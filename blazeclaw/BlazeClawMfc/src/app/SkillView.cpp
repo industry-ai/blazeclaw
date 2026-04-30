@@ -46,6 +46,11 @@ namespace {
 		return normalized;
 	}
 
+	bool IsHiddenSkillKey(const std::string& skillKey)
+	{
+		return NormalizeSkillKeyForDedup(skillKey) == "nano_pdf";
+	}
+
 	std::string BuildCanonicalSkillPayload(
 		const std::string& skillKey,
 		const std::string& sourcePayloadJson,
@@ -485,6 +490,10 @@ void CSkillView::FillSkillView()
 			continue;
 		}
 		const std::string normalizedSkillKey = NormalizeSkillKeyForDedup(skillKey);
+		if (IsHiddenSkillKey(normalizedSkillKey))
+		{
+			continue;
+		}
 		knownSkillKeys.insert(normalizedSkillKey);
 		catalogPayloadBySkillKey.insert_or_assign(
 			normalizedSkillKey,
@@ -685,6 +694,10 @@ void CSkillView::FillSkillView()
 
 					const std::string dedupKey =
 						NormalizeSkillKeyForDedup(skillKey);
+					if (IsHiddenSkillKey(dedupKey))
+					{
+						continue;
+					}
 					if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
 					{
 						continue;
@@ -767,12 +780,17 @@ void CSkillView::FillSkillView()
 						}
 					}
 
-					if (knownSkillKeys.find(NormalizeSkillKeyForDedup(skillKey)) != knownSkillKeys.end())
+					const std::string dedupKey = NormalizeSkillKeyForDedup(skillKey);
+					if (IsHiddenSkillKey(dedupKey))
+					{
+						continue;
+					}
+					if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
 					{
 						continue;
 					}
 
-					knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
+					knownSkillKeys.insert(dedupKey);
 					const std::string parentCategory = "openclaw-original";
 					auto parentCategoryIt = categoryItems.find(parentCategory);
 					HTREEITEM parentCategoryNode = nullptr;
@@ -861,6 +879,10 @@ void CSkillView::FillSkillView()
 
 				const std::string dedupKey =
 					NormalizeSkillKeyForDedup(skillKey);
+				if (IsHiddenSkillKey(dedupKey))
+				{
+					continue;
+				}
 				if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
 				{
 					continue;
@@ -944,12 +966,17 @@ void CSkillView::FillSkillView()
 				}
 			}
 
-			if (knownSkillKeys.find(NormalizeSkillKeyForDedup(skillKey)) != knownSkillKeys.end())
+			const std::string dedupKey = NormalizeSkillKeyForDedup(skillKey);
+			if (IsHiddenSkillKey(dedupKey))
+			{
+				continue;
+			}
+			if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
 			{
 				continue;
 			}
 
-			knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
+			knownSkillKeys.insert(dedupKey);
 			const std::string category = "implemented";
 			auto categoryIt = categoryItems.find(category);
 			HTREEITEM categoryNode = nullptr;

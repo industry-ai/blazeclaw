@@ -1,15 +1,23 @@
 # CBridge Class and Its Usage in CBlazeClawMFCView
 
-## Overview of `CBridge`
+## Index
 
-`CBridge` is a utility class in the BlazeClaw MFC application that manages orchestration and polling of chat events between the UI and the backend gateway. It owns lifecycle state, poll scheduling, failure backoff, and batch delivery of polled events to the view.
+
+## 0. Overview of `CBridge`
+
+`CBridge` is a utility class in the BlazeClaw MFC application that manages orchestration and polling 
+of chat events between the UI and the backend gateway. It owns lifecycle state, poll scheduling, failure 
+backoff, and batch delivery of polled events to the view.
 
 ### Key Responsibilities
+
 - **Lifecycle Management:** Tracks gateway connection/provider/model changes and emits lifecycle updates to the UI.
 - **Polling:** Periodically invokes `chat.events.poll` with adaptive intervals and failure backoff.
 - **Event Handling:** Parses poll payloads and forwards event batches to the UI callback.
 - **Health Reporting:** Emits poll health transitions (`healthy`, `degraded`, `disconnected`).
 - **Trace Counters:** Maintains request/response/event counters for diagnostics.
+
+
 
 ## Usage in `CBlazeClawMFCView`
 
@@ -300,3 +308,67 @@ Suggested rollout env toggles:
 - `BLAZECLAW_BRIDGE_PUSH_ENABLED=true`
 - `BLAZECLAW_BRIDGE_PUSH_FALLBACK_POLL_ENABLED=true`
 - `BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED=true`
+
+## Incident Analysis: "stuck with no response" for ordered weather/email prompts
+
+### Reproduction signals from user
+- Prompt A: `Check my inbox and tell me if any email needs a reply within 2 hours.`
+- Prompt B: `Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.`
+- Observed log:
+  - `[SkillPath] runId=... tried paths:`
+  - no following per-tool lines
+
+### Root cause summary
+The runtime enters **strict ordered preflight** for weather+email intent, but one or more required runtime tools are unavailable/mismatched at preflight time. The run is then marked failed and terminalized as `error`, but the UI-side success extraction currently only reads assistant text from `state=final` events, so the user perceives "no response".
+
+### Detailed causal chain
+1. **Intent policy upgrades prompt to strict ordered sequence**
+   - `ChatOrchestrationPolicy` sets strict ordered targets (`weather.lookup`, `email.schedule`) when weather+email flow is detected.
+2. **Preflight resolves/validates ordered targets**
+   - `RuntimeSequencingPolicy::BuildOrderedSequencePreflight(...)` resolves ordered targets against runtime tools.
+3. **Strict preflight blocks when required targets are missing/unavailable**
+   - In `GatewayHost.Handlers.Runtime.ChatPipeline.cpp`, strict mode with missing targets triggers:
+     - `failed = true`
+     - `orchestrationHandled = true`
+     - error code `ordered_sequence_target_unavailable`
+     - remediation text generated into `assistantText`
+4. **Task deltas are persisted, but no actual tool_result entries are produced**
+   - This explains `[SkillPath] ... tried paths:` with no item lines:
+     - Find-output helper prints details only for `phase == "tool_result"`.
+     - Strict preflight failure path mostly emits `plan/preflight/final` entries.
+5. **Poll path emits terminal `error`, not `final` message text**
+   - `chat.events.poll` reconciliation emits `state="error"` when `run.failed == true`.
+6. **View extraction logic only looks for `state="final"` text**
+   - `TryExtractFinalAssistantText(...)` scans only `"state":"final"`, so remediation text on failed runs is not surfaced in the normal assistant-response path.
+
+### Why it feels like a hang
+- Run lifecycle progresses internally (queued/started/error), but user-facing assistant text path depends on `final.text` extraction.
+- Failed ordered preflight produces an error terminal path that does not satisfy that extraction contract.
+
+## Step-by-step action plan to fix
+
+1. **Add explicit diagnostics for ordered preflight misses in UI path**
+   - When terminal `error` is observed, include `errorCode` + `errorMessage` in status line consistently (not only `final` text path).
+
+2. **Make failed runs emit user-visible assistant content**
+   - In chat pipeline terminalization, when `run.failed` and `run.assistantText` is non-empty, include assistant content in terminal event payload (or emit one last `delta`) so UI can render a clear response instead of silence.
+
+3. **Harden view-side extraction for terminal errors**
+   - Extend extraction helper logic to parse and display terminal `error` event information (and optional message text) as a fallback when no `final` event text exists.
+
+4. **Improve SkillPath reporting for preflight-only failures**
+   - Extend Find output reporter to also summarize `phase=preflight` missing targets / `final` error code when no `tool_result` rows exist.
+
+5. **Validate runtime tool availability assumptions**
+   - Add startup/runtime telemetry line that prints whether `weather.lookup` and `email.schedule` are present/enabled in tool registry before chat handling.
+
+6. **Guard strict policy with capability readiness (optional but recommended)**
+   - If strict ordered targets are missing, downgrade to advisory mode for user-visible graceful degradation (unless explicit strict policy is mandated).
+
+7. **Add integration tests for this exact failure mode**
+   - Case: strict ordered sequence + missing target -> poll returns terminal `error` and UI receives a user-visible failure message.
+   - Case: SkillPath output includes preflight/final diagnostics when no `tool_result` exists.
+
+8. **Regression verify with both provided prompts**
+   - Confirm no silent run.
+   - Confirm user always gets either successful final response or explicit terminal error guidance.
