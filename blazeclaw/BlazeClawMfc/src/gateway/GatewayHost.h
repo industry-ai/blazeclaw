@@ -452,6 +452,12 @@ namespace blazeclaw::gateway {
 			std::uint64_t lastProgressAtMs = 0;
 			bool terminalWaitExceededNotified = false;
 			bool failed = false;
+			std::string terminalState = "final";
+			bool approvalRequired = false;
+			std::string approvalToken;
+			std::uint64_t approvalTokenExpiresAtEpochMs = 0;
+			std::string approvalNextAction;
+			std::string terminalReason;
 			std::string errorCode;
 			std::string errorMessage;
 			std::string errorContextJson;
@@ -485,6 +491,11 @@ namespace blazeclaw::gateway {
 			std::string state;
 			std::optional<std::string> messageJson;
 			std::optional<std::string> errorMessage;
+			bool approvalRequired = false;
+			std::optional<std::string> approvalToken;
+			std::optional<std::uint64_t> approvalTokenExpiresAtEpochMs;
+			std::optional<std::string> approvalNextAction;
+			std::optional<std::string> terminalReason;
 			std::uint64_t timestampMs = 0;
 		};
 

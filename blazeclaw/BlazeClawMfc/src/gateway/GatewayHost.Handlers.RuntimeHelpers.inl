@@ -707,6 +707,11 @@ std::string BuildChatEventJson(
 	const std::optional<std::string>& errorCode,
 	const std::optional<std::string>& errorMessage,
 	const std::optional<std::string>& contextJson,
+	const bool approvalRequired,
+	const std::optional<std::string>& approvalToken,
+	const std::optional<std::uint64_t>& approvalTokenExpiresAtEpochMs,
+	const std::optional<std::string>& approvalNextAction,
+	const std::optional<std::string>& terminalReason,
 	const std::uint64_t timestampMs) {
 	std::string payload =
 		"{\"runId\":\"" +
@@ -740,6 +745,31 @@ std::string BuildChatEventJson(
 		payload += ",\"context\":" + contextJson.value();
 	}
 
+	if (approvalRequired) {
+		payload += ",\"approvalRequired\":true";
+	}
+
+	if (approvalToken.has_value()) {
+		payload += ",\"approvalToken\":\"" + EscapeJsonLocal(approvalToken.value()) + "\"";
+	}
+
+	if (approvalTokenExpiresAtEpochMs.has_value()) {
+		payload += ",\"approvalTokenExpiresAtEpochMs\":" +
+			std::to_string(approvalTokenExpiresAtEpochMs.value());
+	}
+
+	if (approvalNextAction.has_value()) {
+		payload += ",\"approvalNextAction\":\"" +
+			EscapeJsonLocal(approvalNextAction.value()) +
+			"\"";
+	}
+
+	if (terminalReason.has_value()) {
+		payload += ",\"terminalReason\":\"" +
+			EscapeJsonLocal(terminalReason.value()) +
+			"\"";
+	}
+
 	payload += "}";
 	return payload;
 }
@@ -755,7 +785,7 @@ void EmitPushLifecycleEvent(
 }
 
 bool IsTerminalChatState(const std::string& state) {
-	return state == "final" || state == "error" || state == "aborted";
+	return state == "final" || state == "error" || state == "aborted" || state == "needs_approval";
 }
 
 std::string SerializeTaskDeltaEntryJson(
@@ -1469,6 +1499,10 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 			return result;
 		}
 
+		result.approvalToken = approvalToken;
+		result.approvalTokenExpiresAtEpochMs = approvalTokenExpiresAtEpochMs;
+		result.approvalNextAction = "email.schedule.approve";
+
 		ToolExecuteResult emailApproveExecution;
 		bool shouldAutoApprove =
 			intent.scheduleKind == "immediate_keyword";
@@ -1587,6 +1621,7 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 			result.fallbackAction = "continue";
 			result.fallbackAttempt = 1;
 			result.fallbackMaxAttempts = 2;
+			result.approvalPrompt = "Approve email schedule by calling email.schedule with action=approve and approvalToken.";
 			if (preferChinese) {
 				result.assistantText =
 					report +

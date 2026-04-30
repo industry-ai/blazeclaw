@@ -301,7 +301,10 @@ namespace {
 		{
 			std::string state;
 			blazeclaw::gateway::json::FindStringField(eventJson, "state", state);
-			if (state != "final" && state != "error" && state != "aborted")
+			if (state != "final" &&
+				state != "error" &&
+				state != "aborted" &&
+				state != "needs_approval")
 			{
 				continue;
 			}
@@ -1103,6 +1106,39 @@ namespace {
 			{
 				return extracted;
 			}
+		}
+
+		const std::size_t approvalPos =
+			eventsRaw.find("\"state\":\"needs_approval\"");
+		if (approvalPos != std::string::npos)
+		{
+			std::string approvalText;
+			if (TryExtractJsonStringAfterKey(
+				eventsRaw,
+				approvalPos,
+				"text",
+				approvalText) &&
+				!blazeclaw::gateway::json::Trim(approvalText).empty())
+			{
+				return approvalText;
+			}
+
+			std::string approvalToken;
+			TryExtractJsonStringAfterKey(eventsRaw, approvalPos, "approvalToken", approvalToken);
+			std::string approvalNextAction;
+			TryExtractJsonStringAfterKey(eventsRaw, approvalPos, "approvalNextAction", approvalNextAction);
+			approvalToken = blazeclaw::gateway::json::Trim(approvalToken);
+			approvalNextAction = blazeclaw::gateway::json::Trim(approvalNextAction);
+			std::string approvalSummary = "Approval required before email send";
+			if (!approvalToken.empty())
+			{
+				approvalSummary += ". approvalToken=" + approvalToken;
+			}
+			if (!approvalNextAction.empty())
+			{
+				approvalSummary += " nextAction=" + approvalNextAction;
+			}
+			return approvalSummary;
 		}
 
 		const std::size_t errorPos =
@@ -2564,6 +2600,47 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			if (!errorMessage.empty())
 			{
 				line += " errorMessage=" + TruncateForDiagnostics(errorMessage, 200);
+			}
+
+			if (emittedInBatch.find(line) == emittedInBatch.end())
+			{
+				emittedInBatch.insert(line);
+				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+			}
+			continue;
+		}
+
+		if (state == "needs_approval")
+		{
+			std::string runId;
+			std::string approvalToken;
+			std::string approvalNextAction;
+			std::string terminalReason;
+			blazeclaw::gateway::json::FindStringField(eventJson, "runId", runId);
+			blazeclaw::gateway::json::FindStringField(eventJson, "approvalToken", approvalToken);
+			blazeclaw::gateway::json::FindStringField(eventJson, "approvalNextAction", approvalNextAction);
+			blazeclaw::gateway::json::FindStringField(eventJson, "terminalReason", terminalReason);
+			runId = blazeclaw::gateway::json::Trim(runId);
+			approvalToken = blazeclaw::gateway::json::Trim(approvalToken);
+			approvalNextAction = blazeclaw::gateway::json::Trim(approvalNextAction);
+			terminalReason = blazeclaw::gateway::json::Trim(terminalReason);
+
+			std::string line = "[SkillPath] terminal approval_required";
+			if (!runId.empty())
+			{
+				line += " runId=" + runId;
+			}
+			if (!terminalReason.empty())
+			{
+				line += " terminalReason=" + terminalReason;
+			}
+			if (!approvalToken.empty())
+			{
+				line += " approvalToken=" + approvalToken;
+			}
+			if (!approvalNextAction.empty())
+			{
+				line += " nextAction=" + approvalNextAction;
 			}
 
 			if (emittedInBatch.find(line) == emittedInBatch.end())

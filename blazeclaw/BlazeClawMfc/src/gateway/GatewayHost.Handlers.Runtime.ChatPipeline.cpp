@@ -651,6 +651,11 @@ namespace blazeclaw::gateway {
 									.state = "delta",
 									.messageJson = replayMessage,
 									.errorMessage = std::nullopt,
+									.approvalRequired = false,
+									.approvalToken = std::nullopt,
+									.approvalTokenExpiresAtEpochMs = std::nullopt,
+									.approvalNextAction = std::nullopt,
+									.terminalReason = std::nullopt,
 									.timestampMs = nowMs,
 								});
 							BranchDecisionDiagnostics::Emit(
@@ -834,6 +839,12 @@ namespace blazeclaw::gateway {
 					std::string backendErrorCode;
 					std::string backendErrorMessage;
 					std::string backendErrorContextJson;
+					std::string terminalState = "final";
+					bool approvalRequired = false;
+					std::string approvalToken;
+					std::uint64_t approvalTokenExpiresAtEpochMs = 0;
+					std::string approvalNextAction;
+					std::string terminalReason;
 					bool failed = false;
 					bool orchestrationHandled = false;
 					bool lifecycleEventsEnqueued = false;
@@ -1403,6 +1414,14 @@ namespace blazeclaw::gateway {
 									!assistantDeltas.empty()) {
 									assistantText = assistantDeltas.back();
 								}
+								terminalState = orchestrationResult.terminalStatus == "needs_approval"
+									? "needs_approval"
+									: "final";
+								approvalRequired = orchestrationResult.requiresApproval;
+								approvalToken = orchestrationResult.approvalToken;
+								approvalTokenExpiresAtEpochMs = orchestrationResult.approvalTokenExpiresAtEpochMs;
+								approvalNextAction = orchestrationResult.approvalNextAction;
+								terminalReason = orchestrationResult.terminalReason;
 
 								EmitTelemetryEvent(
 									"gateway.chat.orchestration.execution",
@@ -1413,6 +1432,8 @@ namespace blazeclaw::gateway {
 									",\"status\":\"success\",\"steps\":" +
 									std::to_string(
 										orchestrationResult.decompositionSteps) +
+									",\"terminalStatus\":" + JsonString(orchestrationResult.terminalStatus) +
+									",\"requiresApproval\":" + std::string(orchestrationResult.requiresApproval ? "true" : "false") +
 									"}");
 
 								auto orchestrationTaskDeltas =
@@ -1444,6 +1465,12 @@ namespace blazeclaw::gateway {
 							}
 							else {
 								failed = true;
+								terminalState = "error";
+								approvalRequired = false;
+								approvalToken.clear();
+								approvalTokenExpiresAtEpochMs = 0;
+								approvalNextAction.clear();
+								terminalReason = orchestrationResult.terminalReason;
 								assistantText.clear();
 								backendErrorCode = orchestrationResult.errorCode.empty()
 									? "chat_tool_orchestration_failed"
@@ -1502,6 +1529,11 @@ namespace blazeclaw::gateway {
 								.state = "queued",
 								.messageJson = std::nullopt,
 								.errorMessage = std::nullopt,
+								.approvalRequired = false,
+								.approvalToken = std::nullopt,
+								.approvalTokenExpiresAtEpochMs = std::nullopt,
+								.approvalNextAction = std::nullopt,
+								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
 							});
 						PushEventWithRetentionLimit(runtimeSessionEvents, GatewayHost::ChatEventState{
@@ -1510,6 +1542,11 @@ namespace blazeclaw::gateway {
 								.state = "started",
 								.messageJson = std::nullopt,
 								.errorMessage = std::nullopt,
+								.approvalRequired = false,
+								.approvalToken = std::nullopt,
+								.approvalTokenExpiresAtEpochMs = std::nullopt,
+								.approvalNextAction = std::nullopt,
+								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
 							});
 						lifecycleEventsEnqueued = true;
@@ -1565,6 +1602,12 @@ namespace blazeclaw::gateway {
 								.lastProgressAtMs = nowMs,
 								.terminalWaitExceededNotified = false,
 								.failed = false,
+								.terminalState = "final",
+								.approvalRequired = false,
+								.approvalToken = {},
+								.approvalTokenExpiresAtEpochMs = 0,
+								.approvalNextAction = {},
+								.terminalReason = {},
 								.errorCode = {},
 								.errorMessage = {},
 								.errorContextJson = {},
@@ -1635,6 +1678,11 @@ namespace blazeclaw::gateway {
 												.state = "delta",
 												.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
 												.errorMessage = std::nullopt,
+												.approvalRequired = false,
+												.approvalToken = std::nullopt,
+												.approvalTokenExpiresAtEpochMs = std::nullopt,
+												.approvalNextAction = std::nullopt,
+												.terminalReason = std::nullopt,
 												.timestampMs = CurrentEpochMsLocal(),
 											});
 										const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
@@ -1709,6 +1757,12 @@ namespace blazeclaw::gateway {
 									existingRunIt->second.lastProgressAtMs = nowMs;
 									existingRunIt->second.terminalWaitExceededNotified = false;
 									existingRunIt->second.failed = failed;
+									existingRunIt->second.terminalState = failed ? "error" : "final";
+									existingRunIt->second.approvalRequired = false;
+									existingRunIt->second.approvalToken.clear();
+									existingRunIt->second.approvalTokenExpiresAtEpochMs = 0;
+									existingRunIt->second.approvalNextAction.clear();
+									existingRunIt->second.terminalReason.clear();
 									existingRunIt->second.errorCode = backendErrorCode;
 									existingRunIt->second.errorMessage = backendErrorMessage;
 									existingRunIt->second.errorContextJson = backendErrorContextJson;
@@ -1749,6 +1803,12 @@ namespace blazeclaw::gateway {
 							existingRunIt->second.lastProgressAtMs = nowMs;
 							existingRunIt->second.terminalWaitExceededNotified = false;
 							existingRunIt->second.failed = failed;
+							existingRunIt->second.terminalState = failed ? "error" : "final";
+							existingRunIt->second.approvalRequired = false;
+							existingRunIt->second.approvalToken.clear();
+							existingRunIt->second.approvalTokenExpiresAtEpochMs = 0;
+							existingRunIt->second.approvalNextAction.clear();
+							existingRunIt->second.terminalReason.clear();
 							existingRunIt->second.errorCode = backendErrorCode;
 							existingRunIt->second.errorMessage = backendErrorMessage;
 							existingRunIt->second.errorContextJson = backendErrorContextJson;
@@ -1914,6 +1974,11 @@ namespace blazeclaw::gateway {
 								.state = "queued",
 								.messageJson = std::nullopt,
 								.errorMessage = std::nullopt,
+								.approvalRequired = false,
+								.approvalToken = std::nullopt,
+								.approvalTokenExpiresAtEpochMs = std::nullopt,
+								.approvalNextAction = std::nullopt,
+								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
 							});
 						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
@@ -1922,6 +1987,11 @@ namespace blazeclaw::gateway {
 								.state = "started",
 								.messageJson = std::nullopt,
 								.errorMessage = std::nullopt,
+								.approvalRequired = false,
+								.approvalToken = std::nullopt,
+								.approvalTokenExpiresAtEpochMs = std::nullopt,
+								.approvalNextAction = std::nullopt,
+								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
 							});
 						GatewayLifecycleEventEmitter::EmitLifecycle(
@@ -1994,6 +2064,11 @@ namespace blazeclaw::gateway {
 									.state = "delta",
 									.messageJson = deltaMessage,
 									.errorMessage = std::nullopt,
+									.approvalRequired = false,
+									.approvalToken = std::nullopt,
+									.approvalTokenExpiresAtEpochMs = std::nullopt,
+									.approvalNextAction = std::nullopt,
+									.terminalReason = std::nullopt,
 									.timestampMs = nowMs,
 									});
 								GatewayLifecycleEventEmitter::EmitLifecycle(
@@ -2087,6 +2162,14 @@ namespace blazeclaw::gateway {
 								.lastProgressAtMs = nowMs,
 								.terminalWaitExceededNotified = false,
 								.failed = failed,
+								.terminalState = failed
+									? "error"
+									: (terminalState.empty() ? "final" : terminalState),
+								.approvalRequired = approvalRequired,
+								.approvalToken = approvalToken,
+								.approvalTokenExpiresAtEpochMs = approvalTokenExpiresAtEpochMs,
+								.approvalNextAction = approvalNextAction,
+								.terminalReason = terminalReason,
 								.errorCode = backendErrorCode,
 								.errorMessage = backendErrorMessage,
 								.errorContextJson = backendErrorContextJson,
@@ -2106,19 +2189,42 @@ namespace blazeclaw::gateway {
 						!silentAssistantReply &&
 						insertedRunIt->second.streamCursor >= insertedRunIt->second.assistantText.size() &&
 						!insertedRunIt->second.terminalEventEnqueued) {
+						const std::string resolvedTerminalState =
+							insertedRunIt->second.terminalState.empty()
+							? "final"
+							: insertedRunIt->second.terminalState;
 						const std::optional<std::string> terminalMessage =
 							std::optional<std::string>(
 								BuildAssistantFinalMessageJson(insertedRunIt->second.assistantText, nowMs));
 						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
 							.runId = insertedRunIt->second.runId,
 							.sessionKey = insertedRunIt->second.sessionKey,
-							.state = "final",
+							.state = resolvedTerminalState,
 							.messageJson = terminalMessage,
 							.errorMessage = std::nullopt,
+							.approvalRequired = resolvedTerminalState == "needs_approval"
+								? insertedRunIt->second.approvalRequired
+								: false,
+							.approvalToken = (resolvedTerminalState == "needs_approval" &&
+								!insertedRunIt->second.approvalToken.empty())
+								? std::optional<std::string>(insertedRunIt->second.approvalToken)
+								: std::nullopt,
+							.approvalTokenExpiresAtEpochMs =
+								(resolvedTerminalState == "needs_approval" &&
+									insertedRunIt->second.approvalTokenExpiresAtEpochMs > 0)
+								? std::optional<std::uint64_t>(insertedRunIt->second.approvalTokenExpiresAtEpochMs)
+								: std::nullopt,
+							.approvalNextAction = (resolvedTerminalState == "needs_approval" &&
+								!insertedRunIt->second.approvalNextAction.empty())
+								? std::optional<std::string>(insertedRunIt->second.approvalNextAction)
+								: std::nullopt,
+							.terminalReason = insertedRunIt->second.terminalReason.empty()
+								? std::nullopt
+								: std::optional<std::string>(insertedRunIt->second.terminalReason),
 							.timestampMs = nowMs,
 							});
 						GatewayLifecycleEventEmitter::EmitLifecycle(
-							"final",
+							resolvedTerminalState,
 							insertedRunIt->second.runId,
 							insertedRunIt->second.sessionKey,
 							nowMs);
@@ -2129,7 +2235,7 @@ namespace blazeclaw::gateway {
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = insertedRunIt->second.runId,
 									.sessionKey = insertedRunIt->second.sessionKey,
-									.state = "final",
+									.state = resolvedTerminalState,
 									.messageJson = terminalMessage,
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
@@ -2149,6 +2255,7 @@ namespace blazeclaw::gateway {
 							JsonString(insertedRunIt->second.runId) +
 							",\"sessionKey\":" +
 							JsonString(insertedRunIt->second.sessionKey) +
+							",\"terminalState\":" + JsonString(resolvedTerminalState) +
 							",\"reason\":\"assistant_text_fully_available\"}");
 					}
 
@@ -2267,6 +2374,11 @@ namespace blazeclaw::gateway {
 							.state = "final",
 							.messageJson = appended.messageJson,
 							.errorMessage = std::nullopt,
+							.approvalRequired = false,
+							.approvalToken = std::nullopt,
+							.approvalTokenExpiresAtEpochMs = std::nullopt,
+							.approvalNextAction = std::nullopt,
+							.terminalReason = std::nullopt,
 							.timestampMs = nowMs,
 						});
 					GatewayLifecycleEventEmitter::EmitLifecycle(
@@ -2350,6 +2462,11 @@ namespace blazeclaw::gateway {
 									   runIt->second.assistantText,
 									   nowMs)),
 						   .errorMessage = std::nullopt,
+						   .approvalRequired = false,
+						   .approvalToken = std::nullopt,
+						   .approvalTokenExpiresAtEpochMs = std::nullopt,
+						   .approvalNextAction = std::nullopt,
+						   .terminalReason = std::nullopt,
 						   .timestampMs = nowMs,
 						});
 					GatewayLifecycleEventEmitter::EmitLifecycle(
@@ -2634,6 +2751,11 @@ namespace blazeclaw::gateway {
 										   .state = "delta",
 										   .messageJson = pollDeltaMessage,
 										   .errorMessage = std::nullopt,
+										   .approvalRequired = false,
+										   .approvalToken = std::nullopt,
+										   .approvalTokenExpiresAtEpochMs = std::nullopt,
+										   .approvalNextAction = std::nullopt,
+										   .terminalReason = std::nullopt,
 										   .timestampMs = nowMs,
 										});
 									if (pushLifecycleEnabledForRun) {
@@ -2683,13 +2805,35 @@ namespace blazeclaw::gateway {
 										? "chat error"
 										: run.errorMessage)
 									: std::nullopt;
+								const std::string runTerminalState = run.failed
+									? "error"
+									: (run.terminalState.empty() ? "final" : run.terminalState);
 
 								PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
 									   .runId = run.runId,
 									   .sessionKey = run.sessionKey,
-									   .state = run.failed ? "error" : "final",
+									   .state = runTerminalState,
 									   .messageJson = terminalMessage,
 									   .errorMessage = terminalError,
+									   .approvalRequired = runTerminalState == "needs_approval"
+										   ? run.approvalRequired
+										   : false,
+									   .approvalToken = (runTerminalState == "needs_approval" &&
+										   !run.approvalToken.empty())
+										   ? std::optional<std::string>(run.approvalToken)
+										   : std::nullopt,
+									   .approvalTokenExpiresAtEpochMs =
+										   (runTerminalState == "needs_approval" &&
+											run.approvalTokenExpiresAtEpochMs > 0)
+										   ? std::optional<std::uint64_t>(run.approvalTokenExpiresAtEpochMs)
+										   : std::nullopt,
+									   .approvalNextAction = (runTerminalState == "needs_approval" &&
+										   !run.approvalNextAction.empty())
+										   ? std::optional<std::string>(run.approvalNextAction)
+										   : std::nullopt,
+									   .terminalReason = run.terminalReason.empty()
+										   ? std::nullopt
+										   : std::optional<std::string>(run.terminalReason),
 									   .timestampMs = nowMs,
 									});
 								if (pushLifecycleEnabledForRun) {
@@ -2699,7 +2843,7 @@ namespace blazeclaw::gateway {
 										GatewayEventFanoutService::ChatLifecycleEvent{
 											.runId = run.runId,
 											.sessionKey = run.sessionKey,
-											.state = run.failed ? "error" : "final",
+											.state = runTerminalState,
 											.messageJson = terminalMessage,
 											.errorMessage = terminalError,
 											.timestampMs = nowMs,
@@ -2707,7 +2851,7 @@ namespace blazeclaw::gateway {
 										host.m_chatPushEventSeq);
 								}
 								GatewayLifecycleEventEmitter::EmitLifecycle(
-									run.failed ? "error" : "final",
+									runTerminalState,
 									run.runId,
 									run.sessionKey,
 									nowMs,
@@ -2720,7 +2864,7 @@ namespace blazeclaw::gateway {
 								EmitDeepSeekGatewayDiagnostic(
 									"event.enqueue",
 									std::string("state=") +
-									(run.failed ? "error" : "final") +
+									runTerminalState +
 									" runId=" +
 									run.runId +
 									" session=" +
@@ -2799,6 +2943,11 @@ namespace blazeclaw::gateway {
 									eventErrorCode,
 									eventState.errorMessage,
 									eventContextJson,
+									eventState.approvalRequired,
+									eventState.approvalToken,
+									eventState.approvalTokenExpiresAtEpochMs,
+									eventState.approvalNextAction,
+									eventState.terminalReason,
 									eventState.timestampMs);
 								++emitted;
 

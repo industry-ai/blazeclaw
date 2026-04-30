@@ -380,3 +380,67 @@ The runtime enters **strict ordered preflight** for weather+email intent, but on
 8. **Regression verify with both provided prompts** 🔄
    - Code paths are now instrumented to avoid silent failure and expose terminal guidance.
    - Final validation requires running build + regression tests and manual prompt replay in the target environment.
+
+## Incident Analysis (2026-04-30): weather+email prompt shows "stuck" while SkillPath shows preflight/final
+
+### Reproduction observed
+Prompt:
+- `Check tomorrow's weather in Shanghai, write a short report, and email it to jichengwhu@163.com now.`
+
+Observed SkillPath:
+- preflight `weather.lookup` and `email.schedule` both `[ok]`
+- final line includes: `pending approval ... approvalToken=...`
+
+### Root cause summary
+This is a **state/semantics mismatch**, not a true runtime deadlock:
+
+1. Deterministic weather-email orchestration intentionally enters approval flow when auto-approve is unavailable or not allowed.
+2. In `GatewayHost.Handlers.RuntimeHelpers.inl` (`TryOrchestrateWeatherEmailPrompt`), this path sets:
+   - `result.success = true`
+   - `result.requiresApproval = true`
+   - `result.terminalStatus = "needs_approval"`
+   - assistant text containing `approvalToken=...`.
+3. In `GatewayHost.Handlers.Runtime.ChatPipeline.cpp`, orchestration success currently maps to generic successful terminal normalization (`EnsureRuntimeTaskDeltas(..., success=true, ...)`), so the run is persisted/observed as `final [completed]` even though user action is still required.
+4. Because approval-required is not surfaced as a first-class terminal state/error contract in the chat event UX, users interpret the run as "stuck" (no explicit actionable approval UI step), even though backend flow already reached a terminal approval-pending outcome.
+
+### Why current behavior is confusing
+- The text says "pending approval", but protocol/status semantics still look like "completed".
+- There is no explicit chat-level "needs_approval" terminal state contract consumed by the current UI flow.
+- Approval token is emitted in text, but the UX does not guide/trigger the follow-up approve action as a structured step.
+
+## Step-by-step action plan to fix (approval-pending semantic gap)
+
+1. **Introduce explicit approval-pending terminal semantics in runtime result normalization**
+   - Preserve `terminalStatus` from orchestration (`needs_approval`) and map it to explicit event/task-delta status instead of generic `completed`.
+
+2. **Emit structured approval payload in terminal event context**
+   - Include `approvalRequired=true`, `approvalToken`, `approvalTokenExpiresAtEpochMs`, and recommended next action in structured JSON fields (not only free text).
+
+3. **Add a dedicated chat terminal state contract for approval pending**
+   - Extend event/state model to support `needs_approval` (or equivalent) as terminal-but-actionable.
+   - Keep backward-compatible fallback for clients that only understand `final/error/aborted`.
+
+4. **Update UI event handling to recognize approval-pending terminal state**
+   - Stop spinner/reconcile as terminal.
+   - Render a clear banner: "Approval required before email send".
+   - Display token expiry and next-step instructions.
+
+5. **Provide first-class approve action path in UI**
+   - Add action button/workflow that calls `email.schedule` with `{ action: "approve", approvalToken: ..., approve: true }`.
+   - Show success/failure feedback and append resulting assistant/event updates.
+
+6. **Strengthen SkillPath diagnostics for approval flow**
+   - Add explicit lines for `terminalReason=approval_required|fallback_backend_unavailable` and `requiresApproval=true`.
+   - Keep current preflight lines unchanged.
+
+7. **Add regression tests for approval-pending semantics**
+   - Deterministic weather-email prompt producing approval token should assert:
+     - terminal state is approval-pending semantic (not plain completed),
+     - structured approval metadata present,
+     - UI-compatible actionable payload available.
+
+8. **Manual and automated verification with Shanghai prompt**
+   - Run prompt end-to-end and verify:
+     - no perceived stuck behavior,
+     - explicit approval-required status shown,
+     - approve action completes send path or returns clear backend-unavailable guidance.

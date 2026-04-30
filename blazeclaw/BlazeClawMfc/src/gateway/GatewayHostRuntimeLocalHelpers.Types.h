@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,10 @@ struct ChatPromptOrchestrationResult {
 	std::vector<std::string> assistantDeltas;
 	std::string errorCode;
 	std::string errorMessage;
+	std::string approvalToken;
+	std::uint64_t approvalTokenExpiresAtEpochMs = 0;
+	std::string approvalNextAction;
+	std::string approvalPrompt;
 	std::vector<std::string> missReasons;
 	std::string city;
 	std::string date;

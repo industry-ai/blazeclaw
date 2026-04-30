@@ -107,7 +107,8 @@ namespace {
 			appendKnownMarker(rawPayload, "baidu_search_python");
 			if (rawPayload.find("\"state\":\"final\"") != std::string::npos ||
 				rawPayload.find("\"state\":\"error\"") != std::string::npos ||
-				rawPayload.find("\"state\":\"aborted\"") != std::string::npos) {
+				rawPayload.find("\"state\":\"aborted\"") != std::string::npos ||
+				rawPayload.find("\"state\":\"needs_approval\"") != std::string::npos) {
 				trace.terminalSeen = true;
 			}
 
@@ -137,12 +138,12 @@ namespace {
 					const std::string text =
 						event["message"]["text"].get<std::string>();
 					trace.assistantTexts.push_back(text);
-					if (state == "final") {
+					if (state == "final" || state == "needs_approval") {
 						trace.finalAssistantText = text;
 					}
 				}
 
-				if (state == "final" || state == "error" || state == "aborted") {
+				if (state == "final" || state == "error" || state == "aborted" || state == "needs_approval") {
 					trace.terminalSeen = true;
 				}
 			}
@@ -787,6 +788,123 @@ TEST_CASE(
 		pollTrace.assistantTexts,
 		"tools.execute.result tool=email.schedule status=invalid_args");
 	REQUIRE(invalidArgsCount == 0);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Weather-email approval-required flow emits needs_approval terminal with structured metadata",
+	"[gateway][weather-email][approval][terminal][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_failure");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig config;
+	REQUIRE(host.StartLocalOnly(config));
+
+	const std::string sessionKey = "weather-email-approval-terminal";
+	const std::string requestId = "weather-email-approval-terminal-run";
+	const std::string prompt =
+		"Check tomorrow's weather in Shanghai, write a short report, and email it to "
+		"jichengwhu@163.com now.";
+	const std::string sendPayload =
+		std::string("{\"sessionKey\":\"") +
+		sessionKey +
+		"\",\"message\":\"" +
+		prompt +
+		"\",\"idempotencyKey\":\"weather-email-approval-terminal-idem\","
+		"\"hasConnectedClient\":true,\"clientConnectionId\":\"test-conn-approval\","
+		"\"clientCaps\":[\"TOOL_EVENTS\"]}";
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = requestId,
+			.method = "chat.send",
+			.paramsJson = sendPayload,
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	bool sawNeedsApproval = false;
+	std::string approvalToken;
+	std::string approvalNextAction;
+	std::string terminalReason;
+	bool approvalRequired = false;
+	bool sawAssistantMessage = false;
+	for (int poll = 0; poll < 50; ++poll) {
+		if (poll > 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		}
+
+		const auto pollResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = requestId + "-poll-" + std::to_string(poll),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"") +
+					sessionKey +
+					"\",\"limit\":40}",
+			});
+		REQUIRE(pollResponse.ok);
+		REQUIRE(pollResponse.payloadJson.has_value());
+
+		nlohmann::json pollPayload;
+		try {
+			pollPayload = nlohmann::json::parse(pollResponse.payloadJson.value());
+		}
+		catch (...) {
+			continue;
+		}
+		if (!pollPayload.contains("events") || !pollPayload["events"].is_array()) {
+			continue;
+		}
+
+		for (const auto& event : pollPayload["events"]) {
+			if (!event.is_object()) {
+				continue;
+			}
+
+			if (event.value("state", std::string{}) != "needs_approval") {
+				continue;
+			}
+
+			sawNeedsApproval = true;
+			approvalRequired = event.value("approvalRequired", false);
+			approvalToken = event.value("approvalToken", std::string{});
+			approvalNextAction = event.value("approvalNextAction", std::string{});
+			terminalReason = event.value("terminalReason", std::string{});
+			if (event.contains("message") &&
+				event["message"].is_object() &&
+				event["message"].contains("text") &&
+				event["message"]["text"].is_string()) {
+				sawAssistantMessage = !event["message"]["text"].get<std::string>().empty();
+			}
+			break;
+		}
+
+		if (sawNeedsApproval) {
+			break;
+		}
+	}
+
+	REQUIRE(sawNeedsApproval);
+	REQUIRE(approvalRequired);
+	REQUIRE_FALSE(approvalToken.empty());
+	REQUIRE(approvalNextAction == "email.schedule.approve");
+	REQUIRE((terminalReason == "approval_required" || terminalReason == "fallback_backend_unavailable"));
+	REQUIRE(sawAssistantMessage);
 
 	host.Stop();
 }

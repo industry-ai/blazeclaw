@@ -142,7 +142,7 @@
                 const runId = String(event.runId || "").trim();
                 const eventState = String(event.state || "");
                 const eventKey = `${runId}:${eventState}`;
-                if (runId && (eventState === "final" || eventState === "aborted" || eventState === "error")) {
+                if (runId && (eventState === "final" || eventState === "aborted" || eventState === "error" || eventState === "needs_approval")) {
                     if (state.seenChatTerminalRuns.has(eventKey)) {
                         continue;
                     }
@@ -166,7 +166,7 @@
 
                 if (event.runId && state.runId && event.runId !== state.runId) {
                     const isTerminalMismatch =
-                        event.state === "final" || event.state === "aborted" || event.state === "error";
+                        event.state === "final" || event.state === "aborted" || event.state === "error" || event.state === "needs_approval";
                     if (!isTerminalMismatch) {
                         continue;
                     }
@@ -179,6 +179,23 @@
                             addMessage(text, "peer");
                         } else {
                             shouldReconcile = true;
+                        }
+                    } else if (event.state === "needs_approval") {
+                        const approvalMessage = normalizeFinalAssistantMessage(event.message);
+                        const text = controller.parseTextFromMessage(approvalMessage || event.message);
+                        if (text && !controller.isSilentReplyText(text)) {
+                            addMessage(text, "peer");
+                        } else {
+                            const approvalToken = String(event.approvalToken || "").trim();
+                            const nextAction = String(event.approvalNextAction || "").trim();
+                            let fallback = "Approval required before email send.";
+                            if (approvalToken) {
+                                fallback += ` approvalToken=${approvalToken}`;
+                            }
+                            if (nextAction) {
+                                fallback += ` nextAction=${nextAction}`;
+                            }
+                            addMessage(fallback, "peer");
                         }
                     } else if (event.state === "aborted") {
                         const otherAborted = normalizeAbortedAssistantMessage(event.message);
@@ -238,6 +255,45 @@
                     if (shouldReconcile) {
                         controller.scheduleHistoryReconcile();
                     }
+                    continue;
+                }
+
+                if (event.state === "needs_approval") {
+                    const normalizedApproval = normalizeFinalAssistantMessage(event.message);
+                    let text = controller.consumeTerminalText(normalizedApproval || event.message);
+                    if (!text) {
+                        const approvalToken = String(event.approvalToken || "").trim();
+                        const nextAction = String(event.approvalNextAction || "").trim();
+                        text = "Approval required before email send.";
+                        if (approvalToken) {
+                            text += ` approvalToken=${approvalToken}`;
+                        }
+                        if (nextAction) {
+                            text += ` nextAction=${nextAction}`;
+                        }
+                    }
+
+                    if (text) {
+                        if (state.streamText) {
+                            controller.commitStreamTranscriptFinal({
+                                runId,
+                                text,
+                                terminalState: "needs_approval",
+                            });
+                            addOrReplaceStream(text);
+                            finalizeStream();
+                        } else {
+                            addMessage(text, "peer");
+                        }
+                    } else {
+                        finalizeStream();
+                        controller.scheduleHistoryReconcile();
+                    }
+
+                    if (runId) {
+                        controller.markTerminalRun(runId, "needs_approval");
+                    }
+                    controller.clearRunState();
                     continue;
                 }
 
