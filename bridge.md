@@ -347,28 +347,36 @@ The runtime enters **strict ordered preflight** for weather+email intent, but on
 
 ## Step-by-step action plan to fix
 
-1. **Add explicit diagnostics for ordered preflight misses in UI path**
-   - When terminal `error` is observed, include `errorCode` + `errorMessage` in status line consistently (not only `final` text path).
+1. **Add explicit diagnostics for ordered preflight misses in UI path** ✅
+   - Implemented in `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`:
+     - `EmitSkillPathLinesFromEvents(...)` now emits terminal error diagnostics lines containing runId/errorCode/errorMessage for `state=error` events.
 
-2. **Make failed runs emit user-visible assistant content**
-   - In chat pipeline terminalization, when `run.failed` and `run.assistantText` is non-empty, include assistant content in terminal event payload (or emit one last `delta`) so UI can render a clear response instead of silence.
+2. **Make failed runs emit user-visible assistant content** ✅
+   - Implemented in `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.ChatPipeline.cpp`:
+     - poll terminalization path now includes `message` payload for failed runs when `run.assistantText` exists, instead of always returning null message on error.
 
-3. **Harden view-side extraction for terminal errors**
-   - Extend extraction helper logic to parse and display terminal `error` event information (and optional message text) as a fallback when no `final` event text exists.
+3. **Harden view-side extraction for terminal errors** ✅
+   - Implemented in `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`:
+     - `TryExtractFinalAssistantText(...)` now falls back to parsing `state=error` event text and then `errorCode` + `errorMessage` when no `final` text exists.
 
-4. **Improve SkillPath reporting for preflight-only failures**
-   - Extend Find output reporter to also summarize `phase=preflight` missing targets / `final` error code when no `tool_result` rows exist.
+4. **Improve SkillPath reporting for preflight-only failures** ✅
+   - Implemented in `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`:
+     - `ReportRunSkillPathsToFindOutput(...)` now emits fallback summaries from `phase=preflight` and `phase=final` task deltas when no `tool_result` rows are present.
 
-5. **Validate runtime tool availability assumptions**
-   - Add startup/runtime telemetry line that prints whether `weather.lookup` and `email.schedule` are present/enabled in tool registry before chat handling.
+5. **Validate runtime tool availability assumptions** ✅
+   - Implemented in `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.ChatPipeline.cpp`:
+     - added telemetry event `gateway.chat.runtime.required_tools.readiness` with readiness booleans for `weather.lookup` and `email.schedule` plus runtime tool count.
 
-6. **Guard strict policy with capability readiness (optional but recommended)**
-   - If strict ordered targets are missing, downgrade to advisory mode for user-visible graceful degradation (unless explicit strict policy is mandated).
+6. **Guard strict policy with capability readiness (optional but recommended)** ✅
+   - Implemented in `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.ChatPipeline.cpp`:
+     - when strict ordering is policy-derived (`orderedSequencePolicyOverridePtr != nullptr`) and missing targets are detected, strict allowlist is downgraded to advisory and telemetry `gateway.chat.ordered.preflight.strict_downgraded` is emitted.
+     - explicit-call strict flows remain unaffected.
 
-7. **Add integration tests for this exact failure mode**
-   - Case: strict ordered sequence + missing target -> poll returns terminal `error` and UI receives a user-visible failure message.
-   - Case: SkillPath output includes preflight/final diagnostics when no `tool_result` exists.
+7. **Add integration tests for this exact failure mode** ✅
+   - Implemented in `BlazeClawMfc/tests/GatewayWeatherEmailRegressionTests.cpp`:
+     - added test: `Strict ordered preflight missing target emits visible error and preflight task-delta diagnostics`.
+     - validates terminal `error` visibility (with assistant-facing message text), expected error code `ordered_sequence_target_unavailable`, and presence of preflight/final task-delta diagnostics without `tool_result`.
 
-8. **Regression verify with both provided prompts**
-   - Confirm no silent run.
-   - Confirm user always gets either successful final response or explicit terminal error guidance.
+8. **Regression verify with both provided prompts** 🔄
+   - Code paths are now instrumented to avoid silent failure and expose terminal guidance.
+   - Final validation requires running build + regression tests and manual prompt replay in the target environment.

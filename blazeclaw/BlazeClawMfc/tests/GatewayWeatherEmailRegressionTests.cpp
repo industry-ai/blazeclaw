@@ -330,6 +330,149 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Strict ordered preflight missing target emits visible error and preflight task-delta diagnostics",
+	"[gateway][ordered-preflight][missing-target][regression]") {
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig config;
+	REQUIRE(host.StartLocalOnly(config));
+
+	const std::string sessionKey = "ordered-preflight-missing-target";
+	const std::string requestId = "ordered-preflight-missing-target-run";
+	const std::string prompt =
+		"Call weather.lookup first, then call missing.tool.now.";
+	const std::string sendPayload =
+		std::string("{\"sessionKey\":\"") +
+		sessionKey +
+		"\",\"message\":\"" +
+		prompt +
+		"\",\"idempotencyKey\":\"ordered-preflight-missing-target-idem\"}";
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = requestId,
+			.method = "chat.send",
+			.paramsJson = sendPayload,
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	auto sendPayloadJson = nlohmann::json::parse(sendResponse.payloadJson.value());
+	REQUIRE(sendPayloadJson.contains("runId"));
+	REQUIRE(sendPayloadJson["runId"].is_string());
+	const std::string runId = sendPayloadJson["runId"].get<std::string>();
+	REQUIRE_FALSE(runId.empty());
+
+	bool sawErrorTerminal = false;
+	std::string terminalErrorCode;
+	std::string terminalErrorMessage;
+	std::string terminalVisibleText;
+	for (int poll = 0; poll < 40; ++poll) {
+		if (poll > 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		}
+
+		const auto pollResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = requestId + "-poll-" + std::to_string(poll),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"") +
+					sessionKey +
+					"\",\"limit\":40}",
+			});
+		REQUIRE(pollResponse.ok);
+		REQUIRE(pollResponse.payloadJson.has_value());
+
+		nlohmann::json pollPayload;
+		try {
+			pollPayload = nlohmann::json::parse(pollResponse.payloadJson.value());
+		}
+		catch (...) {
+			continue;
+		}
+		if (!pollPayload.contains("events") ||
+			!pollPayload["events"].is_array()) {
+			continue;
+		}
+
+		for (const auto& event : pollPayload["events"]) {
+			if (!event.is_object()) {
+				continue;
+			}
+
+			if (event.value("state", std::string{}) != "error") {
+				continue;
+			}
+
+			sawErrorTerminal = true;
+			terminalErrorCode = event.value("errorCode", std::string{});
+			terminalErrorMessage = event.value("errorMessage", std::string{});
+			if (event.contains("message") &&
+				event["message"].is_object() &&
+				event["message"].contains("text") &&
+				event["message"]["text"].is_string()) {
+				terminalVisibleText = event["message"]["text"].get<std::string>();
+			}
+			break;
+		}
+
+		if (sawErrorTerminal) {
+			break;
+		}
+	}
+
+	REQUIRE(sawErrorTerminal);
+	REQUIRE(terminalErrorCode == "ordered_sequence_target_unavailable");
+	REQUIRE_FALSE(terminalErrorMessage.empty());
+	REQUIRE_FALSE(terminalVisibleText.empty());
+	REQUIRE(terminalVisibleText.find("Unable to execute the strict ordered workflow") != std::string::npos);
+
+	const auto taskDeltaResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = requestId + "-task-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(taskDeltaResponse.ok);
+	REQUIRE(taskDeltaResponse.payloadJson.has_value());
+
+	auto taskDeltaPayload = nlohmann::json::parse(taskDeltaResponse.payloadJson.value());
+	REQUIRE(taskDeltaPayload.contains("taskDeltas"));
+	REQUIRE(taskDeltaPayload["taskDeltas"].is_array());
+
+	bool hasPreflight = false;
+	bool hasFinal = false;
+	bool hasToolResult = false;
+	bool hasMissingPreflight = false;
+	for (const auto& delta : taskDeltaPayload["taskDeltas"]) {
+		if (!delta.is_object()) {
+			continue;
+		}
+
+		const std::string phase = delta.value("phase", std::string{});
+		if (phase == "preflight") {
+			hasPreflight = true;
+			if (delta.value("status", std::string{}) == "missing" ||
+				delta.value("errorCode", std::string{}) == "step_target_unavailable") {
+				hasMissingPreflight = true;
+			}
+		}
+		if (phase == "final") {
+			hasFinal = true;
+		}
+		if (phase == "tool_result") {
+			hasToolResult = true;
+		}
+	}
+
+	REQUIRE(hasPreflight);
+	REQUIRE(hasFinal);
+	REQUIRE(hasMissingPreflight);
+	REQUIRE_FALSE(hasToolResult);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Weather-email explicit location extraction keeps deterministic parity path",
 	"[gateway][weather-email][email-schedule][explicit-location][regression]") {
 	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");

@@ -925,6 +925,31 @@ namespace blazeclaw::gateway {
 						",\"fallbackPolicyProfile\":" +
 						JsonString(orchestrationPolicy.fallbackPolicyProfile) + "}");
 					const auto runtimeToolsSnapshot = host.RuntimeContext().toolRegistry->List();
+					auto isRuntimeToolReady = [&runtimeToolsSnapshot](const std::string& expectedToolId) {
+						const std::string expectedNormalized = json::Trim(expectedToolId);
+						for (const auto& tool : runtimeToolsSnapshot) {
+							if (!tool.enabled) {
+								continue;
+							}
+
+							if (json::Trim(tool.id) == expectedNormalized) {
+								return true;
+							}
+						}
+
+						return false;
+						};
+					const bool weatherLookupReady = isRuntimeToolReady("weather.lookup");
+					const bool emailScheduleReady = isRuntimeToolReady("email.schedule");
+					EmitTelemetryEvent(
+						"gateway.chat.runtime.required_tools.readiness",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"weatherLookupReady\":" +
+						std::string(weatherLookupReady ? "true" : "false") +
+						",\"emailScheduleReady\":" +
+						std::string(emailScheduleReady ? "true" : "false") +
+						",\"runtimeToolsCount\":" +
+						std::to_string(runtimeToolsSnapshot.size()) + "}");
 					OrderedSequencePolicyOverride orderedSequencePolicyOverride{};
 					const OrderedSequencePolicyOverride* orderedSequencePolicyOverridePtr =
 						nullptr;
@@ -938,7 +963,7 @@ namespace blazeclaw::gateway {
 							orchestrationPolicy.decompositionMetadataSource;
 						orderedSequencePolicyOverridePtr = &orderedSequencePolicyOverride;
 					}
-					const auto orderedSequencePreflight =
+					auto orderedSequencePreflight =
 						RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
 							normalizedMessage,
 							runtimeToolsSnapshot,
@@ -1094,7 +1119,7 @@ namespace blazeclaw::gateway {
 								[](const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
 									return delta.phase == "final";
 								});
-					};
+						};
 					auto appendForcedTerminalTaskDeltaIfMissing = [&hasTerminalTaskDelta](
 						std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
 						const std::string& runIdValue,
@@ -1119,47 +1144,64 @@ namespace blazeclaw::gateway {
 								.completedAtMs = now,
 								.latencyMs = 0,
 								.stepLabel = "run_terminal",
-							});
-					};
+								});
+						};
 					auto mergeWithPreflightTaskDeltas = [
 						&orderedPreflightTaskDeltas,
 						&runId,
 						&sessionKey,
 						&appendForcedTerminalTaskDeltaIfMissing](
-						std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> runtimeTaskDeltas,
-						const bool runFailed,
-						const std::string& runErrorCode,
-						const std::string& runErrorMessage) {
-							if (runFailed) {
-								appendForcedTerminalTaskDeltaIfMissing(
-									runtimeTaskDeltas,
-									runId,
-									sessionKey,
-									"failed",
-									runErrorCode,
-									runErrorMessage);
-							}
-							if (orderedPreflightTaskDeltas.empty()) {
-								return runtimeTaskDeltas;
-							}
+							std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> runtimeTaskDeltas,
+							const bool runFailed,
+							const std::string& runErrorCode,
+							const std::string& runErrorMessage) {
+								if (runFailed) {
+									appendForcedTerminalTaskDeltaIfMissing(
+										runtimeTaskDeltas,
+										runId,
+										sessionKey,
+										"failed",
+										runErrorCode,
+										runErrorMessage);
+								}
+								if (orderedPreflightTaskDeltas.empty()) {
+									return runtimeTaskDeltas;
+								}
 
-							std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
-							mergedTaskDeltas.reserve(
-								orderedPreflightTaskDeltas.size() + runtimeTaskDeltas.size());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								orderedPreflightTaskDeltas.begin(),
-								orderedPreflightTaskDeltas.end());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								runtimeTaskDeltas.begin(),
-								runtimeTaskDeltas.end());
-							return mergedTaskDeltas;
-					};
+								std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+								mergedTaskDeltas.reserve(
+									orderedPreflightTaskDeltas.size() + runtimeTaskDeltas.size());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									orderedPreflightTaskDeltas.begin(),
+									orderedPreflightTaskDeltas.end());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									runtimeTaskDeltas.begin(),
+									runtimeTaskDeltas.end());
+								return mergedTaskDeltas;
+						};
 
 					if (!forceError &&
 						!hasAttachments &&
 						orderedSequencePreflight.enforced) {
+						const bool fallbackAllowedForPolicyDerivedStrict =
+							orderedSequencePreflight.strictAllowlist &&
+							orderedSequencePolicyOverridePtr != nullptr &&
+							orderedSequencePreflight.explicitCallTargets.empty();
+						if (fallbackAllowedForPolicyDerivedStrict &&
+							!orderedSequencePreflight.missingTargets.empty()) {
+							orderedSequencePreflight.strictAllowlist = false;
+							EmitTelemetryEvent(
+								"gateway.chat.ordered.preflight.strict_downgraded",
+								std::string("{\"runId\":") + JsonString(runId) +
+								",\"reason\":\"policy_derived_missing_targets\"" +
+								",\"missingTargets\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+								",\"missingRuntimeToolIds\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets) + "}");
+						}
+
 						orderedPreflightTaskDeltas =
 							RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
 								runId,
@@ -1302,11 +1344,11 @@ namespace blazeclaw::gateway {
 									sessionKey,
 									"failed",
 									backendErrorCode.empty()
-										? "ordered_preflight_terminal_guard_triggered"
-										: backendErrorCode,
+									? "ordered_preflight_terminal_guard_triggered"
+									: backendErrorCode,
 									backendErrorMessage.empty()
-										? "Forced terminal fallback emitted by ordered preflight guard."
-										: backendErrorMessage);
+									? "Forced terminal fallback emitted by ordered preflight guard."
+									: backendErrorMessage);
 								++host.m_orderedPreflightMissingTargetTerminalEmittedTotal;
 								EmitTelemetryEvent(
 									"ordered_preflight_missing_target_terminal_emitted_total",
@@ -2626,10 +2668,15 @@ namespace blazeclaw::gateway {
 									run.streamCursor >= run.assistantText.size());
 							if (streamCompleted && !run.terminalEventEnqueued) {
 								const std::optional<std::string> terminalMessage =
-									run.failed || silentAssistantReply
-									? std::nullopt
-									: std::optional<std::string>(
-										BuildAssistantFinalMessageJson(run.assistantText, nowMs));
+									run.failed
+									? (run.assistantText.empty() || silentAssistantReply
+										? std::nullopt
+										: std::optional<std::string>(
+											BuildAssistantFinalMessageJson(run.assistantText, nowMs)))
+									: (silentAssistantReply
+										? std::nullopt
+										: std::optional<std::string>(
+											BuildAssistantFinalMessageJson(run.assistantText, nowMs)));
 								const std::optional<std::string> terminalError =
 									run.failed
 									? std::optional<std::string>(run.errorMessage.empty()
@@ -2685,7 +2732,7 @@ namespace blazeclaw::gateway {
 								host.m_chatToolEventRecipientsByRun.erase(run.runId);
 								host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
 							}
-						};
+							};
 
 						for (std::size_t runIndex = 0; runIndex < reconcileCount; ++runIndex) {
 							if (sessionActiveRuns[runIndex] != nullptr) {

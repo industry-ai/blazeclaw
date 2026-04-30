@@ -1092,19 +1092,55 @@ namespace {
 	{
 		const std::size_t finalPos =
 			eventsRaw.find("\"state\":\"final\"");
-		if (finalPos == std::string::npos)
+		if (finalPos != std::string::npos)
+		{
+			std::string extracted;
+			if (TryExtractJsonStringAfterKey(
+				eventsRaw,
+				finalPos,
+				"text",
+				extracted))
+			{
+				return extracted;
+			}
+		}
+
+		const std::size_t errorPos =
+			eventsRaw.find("\"state\":\"error\"");
+		if (errorPos == std::string::npos)
 		{
 			return {};
 		}
 
-		std::string extracted;
+		std::string errorText;
 		if (TryExtractJsonStringAfterKey(
 			eventsRaw,
-			finalPos,
+			errorPos,
 			"text",
-			extracted))
+			errorText) &&
+			!blazeclaw::gateway::json::Trim(errorText).empty())
 		{
-			return extracted;
+			return errorText;
+		}
+
+		std::string errorCode;
+		TryExtractJsonStringAfterKey(eventsRaw, errorPos, "errorCode", errorCode);
+		std::string errorMessage;
+		TryExtractJsonStringAfterKey(eventsRaw, errorPos, "errorMessage", errorMessage);
+		errorCode = blazeclaw::gateway::json::Trim(errorCode);
+		errorMessage = blazeclaw::gateway::json::Trim(errorMessage);
+		if (!errorCode.empty() || !errorMessage.empty())
+		{
+			std::string merged = "Run failed";
+			if (!errorCode.empty())
+			{
+				merged += " (" + errorCode + ")";
+			}
+			if (!errorMessage.empty())
+			{
+				merged += ": " + errorMessage;
+			}
+			return merged;
 		}
 
 		return {};
@@ -2504,6 +2540,40 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 	{
 		std::string state;
 		blazeclaw::gateway::json::FindStringField(eventJson, "state", state);
+		state = blazeclaw::gateway::json::Trim(state);
+		if (state == "error")
+		{
+			std::string runId;
+			std::string errorCode;
+			std::string errorMessage;
+			blazeclaw::gateway::json::FindStringField(eventJson, "runId", runId);
+			blazeclaw::gateway::json::FindStringField(eventJson, "errorCode", errorCode);
+			blazeclaw::gateway::json::FindStringField(eventJson, "errorMessage", errorMessage);
+			runId = blazeclaw::gateway::json::Trim(runId);
+			errorCode = blazeclaw::gateway::json::Trim(errorCode);
+			errorMessage = blazeclaw::gateway::json::Trim(errorMessage);
+			std::string line = "[SkillPath] terminal error";
+			if (!runId.empty())
+			{
+				line += " runId=" + runId;
+			}
+			if (!errorCode.empty())
+			{
+				line += " errorCode=" + errorCode;
+			}
+			if (!errorMessage.empty())
+			{
+				line += " errorMessage=" + TruncateForDiagnostics(errorMessage, 200);
+			}
+
+			if (emittedInBatch.find(line) == emittedInBatch.end())
+			{
+				emittedInBatch.insert(line);
+				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+			}
+			continue;
+		}
+
 		if (state != "delta")
 		{
 			continue;
@@ -2638,15 +2708,18 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 		CP_UTF8)));
 
 	std::unordered_set<std::string> emitted;
+	bool hasToolResult = false;
 	for (const auto& deltaJson : deltas)
 	{
 		std::string phase;
 		blazeclaw::gateway::json::FindStringField(deltaJson, "phase", phase);
+		phase = blazeclaw::gateway::json::Trim(phase);
 		if (phase != "tool_result")
 		{
 			continue;
 		}
 
+		hasToolResult = true;
 		std::string toolName;
 		std::string status;
 		std::string errorCode;
@@ -2680,6 +2753,90 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 
 		emitted.insert(line);
 		mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+	}
+
+	if (!hasToolResult)
+	{
+		for (const auto& deltaJson : deltas)
+		{
+			std::string phase;
+			blazeclaw::gateway::json::FindStringField(deltaJson, "phase", phase);
+			phase = blazeclaw::gateway::json::Trim(phase);
+
+			if (phase == "preflight")
+			{
+				std::string toolName;
+				std::string status;
+				std::string errorCode;
+				std::string argsJson;
+				blazeclaw::gateway::json::FindStringField(deltaJson, "toolName", toolName);
+				blazeclaw::gateway::json::FindStringField(deltaJson, "status", status);
+				blazeclaw::gateway::json::FindStringField(deltaJson, "errorCode", errorCode);
+				blazeclaw::gateway::json::FindStringField(deltaJson, "argsJson", argsJson);
+				toolName = blazeclaw::gateway::json::Trim(toolName);
+				status = blazeclaw::gateway::json::Trim(status);
+				errorCode = blazeclaw::gateway::json::Trim(errorCode);
+				argsJson = blazeclaw::gateway::json::Trim(argsJson);
+				if (status.empty())
+				{
+					status = "unknown";
+				}
+
+				std::string line = "  - preflight target=" +
+					(toolName.empty() ? std::string("(unknown)") : toolName) +
+					" [" + status + "]";
+				if (!argsJson.empty())
+				{
+					line += " requested=" + argsJson;
+				}
+				if (!errorCode.empty())
+				{
+					line += " errorCode=" + errorCode;
+				}
+
+				if (emitted.find(line) != emitted.end())
+				{
+					continue;
+				}
+
+				emitted.insert(line);
+				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+			}
+			else if (phase == "final")
+			{
+				std::string status;
+				std::string errorCode;
+				std::string resultJson;
+				blazeclaw::gateway::json::FindStringField(deltaJson, "status", status);
+				blazeclaw::gateway::json::FindStringField(deltaJson, "errorCode", errorCode);
+				blazeclaw::gateway::json::FindStringField(deltaJson, "resultJson", resultJson);
+				status = blazeclaw::gateway::json::Trim(status);
+				errorCode = blazeclaw::gateway::json::Trim(errorCode);
+				resultJson = blazeclaw::gateway::json::Trim(resultJson);
+				if (status.empty())
+				{
+					status = "unknown";
+				}
+
+				std::string line = "  - final [" + status + "]";
+				if (!errorCode.empty())
+				{
+					line += " errorCode=" + errorCode;
+				}
+				if (!resultJson.empty())
+				{
+					line += " detail=" + TruncateForDiagnostics(resultJson, 220);
+				}
+
+				if (emitted.find(line) != emitted.end())
+				{
+					continue;
+				}
+
+				emitted.insert(line);
+				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+			}
+		}
 	}
 
 	m_reportedSkillPathRunIds.insert(normalizedRunId);
