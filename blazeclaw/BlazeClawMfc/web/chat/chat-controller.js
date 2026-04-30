@@ -180,6 +180,27 @@
         return parseToolErrorCodeFromOutput(output);
     }
 
+    async function requestEmailBackendReadiness(requestImpl) {
+        try {
+            const response = await requestImpl("gateway.email.backend.readiness", {});
+            const payload = response && response.payload && typeof response.payload === "object"
+                ? response.payload
+                : {};
+            return {
+                ready: Boolean(payload.ready),
+                errorCode: typeof payload.errorCode === "string" ? payload.errorCode.trim() : "",
+                remediation: typeof payload.remediation === "string" ? payload.remediation.trim() : "",
+                missingDependency: typeof payload.missingDependency === "string" ? payload.missingDependency.trim() : "",
+                installHint: typeof payload.installHint === "string" ? payload.installHint.trim() : "",
+                configHint: typeof payload.configHint === "string" ? payload.configHint.trim() : "",
+                bucket: typeof payload.bucket === "string" ? payload.bucket.trim() : "",
+                message: typeof payload.message === "string" ? payload.message.trim() : "",
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
     function dataUrlToBase64(dataUrl) {
         const match = /^data:([^;]+);base64,(.+)$/i.exec(String(dataUrl || ""));
         if (!match) {
@@ -1884,6 +1905,9 @@
             const requestImpl = typeof opts.requestOverride === "function"
                 ? opts.requestOverride
                 : request;
+            const readiness = approve
+                ? await requestEmailBackendReadiness(requestImpl)
+                : null;
             const payload = await requestImpl("gateway.tools.call.execute", {
                 tool: "email.schedule",
                 args: {
@@ -1918,6 +1942,15 @@
                 configHint: parsedHints && parsedHints.configHint ? parsedHints.configHint : "",
                 failureBucket: parsedHints && parsedHints.bucket ? parsedHints.bucket : "",
                 errorMessage: parsedHints && parsedHints.message ? parsedHints.message : "",
+                readinessKnown: Boolean(readiness),
+                readinessReady: readiness ? Boolean(readiness.ready) : false,
+                readinessCode: readiness && readiness.errorCode ? readiness.errorCode : "",
+                readinessMessage: readiness && readiness.message ? readiness.message : "",
+                readinessRemediation: readiness && readiness.remediation ? readiness.remediation : "",
+                readinessMissingDependency: readiness && readiness.missingDependency ? readiness.missingDependency : "",
+                readinessInstallHint: readiness && readiness.installHint ? readiness.installHint : "",
+                readinessConfigHint: readiness && readiness.configHint ? readiness.configHint : "",
+                readinessBucket: readiness && readiness.bucket ? readiness.bucket : "",
             };
         }
 
@@ -2188,6 +2221,14 @@
             const approved = await controller.executeExecApprovalAction("email-token-1", true, {
                 requestOverride: async (method, params) => {
                     calls.push({ method, params });
+                    if (method === "gateway.email.backend.readiness") {
+                        return {
+                            payload: {
+                                ready: true,
+                                errorCode: "none",
+                            },
+                        };
+                    }
                     return {
                         payload: {
                             status: "ok",
@@ -2196,18 +2237,21 @@
                     };
                 },
             });
-            assertRegression(calls.length === 1 &&
-                calls[0].method === "gateway.tools.call.execute",
-                "exec approval action should call gateway.tools.call.execute");
-            assertRegression(calls[0].params &&
-                calls[0].params.tool === "email.schedule" &&
-                calls[0].params.args &&
-                calls[0].params.args.action === "approve" &&
-                calls[0].params.args.approvalToken === "email-token-1" &&
-                calls[0].params.args.approve === true,
+            assertRegression(calls.length === 2 &&
+                calls[0].method === "gateway.email.backend.readiness" &&
+                calls[1].method === "gateway.tools.call.execute",
+                "exec approval action should probe backend readiness before gateway.tools.call.execute");
+            assertRegression(calls[1].params &&
+                calls[1].params.tool === "email.schedule" &&
+                calls[1].params.args &&
+                calls[1].params.args.action === "approve" &&
+                calls[1].params.args.approvalToken === "email-token-1" &&
+                calls[1].params.args.approve === true,
                 "exec approval action should submit canonical email.schedule approval args");
             assertRegression(approved.ok === true && approved.status === "ok",
                 "exec approval action should report successful approval resolution");
+            assertRegression(approved.readinessKnown === true && approved.readinessReady === true,
+                "exec approval action should expose readiness metadata for approve path");
             summary.push("exec approval approve action");
         }
 
@@ -2246,21 +2290,53 @@
                 }),
             });
             const expired = await controller.executeExecApprovalAction("email-token-3", true, {
-                requestOverride: async () => ({
-                    payload: {
-                        status: "error",
-                        output: "approval_token_expired",
-                    },
-                }),
+                requestOverride: async (method) => {
+                    if (method === "gateway.email.backend.readiness") {
+                        return {
+                            payload: {
+                                ready: false,
+                                errorCode: "imap_smtp_skill_missing",
+                                message: "Email backend dependency is missing for approval execution.",
+                                remediation: "Install required email skill backend dependencies and retry approve.",
+                                missingDependency: "imap_smtp_email",
+                                installHint: "Install Himalaya CLI and imap_smtp_email skill assets.",
+                                configHint: "Verify backend scripts and account profile configuration.",
+                                bucket: "missing_skill",
+                            },
+                        };
+                    }
+                    return {
+                        payload: {
+                            status: "error",
+                            output: "approval_token_expired",
+                        },
+                    };
+                },
             });
             const remapped = await controller.executeExecApprovalAction("email-token-4", true, {
-                requestOverride: async () => ({
-                    payload: {
-                        status: "error",
-                        errorCode: "legacy_execution_failed",
-                        output: "{\"ok\":false,\"error\":{\"code\":\"imap_smtp_skill_missing\",\"message\":\"imap_smtp_skill_missing\",\"remediation\":\"install backend\"}}",
-                    },
-                }),
+                requestOverride: async (method) => {
+                    if (method === "gateway.email.backend.readiness") {
+                        return {
+                            payload: {
+                                ready: false,
+                                errorCode: "imap_smtp_skill_missing",
+                                message: "Email backend dependency is missing for approval execution.",
+                                remediation: "Install required email skill backend dependencies and retry approve.",
+                                missingDependency: "imap_smtp_email",
+                                installHint: "Install Himalaya CLI and imap_smtp_email skill assets.",
+                                configHint: "Verify backend scripts and account profile configuration.",
+                                bucket: "missing_skill",
+                            },
+                        };
+                    }
+                    return {
+                        payload: {
+                            status: "error",
+                            errorCode: "legacy_execution_failed",
+                            output: "{\"ok\":false,\"error\":{\"code\":\"imap_smtp_skill_missing\",\"message\":\"imap_smtp_skill_missing\",\"remediation\":\"install backend\"}}",
+                        },
+                    };
+                },
             });
             assertRegression(denied.ok === true && denied.status === "cancelled",
                 "exec approval action should treat cancelled response as resolved deny path");
@@ -2268,6 +2344,10 @@
                 "exec approval action should classify token-expired responses");
             assertRegression(remapped.ok === false && remapped.errorCode === "imap_smtp_skill_missing",
                 "exec approval action should prioritize structured mapped nested error code over legacy top-level code");
+            assertRegression(remapped.readinessKnown === true && remapped.readinessReady === false &&
+                remapped.readinessCode === "imap_smtp_skill_missing" &&
+                remapped.readinessMissingDependency === "imap_smtp_email",
+                "exec approval action should propagate backend readiness hints for pre-approve guardrail rendering");
             summary.push("exec approval deny + expired actions");
         }
 
@@ -2502,7 +2582,7 @@
                 "message parser should degrade image blocks to stable text markers");
             assertRegression(parsed.includes("[Tool call: search_docs]") &&
                 parsed.includes("[Tool result: search_docs]"),
-            "message parser should degrade tool blocks to stable text markers");
+                "message parser should degrade tool blocks to stable text markers");
             summary.push("structured content degraded-text rendering");
         }
 
@@ -2534,17 +2614,17 @@
                 "detached send helper should report success for non-empty messages");
             assertRegression(sendCalls.length === 1 &&
                 sendCalls[0].method === "chat.send",
-            "detached send helper should call chat.send");
+                "detached send helper should call chat.send");
             assertRegression(sendCalls[0].params &&
                 sendCalls[0].params.detached === true &&
                 sendCalls[0].params.deliver === true &&
                 sendCalls[0].params.clientMode === "webchat",
-            "detached send helper should set detached/deliver/clientMode request params");
+                "detached send helper should set detached/deliver/clientMode request params");
             assertRegression(messageRows.every((row) => row.kind !== "self"),
                 "detached send helper should avoid local self bubble rendering");
             assertRegression(detachedNotices.length === 1 &&
                 detachedNotices[0].kind === "sent",
-            "detached send helper should emit side-channel notice callback events");
+                "detached send helper should emit side-channel notice callback events");
             summary.push("detached send semantics");
         }
 
@@ -2571,7 +2651,7 @@
                 calls[0].method === "sessions.subscribe" &&
                 calls[0].params &&
                 calls[0].params.sessionKey === "main",
-            "session subscribe helper should call sessions.subscribe with active session");
+                "session subscribe helper should call sessions.subscribe with active session");
 
             const compactions = await controller.loadSessionCompactions({
                 requestOverride: async (method) => {
@@ -2588,10 +2668,10 @@
             });
             assertRegression(Array.isArray(compactions) && compactions.length === 2 &&
                 compactions[0].id === "cmp-1" && compactions[1].id === "br-2",
-            "compaction loader should normalize compaction ids from payload");
+                "compaction loader should normalize compaction ids from payload");
             assertRegression(sessionSnapshots.length >= 2 &&
                 sessionSnapshots[sessionSnapshots.length - 1].selectedCompactionId === "cmp-1",
-            "session control callback should receive normalized compaction selection state");
+                "session control callback should receive normalized compaction selection state");
             summary.push("session subscribe + compaction controls");
         }
 
@@ -2637,11 +2717,11 @@
                 finalEntry.runId === "run-1" &&
                 finalEntry.terminalState === "final" &&
                 finalEntry.source === "stream",
-            "terminal final events should commit deterministic structured transcript entries");
+                "terminal final events should commit deterministic structured transcript entries");
             assertRegression(streamSnapshots.includes("Hello wor") &&
                 streamSnapshots.includes("Hello world") &&
                 streamFinalized === 1,
-            "delta/final flow should still drive stream rendering transitions");
+                "delta/final flow should still drive stream rendering transitions");
             summary.push("stream final transcript commit");
         }
 
@@ -2697,7 +2777,7 @@
                 "mismatched terminal events should clear stale active run state");
             assertRegression(messageRows.some((row) =>
                 row.kind === "peer" && row.text === "mismatch terminal recovered"),
-            "mismatched terminal recovery should preserve terminal assistant text visibility");
+                "mismatched terminal recovery should preserve terminal assistant text visibility");
             state.runId = "stale-run-aborted";
             eventsModule.handleChatEvents([{
                 sessionKey: "main",
@@ -2709,7 +2789,7 @@
                 "mismatched aborted events should also clear stale active run state");
             assertRegression(messageRows.some((row) =>
                 row.kind === "peer" && row.text === "mismatch aborted recovered"),
-            "mismatched aborted recovery should preserve terminal assistant text visibility");
+                "mismatched aborted recovery should preserve terminal assistant text visibility");
             summary.push("history reconcile repair-only");
         }
 
@@ -2782,12 +2862,12 @@
             assertRegression(calls.length >= 2 &&
                 calls[0].method === "chat.abort" &&
                 calls[1].method === "chat.events.poll",
-            "abort fallback should trigger one reconcile poll when abort outcome is unresolved");
+                "abort fallback should trigger one reconcile poll when abort outcome is unresolved");
             assertRegression(state.runId === null,
                 "abort fallback reconcile should clear stale active run state after terminal evidence");
             assertRegression(messageRows.some((row) =>
                 row.kind === "peer" && row.text.includes("abort fallback reconciled stale run state")),
-            "abort fallback should emit explicit recovery diagnostic message");
+                "abort fallback should emit explicit recovery diagnostic message");
             assertRegression(Number(state.operatorDiagnosticsCounters["chat.abort.stale_run_reconcile"] || 0) >= 1,
                 "abort fallback recovery should increment stale-run reconcile diagnostic counter");
             summary.push("abort fallback reconcile recovery");
@@ -2831,7 +2911,7 @@
                 "abort fallback should keep run active when reconcile has no terminal evidence");
             assertRegression(messageRows.some((row) =>
                 row.kind === "error" && row.text.includes("abort diagnostic: target=stale-run-id-no-terminal")),
-            "abort fallback unresolved path should emit explicit diagnostic message");
+                "abort fallback unresolved path should emit explicit diagnostic message");
             summary.push("abort fallback unresolved diagnostics");
         }
 
@@ -2871,7 +2951,7 @@
             assertRegression(messageRows.some((row) =>
                 row.kind === "peer" &&
                 row.text.includes("waiting for terminal event; queued message (1)")),
-            "queued-send guardrail should surface explicit waiting-for-terminal status text");
+                "queued-send guardrail should surface explicit waiting-for-terminal status text");
             summary.push("queue waiting-status guardrail");
         }
 

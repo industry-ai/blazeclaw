@@ -550,7 +550,7 @@ Completed implementation highlights:
    - Added assertion for `needs_approval` final task-delta status.
    - Added retry-after-repair test where backend state is restored and same-token approve succeeds.
 
-## Incident Analysis (2026-04-30 follow-up): Approval still returns `legacy_execution_failed` after clicking approve
+## Incident Analysis (2026-04-30 latest): Approval fails with `imap_smtp_skill_missing` after clicking approve
 
 ### Reproduction observed (latest)
 Prompt (Chinese):
@@ -559,73 +559,66 @@ Prompt (Chinese):
 Observed behavior:
 - Assistant returns approval-pending message with `approvalToken`.
 - Approval card appears in WebView.
-- Clicking approve still shows tool timeline error:
-  - `status=error code=legacy_execution_failed`
-  - nested backend payload still includes `imap_smtp_skill_missing`.
-- SkillPath shows terminal semantic is now correct (`final [needs_approval]`), but approve execution mapping remains legacy.
+- Clicking approve returns actionable failure in card:
+  - `Email approval failed (imap_smtp_skill_missing)`
+  - remediation/install/config hints are present.
+- SkillPath trace confirms normalized backend result:
+  - `tools.execute.result ... errorCode=imap_smtp_skill_missing`
+  - `output.error.code=imap_smtp_skill_missing` with structured hints.
 
-### Root cause summary (most likely)
-This is now a **post-approval execution mapping bypass/miss** rather than the earlier terminal-state issue.
+### Root cause summary
+This is **no longer a remapping/legacy-code masking bug**. The remapping path is active and visible.
 
-1. **Approval flow itself is active**
-   - `needs_approval` + approval token + approval card prove orchestration/UI wiring is functioning.
+1. **Approval orchestration and approve-click wiring are working**
+   - `needs_approval`, approval card rendering, and approve action execution all work end-to-end.
 
-2. **Backend dependency is still missing**
-   - Nested backend payload still reports `imap_smtp_skill_missing`; environment remains missing IMAP/SMTP delivery runtime assets.
+2. **Error normalization is working**
+   - Top-level and nested error fields are already mapped to actionable code (`imap_smtp_skill_missing`).
+   - The previous `legacy_execution_failed` user-facing symptom is not present in this latest run.
 
-3. **Top-level remapping to actionable code is not taking effect at runtime**
-   - If remapping path were active, top-level code should be `imap_smtp_skill_missing` (or `email_backend_unavailable`) instead of `legacy_execution_failed`.
-
-4. **Likely runtime causes for remapping miss**
-   - Approve request does not satisfy approve-detection gate (argument shape/parse mismatch), so remapping branch is skipped.
-   - Or approve call is hitting a path/binary that does not include latest mapping changes (stale runtime/web bundle / old binary still running).
-   - Or tool timeline UI is reading legacy top-level code source while ignoring normalized output/error fields.
+3. **Current blocker is runtime dependency readiness**
+   - Approval execution fails because the IMAP/SMTP email backend skill/runtime dependency is missing (`imap_smtp_email` / Himalaya integration not ready).
 
 ### Why this exact symptom appears
-- The underlying backend failure remains real (`imap_smtp_skill_missing`).
-- The runtime still exposes the V2 adapter fallback top-level code (`legacy_execution_failed`).
-- Because remapping did not execute (or its result is not consumed), users still see non-actionable top-level error despite nested actionable backend code.
+- The weather and planning phases succeed.
+- `email.schedule.prepare` succeeds and produces an approval token.
+- `email.schedule.approve` attempts real send-path execution, which requires installed/configured backend dependencies.
+- Since backend dependency is missing, approval fails deterministically with the mapped actionable error.
 
-## Step-by-step action plan to fix (follow-up)
+## Step-by-step action plan to fix (latest)
 
-1. **Add explicit approve-remapping gate telemetry (high priority)**
-   - Emit one telemetry event before execution for every `email.schedule` approve click including:
-     - parsed action, parsed approve bool, argsParseMode, argsKey, and whether remap gate is entered.
-   - Purpose: prove whether mapping branch is being skipped.
+1. **Treat this as dependency/config remediation (not remap bug) in incident notes**
+   - ✅ Implemented in analysis update: latest repro is dependency-readiness failure, not remap/UI precedence regression.
 
-2. **Harden approve argument parsing across all request shapes**
-   - Accept and normalize these forms consistently:
-     - `args` object
-     - `arguments` object
-     - serialized JSON string payload
-   - Ensure approve detection does not depend on a single parse shape.
+2. **Verify backend runtime prerequisites on the host machine**
+   - ⏳ Pending manual environment validation on target host.
+   - Confirm Himalaya CLI is installed and reachable via PATH.
+   - Confirm `imap_smtp_email` runtime assets are present in expected skill/runtime directories.
 
-3. **Force top-level error normalization for `email.schedule` approve regardless of legacy adapter code**
-   - When tool=`email.schedule` and action=`approve`, always inspect nested output error and overwrite top-level code/message/category.
-   - Keep `legacy_execution_failed` only as internal fallback, not user-facing terminal code.
+3. **Validate email profile/account configuration used by approve execution**
+   - ⏳ Pending manual environment validation on target host.
+   - Ensure SMTP/IMAP credentials and account profile are configured and readable by current process identity.
+   - Confirm policy/profile env flags in runtime match expected deployment mode.
 
-4. **Add runtime assertion/trace for mapped output fields**
-   - Verify response payload includes:
-     - top-level `errorCode` in normalized bucket
-     - structured `output.error` hints (`remediation`, `missingDependency`, `installHint`, `configHint`, `bucket`).
-   - Add trace line when remap is applied.
+4. **Add a startup/runtime health self-check command for email backend readiness**
+   - ✅ Implemented: new gateway method `gateway.email.backend.readiness` returns `ready`, `bucket`, `errorCode`, and structured remediation hints.
+   - ✅ Added telemetry snapshot emission for readiness diagnostics.
 
-5. **Align tool timeline/UI error source precedence**
-   - In WebView timeline/card rendering, prioritize:
-     1) top-level normalized `errorCode`
-     2) structured `output.error.code`
-     3) legacy fallback text.
-   - Prevent legacy top-level code from masking mapped structured output.
+5. **Improve pre-approve UX guardrail in WebView**
+   - ✅ Implemented: approval action now performs readiness precheck and carries readiness fields back to UI state.
+   - ✅ Implemented: failed approval card renders `[precheck]` guardrail line when backend known-not-ready.
 
-6. **Add regression tests for argument-shape variance**
-   - Approve call tests using each supported arg transport form should all map to actionable top-level code on backend-missing condition.
+6. **Strengthen deployment freshness verification path**
+   - ✅ Implemented: new gateway method `gateway.runtime.freshness` emits `gatewayBuildStamp`, `webAssetsStamp`, and `generatedAtEpochMs`.
+   - ✅ Added telemetry event `gateway.runtime.freshness` for runtime stamp diagnostics.
 
-7. **Add end-to-end WebView approval test assertion**
-   - Simulate approval card click and assert timeline shows mapped top-level code (not `legacy_execution_failed`) plus remediation fields.
+7. **Add/keep regression coverage for backend-missing path and recovery path**
+   - ✅ Implemented: C++ regression now validates `gateway.email.backend.readiness` payload contract under missing-backend setup.
+   - ✅ Kept/extended assertions that approval failure uses actionable mapped top-level code and keeps structured remediation.
+   - ✅ Kept retry-after-repair path assertions.
+   - ✅ Added JS regression assertions for readiness precheck call ordering and readiness metadata propagation.
 
-8. **Validate deployment/runtime freshness before retest**
-   - Confirm gateway binary and web assets loaded at runtime include latest commit/build stamp.
-   - Then replay Shanghai prompt and verify:
-     - approval card appears,
-     - approve failure (if backend still missing) shows actionable top-level code + remediation,
-     - retry succeeds once backend dependency is restored.
+8. **Retest with two deterministic scenarios**
+   - ⏳ Pending runtime/manual retest on local environment:
+     - Scenario A (backend intentionally missing): approval card appears; approve fails with actionable mapped code + remediation fields.
+     - Scenario B (backend restored/configured): same prompt flow; approve succeeds and email is sent.

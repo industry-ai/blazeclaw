@@ -216,9 +216,9 @@
             cursor: pointer;
         }
 
-        .tool-copy-json:hover {
-            background: #3d3d3d;
-        }
+            .tool-copy-json:hover {
+                background: #3d3d3d;
+            }
 
         .detached-notices {
             border-top: 1px solid #2b2b2b;
@@ -282,30 +282,30 @@
             gap: 6px;
         }
 
-        .approval-card .meta {
-            color: #bfbfbf;
-            font-size: 11px;
-        }
+            .approval-card .meta {
+                color: #bfbfbf;
+                font-size: 11px;
+            }
 
-        .approval-card .actions {
-            display: flex;
-            gap: 8px;
-        }
+            .approval-card .actions {
+                display: flex;
+                gap: 8px;
+            }
 
-        .approval-card .actions button {
-            padding: 2px 10px;
-            font-size: 12px;
-        }
+                .approval-card .actions button {
+                    padding: 2px 10px;
+                    font-size: 12px;
+                }
 
-        .approval-card.approved {
-            border-left-color: #8cd98c;
-            color: #d2f0d2;
-        }
+            .approval-card.approved {
+                border-left-color: #8cd98c;
+                color: #d2f0d2;
+            }
 
-        .approval-card.denied {
-            border-left-color: #ff9a9a;
-            color: #ffd0d0;
-        }
+            .approval-card.denied {
+                border-left-color: #ff9a9a;
+                color: #ffd0d0;
+            }
 
         .composer {
             display: grid;
@@ -585,6 +585,24 @@
                             guide.textContent = `${dependency}${remediation}${installHint}${configHint}`;
                             card.appendChild(guide);
                         }
+                        if (item.readinessKnown && !item.readinessReady) {
+                            const readinessLine = document.createElement("div");
+                            readinessLine.className = "meta";
+                            const readinessCode = item.readinessCode
+                                ? `code=${String(item.readinessCode)} · `
+                                : "";
+                            const readinessMissing = item.readinessMissingDependency
+                                ? `missing=${String(item.readinessMissingDependency)} · `
+                                : "";
+                            const readinessMessage = item.readinessMessage
+                                ? String(item.readinessMessage)
+                                : "Email backend is not ready.";
+                            const readinessRemediation = item.readinessRemediation
+                                ? ` ${String(item.readinessRemediation)}`
+                                : "";
+                            readinessLine.textContent = `[precheck] ${readinessCode}${readinessMissing}${readinessMessage}${readinessRemediation}`;
+                            card.appendChild(readinessLine);
+                        }
                         const retryActions = document.createElement("div");
                         retryActions.className = "actions";
                         const retryApproveBtn = document.createElement("button");
@@ -747,6 +765,12 @@
                     item.installHint = String(result && result.installHint || "").trim();
                     item.configHint = String(result && result.configHint || "").trim();
                     item.failureBucket = String(result && result.failureBucket || "").trim();
+                    item.readinessKnown = Boolean(result && result.readinessKnown);
+                    item.readinessReady = Boolean(result && result.readinessReady);
+                    item.readinessCode = String(result && result.readinessCode || "").trim();
+                    item.readinessMessage = String(result && result.readinessMessage || "").trim();
+                    item.readinessRemediation = String(result && result.readinessRemediation || "").trim();
+                    item.readinessMissingDependency = String(result && result.readinessMissingDependency || "").trim();
                 } catch (error) {
                     item.status = "denied";
                     item.title = `Approval error: ${String(error)}`;

@@ -109,6 +109,30 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 			return result;
 		}
 
+		std::string BuildEmailApprovalReadinessJson() {
+			const auto precheck = BuildEmailApprovalPrecheckResult();
+			return std::string("{\"tool\":\"email.schedule\",\"ready\":") +
+				std::string(precheck.ready ? "true" : "false") +
+				",\"bucket\":" + JsonString(precheck.bucket) +
+				",\"errorCode\":" + JsonString(precheck.errorCode.empty() ? "none" : precheck.errorCode) +
+				",\"message\":" + JsonString(precheck.message) +
+				",\"remediation\":" + JsonString(precheck.remediation) +
+				",\"missingDependency\":" + JsonString(precheck.missingDependency) +
+				",\"installHint\":" + JsonString(precheck.installHint) +
+				",\"configHint\":" + JsonString(precheck.configHint) +
+				"}";
+		}
+
+		std::string BuildRuntimeFreshnessJson() {
+			const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			const std::string buildStamp = std::string(__DATE__) + " " + std::string(__TIME__);
+			return std::string("{\"gatewayBuildStamp\":") + JsonString(buildStamp) +
+				",\"webAssetsStamp\":" + JsonString(buildStamp) +
+				",\"generatedAtEpochMs\":" + std::to_string(now) +
+				"}";
+		}
+
 		std::string BuildApprovalFailureResultJson(
 			const std::string& code,
 			const std::string& message,
@@ -211,6 +235,18 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 
 		host.m_dispatcher.Register("sessions.usage.timeseries", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"points\":[],\"totals\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":0,\"totalCost\":0.0}}}");
+			});
+
+		host.m_dispatcher.Register("gateway.email.backend.readiness", [](const protocol::RequestFrame& request) {
+			const std::string payload = BuildEmailApprovalReadinessJson();
+			EmitTelemetryEvent("gateway.email.backend.readiness", payload);
+			return protocol::OkResponse(request, payload);
+			});
+
+		host.m_dispatcher.Register("gateway.runtime.freshness", [](const protocol::RequestFrame& request) {
+			const std::string payload = BuildRuntimeFreshnessJson();
+			EmitTelemetryEvent("gateway.runtime.freshness", payload);
+			return protocol::OkResponse(request, payload);
 			});
 
 		host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::RequestFrame& request) {

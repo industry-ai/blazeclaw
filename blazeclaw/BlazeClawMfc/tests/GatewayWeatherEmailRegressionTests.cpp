@@ -965,6 +965,25 @@ TEST_CASE(
 	blazeclaw::gateway::GatewayHost host;
 	REQUIRE(host.StartLocalRuntimeDispatchOnly());
 
+	const auto readinessResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-remediation-readiness",
+			.method = "gateway.email.backend.readiness",
+			.paramsJson = "{}",
+		});
+	REQUIRE(readinessResponse.ok);
+	REQUIRE(readinessResponse.payloadJson.has_value());
+	const auto readinessPayload = nlohmann::json::parse(readinessResponse.payloadJson.value());
+	REQUIRE(readinessPayload.value("tool", std::string{}) == "email.schedule");
+	REQUIRE(readinessPayload.contains("ready"));
+	REQUIRE(readinessPayload["ready"].is_boolean());
+	REQUIRE(readinessPayload.value("ready", true) == false);
+	REQUIRE(readinessPayload.contains("errorCode"));
+	REQUIRE(readinessPayload.contains("remediation"));
+	REQUIRE(readinessPayload.contains("missingDependency"));
+	REQUIRE(readinessPayload.contains("installHint"));
+	REQUIRE(readinessPayload.contains("configHint"));
+
 	const auto prepareResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
 			.id = "approval-remediation-prepare",
@@ -1321,7 +1340,7 @@ TEST_CASE(
 		REQUIRE(outputJson["error"].is_object());
 		REQUIRE(outputJson["error"].contains("code"));
 		REQUIRE(outputJson["error"].contains("remediation"));
-	};
+		};
 
 	assertMappedApprovalFailure(
 		std::string("{\"tool\":\"email.schedule\",\"arguments\":{") +
