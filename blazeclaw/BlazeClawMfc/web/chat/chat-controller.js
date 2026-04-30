@@ -136,6 +136,34 @@
         return "";
     }
 
+    function parseApprovalFailureHints(output) {
+        const raw = String(output || "").trim();
+        if (!raw) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(raw);
+            const error = parsed && parsed.error && typeof parsed.error === "object"
+                ? parsed.error
+                : null;
+            if (!error) {
+                return null;
+            }
+            return {
+                code: typeof error.code === "string" ? error.code.trim() : "",
+                message: typeof error.message === "string" ? error.message.trim() : "",
+                remediation: typeof error.remediation === "string" ? error.remediation.trim() : "",
+                missingDependency: typeof error.missingDependency === "string" ? error.missingDependency.trim() : "",
+                installHint: typeof error.installHint === "string" ? error.installHint.trim() : "",
+                configHint: typeof error.configHint === "string" ? error.configHint.trim() : "",
+                bucket: typeof error.bucket === "string" ? error.bucket.trim() : "",
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
     function dataUrlToBase64(dataUrl) {
         const match = /^data:([^;]+);base64,(.+)$/i.exec(String(dataUrl || ""));
         if (!match) {
@@ -1857,8 +1885,11 @@
             const output = typeof responsePayload.output === "string"
                 ? responsePayload.output
                 : "";
-            const errorCode = parseToolErrorCodeFromOutput(output);
-            const expired = output.toLowerCase().includes("expired");
+            const parsedHints = parseApprovalFailureHints(output);
+            const errorCode = (responsePayload && typeof responsePayload.errorCode === "string" && responsePayload.errorCode.trim())
+                ? responsePayload.errorCode.trim()
+                : (parsedHints && parsedHints.code ? parsedHints.code : parseToolErrorCodeFromOutput(output));
+            const expired = output.toLowerCase().includes("expired") || errorCode === "approval_token_expired";
             const resolvedOk = approve
                 ? status === "ok"
                 : status === "cancelled" || status === "ok";
@@ -1867,6 +1898,12 @@
                 status: expired ? "expired" : (status || "unknown"),
                 output,
                 errorCode,
+                remediation: parsedHints && parsedHints.remediation ? parsedHints.remediation : "",
+                missingDependency: parsedHints && parsedHints.missingDependency ? parsedHints.missingDependency : "",
+                installHint: parsedHints && parsedHints.installHint ? parsedHints.installHint : "",
+                configHint: parsedHints && parsedHints.configHint ? parsedHints.configHint : "",
+                failureBucket: parsedHints && parsedHints.bucket ? parsedHints.bucket : "",
+                errorMessage: parsedHints && parsedHints.message ? parsedHints.message : "",
             };
         }
 

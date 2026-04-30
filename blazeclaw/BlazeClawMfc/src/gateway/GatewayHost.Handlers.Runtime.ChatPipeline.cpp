@@ -1444,7 +1444,8 @@ namespace blazeclaw::gateway {
 										true,
 										assistantText,
 										{},
-										{});
+										{},
+										orchestrationResult.terminalStatus);
 								if (!orderedPreflightTaskDeltas.empty()) {
 									std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
 									mergedTaskDeltas.reserve(

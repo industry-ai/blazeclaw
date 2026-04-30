@@ -564,6 +564,39 @@
                         actions.appendChild(approveBtn);
                         actions.appendChild(denyBtn);
                         card.appendChild(actions);
+                    } else if (String(item.status || "").toLowerCase() === "failed") {
+                        if (item.errorMessage) {
+                            const errorLine = document.createElement("div");
+                            errorLine.className = "meta";
+                            errorLine.textContent = `error=${String(item.errorMessage)}`;
+                            card.appendChild(errorLine);
+                        }
+                        if (item.missingDependency || item.remediation || item.installHint || item.configHint) {
+                            const guide = document.createElement("div");
+                            guide.className = "meta";
+                            const dependency = item.missingDependency
+                                ? `missing=${String(item.missingDependency)} · `
+                                : "";
+                            const remediation = item.remediation
+                                ? String(item.remediation)
+                                : "Repair dependency/configuration and retry approval.";
+                            const installHint = item.installHint ? ` install: ${String(item.installHint)}` : "";
+                            const configHint = item.configHint ? ` config: ${String(item.configHint)}` : "";
+                            guide.textContent = `${dependency}${remediation}${installHint}${configHint}`;
+                            card.appendChild(guide);
+                        }
+                        const retryActions = document.createElement("div");
+                        retryActions.className = "actions";
+                        const retryApproveBtn = document.createElement("button");
+                        retryApproveBtn.textContent = "Retry approve";
+                        retryApproveBtn.disabled = Boolean(item.busy);
+                        retryApproveBtn.addEventListener("click", () => {
+                            item.status = "pending";
+                            renderApprovalQueue();
+                            void resolveApprovalToken(item.token, true);
+                        });
+                        retryActions.appendChild(retryApproveBtn);
+                        card.appendChild(retryActions);
                     }
 
                     approvalQueueEl.appendChild(card);
@@ -696,8 +729,9 @@
                         : { ok: false, status: "invalid" };
                     item.status = result.ok
                         ? (approve ? "approved" : "denied")
-                        : "denied";
+                        : (approve ? "failed" : "denied");
                     if (result.status === "expired") {
+                        item.status = "failed";
                         item.title = "Approval token expired";
                     } else {
                         const errorCode = String(result && result.errorCode || "").trim();
@@ -707,6 +741,12 @@
                                 ? (errorCode ? `Email approval failed (${errorCode})` : "Email approval failed")
                                 : "Email approval denied");
                     }
+                    item.errorMessage = String(result && result.errorMessage || "").trim();
+                    item.remediation = String(result && result.remediation || "").trim();
+                    item.missingDependency = String(result && result.missingDependency || "").trim();
+                    item.installHint = String(result && result.installHint || "").trim();
+                    item.configHint = String(result && result.configHint || "").trim();
+                    item.failureBucket = String(result && result.failureBucket || "").trim();
                 } catch (error) {
                     item.status = "denied";
                     item.title = `Approval error: ${String(error)}`;

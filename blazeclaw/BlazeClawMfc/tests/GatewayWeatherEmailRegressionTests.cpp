@@ -837,6 +837,10 @@ TEST_CASE(
 		});
 	REQUIRE(sendResponse.ok);
 	REQUIRE(sendResponse.payloadJson.has_value());
+	const auto sendPayloadJson = nlohmann::json::parse(sendResponse.payloadJson.value());
+	REQUIRE(sendPayloadJson.contains("runId"));
+	const std::string runId = sendPayloadJson.value("runId", std::string{});
+	REQUIRE_FALSE(runId.empty());
 
 	bool sawNeedsApproval = false;
 	std::string approvalToken;
@@ -905,6 +909,197 @@ TEST_CASE(
 	REQUIRE(approvalNextAction == "email.schedule.approve");
 	REQUIRE((terminalReason == "approval_required" || terminalReason == "fallback_backend_unavailable"));
 	REQUIRE(sawAssistantMessage);
+
+	const auto taskDeltaResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = requestId + "-task-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(taskDeltaResponse.ok);
+	REQUIRE(taskDeltaResponse.payloadJson.has_value());
+	const auto taskDeltaPayload = nlohmann::json::parse(taskDeltaResponse.payloadJson.value());
+	REQUIRE(taskDeltaPayload.contains("taskDeltas"));
+	REQUIRE(taskDeltaPayload["taskDeltas"].is_array());
+	bool finalNeedsApproval = false;
+	for (const auto& delta : taskDeltaPayload["taskDeltas"]) {
+		if (!delta.is_object()) {
+			continue;
+		}
+
+		if (delta.value("phase", std::string{}) == "final" &&
+			delta.value("status", std::string{}) == "needs_approval") {
+			finalNeedsApproval = true;
+			break;
+		}
+	}
+	REQUIRE(finalNeedsApproval);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Dispatch-only email approval failure returns structured remediation for missing backend",
+	"[gateway][weather-email][email-schedule][approval][remediation][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+	ScopedEnvVar localAppData("LOCALAPPDATA");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_failure");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+	const std::filesystem::path tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_approval_remediation_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+	localAppData.Set(tempStateRoot.string());
+
+	blazeclaw::gateway::GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+
+	const auto prepareResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-remediation-prepare",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"prepare\"," +
+				"\"to\":\"jicheng@whu.edu.cn\"," +
+				"\"subject\":\"Approval remediation test\"," +
+				"\"body\":\"Approval remediation test body\"," +
+				"\"sendAt\":\"13:00\"}}",
+		});
+	REQUIRE(prepareResponse.ok);
+	REQUIRE(prepareResponse.payloadJson.has_value());
+	const auto preparePayload = nlohmann::json::parse(prepareResponse.payloadJson.value());
+	REQUIRE(preparePayload["output"].is_string());
+	const auto prepareOutput = nlohmann::json::parse(preparePayload["output"].get<std::string>());
+	REQUIRE(prepareOutput.contains("requiresApproval"));
+	const std::string approvalToken =
+		prepareOutput["requiresApproval"]["approvalToken"].get<std::string>();
+	REQUIRE_FALSE(approvalToken.empty());
+
+	const auto approveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-remediation-approve",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"" + approvalToken + "\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(approveResponse.ok);
+	REQUIRE(approveResponse.payloadJson.has_value());
+	const auto approvePayload = nlohmann::json::parse(approveResponse.payloadJson.value());
+	REQUIRE(approvePayload["status"].get<std::string>() == "error");
+	REQUIRE(approvePayload.contains("errorCode"));
+	const std::string errorCode = approvePayload.value("errorCode", std::string{});
+	REQUIRE((errorCode == "imap_smtp_skill_missing" || errorCode == "email_backend_unavailable"));
+	REQUIRE(approvePayload["output"].is_string());
+	const auto approveOutput = nlohmann::json::parse(approvePayload["output"].get<std::string>());
+	REQUIRE(approveOutput.contains("error"));
+	REQUIRE(approveOutput["error"].is_object());
+	const auto& errorObj = approveOutput["error"];
+	REQUIRE(errorObj.contains("remediation"));
+	REQUIRE(errorObj.contains("missingDependency"));
+	REQUIRE(errorObj.contains("installHint"));
+	REQUIRE(errorObj.contains("configHint"));
+	REQUIRE(errorObj.contains("bucket"));
+	REQUIRE_FALSE(errorObj.value("remediation", std::string{}).empty());
+	REQUIRE_FALSE(errorObj.value("bucket", std::string{}).empty());
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Dispatch-only email approval retry succeeds after backend readiness is restored",
+	"[gateway][weather-email][email-schedule][approval][retry][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+	ScopedEnvVar localAppData("LOCALAPPDATA");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_failure");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+	const std::filesystem::path tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_approval_retry_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+	localAppData.Set(tempStateRoot.string());
+
+	blazeclaw::gateway::GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+
+	const auto prepareResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-retry-prepare",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"prepare\"," +
+				"\"to\":\"jicheng@whu.edu.cn\"," +
+				"\"subject\":\"Approval retry test\"," +
+				"\"body\":\"Approval retry test body\"," +
+				"\"sendAt\":\"13:00\"}}",
+		});
+	REQUIRE(prepareResponse.ok);
+	REQUIRE(prepareResponse.payloadJson.has_value());
+	const auto preparePayload = nlohmann::json::parse(prepareResponse.payloadJson.value());
+	const auto prepareOutput = nlohmann::json::parse(preparePayload["output"].get<std::string>());
+	const std::string approvalToken =
+		prepareOutput["requiresApproval"]["approvalToken"].get<std::string>();
+	REQUIRE_FALSE(approvalToken.empty());
+
+	const auto firstApproveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-retry-first-approve",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"" + approvalToken + "\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(firstApproveResponse.ok);
+	REQUIRE(firstApproveResponse.payloadJson.has_value());
+	const auto firstApprovePayload = nlohmann::json::parse(firstApproveResponse.payloadJson.value());
+	REQUIRE(firstApprovePayload["status"].get<std::string>() == "error");
+
+	imapModeEnv.Set("mock_success");
+
+	const auto retryApproveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-retry-second-approve",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"" + approvalToken + "\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(retryApproveResponse.ok);
+	REQUIRE(retryApproveResponse.payloadJson.has_value());
+	const auto retryApprovePayload = nlohmann::json::parse(retryApproveResponse.payloadJson.value());
+	REQUIRE(retryApprovePayload["status"].get<std::string>() == "ok");
+	REQUIRE(retryApprovePayload["output"].is_string());
+	REQUIRE(retryApprovePayload["output"].get<std::string>().find("approval_token_invalid") == std::string::npos);
 
 	host.Stop();
 }

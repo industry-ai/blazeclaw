@@ -444,3 +444,188 @@ This is a **state/semantics mismatch**, not a true runtime deadlock:
      - no perceived stuck behavior,
      - explicit approval-required status shown,
      - approve action completes send path or returns clear backend-unavailable guidance.
+
+## Incident Analysis (2026-04-30): Approval button fails with `legacy_execution_failed` / `imap_smtp_skill_missing`
+
+### Reproduction observed
+Prompt (Chinese):
+- `查一下明天上海的天气，写一个简短的报告，用电子邮件发送给 jichengwhu@163.com`
+
+Observed runtime behavior:
+- Assistant returns approval-pending message with `approvalToken=...` and `expiresAtEpochMs=...`.
+- WebView approval request card appears.
+- Clicking approve triggers tool timeline error:
+  - `tool=email.schedule status=error code=legacy_execution_failed`
+  - nested output error code: `imap_smtp_skill_missing`.
+
+Observed SkillPath:
+- `[SkillPath] terminal approval_required ... nextAction=email.schedule.approve`
+- `runId ... tried paths` contains preflight ok and final line still shown as `final [completed]`.
+
+### Root cause summary
+This is primarily a **backend approval execution dependency failure**, with one **diagnostic semantic mismatch**:
+
+1. Approval card/approval token path is now functioning (card appears and approve action is invoked).
+2. Approve click calls `gateway.tools.call.execute` for `email.schedule` with `{ action:"approve", approvalToken, approve:true }`.
+3. The approve execution path falls into legacy/provider runtime and returns `legacy_execution_failed` with nested `imap_smtp_skill_missing`.
+4. That nested error indicates required IMAP/SMTP skill scripts/runtime assets are missing or unavailable in current environment, so approval cannot finalize send.
+5. Separately, task-delta normalization still marks orchestration success as `final [completed]` even when terminal event state is `needs_approval`, causing confusing logs.
+
+### Why user sees this
+- UI behavior is correct to show approval card and then show tool error after approve action.
+- The real send fails because backend email delivery capability is unavailable (`imap_smtp_skill_missing`).
+- SkillPath mixed semantics (`terminal approval_required` + `final [completed]`) make it look inconsistent.
+
+## Step-by-step action plan to fix
+
+1. **Add explicit backend-readiness precheck before enabling approve action**
+   - Before (or at click time), probe `email.schedule` runtime readiness and surface missing-backend reason immediately.
+
+2. **Harden approve error mapping in gateway tool execution response**
+   - Preserve nested backend error (`imap_smtp_skill_missing`) as top-level actionable code/category (not only `legacy_execution_failed`).
+
+3. **Return structured remediation hints for approval failures**
+   - Include fields such as `remediation`, `missingDependency`, `installHint`, `configHint` in approve failure payload.
+
+4. **Fix task-delta terminal status normalization for approval-pending runs**
+   - When orchestration terminal state is `needs_approval`, task-delta final status must be `needs_approval` (not `completed`).
+
+5. **Add UI approval-card failure state with dependency guidance**
+   - In card error view, show concise guidance: backend missing, what to install/configure, and retry path.
+
+6. **Add one-click retry path after dependency repair**
+   - Keep approval token context and allow retry approve without restarting full weather/email prompt when token remains valid.
+
+7. **Extend diagnostics/telemetry for approve failures**
+   - Emit dedicated telemetry for approval execution failure reason buckets (`missing_skill`, `token_expired`, `backend_unavailable`, etc.).
+
+8. **Add regression tests for this exact scenario**
+   - Case A: approval card appears and approve fails with missing backend -> assert structured remediation payload.
+   - Case B: needs_approval terminal run -> task-delta final status is `needs_approval`, not `completed`.
+   - Case C: after backend readiness restored -> approve succeeds and terminal send confirmation is emitted.
+
+## Implementation update (2026-04-30, applied)
+
+Completed implementation highlights:
+
+1. **Backend-readiness precheck added for approval execution path**
+   - `gateway.tools.call.execute` now performs an `email.schedule` approve precheck against `EmailScheduleExecutor::GetRuntimeHealthIndex(false)`.
+   - If backend is not ready, execution is short-circuited with actionable top-level error code and remediation payload.
+
+2. **Approve error mapping hardened**
+   - Approval execution failures now map nested/legacy backend failures into actionable top-level codes:
+     - `imap_smtp_skill_missing`
+     - `email_backend_unavailable`
+     - `approval_token_expired`
+   - Legacy/nested output no longer remains only `legacy_execution_failed` in top-level handling.
+
+3. **Structured remediation hints returned**
+   - Approval failure output now includes structured fields in `error`:
+     - `remediation`
+     - `missingDependency`
+     - `installHint`
+     - `configHint`
+     - `bucket`
+
+4. **Task-delta terminal status normalization fixed**
+   - Synthesized final task-delta status now preserves orchestration terminal state:
+     - terminal `needs_approval` -> final status `needs_approval`
+     - no longer normalized to `completed`.
+
+5. **Approval-card failure UI guidance implemented**
+   - WebView approval card now supports explicit `failed` state.
+   - Card shows backend/dependency guidance from structured remediation fields.
+
+6. **One-click retry path implemented**
+   - Failed approval card now exposes `Retry approve`.
+   - Retry keeps and reuses original approval token context.
+
+7. **Diagnostics/telemetry extended**
+   - Added dedicated telemetry for approval failures:
+     - event: `gateway.email.approval.execute.failure`
+     - includes `bucket`, `code`, `phase` (`precheck`/`execution`), and token-presence flag.
+
+8. **Regression tests added/extended**
+   - Added test coverage for structured remediation payload on approval failure.
+   - Added assertion for `needs_approval` final task-delta status.
+   - Added retry-after-repair test where backend state is restored and same-token approve succeeds.
+
+## Incident Analysis (2026-04-30 follow-up): Approval still returns `legacy_execution_failed` after clicking approve
+
+### Reproduction observed (latest)
+Prompt (Chinese):
+- `查一下明天上海的天气，写一个简短的报告，用电子邮件发送给 jichengwhu@163.com`
+
+Observed behavior:
+- Assistant returns approval-pending message with `approvalToken`.
+- Approval card appears in WebView.
+- Clicking approve still shows tool timeline error:
+  - `status=error code=legacy_execution_failed`
+  - nested backend payload still includes `imap_smtp_skill_missing`.
+- SkillPath shows terminal semantic is now correct (`final [needs_approval]`), but approve execution mapping remains legacy.
+
+### Root cause summary (most likely)
+This is now a **post-approval execution mapping bypass/miss** rather than the earlier terminal-state issue.
+
+1. **Approval flow itself is active**
+   - `needs_approval` + approval token + approval card prove orchestration/UI wiring is functioning.
+
+2. **Backend dependency is still missing**
+   - Nested backend payload still reports `imap_smtp_skill_missing`; environment remains missing IMAP/SMTP delivery runtime assets.
+
+3. **Top-level remapping to actionable code is not taking effect at runtime**
+   - If remapping path were active, top-level code should be `imap_smtp_skill_missing` (or `email_backend_unavailable`) instead of `legacy_execution_failed`.
+
+4. **Likely runtime causes for remapping miss**
+   - Approve request does not satisfy approve-detection gate (argument shape/parse mismatch), so remapping branch is skipped.
+   - Or approve call is hitting a path/binary that does not include latest mapping changes (stale runtime/web bundle / old binary still running).
+   - Or tool timeline UI is reading legacy top-level code source while ignoring normalized output/error fields.
+
+### Why this exact symptom appears
+- The underlying backend failure remains real (`imap_smtp_skill_missing`).
+- The runtime still exposes the V2 adapter fallback top-level code (`legacy_execution_failed`).
+- Because remapping did not execute (or its result is not consumed), users still see non-actionable top-level error despite nested actionable backend code.
+
+## Step-by-step action plan to fix (follow-up)
+
+1. **Add explicit approve-remapping gate telemetry (high priority)**
+   - Emit one telemetry event before execution for every `email.schedule` approve click including:
+     - parsed action, parsed approve bool, argsParseMode, argsKey, and whether remap gate is entered.
+   - Purpose: prove whether mapping branch is being skipped.
+
+2. **Harden approve argument parsing across all request shapes**
+   - Accept and normalize these forms consistently:
+     - `args` object
+     - `arguments` object
+     - serialized JSON string payload
+   - Ensure approve detection does not depend on a single parse shape.
+
+3. **Force top-level error normalization for `email.schedule` approve regardless of legacy adapter code**
+   - When tool=`email.schedule` and action=`approve`, always inspect nested output error and overwrite top-level code/message/category.
+   - Keep `legacy_execution_failed` only as internal fallback, not user-facing terminal code.
+
+4. **Add runtime assertion/trace for mapped output fields**
+   - Verify response payload includes:
+     - top-level `errorCode` in normalized bucket
+     - structured `output.error` hints (`remediation`, `missingDependency`, `installHint`, `configHint`, `bucket`).
+   - Add trace line when remap is applied.
+
+5. **Align tool timeline/UI error source precedence**
+   - In WebView timeline/card rendering, prioritize:
+     1) top-level normalized `errorCode`
+     2) structured `output.error.code`
+     3) legacy fallback text.
+   - Prevent legacy top-level code from masking mapped structured output.
+
+6. **Add regression tests for argument-shape variance**
+   - Approve call tests using each supported arg transport form should all map to actionable top-level code on backend-missing condition.
+
+7. **Add end-to-end WebView approval test assertion**
+   - Simulate approval card click and assert timeline shows mapped top-level code (not `legacy_execution_failed`) plus remediation fields.
+
+8. **Validate deployment/runtime freshness before retest**
+   - Confirm gateway binary and web assets loaded at runtime include latest commit/build stamp.
+   - Then replay Shanghai prompt and verify:
+     - approval card appears,
+     - approve failure (if backend still missing) shows actionable top-level code + remediation,
+     - retry succeeds once backend dependency is restored.

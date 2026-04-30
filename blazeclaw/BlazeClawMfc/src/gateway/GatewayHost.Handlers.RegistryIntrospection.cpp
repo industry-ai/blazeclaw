@@ -9,10 +9,190 @@
 #include "GatewayRequestParams.h"
 #include "Telemetry.h"
 #include "GatewayJsonUtils.h"
+#include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace blazeclaw::gateway::handlers::registry_introspection {
+	namespace {
+		std::string ToLowerCopyLocal(const std::string& value) {
+			std::string lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return lowered;
+		}
+
+		bool ParseEmailScheduleApproveArgs(
+			const std::optional<std::string>& argsJson,
+			std::string& approvalToken,
+			bool& approveRequested) {
+			approvalToken.clear();
+			approveRequested = false;
+			if (!argsJson.has_value() || json::Trim(argsJson.value()).empty()) {
+				return false;
+			}
+
+			std::string action;
+			if (!json::FindStringField(argsJson.value(), "action", action)) {
+				return false;
+			}
+			if (ToLowerCopyLocal(json::Trim(action)) != "approve") {
+				return false;
+			}
+
+			json::FindStringField(argsJson.value(), "approvalToken", approvalToken);
+			approveRequested = false;
+			json::FindBoolField(argsJson.value(), "approve", approveRequested);
+			approvalToken = json::Trim(approvalToken);
+			return true;
+		}
+
+		struct EmailApprovalPrecheckResult {
+			bool ready = true;
+			std::string bucket = "ready";
+			std::string errorCode;
+			std::string message;
+			std::string remediation;
+			std::string missingDependency;
+			std::string installHint;
+			std::string configHint;
+		};
+
+		EmailApprovalPrecheckResult BuildEmailApprovalPrecheckResult() {
+			EmailApprovalPrecheckResult result;
+			const auto health = executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
+			const std::string emailSendStateLower = ToLowerCopyLocal(json::Trim(health.emailSendState));
+			if (!emailSendStateLower.empty() && emailSendStateLower != "ready") {
+				result.ready = false;
+				result.bucket = "backend_unavailable";
+				result.errorCode = "email_backend_unavailable";
+				result.message = "Email delivery backend is not ready.";
+				result.remediation = "Install and configure the email delivery backend, then retry approve.";
+				result.missingDependency = "himalaya";
+				result.installHint = "Install Himalaya CLI and ensure it is available on PATH.";
+				result.configHint = "Configure a valid Himalaya account profile and SMTP/IMAP credentials.";
+			}
+
+			for (const auto& probe : health.probes) {
+				if (ToLowerCopyLocal(json::Trim(probe.state)) == "ready") {
+					continue;
+				}
+
+				const std::string keyLower = ToLowerCopyLocal(json::Trim(probe.key));
+				if (keyLower.rfind("backend:", 0) != 0) {
+					continue;
+				}
+
+				result.ready = false;
+				result.bucket = "missing_skill";
+				result.errorCode = "imap_smtp_skill_missing";
+				result.message = probe.reasonMessage.empty()
+					? "Email scheduling backend dependency is missing."
+					: probe.reasonMessage;
+				result.missingDependency = probe.key.size() > 8
+					? probe.key.substr(8)
+					: "himalaya";
+				result.remediation = "Install required email scheduling backend dependencies and retry approve.";
+				result.installHint = "Install Himalaya CLI and the imap_smtp_email skill runtime assets.";
+				result.configHint = "Verify backend binaries, skill scripts, and account configuration.";
+				break;
+			}
+
+			return result;
+		}
+
+		std::string BuildApprovalFailureResultJson(
+			const std::string& code,
+			const std::string& message,
+			const std::string& remediation,
+			const std::string& missingDependency,
+			const std::string& installHint,
+			const std::string& configHint,
+			const std::string& bucket) {
+			return std::string("{\"ok\":false,\"error\":{\"code\":") +
+				JsonString(code.empty() ? "email_approval_failed" : code) +
+				",\"message\":" +
+				JsonString(message.empty() ? "email approval execution failed" : message) +
+				",\"category\":" +
+				JsonString("approval_execution") +
+				",\"bucket\":" +
+				JsonString(bucket.empty() ? "unknown" : bucket) +
+				",\"remediation\":" +
+				JsonString(remediation) +
+				",\"missingDependency\":" +
+				JsonString(missingDependency) +
+				",\"installHint\":" +
+				JsonString(installHint) +
+				",\"configHint\":" +
+				JsonString(configHint) +
+				"}}";
+		}
+
+		std::string ResolveApprovalFailureCode(
+			const ToolExecuteResultV2& execution,
+			const std::string& lowerResult,
+			std::string& outBucket,
+			std::string& outMessage,
+			std::string& outRemediation,
+			std::string& outMissingDependency,
+			std::string& outInstallHint,
+			std::string& outConfigHint) {
+			const std::string lowerErrorCode = ToLowerCopyLocal(json::Trim(execution.errorCode));
+			if (lowerErrorCode == "approval_token_expired" ||
+				lowerResult.find("approval_token_expired") != std::string::npos ||
+				lowerResult.find("token_expired") != std::string::npos) {
+				outBucket = "token_expired";
+				outMessage = "Approval token expired. Request a new approval token and retry.";
+				outRemediation = "Generate a fresh approval token, then re-run approve action.";
+				outMissingDependency.clear();
+				outInstallHint.clear();
+				outConfigHint = "Retry approval promptly before token expiration.";
+				return "approval_token_expired";
+			}
+
+			if (lowerErrorCode == "imap_smtp_skill_missing" ||
+				lowerResult.find("imap_smtp_skill_missing") != std::string::npos ||
+				lowerResult.find("email_delivery_backends_exhausted") != std::string::npos) {
+				outBucket = "missing_skill";
+				outMessage = "Email backend dependency is missing for approval execution.";
+				outRemediation = "Install required email skill backend dependencies and retry approve.";
+				outMissingDependency = "imap_smtp_email";
+				outInstallHint = "Install Himalaya CLI and imap_smtp_email skill assets.";
+				outConfigHint = "Verify backend scripts and account profile configuration.";
+				return "imap_smtp_skill_missing";
+			}
+
+			if (lowerErrorCode == "email_backend_unavailable" ||
+				lowerResult.find("backend_unavailable") != std::string::npos ||
+				lowerResult.find("himalaya") != std::string::npos) {
+				outBucket = "backend_unavailable";
+				outMessage = "Email delivery backend is unavailable for approval execution.";
+				outRemediation = "Restore backend runtime availability and retry approve.";
+				outMissingDependency = "himalaya";
+				outInstallHint = "Install Himalaya CLI and add it to PATH.";
+				outConfigHint = "Configure Himalaya account and SMTP/IMAP credentials.";
+				return "email_backend_unavailable";
+			}
+
+			outBucket = "approval_execution_failed";
+			outMessage = execution.errorMessage.empty()
+				? "Email approval execution failed."
+				: execution.errorMessage;
+			outRemediation = "Inspect email.schedule tool output and retry after fixing backend/runtime conditions.";
+			outMissingDependency.clear();
+			outInstallHint.clear();
+			outConfigHint.clear();
+			return execution.errorCode.empty()
+				? "email_approval_failed"
+				: execution.errorCode;
+		}
+	}
 
 	void RegistryIntrospectionHandlers::RegisterAll(GatewayHost& host) {
 		host.m_dispatcher.Register("usage.status", [](const protocol::RequestFrame& request) {
@@ -329,53 +509,135 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 
 			ToolExecuteResultV2 execution;
 			const auto startedAt = std::chrono::steady_clock::now();
-			try {
-				execution = host.ExecuteRuntimeToolV2(ToolExecuteRequestV2{
-					.tool = requestedTool,
-					.argsJson = argsJson,
-					.correlationId = request.id.empty()
-						? std::string("gateway.tools.call.execute")
-						: request.id,
-					.deadlineEpochMs = std::nullopt,
-					});
-				const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-					std::chrono::steady_clock::now() - startedAt).count();
-				if (elapsedMs > 30000 && !execution.executed) {
-					execution.status = "tool_dispatch_timeout";
-					execution.errorCode = "tool_dispatch_timeout";
-					execution.errorMessage = "tool dispatch timed out before execution";
-					execution.result = "{\"ok\":false,\"error\":{\"code\":\"tool_dispatch_timeout\",\"message\":\"tool dispatch timed out before execution\",\"hint\":\"verify required params and schema compatibility\"}}";
+			std::string approvalToken;
+			bool approveRequested = false;
+			const bool isEmailScheduleApproveRequest =
+				requestedTool == "email.schedule" &&
+				ParseEmailScheduleApproveArgs(argsJson, approvalToken, approveRequested) &&
+				approveRequested;
+			if (isEmailScheduleApproveRequest) {
+				const auto precheck = BuildEmailApprovalPrecheckResult();
+				if (!precheck.ready) {
+					execution = ToolExecuteResultV2{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.result = BuildApprovalFailureResultJson(
+							precheck.errorCode,
+							precheck.message,
+							precheck.remediation,
+							precheck.missingDependency,
+							precheck.installHint,
+							precheck.configHint,
+							precheck.bucket),
+						.errorCode = precheck.errorCode,
+						.errorMessage = precheck.message,
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.latencyMs = 0,
+						.correlationId = request.id,
+					};
+					EmitTelemetryEvent(
+						"gateway.email.approval.execute.failure",
+						std::string("{\"tool\":") + JsonString(requestedTool) +
+						",\"bucket\":" + JsonString(precheck.bucket) +
+						",\"code\":" + JsonString(precheck.errorCode) +
+						",\"phase\":" + JsonString("precheck") +
+						",\"approvalTokenPresent\":" +
+						std::string(approvalToken.empty() ? "false" : "true") +
+						"}");
 				}
 			}
-			catch (const std::exception& ex) {
-				execution = ToolExecuteResultV2{
-					.tool = requestedTool,
-					.executed = false,
-					.status = "error",
-					.result = std::string("{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"") +
-						EscapeJsonString(ex.what()) +
-						"\"}}",
-					.errorCode = "tool_execute_unhandled_exception",
-					.errorMessage = ex.what(),
-					.startedAtMs = 0,
-					.completedAtMs = 0,
-					.latencyMs = 0,
-					.correlationId = request.id,
-				};
+
+			if (execution.tool.empty()) {
+				try {
+					execution = host.ExecuteRuntimeToolV2(ToolExecuteRequestV2{
+						.tool = requestedTool,
+						.argsJson = argsJson,
+						.correlationId = request.id.empty()
+							? std::string("gateway.tools.call.execute")
+							: request.id,
+						.deadlineEpochMs = std::nullopt,
+						});
+					const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - startedAt).count();
+					if (elapsedMs > 30000 && !execution.executed) {
+						execution.status = "tool_dispatch_timeout";
+						execution.errorCode = "tool_dispatch_timeout";
+						execution.errorMessage = "tool dispatch timed out before execution";
+						execution.result = "{\"ok\":false,\"error\":{\"code\":\"tool_dispatch_timeout\",\"message\":\"tool dispatch timed out before execution\",\"hint\":\"verify required params and schema compatibility\"}}";
+					}
+				}
+				catch (const std::exception& ex) {
+					execution = ToolExecuteResultV2{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.result = std::string("{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"") +
+							EscapeJsonString(ex.what()) +
+							"\"}}",
+						.errorCode = "tool_execute_unhandled_exception",
+						.errorMessage = ex.what(),
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.latencyMs = 0,
+						.correlationId = request.id,
+					};
+				}
+				catch (...) {
+					execution = ToolExecuteResultV2{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.result = "{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"unknown_exception\"}}",
+						.errorCode = "tool_execute_unhandled_exception",
+						.errorMessage = "unknown_exception",
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.latencyMs = 0,
+						.correlationId = request.id,
+					};
+				}
 			}
-			catch (...) {
-				execution = ToolExecuteResultV2{
-					.tool = requestedTool,
-					.executed = false,
-					.status = "error",
-					.result = "{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"unknown_exception\"}}",
-					.errorCode = "tool_execute_unhandled_exception",
-					.errorMessage = "unknown_exception",
-					.startedAtMs = 0,
-					.completedAtMs = 0,
-					.latencyMs = 0,
-					.correlationId = request.id,
-				};
+
+			if (isEmailScheduleApproveRequest &&
+				(!execution.errorCode.empty() || execution.status == "error" || execution.status == "failed")) {
+				const std::string lowerResult = ToLowerCopyLocal(execution.result);
+				std::string bucket;
+				std::string mappedMessage;
+				std::string remediation;
+				std::string missingDependency;
+				std::string installHint;
+				std::string configHint;
+				const std::string mappedCode = ResolveApprovalFailureCode(
+					execution,
+					lowerResult,
+					bucket,
+					mappedMessage,
+					remediation,
+					missingDependency,
+					installHint,
+					configHint);
+				execution.status = "error";
+				execution.errorCode = mappedCode;
+				execution.errorMessage = mappedMessage;
+				execution.result = BuildApprovalFailureResultJson(
+					mappedCode,
+					mappedMessage,
+					remediation,
+					missingDependency,
+					installHint,
+					configHint,
+					bucket);
+				EmitTelemetryEvent(
+					"gateway.email.approval.execute.failure",
+					std::string("{\"tool\":") + JsonString(requestedTool) +
+					",\"bucket\":" + JsonString(bucket) +
+					",\"code\":" + JsonString(mappedCode) +
+					",\"phase\":" + JsonString("execution") +
+					",\"approvalTokenPresent\":" +
+					std::string(approvalToken.empty() ? "false" : "true") +
+					"}");
 			}
 
 			// Emit telemetry for tool execution result
@@ -384,6 +646,7 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 					"{\"tool\":" + JsonString(execution.tool) +
 					",\"executed\":" + std::string(execution.executed ? "true" : "false") +
 					",\"status\":" + JsonString(execution.status) +
+					",\"errorCode\":" + JsonString(execution.errorCode.empty() ? "none" : execution.errorCode) +
 					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") +
 					",\"argsKey\":" + JsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
 					",\"argsParseMode\":" + JsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) + "}";

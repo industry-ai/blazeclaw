@@ -402,11 +402,16 @@ namespace blazeclaw::gateway {
 			const bool success,
 			const std::string& assistantText,
 			const std::string& errorCode,
-			const std::string& errorMessage) {
+			const std::string& errorMessage,
+			const std::string& terminalStatus) {
 		if (!taskDeltas.empty()) {
 			return taskDeltas;
 		}
 
+		const std::string normalizedTerminalStatus = ToLowerCopyNormalizer(json::Trim(terminalStatus));
+		const std::string finalStatus = success
+			? (normalizedTerminalStatus == "needs_approval" ? "needs_approval" : "completed")
+			: "failed";
 		const std::uint64_t nowMs = CurrentEpochMsNormalizer();
 		return std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>{
 			GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
@@ -426,7 +431,7 @@ namespace blazeclaw::gateway {
 				.sessionId = sessionKey,
 				.phase = "final",
 				.resultJson = success ? assistantText : errorMessage,
-				.status = success ? "completed" : "failed",
+				.status = finalStatus,
 				.errorCode = success ? std::string() : errorCode,
 				.startedAtMs = nowMs,
 				.completedAtMs = nowMs,

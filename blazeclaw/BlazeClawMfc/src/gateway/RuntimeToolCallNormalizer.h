@@ -14,7 +14,8 @@ namespace blazeclaw::gateway {
 				bool success,
 				const std::string& assistantText,
 				const std::string& errorCode,
-				const std::string& errorMessage);
+				const std::string& errorMessage,
+				const std::string& terminalStatus = std::string());
 
 		[[nodiscard]] static std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
 			ApplyInvalidArgumentsRecoveryPolicy(
