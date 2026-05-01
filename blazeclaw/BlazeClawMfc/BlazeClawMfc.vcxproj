@@ -103,6 +103,7 @@
     <ClInclude Include="src\app\calendarbar.h" />
     <ClInclude Include="src\app\CBridge.h" />
     <ClInclude Include="src\app\ChatInputEdit.h" />
+    <ClInclude Include="src\app\ChatUiStartupResolver.h" />
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\EventTransport.h" />

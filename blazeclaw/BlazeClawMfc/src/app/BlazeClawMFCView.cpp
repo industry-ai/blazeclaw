@@ -23,6 +23,7 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 #include "MainFrame.h"
+#include "ChatUiStartupResolver.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/GatewayProtocolModels.h"
 
@@ -1721,52 +1722,52 @@ namespace {
 		return {};
 	}
 
-	std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::path& start)
+	bool IsDevModePreferred()
 	{
-		std::filesystem::path cursor = start;
-		while (!cursor.empty())
+	#ifdef _DEBUG
+		return true;
+	#else
+		return false;
+	#endif
+	}
+
+	std::optional<std::filesystem::path> ResolveChatUiPathFromOverride()
+	{
+		if (const auto envFile = GetEnvValue(L"BLAZECLAW_CHAT_UI_FILE"); envFile.has_value())
 		{
-			const auto dist =
-				cursor /
-				L"blazeclaw" /
-				L"BlazeClawMfc" /
-				L"web" /
-				L"chat" /
-				L"dist" /
-				L"index.html";
-			if (std::filesystem::exists(dist))
+			const std::wstring value = TrimCopy(envFile.value());
+			if (!value.empty())
 			{
-				return dist;
+				const std::filesystem::path explicitFile(value);
+				if (std::filesystem::exists(explicitFile))
+				{
+					return explicitFile;
+				}
 			}
+		}
 
-			const auto direct =
-				cursor /
-				L"blazeclaw" /
-				L"BlazeClawMfc" /
-				L"web" /
-				L"chat" /
-				L"index.html";
-			if (std::filesystem::exists(direct))
+		if (const auto envRoot = GetEnvValue(L"BLAZECLAW_CHAT_UI_ROOT"); envRoot.has_value())
+		{
+			const std::wstring value = TrimCopy(envRoot.value());
+			if (!value.empty())
 			{
-				return direct;
+				const std::filesystem::path root(value);
+				const auto sourceIndex = root / L"index.html";
+				if (std::filesystem::exists(sourceIndex))
+				{
+					return sourceIndex;
+				}
+				const auto distIndex = root / L"dist" / L"index.html";
+				if (std::filesystem::exists(distIndex))
+				{
+					return distIndex;
+				}
 			}
-
-			if (!cursor.has_parent_path())
-			{
-				break;
-			}
-
-			auto parent = cursor.parent_path();
-			if (parent == cursor)
-			{
-				break;
-			}
-
-			cursor = parent;
 		}
 
 		return std::nullopt;
 	}
+
 
 	std::wstring ResolveChatStartupUrl()
 	{
@@ -1788,8 +1789,8 @@ namespace {
 			}
 		}
 
-		const auto mode = GetEnvValue(L"BLAZECLAW_CHAT_UI_MODE");
-		if (mode.has_value())
+		bool preferSource = IsDevModePreferred();
+		if (const auto mode = GetEnvValue(L"BLAZECLAW_CHAT_UI_MODE"); mode.has_value())
 		{
 			std::wstring normalized = TrimCopy(mode.value());
 			for (wchar_t& ch : normalized)
@@ -1801,23 +1802,83 @@ namespace {
 			{
 				return L"http://127.0.0.1:5173";
 			}
+			if (normalized == L"source")
+			{
+				preferSource = true;
+			}
+			if (normalized == L"dist")
+			{
+				preferSource = false;
+			}
 		}
 
-		std::vector<std::filesystem::path> roots;
-		roots.push_back(std::filesystem::current_path());
+		if (const auto overrideFile = ResolveChatUiPathFromOverride(); overrideFile.has_value())
+		{
+			AppendChatProcedureStatusLine(
+				L"startup.chat.override",
+				ToNarrow(overrideFile.value().wstring()));
+			return BuildFileUrl(overrideFile.value());
+		}
 
 		wchar_t modulePath[MAX_PATH]{};
+		std::filesystem::path moduleDir;
 		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
 		{
-			roots.push_back(std::filesystem::path(modulePath).parent_path());
+			moduleDir = std::filesystem::path(modulePath).parent_path();
 		}
 
+		const auto roots = blazeclaw::app::chatui::BuildOrderedRoots(moduleDir, std::filesystem::current_path());
+		const auto preference = preferSource
+			? blazeclaw::app::chatui::StartupPreference::PreferSource
+			: blazeclaw::app::chatui::StartupPreference::PreferDist;
 		for (const auto& root : roots)
 		{
-			if (const auto found = FindOpenClawUiIndex(root); found.has_value())
+			if (const auto found = blazeclaw::app::chatui::FindChatUiIndex(root, preference); found.has_value())
 			{
-				return BuildFileUrl(found.value());
+				AppendChatProcedureStatusLine(
+					L"startup.chat.root",
+					ToNarrow(root.wstring()));
+				AppendChatProcedureStatusLine(
+					L"startup.chat.selected",
+					ToNarrow(found->selectedPath.wstring()));
+				AppendChatProcedureStatusLine(
+					L"startup.chat.selected.type",
+					found->selectedDist ? "dist" : "source");
+
+				if (!found->inspectedCandidates.empty())
+				{
+					std::ostringstream inspected;
+					for (std::size_t i = 0; i < found->inspectedCandidates.size(); ++i)
+					{
+						if (i > 0)
+						{
+							inspected << " | ";
+						}
+						inspected << ToNarrow(found->inspectedCandidates[i].wstring());
+					}
+					AppendChatProcedureStatusLine(
+						L"startup.chat.candidates",
+						inspected.str());
+				}
+
+				return BuildFileUrl(found->selectedPath);
 			}
+		}
+
+		if (!roots.empty())
+		{
+			std::ostringstream inspectedRoots;
+			for (std::size_t i = 0; i < roots.size(); ++i)
+			{
+				if (i > 0)
+				{
+					inspectedRoots << " | ";
+				}
+				inspectedRoots << ToNarrow(roots[i].wstring());
+			}
+			AppendChatProcedureStatusLine(
+				L"startup.chat.roots",
+				inspectedRoots.str());
 		}
 
 		return {};

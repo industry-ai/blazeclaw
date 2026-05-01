@@ -3,9 +3,11 @@
 
 #include <catch2/catch_all.hpp>
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include "app/ChatUiStartupResolver.h"
 
 TEST_CASE("ConfigLoader parses embedded.orchestrationPath values", "[config][embedded][orchestration]") {
 	blazeclaw::config::ConfigLoader loader;
@@ -235,6 +237,111 @@ TEST_CASE(
 	REQUIRE(direct.contentDigest == fromLoad.contentDigest);
 	REQUIRE(direct.internalWriteHashesAtRecord.size() == 2u);
 	REQUIRE(direct.internalWriteHashesAtRecord[0] == 99u);
+
+	std::filesystem::remove_all(root);
+}
+
+namespace {
+
+std::filesystem::path MakeChatUiResolverTempRoot(const std::string& suffix)
+{
+	return std::filesystem::temp_directory_path() /
+		("blazeclaw_chat_ui_resolver_" + suffix + "_" + std::to_string(std::rand()));
+}
+
+void EnsureChatUiResolverFile(const std::filesystem::path& path)
+{
+	std::filesystem::create_directories(path.parent_path());
+	std::ofstream out(path.string(), std::ios::binary);
+	REQUIRE(out.is_open());
+	out << "<!doctype html><title>test</title>";
+}
+
+} // namespace
+
+TEST_CASE("Chat UI resolver finds deterministic source path from repo root in dev preference", "[chat-ui][resolver][repo-root]")
+{
+	namespace resolver = blazeclaw::app::chatui;
+
+	const auto root = MakeChatUiResolverTempRoot("repo_root");
+	const auto sourceIndex = root / "blazeclaw" / "BlazeClawMfc" / "web" / "chat" / "index.html";
+	const auto distIndex = root / "blazeclaw" / "BlazeClawMfc" / "web" / "chat" / "dist" / "index.html";
+	EnsureChatUiResolverFile(sourceIndex);
+	EnsureChatUiResolverFile(distIndex);
+
+	const auto found = resolver::FindChatUiIndex(root, resolver::StartupPreference::PreferSource);
+	REQUIRE(found.has_value());
+	REQUIRE(found->selectedPath == sourceIndex);
+	REQUIRE(found->selectedDist == false);
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Chat UI resolver finds deterministic source path from project root in dev preference", "[chat-ui][resolver][project-root]")
+{
+	namespace resolver = blazeclaw::app::chatui;
+
+	const auto workspaceRoot = MakeChatUiResolverTempRoot("project_root");
+	const auto projectRoot = workspaceRoot / "BlazeClawMfc";
+	const auto sourceIndex = projectRoot / "web" / "chat" / "index.html";
+	const auto distIndex = projectRoot / "web" / "chat" / "dist" / "index.html";
+	EnsureChatUiResolverFile(sourceIndex);
+	EnsureChatUiResolverFile(distIndex);
+
+	const auto found = resolver::FindChatUiIndex(projectRoot, resolver::StartupPreference::PreferSource);
+	REQUIRE(found.has_value());
+	REQUIRE(found->selectedPath == sourceIndex);
+	REQUIRE(found->selectedDist == false);
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
+TEST_CASE("Chat UI resolver from module/bin parent finds same intended target in dev preference", "[chat-ui][resolver][module-bin]")
+{
+	namespace resolver = blazeclaw::app::chatui;
+
+	const auto root = MakeChatUiResolverTempRoot("module_bin");
+	const auto moduleDir = root / "bin" / "Debug";
+	const auto sourceIndex = root / "BlazeClawMfc" / "web" / "chat" / "index.html";
+	const auto distIndex = root / "BlazeClawMfc" / "web" / "chat" / "dist" / "index.html";
+	EnsureChatUiResolverFile(sourceIndex);
+	EnsureChatUiResolverFile(distIndex);
+	std::filesystem::create_directories(moduleDir);
+
+	const auto roots = resolver::BuildOrderedRoots(moduleDir, root);
+	REQUIRE_FALSE(roots.empty());
+
+	bool foundSource = false;
+	for (const auto& candidateRoot : roots)
+	{
+		const auto found = resolver::FindChatUiIndex(candidateRoot, resolver::StartupPreference::PreferSource);
+		if (found.has_value())
+		{
+			REQUIRE(found->selectedPath == sourceIndex);
+			REQUIRE(found->selectedDist == false);
+			foundSource = true;
+			break;
+		}
+	}
+
+	REQUIRE(foundSource);
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Chat UI resolver prefers dist in dist preference mode", "[chat-ui][resolver][dist-mode]")
+{
+	namespace resolver = blazeclaw::app::chatui;
+
+	const auto root = MakeChatUiResolverTempRoot("dist_mode");
+	const auto sourceIndex = root / "BlazeClawMfc" / "web" / "chat" / "index.html";
+	const auto distIndex = root / "BlazeClawMfc" / "web" / "chat" / "dist" / "index.html";
+	EnsureChatUiResolverFile(sourceIndex);
+	EnsureChatUiResolverFile(distIndex);
+
+	const auto found = resolver::FindChatUiIndex(root, resolver::StartupPreference::PreferDist);
+	REQUIRE(found.has_value());
+	REQUIRE(found->selectedPath == distIndex);
+	REQUIRE(found->selectedDist == true);
 
 	std::filesystem::remove_all(root);
 }
