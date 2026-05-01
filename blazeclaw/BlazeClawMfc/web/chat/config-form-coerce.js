@@ -13,7 +13,10 @@
             const nonNull = type.find(function (entry) {
                 return entry !== "null";
             });
-            return typeof nonNull === "string" ? nonNull : null;
+            if (typeof nonNull === "string") {
+                return nonNull;
+            }
+            return null;
         }
 
         return null;
@@ -148,19 +151,23 @@
             }
 
             const obj = value;
-            const props = schema.properties && typeof schema.properties === "object"
-                ? schema.properties
-                : {};
-            const additional = schema.additionalProperties && typeof schema.additionalProperties === "object"
-                ? schema.additionalProperties
-                : null;
+            let props = {};
+            if (schema.properties && typeof schema.properties === "object") {
+                props = schema.properties;
+            }
+
+            let additional = null;
+            if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+                additional = schema.additionalProperties;
+            }
             const result = {};
 
             Object.keys(obj).forEach(function (key) {
                 const rawValue = obj[key];
-                const propSchema = Object.prototype.hasOwnProperty.call(props, key)
-                    ? props[key]
-                    : additional;
+                let propSchema = additional;
+                if (Object.prototype.hasOwnProperty.call(props, key)) {
+                    propSchema = props[key];
+                }
                 const coerced = propSchema ? coerceFormValues(rawValue, propSchema) : rawValue;
                 if (coerced !== undefined) {
                     result[key] = coerced;
@@ -178,8 +185,16 @@
             if (Array.isArray(schema.items)) {
                 const tupleSchemas = schema.items;
                 return value.map(function (item, index) {
-                    const itemSchema = index < tupleSchemas.length ? tupleSchemas[index] : undefined;
-                    return itemSchema ? coerceFormValues(item, itemSchema) : item;
+                    if (index >= tupleSchemas.length) {
+                        return item;
+                    }
+
+                    const itemSchema = tupleSchemas[index];
+                    if (!itemSchema) {
+                        return item;
+                    }
+
+                    return coerceFormValues(item, itemSchema);
                 });
             }
 

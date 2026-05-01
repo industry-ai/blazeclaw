@@ -6,16 +6,18 @@
             throw new Error("agents-controller requires state");
         }
 
-        const request = typeof opts.request === "function"
-            ? opts.request
-            : null;
+        let request = null;
+        if (typeof opts.request === "function") {
+            request = opts.request;
+        }
         if (!request) {
             throw new Error("agents-controller requires request function");
         }
 
-        const onStateUpdated = typeof opts.onStateUpdated === "function"
-            ? opts.onStateUpdated
-            : function () { };
+        let onStateUpdated = function () { };
+        if (typeof opts.onStateUpdated === "function") {
+            onStateUpdated = opts.onStateUpdated;
+        }
 
         if (typeof state.agentsLoading !== "boolean") {
             state.agentsLoading = false;
@@ -3751,7 +3753,6 @@
                 const entries = payload && Array.isArray(payload.entries)
                     ? payload.entries
                     : [];
-                const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
                 const scopeIsJob = scope === "job" && selectedJobId;
                 state.agentCronRuns = append && (!scopeIsJob || selectedJobId)
                     ? state.agentCronRuns.concat(entries)

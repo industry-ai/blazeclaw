@@ -236,20 +236,25 @@
     }
 
     function normalizeAssistantIdentity(input) {
-        const source = input && typeof input === "object"
-            ? input
-            : {};
+        let source = {};
+        if (input && typeof input === "object") {
+            source = input;
+        }
 
-        const name =
-            coerceIdentityValue(source.name, MAX_ASSISTANT_NAME) ||
-            DEFAULT_ASSISTANT_NAME;
-        const avatar =
-            coerceIdentityValue(source.avatar, MAX_ASSISTANT_AVATAR) ||
-            null;
-        const agentId =
-            typeof source.agentId === "string" && source.agentId.trim().length > 0
-                ? source.agentId.trim()
-                : null;
+        let name = coerceIdentityValue(source.name, MAX_ASSISTANT_NAME);
+        if (!name) {
+            name = DEFAULT_ASSISTANT_NAME;
+        }
+
+        let avatar = coerceIdentityValue(source.avatar, MAX_ASSISTANT_AVATAR);
+        if (!avatar) {
+            avatar = null;
+        }
+
+        let agentId = null;
+        if (typeof source.agentId === "string" && source.agentId.trim().length > 0) {
+            agentId = source.agentId.trim();
+        }
 
         return {
             name,
@@ -288,9 +293,11 @@
     }
 
     function buildControlUiBootstrapConfigSnapshot(input) {
-        const source = input && typeof input === "object"
-            ? input
-            : {};
+        let source = {};
+        if (input && typeof input === "object") {
+            source = input;
+        }
+
         const normalizedIdentity = normalizeAssistantIdentity({
             name: source.assistantName,
             avatar: source.assistantAvatar,
@@ -546,7 +553,9 @@
                 return;
             }
 
-            const existingIndex = state.inputHistory.findIndex((item) => item === trimmed);
+            const existingIndex = state.inputHistory.findIndex(function (item) {
+                return item === trimmed;
+            });
             if (existingIndex >= 0) {
                 state.inputHistory.splice(existingIndex, 1);
             }
@@ -1928,29 +1937,100 @@
             const parsedHints = parseApprovalFailureHints(output);
             const errorCode = resolveNormalizedErrorCode(responsePayload, output, parsedHints);
             const expired = output.toLowerCase().includes("expired") || errorCode === "approval_token_expired";
-            const resolvedOk = approve
-                ? status === "ok"
-                : status === "cancelled" || status === "ok";
+
+            let resolvedOk = status === "cancelled" || status === "ok";
+            if (approve) {
+                resolvedOk = status === "ok";
+            }
+
+            let normalizedStatus = "unknown";
+            if (status) {
+                normalizedStatus = status;
+            }
+            if (expired) {
+                normalizedStatus = "expired";
+            }
+
+            let remediation = "";
+            let missingDependency = "";
+            let installHint = "";
+            let configHint = "";
+            let failureBucket = "";
+            let errorMessage = "";
+            if (parsedHints) {
+                if (parsedHints.remediation) {
+                    remediation = parsedHints.remediation;
+                }
+                if (parsedHints.missingDependency) {
+                    missingDependency = parsedHints.missingDependency;
+                }
+                if (parsedHints.installHint) {
+                    installHint = parsedHints.installHint;
+                }
+                if (parsedHints.configHint) {
+                    configHint = parsedHints.configHint;
+                }
+                if (parsedHints.bucket) {
+                    failureBucket = parsedHints.bucket;
+                }
+                if (parsedHints.message) {
+                    errorMessage = parsedHints.message;
+                }
+            }
+
+            let readinessReady = false;
+            let readinessCode = "";
+            let readinessMessage = "";
+            let readinessRemediation = "";
+            let readinessMissingDependency = "";
+            let readinessInstallHint = "";
+            let readinessConfigHint = "";
+            let readinessBucket = "";
+            if (readiness) {
+                readinessReady = Boolean(readiness.ready);
+                if (readiness.errorCode) {
+                    readinessCode = readiness.errorCode;
+                }
+                if (readiness.message) {
+                    readinessMessage = readiness.message;
+                }
+                if (readiness.remediation) {
+                    readinessRemediation = readiness.remediation;
+                }
+                if (readiness.missingDependency) {
+                    readinessMissingDependency = readiness.missingDependency;
+                }
+                if (readiness.installHint) {
+                    readinessInstallHint = readiness.installHint;
+                }
+                if (readiness.configHint) {
+                    readinessConfigHint = readiness.configHint;
+                }
+                if (readiness.bucket) {
+                    readinessBucket = readiness.bucket;
+                }
+            }
+
             return {
                 ok: resolvedOk && !expired,
-                status: expired ? "expired" : (status || "unknown"),
+                status: normalizedStatus,
                 output,
                 errorCode,
-                remediation: parsedHints && parsedHints.remediation ? parsedHints.remediation : "",
-                missingDependency: parsedHints && parsedHints.missingDependency ? parsedHints.missingDependency : "",
-                installHint: parsedHints && parsedHints.installHint ? parsedHints.installHint : "",
-                configHint: parsedHints && parsedHints.configHint ? parsedHints.configHint : "",
-                failureBucket: parsedHints && parsedHints.bucket ? parsedHints.bucket : "",
-                errorMessage: parsedHints && parsedHints.message ? parsedHints.message : "",
+                remediation,
+                missingDependency,
+                installHint,
+                configHint,
+                failureBucket,
+                errorMessage,
                 readinessKnown: Boolean(readiness),
-                readinessReady: readiness ? Boolean(readiness.ready) : false,
-                readinessCode: readiness && readiness.errorCode ? readiness.errorCode : "",
-                readinessMessage: readiness && readiness.message ? readiness.message : "",
-                readinessRemediation: readiness && readiness.remediation ? readiness.remediation : "",
-                readinessMissingDependency: readiness && readiness.missingDependency ? readiness.missingDependency : "",
-                readinessInstallHint: readiness && readiness.installHint ? readiness.installHint : "",
-                readinessConfigHint: readiness && readiness.configHint ? readiness.configHint : "",
-                readinessBucket: readiness && readiness.bucket ? readiness.bucket : "",
+                readinessReady,
+                readinessCode,
+                readinessMessage,
+                readinessRemediation,
+                readinessMissingDependency,
+                readinessInstallHint,
+                readinessConfigHint,
+                readinessBucket,
             };
         }
 

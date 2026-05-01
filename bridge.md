@@ -622,3 +622,85 @@ This is **no longer a remapping/legacy-code masking bug**. The remapping path is
    - ⏳ Pending runtime/manual retest on local environment:
      - Scenario A (backend intentionally missing): approval card appears; approve fails with actionable mapped code + remediation fields.
      - Scenario B (backend restored/configured): same prompt flow; approve succeeds and email is sent.
+
+## Incident Analysis (2026-04-30 latest retest): Approval fails with backend-not-ready and dual missing-dependency signals
+
+### Reproduction observed (latest retest)
+Prompt (Chinese):
+- `查一下明天上海的天气，写一个简短的报告，用电子邮件发送给 jichengwhu@163.com`
+
+Observed behavior:
+- Approval token is issued and approval card appears.
+- Approve click returns actionable error code: `imap_smtp_skill_missing`.
+- Card includes execution failure hints and a precheck line:
+  - execution hints: missing `imap_smtp_email`
+  - precheck hints: missing `himalaya` / `himalaya cli not found`
+- SkillPath confirms normalized execution output and top-level errorCode are mapped correctly.
+
+### Root cause summary
+This is a **runtime dependency readiness issue**, not an approval-routing or error-remap defect.
+
+1. **Approval workflow is healthy**
+   - `needs_approval` terminal path, token issuance, approval card rendering, and approve RPC flow all succeed.
+
+2. **Error normalization is healthy**
+   - Top-level `errorCode` and nested `output.error.code` are actionable (`imap_smtp_skill_missing`).
+   - Legacy `legacy_execution_failed` masking is no longer present.
+
+3. **Backend runtime is not fully provisioned**
+   - Approve execution requires both backend CLI/runtime and skill runtime assets/config.
+   - Current machine is missing at least one required backend component, causing deterministic approval failure.
+
+4. **Two-layer dependency checks are both failing (different detectors)**
+   - Precheck surfaces `himalaya` CLI missing.
+   - Execution path surfaces `imap_smtp_email` skill dependency missing.
+   - Both point to the same environment state class: email backend stack incomplete.
+
+### Why this exact symptom appears
+- Weather query and approval-request preparation do not require full send-path backend readiness.
+- Approve action is the first step that executes real email delivery backend path.
+- Because backend stack is incomplete, approve fails with mapped actionable code and remediation hints.
+- The additional `[precheck]` line is expected and indicates readiness guardrail is working.
+
+## Step-by-step action plan to fix (latest retest)
+
+1. **Treat incident as environment readiness remediation**
+   - ✅ Implemented in incident analysis and retained as canonical triage classification.
+
+2. **Install/verify Himalaya CLI on the runtime host**
+   - ⏳ Pending manual host remediation.
+   - Ensure executable is installed and discoverable in PATH for the running process identity.
+   - Confirm the CLI invocation works in the same environment as BlazeClaw process.
+
+3. **Install/verify `imap_smtp_email` backend assets**
+   - ⏳ Pending manual host remediation.
+   - Ensure skill runtime files/assets required by `imap_smtp_email` are present in expected directories.
+   - Verify no missing manifest/runtime payloads for email backend skill chain.
+
+4. **Validate account/profile configuration for send path**
+   - ⏳ Pending manual host remediation.
+   - Confirm SMTP/IMAP credentials and profile config are valid and readable by runtime process.
+   - Recheck profile-related env flags and policy settings used by runtime.
+
+5. **Align dependency hint precedence in UI copy (optional polish)**
+   - ✅ Implemented: approval card now emits one consolidated guidance line prefixed with `[backend stack incomplete]` that merges precheck and execution dependency hints.
+
+6. **Add one consolidated backend-readiness diagnostic command output in runbook**
+   - ✅ Implemented in `docs/readme.md`: explicit runbook now uses `gateway.email.backend.readiness` as primary triage snapshot and requires logging before retests.
+
+7. **Perform deterministic retest sequence**
+   - ⏳ Pending runtime/manual execution after environment repair:
+     - Retest A (expected fail): keep backend missing; verify actionable mapped failure + consolidated backend-stack guidance.
+     - Retest B (expected success): after installing/configuring backend stack, approve should return success and queue card should become approved.
+
+8. **Capture closure evidence in incident notes**
+   - ✅ Implemented template/checklist in runbook; pending final artifact capture after successful Retest B.
+
+### Closure evidence template (fill after remediation)
+- readiness-before: `<gateway.email.backend.readiness payload JSON>`
+- freshness-before: `<gateway.runtime.freshness payload JSON>`
+- retestA-approve-result: `<gateway.tools.call.execute approve payload JSON>`
+- retestA-skillpath-line: `<tools.execute.result line>`
+- readiness-after: `<gateway.email.backend.readiness payload JSON>`
+- retestB-approve-result: `<gateway.tools.call.execute approve payload JSON>`
+- retestB-skillpath-line: `<tools.execute.result line showing success>`

@@ -4,13 +4,12 @@
             return "";
         }
 
-        const candidate = err;
-        if (typeof candidate.detailCode === "string") {
-            return candidate.detailCode.trim().toUpperCase();
+        if (typeof err.detailCode === "string") {
+            return err.detailCode.trim().toUpperCase();
         }
 
-        if (candidate.details && typeof candidate.details === "object") {
-            const details = candidate.details;
+        if (err.details && typeof err.details === "object") {
+            const details = err.details;
             if (typeof details.detailCode === "string") {
                 return details.detailCode.trim().toUpperCase();
             }
@@ -35,13 +34,13 @@
     }
 
     function isMissingOperatorReadScopeError(err) {
-        const detailCode = normalizeDetailCode(err);
-        if (detailCode === "AUTH_UNAUTHORIZED") {
+        if (normalizeDetailCode(err) === "AUTH_UNAUTHORIZED") {
             return true;
         }
 
-        const message = normalizeErrorMessage(err).toLowerCase();
-        return message.includes("missing scope: operator.read");
+        return normalizeErrorMessage(err)
+            .toLowerCase()
+            .includes("missing scope: operator.read");
     }
 
     function formatMissingOperatorReadScopeMessage(feature) {

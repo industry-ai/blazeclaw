@@ -35,7 +35,7 @@
         if (typeof state.channelsError !== "string" && state.channelsError !== null) {
             state.channelsError = null;
         }
-        if (!state.channelsSnapshot) {
+        if (!state.channelsSnapshot || typeof state.channelsSnapshot !== "object") {
             state.channelsSnapshot = null;
         }
         if (typeof state.channelsLastSuccess !== "number" && state.channelsLastSuccess !== null) {
@@ -60,7 +60,7 @@
         if (typeof state.agentChannelsError !== "string" && state.agentChannelsError !== null) {
             state.agentChannelsError = null;
         }
-        if (!state.agentChannelsResult) {
+        if (!state.agentChannelsResult || typeof state.agentChannelsResult !== "object") {
             state.agentChannelsResult = null;
         }
         if (!state.agentChannelsCapability) {

@@ -14,7 +14,11 @@
     }
 
     function isForbiddenKey(key) {
-        return typeof key === "string" && FORBIDDEN_KEYS.has(key);
+        if (typeof key !== "string") {
+            return false;
+        }
+
+        return FORBIDDEN_KEYS.has(key);
     }
 
     function resolvePathContainer(obj, path, createMissing) {
@@ -36,7 +40,12 @@
                     if (!createMissing) {
                         return null;
                     }
-                    current[key] = typeof nextKey === "number" ? [] : {};
+
+                    if (typeof nextKey === "number") {
+                        current[key] = [];
+                    } else {
+                        current[key] = {};
+                    }
                 }
 
                 current = current[key];
@@ -51,7 +60,12 @@
                 if (!createMissing) {
                     return null;
                 }
-                current[key] = typeof nextKey === "number" ? [] : {};
+
+                if (typeof nextKey === "number") {
+                    current[key] = [];
+                } else {
+                    current[key] = {};
+                }
             }
 
             current = current[key];

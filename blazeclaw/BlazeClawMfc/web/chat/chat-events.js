@@ -76,16 +76,35 @@
             return message;
         }
 
+        function isTerminalEventState(eventState) {
+            return eventState === "final" ||
+                eventState === "aborted" ||
+                eventState === "error" ||
+                eventState === "needs_approval";
+        }
+
         function normalizeInboundBridgeEvent(rawMessage) {
-            const message = rawMessage && typeof rawMessage === "object" ? rawMessage : null;
+            let message = null;
+            if (rawMessage && typeof rawMessage === "object") {
+                message = rawMessage;
+            }
             if (!message) {
                 return null;
             }
 
             if (message.channel === "blazeclaw.transport.event.v1") {
                 const topic = String(message.topic || "");
-                const payload = message && typeof message.payload === "object" ? message.payload : {};
-                const meta = message && typeof message.meta === "object" ? message.meta : {};
+
+                let payload = {};
+                if (message && typeof message.payload === "object") {
+                    payload = message.payload;
+                }
+
+                let meta = {};
+                if (message && typeof message.meta === "object") {
+                    meta = message.meta;
+                }
+
                 const seq = Number(meta.seq || 0);
 
                 if (seq > 0 && trackSeenWithLimit(state.seenBridgeSeq, `seq:${seq}`, 512)) {
@@ -142,7 +161,7 @@
                 const runId = String(event.runId || "").trim();
                 const eventState = String(event.state || "");
                 const eventKey = `${runId}:${eventState}`;
-                if (runId && (eventState === "final" || eventState === "aborted" || eventState === "error" || eventState === "needs_approval")) {
+                if (runId && isTerminalEventState(eventState)) {
                     if (state.seenChatTerminalRuns.has(eventKey)) {
                         continue;
                     }
@@ -165,8 +184,7 @@
                 }
 
                 if (event.runId && state.runId && event.runId !== state.runId) {
-                    const isTerminalMismatch =
-                        event.state === "final" || event.state === "aborted" || event.state === "error" || event.state === "needs_approval";
+                    const isTerminalMismatch = isTerminalEventState(event.state);
                     if (!isTerminalMismatch) {
                         continue;
                     }
@@ -341,9 +359,20 @@
 
             let status = `gateway: ${message.state}`;
             if (state.connected) {
-                const provider = typeof message.provider === "string" ? message.provider : "";
-                const model = typeof message.model === "string" ? message.model : "";
-                const runtimeKind = typeof message.runtimeKind === "string" ? message.runtimeKind : "";
+                let provider = "";
+                if (typeof message.provider === "string") {
+                    provider = message.provider;
+                }
+
+                let model = "";
+                if (typeof message.model === "string") {
+                    model = message.model;
+                }
+
+                let runtimeKind = "";
+                if (typeof message.runtimeKind === "string") {
+                    runtimeKind = message.runtimeKind;
+                }
 
                 const details = [];
                 if (runtimeKind) {
@@ -386,12 +415,17 @@
         }
 
         function handleSessionReset(message) {
-            const payload = message && typeof message === "object" ? message : {};
-            const payloadSession = typeof payload.sessionId === "string"
-                ? payload.sessionId
-                : (payload.session && typeof payload.session.id === "string"
-                    ? payload.session.id
-                    : "");
+            let payload = {};
+            if (message && typeof message === "object") {
+                payload = message;
+            }
+
+            let payloadSession = "";
+            if (typeof payload.sessionId === "string") {
+                payloadSession = payload.sessionId;
+            } else if (payload.session && typeof payload.session.id === "string") {
+                payloadSession = payload.session.id;
+            }
             if (!payloadSession || payloadSession === state.sessionKey) {
                 void controller.loadHistory();
             }

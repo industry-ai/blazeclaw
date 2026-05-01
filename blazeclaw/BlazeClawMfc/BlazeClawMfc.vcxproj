@@ -502,6 +502,8 @@
     <None Include="..\docs\readme.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
+    <None Include="web\chat-controller.js" />
+    <None Include="web\chat\index.css" />
     <None Include="web\chat\index.html" />
     <None Include="web\chat\dist\index.html" />
     <None Include="packages.config" />
