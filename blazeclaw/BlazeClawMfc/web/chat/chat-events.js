@@ -37,6 +37,8 @@
         const updateComposerState = opts.updateComposerState || function () { };
         const finalizeStream = opts.finalizeStream || function () { };
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
+        const upsertApprovalToken = opts.upsertApprovalToken || function () { };
+        const onNeedsApprovalEvent = opts.onNeedsApprovalEvent || function () { };
 
         state.seenChatTerminalRuns = state.seenChatTerminalRuns || new Set();
         state.seenToolLifecycleKeys = state.seenToolLifecycleKeys || new Set();
@@ -148,6 +150,23 @@
             return message;
         }
 
+        function notifyNeedsApprovalEvent(event) {
+            onNeedsApprovalEvent({
+                approvalToken: String(event && event.approvalToken || "").trim(),
+                runId: String(event && event.runId || ""),
+                sessionKey: String(event && event.sessionKey || state.sessionKey || ""),
+            });
+        }
+
+        function upsertApprovalTokenFromEvent(event) {
+            const approvalToken = String(event && event.approvalToken || "").trim();
+            if (!approvalToken) {
+                return;
+            }
+
+            upsertApprovalToken(approvalToken, "Email scheduling approval required");
+        }
+
         function handleChatEvents(events) {
             if (!Array.isArray(events)) {
                 return;
@@ -199,6 +218,8 @@
                             shouldReconcile = true;
                         }
                     } else if (event.state === "needs_approval") {
+                        notifyNeedsApprovalEvent(event);
+                        upsertApprovalTokenFromEvent(event);
                         const approvalMessage = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(approvalMessage || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
@@ -277,6 +298,8 @@
                 }
 
                 if (event.state === "needs_approval") {
+                    notifyNeedsApprovalEvent(event);
+                    upsertApprovalTokenFromEvent(event);
                     const normalizedApproval = normalizeFinalAssistantMessage(event.message);
                     let text = controller.consumeTerminalText(normalizedApproval || event.message);
                     if (!text) {
@@ -292,12 +315,13 @@
                     }
 
                     if (text) {
+                        controller.commitStreamTranscriptFinal({
+                            runId,
+                            text,
+                            terminalState: "needs_approval",
+                        });
+
                         if (state.streamText) {
-                            controller.commitStreamTranscriptFinal({
-                                runId,
-                                text,
-                                terminalState: "needs_approval",
-                            });
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
@@ -485,7 +509,184 @@
         };
     }
 
+    function createRegressionState() {
+        return {
+            sessionKey: "main",
+            runId: null,
+            streamText: "",
+            seenChatTerminalRuns: new Set(),
+            seenToolLifecycleKeys: new Set(),
+            seenBridgeSeq: new Set(),
+            seenBridgeIds: new Set(),
+        };
+    }
+
+    function assertRegression(condition, message) {
+        if (!condition) {
+            throw new Error(message);
+        }
+    }
+
+    async function runRegressionChecks() {
+        const summary = [];
+
+        {
+            const state = createRegressionState();
+            state.streamText = "partial stream";
+            const messageRows = [];
+            const streamRows = [];
+            const transcriptCommits = [];
+            const approvalUpserts = [];
+            let finalizeCount = 0;
+
+            const module = createEventsModule({
+                state,
+                controller: {
+                    hasTerminalRun: function () { return false; },
+                    markTerminalRun: function () { },
+                    clearRunState: function () { },
+                    scheduleHistoryReconcile: function () { },
+                    parseTextFromMessage: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    consumeTerminalText: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    isSilentReplyText: function (text) {
+                        return typeof text === "string" && /^\s*NO_REPLY\s*$/i.test(text);
+                    },
+                    commitStreamTranscriptFinal: function (payload) {
+                        transcriptCommits.push(payload);
+                        return true;
+                    },
+                    noteInboundChatEvent: function () { },
+                    applyDeltaText: function () { },
+                },
+                addMessage: function (text, kind) {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+                addOrReplaceStream: function (text) {
+                    streamRows.push(String(text || ""));
+                },
+                finalizeStream: function () {
+                    finalizeCount += 1;
+                },
+                upsertApprovalToken: function (token, title) {
+                    approvalUpserts.push({ token: String(token || ""), title: String(title || "") });
+                },
+            });
+
+            module.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-needs-approval-stream",
+                state: "needs_approval",
+                approvalToken: "email-approval-1234567890-1",
+                message: {
+                    role: "assistant",
+                    text: "Approval required before email send. approvalToken=email-approval-1234567890-1",
+                },
+            }]);
+
+            assertRegression(transcriptCommits.length === 1 &&
+                transcriptCommits[0] &&
+                transcriptCommits[0].terminalState === "needs_approval",
+                "needs_approval (stream path) should commit transcript terminal state");
+            assertRegression(streamRows.length === 1,
+                "needs_approval (stream path) should render/update stream text");
+            assertRegression(finalizeCount === 1,
+                "needs_approval (stream path) should finalize stream");
+            assertRegression(messageRows.length === 0,
+                "needs_approval (stream path) should not append direct peer bubble");
+            assertRegression(approvalUpserts.some(function (entry) {
+                return entry.token === "email-approval-1234567890-1";
+            }),
+                "needs_approval (stream path) should upsert approval token directly");
+            summary.push("needs_approval with stream text");
+        }
+
+        {
+            const state = createRegressionState();
+            state.streamText = "";
+            const messageRows = [];
+            const transcriptCommits = [];
+            const approvalUpserts = [];
+
+            const module = createEventsModule({
+                state,
+                controller: {
+                    hasTerminalRun: function () { return false; },
+                    markTerminalRun: function () { },
+                    clearRunState: function () { },
+                    scheduleHistoryReconcile: function () { },
+                    parseTextFromMessage: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    consumeTerminalText: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    isSilentReplyText: function (text) {
+                        return typeof text === "string" && /^\s*NO_REPLY\s*$/i.test(text);
+                    },
+                    commitStreamTranscriptFinal: function (payload) {
+                        transcriptCommits.push(payload);
+                        return true;
+                    },
+                    noteInboundChatEvent: function () { },
+                    applyDeltaText: function () { },
+                },
+                addMessage: function (text, kind) {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+                addOrReplaceStream: function () { },
+                finalizeStream: function () { },
+                upsertApprovalToken: function (token, title) {
+                    approvalUpserts.push({ token: String(token || ""), title: String(title || "") });
+                },
+            });
+
+            module.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-needs-approval-no-stream",
+                state: "needs_approval",
+                approvalToken: "email-approval-1234567890-2",
+                message: {},
+            }]);
+
+            assertRegression(transcriptCommits.length === 1 &&
+                transcriptCommits[0] &&
+                transcriptCommits[0].terminalState === "needs_approval",
+                "needs_approval (non-stream path) should still commit transcript terminal state");
+            assertRegression(messageRows.some(function (row) {
+                return row.kind === "peer" && row.text.indexOf("Approval required before email send.") >= 0;
+            }),
+                "needs_approval (non-stream path) should render peer assistant feedback");
+            assertRegression(approvalUpserts.some(function (entry) {
+                return entry.token === "email-approval-1234567890-2";
+            }),
+                "needs_approval (non-stream path) should upsert approval token directly");
+            summary.push("needs_approval without stream text");
+        }
+
+        return {
+            ok: true,
+            checks: summary,
+        };
+    }
+
     window.BlazeClawChatEvents = {
         createEventsModule,
+        runRegressionChecks,
     };
 })();
