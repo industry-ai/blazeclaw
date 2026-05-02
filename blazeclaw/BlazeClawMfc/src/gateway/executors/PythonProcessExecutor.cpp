@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -264,6 +265,36 @@ namespace blazeclaw::gateway::executors {
 			return std::nullopt;
 		}
 
+		std::optional<std::filesystem::path> WriteToolArgsToTempFile(const std::string& argsJson) {
+			char tempDirectory[MAX_PATH] = {};
+			const DWORD tempDirectoryChars = GetTempPathA(MAX_PATH, tempDirectory);
+			if (tempDirectoryChars == 0 || tempDirectoryChars >= MAX_PATH) {
+				return std::nullopt;
+			}
+
+			char tempFilePath[MAX_PATH] = {};
+			if (GetTempFileNameA(tempDirectory, "bcp", 0, tempFilePath) == 0) {
+				return std::nullopt;
+			}
+
+			std::ofstream output(tempFilePath, std::ios::binary | std::ios::trunc);
+			if (!output.is_open()) {
+				std::error_code cleanupEc;
+				std::filesystem::remove(std::filesystem::path(tempFilePath), cleanupEc);
+				return std::nullopt;
+			}
+
+			output.write(argsJson.data(), static_cast<std::streamsize>(argsJson.size()));
+			output.close();
+			if (!output) {
+				std::error_code cleanupEc;
+				std::filesystem::remove(std::filesystem::path(tempFilePath), cleanupEc);
+				return std::nullopt;
+			}
+
+			return std::filesystem::path(tempFilePath);
+		}
+
 		std::string ResolveExecutablePath(const std::string& interpreter) {
 			const std::string trimmed = blazeclaw::gateway::json::Trim(interpreter);
 			if (trimmed.empty()) {
@@ -332,7 +363,8 @@ namespace blazeclaw::gateway::executors {
 			const std::vector<std::string>& argv,
 			const std::string& cwd,
 			const std::uint64_t timeoutMs,
-			const std::size_t maxOutputBytes) {
+			const std::size_t maxOutputBytes,
+			const std::optional<std::string>& toolArgsJson = std::nullopt) {
 			std::ostringstream command;
 			command << QuoteArg(executablePath);
 			for (const auto& arg : argv) {
@@ -368,6 +400,27 @@ namespace blazeclaw::gateway::executors {
 			std::copy(commandLine.begin(), commandLine.end(), commandBuffer.get());
 			commandBuffer[commandLine.size()] = '\0';
 
+			std::string previousToolArgsJson;
+			bool hadPreviousToolArgsJson = false;
+			if (toolArgsJson.has_value()) {
+				const DWORD requiredSize = GetEnvironmentVariableA(
+					"BLAZECLAW_TOOL_ARGS_JSON",
+					nullptr,
+					0);
+				if (requiredSize > 0) {
+					std::string buffer(requiredSize, '\0');
+					const DWORD copied = GetEnvironmentVariableA(
+						"BLAZECLAW_TOOL_ARGS_JSON",
+						buffer.data(),
+						requiredSize);
+					if (copied > 0 && copied < requiredSize) {
+						previousToolArgsJson.assign(buffer.data(), copied);
+						hadPreviousToolArgsJson = true;
+					}
+				}
+				SetEnvironmentVariableA("BLAZECLAW_TOOL_ARGS_JSON", toolArgsJson->c_str());
+			}
+
 			const BOOL created = CreateProcessA(
 				executablePath.c_str(),
 				commandBuffer.get(),
@@ -379,6 +432,15 @@ namespace blazeclaw::gateway::executors {
 				cwd.empty() ? nullptr : cwd.c_str(),
 				&startup,
 				&process);
+
+			if (toolArgsJson.has_value()) {
+				if (hadPreviousToolArgsJson) {
+					SetEnvironmentVariableA("BLAZECLAW_TOOL_ARGS_JSON", previousToolArgsJson.c_str());
+				}
+				else {
+					SetEnvironmentVariableA("BLAZECLAW_TOOL_ARGS_JSON", nullptr);
+				}
+			}
 
 			CloseHandle(hStdOutWrite);
 			if (!created) {
@@ -693,10 +755,20 @@ namespace blazeclaw::gateway::executors {
 			}
 
 			std::vector<std::string> argv;
+			std::optional<std::string> toolArgsJsonForEnvironment;
+			std::optional<std::filesystem::path> toolArgsJsonTempFile;
 			argv.push_back(canonicalScript.string());
 			if (requestedTool == "pdf_generator.generate") {
 				args["tool"] = requestedTool;
-				argv.push_back(args.dump());
+				const std::string serializedArgs = args.dump(-1, ' ', true);
+				toolArgsJsonTempFile = WriteToolArgsToTempFile(serializedArgs);
+				if (toolArgsJsonTempFile.has_value()) {
+					argv.push_back("@" + toolArgsJsonTempFile->string());
+				}
+				else {
+					toolArgsJsonForEnvironment = serializedArgs;
+					argv.push_back("{}");
+				}
 			}
 			else if (args.contains("args") && args["args"].is_array()) {
 				for (const auto& item : args["args"]) {
@@ -722,7 +794,12 @@ namespace blazeclaw::gateway::executors {
 				argv,
 				cwd,
 				timeoutMs,
-				maxOutputBytes);
+				maxOutputBytes,
+				toolArgsJsonForEnvironment);
+			if (toolArgsJsonTempFile.has_value()) {
+				std::error_code cleanupEc;
+				std::filesystem::remove(toolArgsJsonTempFile.value(), cleanupEc);
+			}
 			if (!runResult.launched) {
 				EmitExecutionTelemetry(
 					"python.external.execute.complete",

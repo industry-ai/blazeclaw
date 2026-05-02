@@ -51,9 +51,41 @@ def _resolve_paths(args: dict) -> tuple[Path | None, Path]:
     return input_path, output_path
 
 
-def _pdf_escape(text: str) -> str:
-    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    return escaped.encode("latin-1", errors="replace").decode("latin-1")
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
+def _text_quality_score(text: str) -> int:
+    cjk_count = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    mojibake_markers = "鍙銆锛锟鈥姹烘€佷负浜嗭紝"
+    marker_count = sum(text.count(ch) for ch in mojibake_markers) + text.count("�")
+    return cjk_count * 3 - marker_count * 2
+
+
+def _normalize_markdown_text(text: str) -> str:
+    normalized = text
+    if "\\n" in normalized and "\n" not in normalized:
+        normalized = normalized.replace("\\n", "\n")
+
+    best = normalized
+    best_score = _text_quality_score(best)
+    for src in ("gbk", "gb18030", "cp936"):
+        try:
+            candidate = normalized.encode(src).decode("utf-8")
+        except Exception:
+            continue
+
+        candidate_score = _text_quality_score(candidate)
+        if candidate_score > best_score and _contains_cjk(candidate):
+            best = candidate
+            best_score = candidate_score
+
+    return best
+
+
+def _pdf_hex_text(text: str) -> str:
+    utf16be = text.encode("utf-16-be", errors="replace")
+    return (b"\xFE\xFF" + utf16be).hex().upper()
 
 
 def _build_fallback_pdf_bytes(markdown_text: str, title: str, author: str) -> bytes:
@@ -63,20 +95,22 @@ def _build_fallback_pdf_bytes(markdown_text: str, title: str, author: str) -> by
     y = 800
     content_lines = ["BT", "/F1 11 Tf"]
     for raw in lines[:48]:
-        content_lines.append(f"1 0 0 1 50 {y} Tm ({_pdf_escape(raw)}) Tj")
+        content_lines.append(f"1 0 0 1 50 {y} Tm <{_pdf_hex_text(raw)}> Tj")
         y -= 15
         if y < 50:
             break
     content_lines.append("ET")
     stream = "\n".join(content_lines) + "\n"
-    stream_bytes = stream.encode("latin-1", errors="replace")
+    stream_bytes = stream.encode("ascii", errors="replace")
 
     objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >>",
         f"<< /Length {len(stream_bytes)} >>\nstream\n{stream}endstream",
+        "<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor 7 0 R /DW 1000 >>",
+        "<< /Type /FontDescriptor /FontName /STSongStd-Light /Flags 4 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 90 >>",
     ]
 
     pdf_parts: list[bytes] = [b"%PDF-1.4\n"]
@@ -115,13 +149,22 @@ def _build_pdf_bytes(markdown_text: str, title: str, author: str) -> bytes:
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import cm
         from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     except ModuleNotFoundError:
+        return _build_fallback_pdf_bytes(markdown_text, title, author)
+
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        cjk_font_name = "STSong-Light"
+    except Exception:
         return _build_fallback_pdf_bytes(markdown_text, title, author)
 
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "BlazePdfTitle",
         parent=styles["Heading1"],
+        fontName=cjk_font_name,
         fontSize=18,
         leading=22,
         spaceAfter=12,
@@ -129,6 +172,7 @@ def _build_pdf_bytes(markdown_text: str, title: str, author: str) -> bytes:
     meta_style = ParagraphStyle(
         "BlazePdfMeta",
         parent=styles["Normal"],
+        fontName=cjk_font_name,
         fontSize=10,
         textColor="#666666",
         spaceAfter=16,
@@ -136,6 +180,7 @@ def _build_pdf_bytes(markdown_text: str, title: str, author: str) -> bytes:
     body_style = ParagraphStyle(
         "BlazePdfBody",
         parent=styles["Normal"],
+        fontName=cjk_font_name,
         fontSize=11,
         leading=16,
     )
@@ -169,7 +214,12 @@ def main() -> None:
     try:
         raw = os.environ.get("BLAZECLAW_TOOL_ARGS_JSON", "")
         if not raw:
-            raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+            argv_raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+            if argv_raw.startswith("@"):
+                args_path = Path(argv_raw[1:])
+                raw = args_path.read_text(encoding="utf-8") if args_path.is_file() else "{}"
+            else:
+                raw = argv_raw
 
         args = json.loads(raw) if raw else {}
         if not isinstance(args, dict):
@@ -177,8 +227,8 @@ def main() -> None:
 
         input_path, output_path = _resolve_paths(args)
 
-        title = str(args.get("title") or "Untitled Report")
-        author = str(args.get("author") or "BlazeClaw")
+        title = _normalize_markdown_text(str(args.get("title") or "Untitled Report"))
+        author = _normalize_markdown_text(str(args.get("author") or "BlazeClaw"))
 
         markdown_text = ""
         if input_path is not None:
@@ -201,6 +251,7 @@ def main() -> None:
             if not markdown_text:
                 markdown_text = "# Business Brief\n\nNo markdown input provided by caller."
 
+        markdown_text = _normalize_markdown_text(markdown_text)
         pdf_bytes = _build_pdf_bytes(markdown_text, title, author)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
