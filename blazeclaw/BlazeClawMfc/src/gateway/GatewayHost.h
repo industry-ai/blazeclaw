@@ -409,6 +409,11 @@ namespace blazeclaw::gateway {
 		void ReloadSkillToolsFromDirectories(
 			const std::vector<std::string>& directories,
 			bool emitCatalogUpdateEvent);
+		[[nodiscard]] std::vector<std::string> ResolveAbsoluteSkillDirectories(
+			const std::vector<std::string>& hintDirectories) const;
+		void EmitSkillRootDiagnostics(
+			const char* stage,
+			const std::vector<std::string>& resolvedDirectories) const;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const override;
 		[[nodiscard]] bool IsHealthy() const noexcept override;
@@ -548,6 +553,7 @@ namespace blazeclaw::gateway {
 		std::string m_runtimeDeepSeekApiKey;
 		std::string m_runtimeDeepSeekBaseUrl = "https://api.deepseek.com";
 		std::string m_runtimeDeepSeekDefaultModel = "deepseek/deepseek-chat";
+		std::vector<std::string> m_runtimeResolvedSkillDirectories;
 		bool m_runtimeEmailPreflightEnabled = false;
 		bool m_runtimeEmailPolicyProfilesEnabled = false;
 		bool m_runtimeEmailPolicyProfilesEnforce = false;

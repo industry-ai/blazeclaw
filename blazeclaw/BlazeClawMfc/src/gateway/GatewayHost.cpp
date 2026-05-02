@@ -9,6 +9,7 @@
 #include "GatewayHostCatalogHelpers.h"
 #include "GatewayHostModelHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
+#include "GatewaySkillRootResolver.h"
 #include "GatewayHostHandlersToolsShared.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
@@ -321,8 +322,24 @@ namespace blazeclaw::gateway {
 	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
-		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
-		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
+		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
+			"blazeclaw/skills",
+			"skills",
+		});
+		EmitSkillRootDiagnostics("start_local_runtime_dispatch_only", m_runtimeResolvedSkillDirectories);
+		for (const auto& directory : m_runtimeResolvedSkillDirectories) {
+			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			const auto loadedCount = m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+			const auto loadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			EmitTelemetryEvent(
+				"gateway.skills.root.load",
+				std::string("{\"stage\":\"start_local_runtime_dispatch_only\",\"root\":") + JsonString(directory) +
+				",\"loadedCount\":" + std::to_string(loadedCount) +
+				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
+				"}");
+		}
 		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsList(m_dispatcher, m_toolRegistry);
 		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsCatalog(m_dispatcher, m_toolRegistry);
 		RegisterGatewayRegistryIntrospectionHandlers();
@@ -376,11 +393,27 @@ namespace blazeclaw::gateway {
 
 		const std::string catalogPath = ResolveExtensionsCatalogPath();
 		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
-		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-bundled");
-		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
-		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-openclaw-original");
-		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
-		m_toolRegistry.LoadSkillToolsFromDirectory("skills-openclaw-original");
+		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
+			"blazeclaw/skills-bundled",
+			"blazeclaw/skills",
+			"blazeclaw/skills-openclaw-original",
+			"skills",
+			"skills-openclaw-original",
+		});
+		EmitSkillRootDiagnostics("start_runtime_services", m_runtimeResolvedSkillDirectories);
+		for (const auto& directory : m_runtimeResolvedSkillDirectories) {
+			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			const auto loadedCount = m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+			const auto loadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			EmitTelemetryEvent(
+				"gateway.skills.root.load",
+				std::string("{\"stage\":\"start_runtime_services\",\"root\":") + JsonString(directory) +
+				",\"loadedCount\":" + std::to_string(loadedCount) +
+				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
+				"}");
+		}
 
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
@@ -716,14 +749,18 @@ namespace blazeclaw::gateway {
 				});
 		}
 
+		const std::vector<std::string> resolvedDirectories =
+			ResolveAbsoluteSkillDirectories(
+				std::vector<std::string>{
+					"blazeclaw/skills-bundled",
+					"blazeclaw/skills",
+					"blazeclaw/skills-openclaw-original",
+					"skills",
+					"skills-openclaw-original",
+				});
+		EmitSkillRootDiagnostics("set_skills_catalog_state", resolvedDirectories);
 		m_toolRegistry.SyncSkillToolsManifestFirst(
-			std::vector<std::string>{
-				"blazeclaw/skills-bundled",
-				"blazeclaw/skills",
-				"blazeclaw/skills-openclaw-original",
-				"skills",
-				"skills-openclaw-original",
-			},
+			resolvedDirectories,
 			catalogSkillTools,
 			true);
 		m_skillsCatalogState = std::move(state);
@@ -1130,11 +1167,21 @@ namespace blazeclaw::gateway {
 	void GatewayHost::ReloadSkillToolsFromDirectories(
 		const std::vector<std::string>& directories,
 		const bool emitCatalogUpdateEvent) {
-		for (const auto& directory : directories) {
-			if (directory.empty()) {
-				continue;
-			}
-			m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+		const std::vector<std::string> resolvedDirectories =
+			ResolveAbsoluteSkillDirectories(directories);
+		EmitSkillRootDiagnostics("reload_skill_tools_from_directories", resolvedDirectories);
+		for (const auto& directory : resolvedDirectories) {
+			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			const auto loadedCount = m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+			const auto loadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()).count();
+			EmitTelemetryEvent(
+				"gateway.skills.root.load",
+				std::string("{\"stage\":\"reload_skill_tools_from_directories\",\"root\":") + JsonString(directory) +
+				",\"loadedCount\":" + std::to_string(loadedCount) +
+				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
+				"}");
 		}
 
 		if (!emitCatalogUpdateEvent) {
@@ -1149,6 +1196,142 @@ namespace blazeclaw::gateway {
 			"gateway.tools.catalog.update",
 			std::string("{\"source\":\"openclaw-original\",\"broadcastError\":") +
 			JsonString(broadcastError) +
+			"}");
+	}
+
+	std::vector<std::string> GatewayHost::ResolveAbsoluteSkillDirectories(
+		const std::vector<std::string>& hintDirectories) const {
+		wchar_t modulePathBuffer[MAX_PATH] = {};
+		std::filesystem::path moduleDir;
+		if (GetModuleFileNameW(nullptr, modulePathBuffer, MAX_PATH) > 0) {
+			moduleDir = std::filesystem::path(modulePathBuffer).parent_path();
+		}
+
+		const std::filesystem::path currentDir = std::filesystem::current_path();
+		std::set<std::string> seen;
+		std::vector<std::string> resolved;
+
+		const auto pushUnique = [&seen, &resolved](const std::filesystem::path& input) {
+			if (input.empty()) {
+				return;
+			}
+
+			std::error_code ec;
+			const auto canonical = std::filesystem::weakly_canonical(input, ec);
+			const auto normalized = ec ? input.lexically_normal() : canonical.lexically_normal();
+			if (normalized.empty()) {
+				return;
+			}
+
+			const std::string value = normalized.string();
+			if (seen.insert(value).second) {
+				resolved.push_back(value);
+			}
+		};
+
+		const auto readEnvOverride = [](const char* name) -> std::optional<std::string> {
+			const std::string value = ReadEnvironmentVariable(name);
+			if (value.empty()) {
+				return std::nullopt;
+			}
+			return value;
+		};
+
+		const std::optional<std::string> genericOverride =
+			readEnvOverride("BLAZECLAW_SKILLS_ROOT");
+		const std::optional<std::string> bundledOverride =
+			readEnvOverride("BLAZECLAW_SKILLS_BUNDLED_ROOT");
+		const std::optional<std::string> openClawOverride =
+			readEnvOverride("BLAZECLAW_SKILLS_OPENCLAW_ROOT");
+
+		for (const auto& path : skills::ResolveSkillRoots(
+			skills::SkillRootKind::Bundled,
+			moduleDir,
+			currentDir,
+			genericOverride,
+			bundledOverride).resolvedRoots) {
+			pushUnique(path);
+		}
+		for (const auto& path : skills::ResolveSkillRoots(
+			skills::SkillRootKind::Core,
+			moduleDir,
+			currentDir,
+			genericOverride,
+			std::nullopt).resolvedRoots) {
+			pushUnique(path);
+		}
+		for (const auto& path : skills::ResolveSkillRoots(
+			skills::SkillRootKind::OpenClawOriginal,
+			moduleDir,
+			currentDir,
+			genericOverride,
+			openClawOverride).resolvedRoots) {
+			pushUnique(path);
+		}
+
+		for (const auto& hint : hintDirectories) {
+			if (hint.empty()) {
+				continue;
+			}
+			pushUnique(hint);
+		}
+
+		return resolved;
+	}
+
+	void GatewayHost::EmitSkillRootDiagnostics(
+		const char* stage,
+		const std::vector<std::string>& resolvedDirectories) const {
+		if (stage == nullptr) {
+			return;
+		}
+
+		std::string roots = "[]";
+		if (!resolvedDirectories.empty()) {
+			roots = "[";
+			for (std::size_t i = 0; i < resolvedDirectories.size(); ++i) {
+				if (i > 0) {
+					roots += ",";
+				}
+				roots += JsonString(resolvedDirectories[i]);
+			}
+			roots += "]";
+		}
+
+		bool imapSmtpSkillDiscovered = false;
+		bool imapSmtpManifestDiscovered = false;
+		for (const auto& directory : resolvedDirectories) {
+			std::error_code ec;
+			if (!std::filesystem::exists(directory, ec) ||
+				!std::filesystem::is_directory(directory, ec)) {
+				continue;
+			}
+
+			for (const auto& child : std::filesystem::directory_iterator(directory, ec)) {
+				if (ec) {
+					break;
+				}
+				if (!child.is_directory()) {
+					continue;
+				}
+				const std::string name = child.path().filename().string();
+				if (name != "imap-smtp-email" && name != "imap_smtp_email") {
+					continue;
+				}
+				imapSmtpSkillDiscovered = true;
+				if (std::filesystem::exists(child.path() / "tool-manifest.json", ec)) {
+					imapSmtpManifestDiscovered = true;
+				}
+			}
+		}
+
+		EmitTelemetryEvent(
+			"gateway.skills.roots",
+			std::string("{\"stage\":") + JsonString(stage) +
+			",\"count\":" + std::to_string(resolvedDirectories.size()) +
+			",\"roots\":" + roots +
+			",\"imapSmtpSkillDiscovered\":" + std::string(imapSmtpSkillDiscovered ? "true" : "false") +
+			",\"imapSmtpManifestDiscovered\":" + std::string(imapSmtpManifestDiscovered ? "true" : "false") +
 			"}");
 	}
 

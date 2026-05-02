@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include "gateway/GatewaySkillRootResolver.h"
 
 namespace {
 	std::filesystem::path MakeTempDir(const std::string& suffix) {
@@ -281,4 +282,48 @@ TEST_CASE("Invalid catalog descriptors are rejected deterministically", "[gatewa
 
 	const auto diagnostics = registry.GetSkillToolSourceDiagnostics();
 	REQUIRE(diagnostics.catalogRejected >= 1);
+}
+
+TEST_CASE("Skill root resolver returns equivalent imap-smtp roots across repo and project launch directories", "[gateway][tools][skills][resolver]") {
+	const auto workspaceRoot = std::filesystem::current_path();
+	const auto projectRoot = workspaceRoot;
+	const auto repoRoot = projectRoot.parent_path();
+	const auto moduleDir = projectRoot / "BlazeClawMfc" / "x64" / "Debug";
+
+	const auto extractImapRoot = [](const blazeclaw::gateway::skills::SkillRootResolution& resolution) {
+		for (const auto& root : resolution.resolvedRoots) {
+			const auto normalized = root.lexically_normal().generic_string();
+			if (normalized.find("/skills") != std::string::npos) {
+				return normalized;
+			}
+		}
+		return std::string{};
+	};
+
+	const auto repoCore = blazeclaw::gateway::skills::ResolveSkillRoots(
+		blazeclaw::gateway::skills::SkillRootKind::Core,
+		moduleDir,
+		repoRoot,
+		std::nullopt,
+		std::nullopt);
+	const auto projectCore = blazeclaw::gateway::skills::ResolveSkillRoots(
+		blazeclaw::gateway::skills::SkillRootKind::Core,
+		moduleDir,
+		projectRoot,
+		std::nullopt,
+		std::nullopt);
+
+	REQUIRE_FALSE(repoCore.resolvedRoots.empty());
+	REQUIRE_FALSE(projectCore.resolvedRoots.empty());
+
+	const auto repoImapRoot = extractImapRoot(repoCore);
+	const auto projectImapRoot = extractImapRoot(projectCore);
+	REQUIRE_FALSE(repoImapRoot.empty());
+	REQUIRE_FALSE(projectImapRoot.empty());
+	REQUIRE(repoImapRoot == projectImapRoot);
+
+	const auto repoManifest = std::filesystem::path(repoImapRoot) / "imap-smtp-email" / "tool-manifest.json";
+	const auto projectManifest = std::filesystem::path(projectImapRoot) / "imap-smtp-email" / "tool-manifest.json";
+	REQUIRE(std::filesystem::exists(repoManifest));
+	REQUIRE(std::filesystem::exists(projectManifest));
 }
