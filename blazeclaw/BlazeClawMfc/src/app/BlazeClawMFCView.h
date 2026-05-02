@@ -117,6 +117,10 @@ protected:
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
 	void ReportRunSkillPathsToFindOutput(const std::string& runId);
+	void ProcessRunSkillPathLookupResult(
+		const std::string& normalizedRunId,
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		std::uint64_t elapsedMs);
 	void EmitSkillPathLinesFromEvents(const std::string& eventsRaw);
 	void EnsureOpenClawBridgeShim();
 	void TraceBridgeTraffic(
@@ -147,6 +151,7 @@ protected:
 	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
 	afx_msg LRESULT OnBridgePollCompleted(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnSkillPathLookupCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:

@@ -54,11 +54,20 @@ namespace {
 	std::string ToLowerAscii(const std::string& value);
 	std::unordered_map<std::string, std::string> ParseDotEnvPairs(
 		const std::string& envContent);
+	void AppendChatProcedureStatusLine(const CString& line);
+	void AppendChatProcedureStatusLine(const wchar_t* stage);
+	void AppendChatProcedureStatusLine(
+		const wchar_t* stage,
+		const std::string& detail);
+	void AppendStartupEventDiagnostic(
+		const wchar_t* stage,
+		const std::string& detail);
 
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
 	constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
 	constexpr UINT kBridgePollCompletedMessage = WM_APP + 0x2A1;
+	constexpr UINT kSkillPathLookupCompletedMessage = WM_APP + 0x2A2;
 	constexpr std::uint32_t kBridgePollIntervalActiveMs = 300;
 	constexpr std::uint32_t kBridgePollIntervalIdleMs = 1000;
 	constexpr std::uint32_t kBridgePollIntervalFailureMs = 3000;
@@ -69,6 +78,13 @@ namespace {
 	{
 		bool ok = false;
 		std::optional<std::string> payloadJson;
+	};
+
+	struct SkillPathLookupCompletionPayload
+	{
+		std::string runId;
+		std::uint64_t elapsedMs = 0;
+		blazeclaw::gateway::protocol::ResponseFrame response;
 	};
 
 	std::uint32_t ComputeFailureBackoffMs(const std::uint32_t failureCount)
@@ -295,6 +311,26 @@ namespace {
 		return objects;
 	}
 
+	void AppendStartupEventDiagnostic(
+		const wchar_t* stage,
+		const std::string& detail)
+	{
+		auto* mainFrame =
+			dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr)
+		{
+			return;
+		}
+
+		CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+		CString line;
+		line.Format(
+			L"[Chat] %s - %s",
+			(stage != nullptr ? stage : L"stage"),
+			detailW.GetString());
+		mainFrame->AddChatStatusLine(line);
+	}
+
 	std::vector<std::string> ExtractTerminalRunIds(const std::string& eventsRaw)
 	{
 		std::vector<std::string> runIds;
@@ -302,11 +338,21 @@ namespace {
 		{
 			std::string state;
 			blazeclaw::gateway::json::FindStringField(eventJson, "state", state);
+			// If state is missing, emit a diagnostic so malformed event payloads are visible
+			if (state.empty())
+			{
+				std::string snippet = eventJson.size() > 200 ? eventJson.substr(0, 200) + "..." : eventJson;
+				AppendStartupEventDiagnostic(L"startup.chat.event.malformed", snippet);
+				continue;
+			}
+
+			// If the event state is not one of the terminal states, record it for diagnostics
 			if (state != "final" &&
 				state != "error" &&
 				state != "aborted" &&
 				state != "needs_approval")
 			{
+				AppendStartupEventDiagnostic(L"startup.chat.event.unexpected_state", state);
 				continue;
 			}
 
@@ -316,6 +362,12 @@ namespace {
 			if (!runId.empty())
 			{
 				runIds.push_back(runId);
+			}
+			else
+			{
+				// Terminal event without a runId is unexpected; log snippet for debugging
+				std::string snippet = eventJson.size() > 200 ? eventJson.substr(0, 200) + "..." : eventJson;
+				AppendStartupEventDiagnostic(L"startup.chat.event.missing_runid", snippet);
 			}
 		}
 
@@ -1919,6 +1971,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CBlazeClawMFCView::OnFilePrintPreview)
 	ON_MESSAGE(kBridgePollCompletedMessage, &CBlazeClawMFCView::OnBridgePollCompleted)
+	ON_MESSAGE(kSkillPathLookupCompletedMessage, &CBlazeClawMFCView::OnSkillPathLookupCompleted)
 	ON_WM_CONTEXTMENU()
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
@@ -2119,10 +2172,21 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 	bridgeDeps.handleEventsBatch =
 		[this](const std::string& eventsRaw)
 		{
+			// Call-chain annotations:
+			// 1) Poll path:
+			//    CBridge::StartEventsPollAsync -> WM_APP(kBridgePollCompletedMessage)
+			//    -> CBlazeClawMFCView::OnBridgePollCompleted -> CBridge::HandlePollCompleted
+			//    -> CBridge::HandleInboundEventsBatch -> this lambda
+			// 2) Push path:
+			//    CBlazeClawMFCView::HandleWebMessageJson(channel=blazeclaw.gateway.chat.push.event)
+			//    -> CBridge::HandlePushChatEventFrame -> CBridge::HandleInboundEventsBatch
+			//    -> this lambda
+			const std::uint64_t batchStartMs = GetTickCount64();
 			AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
 			EmitSkillPathLinesFromEvents(eventsRaw);
 			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
 			{
+				// Async to avoid UI-thread blocking inside batch handling.
 				ReportRunSkillPathsToFindOutput(runId);
 			}
 
@@ -2143,6 +2207,11 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 				"}";
 			m_eventTransport.EmitTopic(BridgeEventTopic::ChatEvents, envelope);
 			EmitOpenClawChatEvents(eventsRaw);
+
+			const std::uint64_t batchElapsedMs = GetTickCount64() - batchStartMs;
+			AppendChatProcedureStatusLine(
+				L"events.batch.timing",
+				"elapsedMs=" + std::to_string(batchElapsedMs));
 		};
 
 	CBridge::Config bridgeCfg{};
@@ -2611,6 +2680,10 @@ LRESULT CBlazeClawMFCView::OnBridgePollCompleted(
 {
 	UNREFERENCED_PARAMETER(lParam);
 
+	// Poll-path call chain:
+	// CBridge::StartEventsPollAsync -> WM_APP(kBridgePollCompletedMessage)
+	// -> OnBridgePollCompleted -> CBridge::HandlePollCompleted
+	// -> CBridge::HandleInboundEventsBatch -> bridgeDeps.handleEventsBatch.
 	auto* payload =
 		reinterpret_cast<CBridgePollCompletionPayload*>(wParam);
 	if (payload == nullptr)
@@ -2620,6 +2693,27 @@ LRESULT CBlazeClawMFCView::OnBridgePollCompleted(
 	}
 
 	m_bridge.HandlePollCompleted(payload->ok, payload->payloadJson);
+	delete payload;
+	return 0;
+}
+
+LRESULT CBlazeClawMFCView::OnSkillPathLookupCompleted(
+	WPARAM wParam,
+	LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+
+	auto* payload =
+		reinterpret_cast<SkillPathLookupCompletionPayload*>(wParam);
+	if (payload == nullptr)
+	{
+		return 0;
+	}
+
+	ProcessRunSkillPathLookupResult(
+		payload->runId,
+		payload->response,
+		payload->elapsedMs);
 	delete payload;
 	return 0;
 }
@@ -2754,13 +2848,13 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 		return;
 	}
 
-	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (mainFrame == nullptr || app == nullptr)
+	const HWND hwnd = GetSafeHwnd();
+	if (hwnd == nullptr)
 	{
 		return;
 	}
 
+	m_reportedSkillPathRunIds.insert(normalizedRunId);
 	const blazeclaw::gateway::protocol::RequestFrame request{
 		.id = std::string("find-skill-path-") + normalizedRunId,
 		.method = "gateway.runtime.taskDeltas.get",
@@ -2768,7 +2862,66 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 			std::string("{\"runId\":\"") + normalizedRunId + "\"}",
 	};
 
-	const auto response = app->RouteGatewayRequest(request);
+	std::thread(
+		[hwnd, normalizedRunId, request]()
+		{
+			const std::uint64_t startedAtMs = GetTickCount64();
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			blazeclaw::gateway::protocol::ResponseFrame response;
+			if (app == nullptr)
+			{
+				response = blazeclaw::gateway::protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = blazeclaw::gateway::protocol::ErrorShape{
+						.code = "app_unavailable",
+						.message = "Application context unavailable.",
+						.detailsJson = std::nullopt,
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+			else
+			{
+				response = app->RouteGatewayRequest(request);
+			}
+
+			auto* payload = new SkillPathLookupCompletionPayload{
+				.runId = normalizedRunId,
+				.elapsedMs = GetTickCount64() - startedAtMs,
+				.response = std::move(response),
+			};
+			if (!::PostMessage(
+				hwnd,
+				kSkillPathLookupCompletedMessage,
+				reinterpret_cast<WPARAM>(payload),
+				0))
+			{
+				delete payload;
+			}
+		})
+		.detach();
+}
+
+void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
+	const std::string& normalizedRunId,
+	const blazeclaw::gateway::protocol::ResponseFrame& response,
+	const std::uint64_t elapsedMs)
+{
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame == nullptr)
+	{
+		return;
+	}
+
+	AppendChatProcedureStatusLine(
+		L"skills.path.lookup.timing",
+		"runId=" + normalizedRunId +
+		" elapsedMs=" + std::to_string(elapsedMs) +
+		" ok=" + (response.ok ? std::string("true") : std::string("false")));
+
 	if (!response.ok || !response.payloadJson.has_value())
 	{
 		std::string detail =
@@ -2797,7 +2950,6 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 
 		mainFrame->AddFindStatusLine(
 			CString(CA2W(detail.c_str(), CP_UTF8)));
-		m_reportedSkillPathRunIds.insert(normalizedRunId);
 		return;
 	}
 
@@ -2830,14 +2982,12 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 				320);
 
 		mainFrame->AddFindStatusLine(CString(CA2W(detail.c_str(), CP_UTF8)));
-		m_reportedSkillPathRunIds.insert(normalizedRunId);
 		return;
 	}
 
 	const auto deltas = SplitTopLevelObjects(taskDeltasRaw);
 	if (deltas.empty())
 	{
-		m_reportedSkillPathRunIds.insert(normalizedRunId);
 		return;
 	}
 
@@ -2976,8 +3126,6 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 			}
 		}
 	}
-
-	m_reportedSkillPathRunIds.insert(normalizedRunId);
 }
 
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
@@ -3027,6 +3175,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (channel == "blazeclaw.gateway.chat.push.event")
 	{
+		// Push-path call chain:
+		// HandleWebMessageJson(channel=blazeclaw.gateway.chat.push.event)
+		// -> CBridge::HandlePushChatEventFrame
+		// -> CBridge::HandleInboundEventsBatch
+		// -> bridgeDeps.handleEventsBatch.
 		std::string eventRaw;
 		if (!blazeclaw::gateway::json::FindRawField(message, "event", eventRaw))
 		{
