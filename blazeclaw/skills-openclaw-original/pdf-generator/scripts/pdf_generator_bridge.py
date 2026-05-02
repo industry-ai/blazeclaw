@@ -85,16 +85,46 @@ def _normalize_markdown_text(text: str) -> str:
 
 def _pdf_hex_text(text: str) -> str:
     utf16be = text.encode("utf-16-be", errors="replace")
-    return (b"\xFE\xFF" + utf16be).hex().upper()
+    return utf16be.hex().upper()
+
+
+def _char_display_units(ch: str) -> int:
+    return 2 if "\u4e00" <= ch <= "\u9fff" else 1
+
+
+def _wrap_line_for_pdf(text: str, max_units: int = 72) -> list[str]:
+    if not text:
+        return [""]
+
+    wrapped: list[str] = []
+    current = ""
+    units = 0
+    for ch in text:
+        ch_units = _char_display_units(ch)
+        if units + ch_units > max_units and current:
+            wrapped.append(current)
+            current = ch
+            units = ch_units
+        else:
+            current += ch
+            units += ch_units
+
+    if current or not wrapped:
+        wrapped.append(current)
+    return wrapped
 
 
 def _build_fallback_pdf_bytes(markdown_text: str, title: str, author: str) -> bytes:
-    lines = [title, f"Author: {author} | Date: {date.today().isoformat()}", ""]
-    lines.extend(markdown_text.splitlines())
+    source_lines = [title, f"Author: {author} | Date: {date.today().isoformat()}", ""]
+    source_lines.extend(markdown_text.splitlines())
+
+    lines: list[str] = []
+    for line in source_lines:
+        lines.extend(_wrap_line_for_pdf(line))
 
     y = 800
     content_lines = ["BT", "/F1 11 Tf"]
-    for raw in lines[:48]:
+    for raw in lines[:90]:
         content_lines.append(f"1 0 0 1 50 {y} Tm <{_pdf_hex_text(raw)}> Tj")
         y -= 15
         if y < 50:
