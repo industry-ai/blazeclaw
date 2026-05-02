@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "skill": "pdf-generator",
+  "namespace": "pdf_generator",
+  "description": "BlazeClaw runtime tool manifest for PDF generation workflows.",
+  "tools": [
+    {
+      "id": "pdf_generator.generate",
+      "label": "PDF Generator",
+      "category": "document",
+      "enabled": true
+    }
+  ]
+}

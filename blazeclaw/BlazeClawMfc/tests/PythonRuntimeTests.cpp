@@ -136,6 +136,26 @@ TEST_CASE("Python runtime disabled flag blocks python.script.run", "[python][run
 	host.Stop();
 }
 
+TEST_CASE("pdf_generator.generate is executor-bound and does not surface runtime_executor_missing", "[python][runtime][pdf-generator]") {
+	ScopedEnvVar runtimeEnabled("BLAZECLAW_PYTHON_RUNTIME_ENABLED");
+	runtimeEnabled.Set("false");
+
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig config;
+	REQUIRE(host.Start(config));
+
+	const auto executeResponse = ExecuteTool(
+		host,
+		"pdf_generator.generate",
+		R"({"output_pdf":"Battery_Report.pdf","text":"hello"})");
+	REQUIRE(executeResponse.ok);
+	const std::string output = ExtractToolOutput(executeResponse);
+	REQUIRE(output.find("runtime_executor_missing") == std::string::npos);
+	REQUIRE(output.find("python_runtime_disabled") != std::string::npos);
+
+	host.Stop();
+}
+
 TEST_CASE("Embedded runtime disabled flag blocks embedded mode requests", "[python][runtime][rollout]") {
 	ScopedEnvVar runtimeEnabled("BLAZECLAW_PYTHON_RUNTIME_ENABLED");
 	ScopedEnvVar embeddedEnabled("BLAZECLAW_PYTHON_EMBEDDED_ENABLED");

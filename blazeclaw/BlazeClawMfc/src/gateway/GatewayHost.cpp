@@ -98,6 +98,17 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		void EnsurePdfGeneratorRuntimeRegistered(GatewayToolRegistry& registry) {
+			registry.RegisterRuntimeTool(
+				ToolCatalogEntry{
+					.id = "pdf_generator.generate",
+					.label = "PDF Generator",
+					.category = "document",
+					.enabled = true,
+				},
+				python::PythonRuntimeDispatcher::CreateExecutor());
+		}
+
 		std::string ResolveExtensionsCatalogPath() {
 			const std::filesystem::path preferred =
 				std::filesystem::path("blazeclaw") /
@@ -266,6 +277,7 @@ namespace blazeclaw::gateway {
 
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 		RegisterDefaultHandlers();
 		m_dispatchInitialized = true;
 		m_runtimeHandlersInitialized = true;
@@ -322,6 +334,7 @@ namespace blazeclaw::gateway {
 	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
 			"blazeclaw/skills",
 			"skills",
@@ -434,6 +447,7 @@ namespace blazeclaw::gateway {
 			true,
 			true);
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		LoadPersistedTaskDeltas();
 
@@ -453,6 +467,14 @@ namespace blazeclaw::gateway {
 				.enabled = true,
 			},
 			python::PythonRuntimeDispatcher::CreateDiagnosticsExecutor());
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "pdf_generator.generate",
+				.label = "PDF Generator",
+				.category = "document",
+				.enabled = true,
+			},
+			python::PythonRuntimeDispatcher::CreateExecutor());
 
 		return true;
 	}
@@ -1746,6 +1768,7 @@ namespace blazeclaw::gateway {
 			true,
 			true);
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 
 		const std::vector<std::string> after = sortNames(m_dispatcher);
 		std::vector<std::string> added;

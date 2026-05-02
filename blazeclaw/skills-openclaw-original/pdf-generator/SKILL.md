@@ -1,188 +1,155 @@
-# pdf-generator - Professional PDF Report Generator from Markdown
+---
+name: PDF Generator
+slug: pdf-generator
+version: 1.0.1
+homepage: https://clawic.com/skills/pdf-generator
+description: Generate professional PDFs from Markdown, HTML, data, or code. Reports, invoices, contracts, and documents with best practices.
+metadata: {"clawdbot":{"emoji":"📄","requires":{"bins":[]},"os":["linux","darwin","win32"]}}
+command-dispatch: tool
+command-tool: pdf_generator.generate
+command-arg-mode: raw
+command-arg-schema: schema://pdf_generator.generate.args.v1
+command-result-schema: schema://pdf_generator.generate.result.v1
+command-idempotency-hint: safe
+command-retry-policy-hint: transient-runtime
+command-requires-approval: false
+---
 
-## Description
-Convert Markdown documents to professional, well-formatted PDF reports using ReportLab. Supports Chinese fonts, custom styling, tables, and structured layouts. Perfect for business reports, research papers, and data-driven documentation.
+## When to Use
 
-## Features
-- ✅ Convert Markdown files to A4 format PDF
-- ✅ Support Chinese fonts (SimHei/Microsoft YaHei)
-- ✅ Custom table styling with themes
-- ✅ Multi-page document support
-- ✅ Automatic section headers and page breaks
-- ✅ Export multiple report formats (summary + detailed)
+User needs to create, generate, or export PDF documents. Agent handles document generation from multiple sources (Markdown, HTML, JSON, templates), formatting, styling, and batch processing.
 
-## Dependencies
-- Python 3.8+
-- ReportLab >= 4.0 (`pip install reportlab`)
+## Scope
 
-## Usage Examples
+This skill:
+- Provides code patterns and implementation guidance for PDF generation
+- Explains tool selection, CSS for print, and document structure
+- Supports runtime execution through `pdf_generator.generate` for Markdown→PDF conversion
 
-### Basic Usage
-```python
-# Simple markdown to PDF conversion
-from pdf_generator import generate_pdf
+Runtime execution behavior:
+- Reads input Markdown from the current workspace
+- Writes output PDF to the requested workspace path
+- Does not perform network requests
 
-generate_pdf(
-    input_md="report.md",
-    output_pdf="report.pdf",
-    title="Report Title",
-    author="Author Name",
-    date="2026-04-28"
-)
-```
+## Quick Reference
 
-### With Custom Tables
-```python
-# Generate report with styled tables
-data_tables = [
-    ["指标", "数据", "时间"],
-    ["2024 年全球出货量", "5.3 GWh", "EVTank"],
-    ["半固态电池渗透率", "1%", "行业调研"],
-]
+| Topic | File |
+|-------|------|
+| Tool selection | `tools.md` |
+| Document types | `templates.md` |
+| Advanced operations | `advanced.md` |
 
-generate_pdf(
-    input_md="battery_report.md",
-    output_pdf="battery_report.pdf",
-    include_table_styles=True,
-    theme="business_blue"
-)
-```
+## Core Rules
 
-### CLI Mode
-```bash
-# From workspace directory
-python scripts/pdf-generator.py \
-    --input "source.md" \
-    --output "report.pdf" \
-    --title "My Report" \
-    --author "OpenClaw AI Team"
-```
+### 1. Choose the Right Tool
 
-## Configuration Options
+| Source | Best Tool | Why |
+|--------|-----------|-----|
+| Markdown | pandoc | Native support, TOC, templates |
+| HTML/CSS | weasyprint | Best CSS support, no LaTeX |
+| Data/JSON | reportlab | Programmatic, precise control |
+| Simple text | fpdf2 | Lightweight, fast |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `input_md` | str | required | Input Markdown file path |
-| `output_pdf` | str | required | Output PDF file path |
-| `title` | str | "Untitled Report" | Document title |
-| `author` | str | "AI Assistant" | Author name |
-| `theme` | str | "business_blue" | Color theme: blue/green/orange/purple |
-| `include_toc` | bool | True | Include table of contents |
-| `chinese_font` | str | None | Use system Chinese font if available |
+**Default recommendation:** weasyprint for most HTML-based documents.
 
-## Themed Color Schemes
+### 2. Structure Before Style
 
 ```python
-THEMES = {
-    "business_blue":   "#3498db",  # Professional blue
-    "nature_green":    "#27ae60",  # Eco-friendly green
-    "energy_orange":   "#e67e22",  # Energetic orange
-    "corporate_purple":"#8e44ad",  # Corporate purple
+# CORRECT: semantic structure
+html = """
+<article>
+  <header><h1>Report Title</h1></header>
+  <section>
+    <h2>Summary</h2>
+    <p>Content...</p>
+  </section>
+</article>
+"""
+
+# WRONG: style-first approach
+html = "<div style='font-size:24px'>Report Title</div>"
+```
+
+### 3. Handle Page Breaks Explicitly
+
+```css
+/* Force page break before */
+.new-page { page-break-before: always; }
+
+/* Keep together */
+.keep-together { page-break-inside: avoid; }
+
+/* Headers never orphaned */
+h2, h3 { page-break-after: avoid; }
+```
+
+### 4. Always Set Metadata
+
+```python
+# Example pattern for weasyprint
+html = """
+<html>
+<head>
+  <title>Document Title</title>
+  <meta name="author" content="Author Name">
+</head>
+...
+"""
+```
+
+### 5. Use Print-Optimized CSS
+
+```css
+@media print {
+  body {
+    font-family: 'Georgia', serif;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  
+  @page {
+    size: A4;
+    margin: 2cm;
+  }
+  
+  .no-print { display: none; }
 }
 ```
 
-## Advanced Usage
+### 6. Validate Output
 
-### Custom Table Styles
-```python
-from pdf_generator import TableStyleBuilder
+After generating any PDF:
+1. Check file size (0 bytes = failed)
+2. Open and verify page count
+3. Verify fonts render correctly
 
-# Create custom header style
-header_style = TableStyleBuilder(
-    background="#2c3e50",
-    text_color="white",
-    font_size=11,
-    padding=10
-)
+## Common Traps
 
-# Add to report
-table = build_table(data, style=header_style)
-```
+| Trap | Consequence | Fix |
+|------|-------------|-----|
+| Missing fonts | Fallback to defaults | Use web-safe fonts |
+| Absolute image paths | Images missing | Use relative paths |
+| No page size | Unpredictable layout | Set `@page { size: A4; }` |
+| Large images | Huge files | Compress before use |
 
-### Multi-Page with Page Breaks
-```python
-from reportlab.platypus import PageBreak
+## Security & Privacy
 
-story.append(PageBreak())  # Force new page
-story.append(Paragraph("Next Section", heading_style))
-```
+**Data stays local:**
+- PDF generation runs locally through BlazeClaw runtime
+- No data sent externally
 
-### Extract Data Tables
-```python
-from pdf_extractor import extract_tables
+**Runtime constraints:**
+- Executes trusted local bridge script under skill directories
+- No network requests
+- File operations are limited to user-provided workspace paths
 
-tables = extract_tables("existing_report.pdf")
-for i, table in enumerate(tables):
-    print(f"Table {i+1}: {len(table)} rows")
-```
+## BlazeClaw Chat Invocation
 
-## Error Handling
+- Slash command: `/pdf_generator <input.md> <output.pdf>`
+- Tool dispatch: `pdf_generator.generate`
+- Recommended explicit arguments: `input_md`, `output_pdf`, `title`, `author`
 
-```python
-try:
-    generate_pdf(input_md="source.md", output_pdf="report.pdf")
-except FileNotFoundError:
-    print("Input file not found")
-except IOError as e:
-    print(f"I/O error: {e}")
-except Exception as e:
-    print(f"Unexpected error: {type(e).__name__}: {e}")
-```
+## Feedback
 
-## Integration with Other Tools
-
-### Combined with Email Sending
-```python
-from email_sender import send_email_with_attachment
-
-generate_pdf("report.md", "report.pdf")
-send_email(
-    to="user@example.com",
-    subject="PDF Report Attached",
-    attachment="report.pdf"
-)
-```
-
-### Batch Processing
-```python
-import glob
-
-for md_file in glob.glob("reports/*.md"):
-    pdf_name = md_file.replace(".md", ".pdf")
-    generate_pdf(md_file, pdf_name)
-    print(f"✓ Converted {md_file}")
-```
-
-## File Structure
-
-```
-~/.openclaw/skills/pdf-generator/
-├── SKILL.md                 # This file
-├── README.md                # Extended documentation
-├── pdf_generator.py         # Core generator module
-├── templates/               # Pre-built report templates
-│   ├── business_report.py
-│   ├── research_paper.py
-│   └── executive_summary.py
-├── requirements.txt         # pip dependencies
-└── tests/                   # Unit tests
-    ├── test_generation.py
-    └── test_themes.py
-```
-
-## Changelog
-
-### v1.0.0 (2026-04-28)
-- Initial release
-- Basic markdown to PDF conversion
-- 4 color themes
-- Chinese font support
-- Table styling
-
-## License
-
-MIT License - Free for personal and commercial use.
-
-## Support
-
-For issues or feature requests, contact the OpenClaw team or submit a PR on GitHub.
+- If useful: `clawhub star pdf-generator`
+- Stay updated: `clawhub sync`

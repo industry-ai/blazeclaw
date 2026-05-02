@@ -163,18 +163,50 @@ namespace blazeclaw::gateway::executors {
 				values = {
 					"blazeclaw/skills",
 					"skills",
-					"blazeclaw/skills-bundled"
+					"blazeclaw/skills-bundled",
+					"blazeclaw/skills-openclaw-original",
+					"skills-openclaw-original"
 				};
 			}
 
-			for (const auto& value : values) {
+			auto addCanonical = [&roots](const std::filesystem::path& candidate) {
 				std::error_code ec;
 				const std::filesystem::path canonical =
-					std::filesystem::weakly_canonical(std::filesystem::path(value), ec);
+					std::filesystem::weakly_canonical(candidate, ec);
 				if (ec) {
+					return;
+				}
+				if (std::find(roots.begin(), roots.end(), canonical) == roots.end()) {
+					roots.push_back(canonical);
+				}
+			};
+
+			std::vector<std::filesystem::path> baseDirectories;
+			baseDirectories.push_back(std::filesystem::current_path());
+			baseDirectories.push_back(std::filesystem::current_path() / "..");
+			baseDirectories.push_back(std::filesystem::current_path() / ".." / "..");
+
+			char modulePathBuffer[MAX_PATH] = {};
+			const DWORD moduleChars =
+				GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
+			if (moduleChars > 0 && moduleChars < MAX_PATH) {
+				const std::filesystem::path exeDir =
+					std::filesystem::path(modulePathBuffer).parent_path();
+				baseDirectories.push_back(exeDir);
+				baseDirectories.push_back(exeDir / "..");
+				baseDirectories.push_back(exeDir / ".." / "..");
+			}
+
+			for (const auto& value : values) {
+				const std::filesystem::path configuredPath(value);
+				if (configuredPath.is_absolute()) {
+					addCanonical(configuredPath);
 					continue;
 				}
-				roots.push_back(canonical);
+
+				for (const auto& baseDir : baseDirectories) {
+					addCanonical(baseDir / configuredPath);
+				}
 			}
 
 			return roots;
@@ -196,6 +228,40 @@ namespace blazeclaw::gateway::executors {
 		std::string BaseNameLower(const std::string& rawPath) {
 			const std::filesystem::path path(rawPath);
 			return ToLowerTrimmed(path.filename().string());
+		}
+
+		std::optional<std::filesystem::path> ResolveScriptPath(const std::string& scriptPath) {
+			if (scriptPath.empty()) {
+				return std::nullopt;
+			}
+
+			std::vector<std::filesystem::path> candidates;
+			candidates.emplace_back(scriptPath);
+			candidates.emplace_back(std::filesystem::path("..") / scriptPath);
+			candidates.emplace_back(std::filesystem::path("..") / ".." / scriptPath);
+			candidates.emplace_back(std::filesystem::path("blazeclaw") / scriptPath);
+			candidates.emplace_back(std::filesystem::path("..") / "blazeclaw" / scriptPath);
+
+			char modulePathBuffer[MAX_PATH] = {};
+			const DWORD moduleChars =
+				GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
+			if (moduleChars > 0 && moduleChars < MAX_PATH) {
+				const std::filesystem::path exeDir =
+					std::filesystem::path(modulePathBuffer).parent_path();
+				candidates.emplace_back(exeDir / scriptPath);
+				candidates.emplace_back(exeDir / ".." / scriptPath);
+				candidates.emplace_back(exeDir / ".." / ".." / scriptPath);
+			}
+
+			for (const auto& candidate : candidates) {
+				std::error_code ec;
+				const auto canonical = std::filesystem::weakly_canonical(candidate, ec);
+				if (!ec && std::filesystem::exists(canonical, ec) && !ec) {
+					return canonical;
+				}
+			}
+
+			return std::nullopt;
 		}
 
 		std::string ResolveExecutablePath(const std::string& interpreter) {
@@ -482,14 +548,28 @@ namespace blazeclaw::gateway::executors {
 				};
 			}
 
-			const std::string interpreter = args.value("interpreter", std::string("python3"));
-			const std::string scriptPath = blazeclaw::gateway::json::Trim(args.value("scriptPath", std::string{}));
+			std::string interpreter = args.value("interpreter", std::string("python3"));
+			const bool interpreterProvided =
+				args.contains("interpreter") &&
+				args["interpreter"].is_string() &&
+				!blazeclaw::gateway::json::Trim(args["interpreter"].get<std::string>()).empty();
+			std::string scriptPath = blazeclaw::gateway::json::Trim(args.value("scriptPath", std::string{}));
 			const std::string profile = ToLowerTrimmed(args.value("profile", std::string{}));
 			const std::string requestedCwd = blazeclaw::gateway::json::Trim(args.value("cwd", std::string{}));
 			const std::uint64_t requestedTimeout = args.value("timeoutMs", policy.defaultTimeoutMs);
 			const std::size_t requestedMaxOutput = args.value("maxOutputBytes", policy.defaultMaxOutputBytes);
 			const std::uint64_t timeoutMs = (std::min)(requestedTimeout, policy.maxTimeoutMs);
 			const std::size_t maxOutputBytes = (std::min)(requestedMaxOutput, policy.maxOutputBytes);
+
+			if (scriptPath.empty() && requestedTool == "pdf_generator.generate") {
+				scriptPath = "skills-openclaw-original/pdf-generator/scripts/pdf_generator_bridge.py";
+				if (!args.contains("input_md") && args.contains("input")) {
+					args["input_md"] = args["input"];
+				}
+				if (!args.contains("output_pdf") && args.contains("output")) {
+					args["output_pdf"] = args["output"];
+				}
+			}
 
 			if (scriptPath.empty()) {
 				EmitExecutionTelemetry(
@@ -525,7 +605,16 @@ namespace blazeclaw::gateway::executors {
 				}
 			}
 
-			const std::string resolvedInterpreterPath = ResolveExecutablePath(interpreter);
+			std::string resolvedInterpreterPath = ResolveExecutablePath(interpreter);
+			if (resolvedInterpreterPath.empty() && !interpreterProvided) {
+				for (const auto& candidate : { "python", "python.exe", "py", "py.exe", "python3", "python3.exe" }) {
+					resolvedInterpreterPath = ResolveExecutablePath(candidate);
+					if (!resolvedInterpreterPath.empty()) {
+						interpreter = candidate;
+						break;
+					}
+				}
+			}
 			if (resolvedInterpreterPath.empty()) {
 				EmitExecutionTelemetry(
 					"python.external.execute.complete",
@@ -561,10 +650,8 @@ namespace blazeclaw::gateway::executors {
 				};
 			}
 
-			std::error_code ec;
-			const std::filesystem::path canonicalScript =
-				std::filesystem::weakly_canonical(std::filesystem::path(scriptPath), ec);
-			if (ec || !std::filesystem::exists(canonicalScript, ec) || ec) {
+			const std::optional<std::filesystem::path> resolvedScript = ResolveScriptPath(scriptPath);
+			if (!resolvedScript.has_value()) {
 				EmitExecutionTelemetry(
 					"python.external.execute.complete",
 					requestedTool,
@@ -578,6 +665,7 @@ namespace blazeclaw::gateway::executors {
 					.output = BuildErrorEnvelope("script_not_found", scriptPath),
 				};
 			}
+			const std::filesystem::path canonicalScript = resolvedScript.value();
 
 			bool trustedScript = false;
 			for (const auto& root : policy.trustedScriptRoots) {
@@ -606,7 +694,11 @@ namespace blazeclaw::gateway::executors {
 
 			std::vector<std::string> argv;
 			argv.push_back(canonicalScript.string());
-			if (args.contains("args") && args["args"].is_array()) {
+			if (requestedTool == "pdf_generator.generate") {
+				args["tool"] = requestedTool;
+				argv.push_back(args.dump());
+			}
+			else if (args.contains("args") && args["args"].is_array()) {
 				for (const auto& item : args["args"]) {
 					if (item.is_string()) {
 						argv.push_back(item.get<std::string>());
