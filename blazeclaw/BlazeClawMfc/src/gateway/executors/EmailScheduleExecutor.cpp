@@ -4,6 +4,8 @@
 #include "../ApprovalTokenStore.h"
 #include "../GatewayJsonUtils.h"
 #include "../GatewayPersistencePaths.h"
+#include "../GatewaySkillRootResolver.h"
+#include "../Telemetry.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +17,7 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <set>
 #include <thread>
 #include <vector>
 #include <windows.h>
@@ -26,6 +29,13 @@ namespace blazeclaw::gateway::executors {
 		bool HasHimalayaBinary();
 		bool HasNodeBinary();
 		bool HasPythonBinary();
+		struct ImapSmtpSkillResolution {
+			std::vector<std::string> roots;
+			std::string selectedRoot;
+			bool hasSmtpScript = false;
+			bool hasManifest = false;
+		};
+		ImapSmtpSkillResolution ResolveImapSmtpSkillResolution();
 		bool HasImapSmtpSkill();
 		bool HasWebBrowsingPythonSkill();
 		std::string ResolveWebBrowsingPythonSkillRoot();
@@ -693,23 +703,129 @@ namespace blazeclaw::gateway::executors {
 			}
 		}
 
-		std::string ResolveImapSmtpSkillRoot() {
-			const std::vector<std::filesystem::path> candidates = {
-				std::filesystem::path("blazeclaw") / "skills" / "imap-smtp-email",
-				std::filesystem::path("skills") / "imap-smtp-email",
-				std::filesystem::path("openclaw") / "skills" / "imap-smtp-email",
+		std::string BuildJsonStringArray(const std::vector<std::string>& values) {
+			if (values.empty()) {
+				return "[]";
+			}
+
+			std::string json = "[";
+			for (std::size_t i = 0; i < values.size(); ++i) {
+				if (i > 0) {
+					json += ",";
+				}
+				json += "\"" + EscapeJson(values[i]) + "\"";
+			}
+			json += "]";
+			return json;
+		}
+
+		void EmitImapSmtpSkillResolutionTelemetry(
+			const char* stage,
+			const ImapSmtpSkillResolution& resolution) {
+			if (stage == nullptr) {
+				return;
+			}
+
+			EmitTelemetryEvent(
+				"gateway.email.imap_smtp_skill_resolution",
+				std::string("{\"stage\":\"") + EscapeJson(stage) +
+				"\",\"selectedRoot\":\"" + EscapeJson(resolution.selectedRoot) +
+				"\",\"hasSmtpScript\":" + std::string(resolution.hasSmtpScript ? "true" : "false") +
+				",\"hasManifest\":" + std::string(resolution.hasManifest ? "true" : "false") +
+				",\"candidates\":" + BuildJsonStringArray(resolution.roots) +
+				"}");
+		}
+
+		ImapSmtpSkillResolution ResolveImapSmtpSkillResolution() {
+			ImapSmtpSkillResolution resolution;
+
+			char modulePathBuffer[MAX_PATH] = {};
+			std::filesystem::path moduleDir;
+			const DWORD moduleChars = GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
+			if (moduleChars > 0 && moduleChars < MAX_PATH) {
+				moduleDir = std::filesystem::path(modulePathBuffer).parent_path();
+			}
+			const std::filesystem::path currentDir = std::filesystem::current_path();
+
+			const std::string genericOverrideRaw = json::Trim(ReadEnvVar("BLAZECLAW_SKILLS_ROOT"));
+			const std::optional<std::string> genericOverride =
+				genericOverrideRaw.empty() ? std::nullopt : std::make_optional(genericOverrideRaw);
+
+			const auto coreRoots = skills::ResolveSkillRoots(
+				skills::SkillRootKind::Core,
+				moduleDir,
+				currentDir,
+				genericOverride,
+				std::nullopt);
+
+			std::set<std::string> seen;
+			auto pushCandidate = [&resolution, &seen](const std::filesystem::path& input) {
+				if (input.empty()) {
+					return;
+				}
+				std::error_code ec;
+				const auto canonical = std::filesystem::weakly_canonical(input, ec);
+				const auto normalized = ec ? input.lexically_normal() : canonical.lexically_normal();
+				if (normalized.empty()) {
+					return;
+				}
+				const std::string value = normalized.string();
+				if (seen.insert(value).second) {
+					resolution.roots.push_back(value);
+				}
 			};
 
-			for (const auto& candidate : candidates) {
+			for (const auto& root : coreRoots.resolvedRoots) {
+				pushCandidate(root / "imap-smtp-email");
+				pushCandidate(root / "imap_smtp_email");
+			}
+
+			pushCandidate(std::filesystem::path("blazeclaw") / "skills" / "imap-smtp-email");
+			pushCandidate(std::filesystem::path("skills") / "imap-smtp-email");
+			pushCandidate(std::filesystem::path("openclaw") / "skills" / "imap-smtp-email");
+
+			std::string firstExistingRoot;
+			for (const auto& root : resolution.roots) {
 				std::error_code ec;
-				if (std::filesystem::exists(candidate, ec) &&
-					std::filesystem::is_directory(candidate, ec) &&
-					!ec) {
-					return candidate.string();
+				if (!std::filesystem::exists(root, ec) || !std::filesystem::is_directory(root, ec)) {
+					continue;
+				}
+
+				if (firstExistingRoot.empty()) {
+					firstExistingRoot = root;
+				}
+
+				const bool hasScript = std::filesystem::exists(
+					std::filesystem::path(root) / "scripts" / "smtp.js",
+					ec);
+				const bool hasManifest = std::filesystem::exists(
+					std::filesystem::path(root) / "tool-manifest.json",
+					ec);
+				if (hasScript) {
+					resolution.selectedRoot = root;
+					resolution.hasSmtpScript = true;
+					resolution.hasManifest = hasManifest;
+					break;
 				}
 			}
 
-			return {};
+			if (resolution.selectedRoot.empty() && !firstExistingRoot.empty()) {
+				std::error_code ec;
+				resolution.selectedRoot = firstExistingRoot;
+				resolution.hasSmtpScript = std::filesystem::exists(
+					std::filesystem::path(firstExistingRoot) / "scripts" / "smtp.js",
+					ec);
+				resolution.hasManifest = std::filesystem::exists(
+					std::filesystem::path(firstExistingRoot) / "tool-manifest.json",
+					ec);
+			}
+
+			return resolution;
+		}
+
+		std::string ResolveImapSmtpSkillRoot() {
+			const auto resolution = ResolveImapSmtpSkillResolution();
+			return resolution.selectedRoot;
 		}
 
 		std::string ResolveWebBrowsingPythonSkillRoot() {
@@ -798,15 +914,9 @@ namespace blazeclaw::gateway::executors {
 		}
 
 		bool HasImapSmtpSkill() {
-			const std::string root = ResolveImapSmtpSkillRoot();
-			if (root.empty()) {
-				return false;
-			}
-
-			std::error_code ec;
-			const auto scriptPath =
-				std::filesystem::path(root) / "scripts" / "smtp.js";
-			return std::filesystem::exists(scriptPath, ec) && !ec;
+			const auto resolution = ResolveImapSmtpSkillResolution();
+			EmitImapSmtpSkillResolutionTelemetry("has_imap_smtp_skill", resolution);
+			return !resolution.selectedRoot.empty() && resolution.hasSmtpScript;
 		}
 
 		bool HasWebBrowsingPythonSkill() {
@@ -1054,10 +1164,15 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
-			const std::string skillRoot = ResolveImapSmtpSkillRoot();
-			if (skillRoot.empty() || !HasImapSmtpSkill()) {
+			const auto skillResolution = ResolveImapSmtpSkillResolution();
+			const std::string skillRoot = skillResolution.selectedRoot;
+			if (skillRoot.empty() || !skillResolution.hasSmtpScript) {
+				EmitImapSmtpSkillResolutionTelemetry("deliver_via_imap_smtp_skill_missing", skillResolution);
 				outErrorCode = "imap_smtp_skill_missing";
-				outErrorMessage = "imap_smtp_skill_missing";
+				outErrorMessage = std::string("imap_smtp_skill_missing root=") +
+					(skillRoot.empty() ? "<none>" : skillRoot) +
+					" hasSmtpScript=" + (skillResolution.hasSmtpScript ? "true" : "false") +
+					" hasManifest=" + (skillResolution.hasManifest ? "true" : "false");
 				return false;
 			}
 

@@ -290,40 +290,34 @@ TEST_CASE("Skill root resolver returns equivalent imap-smtp roots across repo an
 	const auto repoRoot = projectRoot.parent_path();
 	const auto moduleDir = projectRoot / "BlazeClawMfc" / "x64" / "Debug";
 
-	const auto extractImapRoot = [](const blazeclaw::gateway::skills::SkillRootResolution& resolution) {
-		for (const auto& root : resolution.resolvedRoots) {
-			const auto normalized = root.lexically_normal().generic_string();
-			if (normalized.find("/skills") != std::string::npos) {
-				return normalized;
+	const auto resolveImapSmtpSkillPath = [](const std::filesystem::path& module, const std::filesystem::path& cwd) {
+		const auto core = blazeclaw::gateway::skills::ResolveSkillRoots(
+			blazeclaw::gateway::skills::SkillRootKind::Core,
+			module,
+			cwd,
+			std::nullopt,
+			std::nullopt);
+		for (const auto& root : core.resolvedRoots) {
+			const auto candidate = root / "imap-smtp-email";
+			if (std::filesystem::exists(candidate) && std::filesystem::is_directory(candidate)) {
+				return candidate.lexically_normal().generic_string();
 			}
 		}
 		return std::string{};
 	};
 
-	const auto repoCore = blazeclaw::gateway::skills::ResolveSkillRoots(
-		blazeclaw::gateway::skills::SkillRootKind::Core,
-		moduleDir,
-		repoRoot,
-		std::nullopt,
-		std::nullopt);
-	const auto projectCore = blazeclaw::gateway::skills::ResolveSkillRoots(
-		blazeclaw::gateway::skills::SkillRootKind::Core,
-		moduleDir,
-		projectRoot,
-		std::nullopt,
-		std::nullopt);
-
-	REQUIRE_FALSE(repoCore.resolvedRoots.empty());
-	REQUIRE_FALSE(projectCore.resolvedRoots.empty());
-
-	const auto repoImapRoot = extractImapRoot(repoCore);
-	const auto projectImapRoot = extractImapRoot(projectCore);
+	const auto repoImapRoot = resolveImapSmtpSkillPath(moduleDir, repoRoot);
+	const auto projectImapRoot = resolveImapSmtpSkillPath(moduleDir, projectRoot);
 	REQUIRE_FALSE(repoImapRoot.empty());
 	REQUIRE_FALSE(projectImapRoot.empty());
 	REQUIRE(repoImapRoot == projectImapRoot);
 
-	const auto repoManifest = std::filesystem::path(repoImapRoot) / "imap-smtp-email" / "tool-manifest.json";
-	const auto projectManifest = std::filesystem::path(projectImapRoot) / "imap-smtp-email" / "tool-manifest.json";
+	const auto repoManifest = std::filesystem::path(repoImapRoot) / "tool-manifest.json";
+	const auto projectManifest = std::filesystem::path(projectImapRoot) / "tool-manifest.json";
+	const auto repoScript = std::filesystem::path(repoImapRoot) / "scripts" / "smtp.js";
+	const auto projectScript = std::filesystem::path(projectImapRoot) / "scripts" / "smtp.js";
 	REQUIRE(std::filesystem::exists(repoManifest));
 	REQUIRE(std::filesystem::exists(projectManifest));
+	REQUIRE(std::filesystem::exists(repoScript));
+	REQUIRE(std::filesystem::exists(projectScript));
 }
