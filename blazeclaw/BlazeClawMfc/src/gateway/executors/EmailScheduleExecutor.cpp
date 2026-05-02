@@ -17,6 +17,7 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <regex>
 #include <set>
 #include <thread>
 #include <vector>
@@ -974,23 +975,161 @@ namespace blazeclaw::gateway::executors {
 			return !account.empty();
 		}
 
+		std::vector<std::string> ExtractPdfPathsFromText(const std::string& text) {
+			std::vector<std::string> paths;
+			const std::string normalized = std::regex_replace(text, std::regex(R"(\\\\)"), R"(\)");
+			const std::regex windowsPdfPath(R"(([A-Za-z]:[\\/][^\r\n\"'<>|]+?\.pdf))", std::regex::icase);
+			for (std::sregex_iterator it(normalized.begin(), normalized.end(), windowsPdfPath), end; it != end; ++it) {
+				std::string value = json::Trim((*it)[1].str());
+				if (!value.empty()) {
+					paths.push_back(value);
+				}
+			}
+			return paths;
+		}
+
+		std::vector<std::string> ResolveAttachmentPaths(
+			const std::string& argsJson,
+			const std::string& body) {
+			std::vector<std::string> candidates = ExtractPdfPathsFromText(body);
+			const std::vector<std::string> argsEmbeddedPaths = ExtractPdfPathsFromText(argsJson);
+			candidates.insert(candidates.end(), argsEmbeddedPaths.begin(), argsEmbeddedPaths.end());
+			try {
+				const auto parsed = nlohmann::json::parse(argsJson);
+				auto appendPath = [&candidates](const nlohmann::json& value) {
+					if (value.is_string()) {
+						const std::string path = json::Trim(value.get<std::string>());
+						if (!path.empty()) {
+							candidates.push_back(path);
+						}
+					}
+				};
+				appendPath(parsed.value("attachmentPath", nlohmann::json{}));
+				appendPath(parsed.value("output_pdf", nlohmann::json{}));
+				appendPath(parsed.value("output", nlohmann::json{}));
+				if (parsed.contains("attachmentPaths") && parsed["attachmentPaths"].is_array()) {
+					for (const auto& item : parsed["attachmentPaths"]) {
+						appendPath(item);
+					}
+				}
+				if (parsed.contains("attachments") && parsed["attachments"].is_array()) {
+					for (const auto& item : parsed["attachments"]) {
+						if (item.is_object() && item.contains("path")) {
+							appendPath(item["path"]);
+						}
+					}
+				}
+			}
+			catch (...) {
+			}
+
+			std::vector<std::string> resolved;
+			for (const auto& candidate : candidates) {
+				std::error_code ec;
+				auto canonical = std::filesystem::weakly_canonical(std::filesystem::path(candidate), ec);
+				if (ec || !std::filesystem::exists(canonical, ec) || ec) {
+					const std::string repaired = std::regex_replace(candidate, std::regex(R"(\\{2,})"), R"(\)");
+					ec.clear();
+					canonical = std::filesystem::weakly_canonical(std::filesystem::path(repaired), ec);
+					if (ec || !std::filesystem::exists(canonical, ec) || ec) {
+						continue;
+					}
+				}
+				const std::string normalizedPath = canonical.string();
+				if (std::find(resolved.begin(), resolved.end(), normalizedPath) == resolved.end()) {
+					resolved.push_back(normalizedPath);
+				}
+			}
+
+			if (!resolved.empty()) {
+				return resolved;
+			}
+
+			std::vector<std::filesystem::path> fallbackCandidates = {
+				std::filesystem::path("skills-openclaw-original") / "pdf-generator" / "scripts" / "Battery_Report.pdf",
+				std::filesystem::path("blazeclaw") / "skills-openclaw-original" / "pdf-generator" / "scripts" / "Battery_Report.pdf",
+				std::filesystem::path("skills") / "pdf-generator" / "scripts" / "Battery_Report.pdf"
+			};
+			char modulePathBuffer[MAX_PATH] = {};
+			const DWORD moduleChars = GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
+			if (moduleChars > 0 && moduleChars < MAX_PATH) {
+				const std::filesystem::path exeDir = std::filesystem::path(modulePathBuffer).parent_path();
+				fallbackCandidates.push_back(exeDir / ".." / ".." / "skills-openclaw-original" / "pdf-generator" / "scripts" / "Battery_Report.pdf");
+				fallbackCandidates.push_back(exeDir / ".." / "skills-openclaw-original" / "pdf-generator" / "scripts" / "Battery_Report.pdf");
+			}
+
+			for (const auto& candidate : fallbackCandidates) {
+				std::error_code ec;
+				auto canonical = std::filesystem::weakly_canonical(candidate, ec);
+				if (ec || !std::filesystem::exists(canonical, ec) || ec) {
+					continue;
+				}
+				const std::string normalizedPath = canonical.string();
+				if (std::find(resolved.begin(), resolved.end(), normalizedPath) == resolved.end()) {
+					resolved.push_back(normalizedPath);
+				}
+			}
+			return resolved;
+		}
+
+		std::string WrapBase64Lines(const std::string& value) {
+			std::string wrapped;
+			for (std::size_t i = 0; i < value.size(); i += 76) {
+				wrapped += value.substr(i, (std::min)(std::size_t{ 76 }, value.size() - i));
+				wrapped += "\n";
+			}
+			return wrapped;
+		}
+
 		std::string BuildEmailTemplate(
 			const std::string& recipient,
 			const std::string& subject,
-			const std::string& body) {
+			const std::string& body,
+			const std::vector<std::string>& attachmentPaths) {
+			if (attachmentPaths.empty()) {
+				std::string templateText;
+				templateText.reserve(
+					recipient.size() +
+					subject.size() +
+					body.size() +
+					64);
+				templateText += "To: ";
+				templateText += recipient;
+				templateText += "\nSubject: ";
+				templateText += subject;
+				templateText += "\n\n";
+				templateText += body;
+				templateText += "\n";
+				return templateText;
+			}
+
+			const std::string boundary = "----blazeclaw-boundary-" + std::to_string(CurrentEpochMs());
 			std::string templateText;
-			templateText.reserve(
-				recipient.size() +
-				subject.size() +
-				body.size() +
-				64);
-			templateText += "To: ";
-			templateText += recipient;
-			templateText += "\nSubject: ";
-			templateText += subject;
-			templateText += "\n\n";
-			templateText += body;
-			templateText += "\n";
+			templateText += "To: " + recipient + "\n";
+			templateText += "Subject: " + subject + "\n";
+			templateText += "MIME-Version: 1.0\n";
+			templateText += "Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\n\n";
+			templateText += "--" + boundary + "\n";
+			templateText += "Content-Type: text/plain; charset=utf-8\n";
+			templateText += "Content-Transfer-Encoding: 8bit\n\n";
+			templateText += body + "\n";
+
+			for (const auto& pathText : attachmentPaths) {
+				std::filesystem::path path(pathText);
+				std::ifstream in(path, std::ios::binary);
+				if (!in.is_open()) {
+					continue;
+				}
+				std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+				const std::string encoded = WrapBase64Lines(EncodeBase64Utf8(content));
+				templateText += "\n--" + boundary + "\n";
+				templateText += "Content-Type: application/pdf; name=\"" + path.filename().string() + "\"\n";
+				templateText += "Content-Transfer-Encoding: base64\n";
+				templateText += "Content-Disposition: attachment; filename=\"" + path.filename().string() + "\"\n\n";
+				templateText += encoded;
+			}
+
+			templateText += "\n--" + boundary + "--\n";
 			return templateText;
 		}
 
@@ -1035,6 +1174,7 @@ namespace blazeclaw::gateway::executors {
 			const std::string& subject,
 			const std::string& body,
 			const std::string& account,
+			const std::vector<std::string>& attachmentPaths,
 			std::string& outStatus,
 			std::string& outOutput,
 			std::string& outErrorCode,
@@ -1078,7 +1218,8 @@ namespace blazeclaw::gateway::executors {
 			const std::string templateText = BuildEmailTemplate(
 				recipient,
 				subject,
-				body);
+				body,
+				attachmentPaths);
 			if (!WriteFileUtf8(inputPath, templateText)) {
 				outErrorCode = "email_temp_write_failed";
 				outErrorMessage = "email_temp_write_failed";
@@ -1136,6 +1277,7 @@ namespace blazeclaw::gateway::executors {
 			const std::string& subject,
 			const std::string& body,
 			const std::string& account,
+			const std::vector<std::string>& attachmentPaths,
 			std::string& outStatus,
 			std::string& outOutput,
 			std::string& outErrorCode,
@@ -1144,6 +1286,7 @@ namespace blazeclaw::gateway::executors {
 			outOutput.clear();
 			outErrorCode.clear();
 			outErrorMessage.clear();
+			std::vector<std::filesystem::path> stagedAttachmentFiles;
 
 			const std::string mode = NormalizeImapSmtpMode();
 			if (mode == "mock_success") {
@@ -1187,6 +1330,39 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
+			std::vector<std::string> effectiveAttachmentPaths;
+			effectiveAttachmentPaths.reserve(attachmentPaths.size());
+			const std::filesystem::path stageRoot =
+				std::filesystem::path(skillRoot) / "tmp" / "outbound-attachments";
+			for (const auto& pathText : attachmentPaths) {
+				std::error_code ec;
+				const std::filesystem::path sourcePath =
+					std::filesystem::weakly_canonical(std::filesystem::path(pathText), ec);
+				if (ec || !std::filesystem::exists(sourcePath, ec) || ec) {
+					continue;
+				}
+
+				std::filesystem::create_directories(stageRoot, ec);
+				if (!ec) {
+					const std::filesystem::path stagedPath =
+						stageRoot /
+						(std::to_string(CurrentEpochMs()) + "_" + sourcePath.filename().string());
+					ec.clear();
+					std::filesystem::copy_file(
+						sourcePath,
+						stagedPath,
+						std::filesystem::copy_options::overwrite_existing,
+						ec);
+					if (!ec && std::filesystem::exists(stagedPath, ec) && !ec) {
+						effectiveAttachmentPaths.push_back(stagedPath.string());
+						stagedAttachmentFiles.push_back(stagedPath);
+						continue;
+					}
+				}
+
+				effectiveAttachmentPaths.push_back(sourcePath.string());
+			}
+
 			std::string command = "cmd /C \"node ";
 			command += QuoteArg(
 				(std::filesystem::path(skillRoot) / "scripts" / "smtp.js").string());
@@ -1202,6 +1378,17 @@ namespace blazeclaw::gateway::executors {
 			command += QuoteArg(EncodeBase64Utf8(subject));
 			command += " --body-base64 ";
 			command += QuoteArg(EncodeBase64Utf8(body));
+			if (!effectiveAttachmentPaths.empty()) {
+				std::string joinedAttachments;
+				for (std::size_t i = 0; i < effectiveAttachmentPaths.size(); ++i) {
+					if (i > 0) {
+						joinedAttachments += ",";
+					}
+					joinedAttachments += effectiveAttachmentPaths[i];
+				}
+				command += " --attach ";
+				command += QuoteArg(joinedAttachments);
+			}
 			command += " 2>&1\"";
 
 			int exitCode = -1;
@@ -1210,6 +1397,10 @@ namespace blazeclaw::gateway::executors {
 				command,
 				commandOutput,
 				exitCode);
+			for (const auto& stagedPath : stagedAttachmentFiles) {
+				std::error_code cleanupEc;
+				std::filesystem::remove(stagedPath, cleanupEc);
+			}
 			if (!launched) {
 				outErrorCode = "imap_smtp_launch_failed";
 				outErrorMessage = "imap_smtp_launch_failed";
@@ -1239,6 +1430,16 @@ namespace blazeclaw::gateway::executors {
 			if (outOutput.empty()) {
 				outOutput = "ok";
 			}
+			if (!attachmentPaths.empty()) {
+				outOutput += " attachments=" + std::to_string(attachmentPaths.size()) + " [";
+				for (std::size_t i = 0; i < attachmentPaths.size(); ++i) {
+					if (i > 0) {
+						outOutput += ",";
+					}
+					outOutput += attachmentPaths[i];
+				}
+				outOutput += "]";
+			}
 
 			return true;
 		}
@@ -1248,6 +1449,7 @@ namespace blazeclaw::gateway::executors {
 			const std::string& subject,
 			const std::string& body,
 			const std::string& account,
+			const std::vector<std::string>& attachmentPaths,
 			std::string& outBackend,
 			std::string& outStatus,
 			std::string& outOutput,
@@ -1286,6 +1488,7 @@ namespace blazeclaw::gateway::executors {
 							subject,
 							body,
 							account,
+							attachmentPaths,
 							status,
 							output,
 							code,
@@ -1298,6 +1501,7 @@ namespace blazeclaw::gateway::executors {
 							subject,
 							body,
 							account,
+							attachmentPaths,
 							status,
 							output,
 							code,
@@ -1388,6 +1592,7 @@ namespace blazeclaw::gateway::executors {
 				json::FindStringField(argsJson.value(), "body", body);
 				json::FindStringField(argsJson.value(), "sendAt", sendAt);
 				json::FindStringField(argsJson.value(), "account", account);
+				const std::vector<std::string> attachmentPaths = ResolveAttachmentPaths(argsJson.value(), body);
 
 				std::vector<std::string> missingFields;
 				if (json::Trim(recipient).empty()) {
@@ -1434,18 +1639,15 @@ namespace blazeclaw::gateway::executors {
 					"-" +
 					std::to_string(ttlMinutes);
 
-				const std::string payload =
-					"{\"to\":\"" +
-					EscapeJson(recipient) +
-					"\",\"subject\":\"" +
-					EscapeJson(subject) +
-					"\",\"body\":\"" +
-					EscapeJson(body) +
-					"\",\"sendAt\":\"" +
-					EscapeJson(sendAt) +
-					"\",\"account\":\"" +
-					EscapeJson(account) +
-					"\"}";
+				nlohmann::json payloadJson = {
+					{ "to", recipient },
+					{ "subject", subject },
+					{ "body", body },
+					{ "sendAt", sendAt },
+					{ "account", account },
+					{ "attachmentPaths", attachmentPaths },
+				};
+				const std::string payload = payloadJson.dump();
 
 				const ApprovalSessionRecord session{
 					.token = token,
@@ -1559,11 +1761,27 @@ namespace blazeclaw::gateway::executors {
 					std::string body;
 					std::string sendAt;
 					std::string account;
+					std::vector<std::string> attachmentPaths;
 					json::FindStringField(session.payloadJson, "to", recipient);
 					json::FindStringField(session.payloadJson, "subject", subject);
 					json::FindStringField(session.payloadJson, "body", body);
 					json::FindStringField(session.payloadJson, "sendAt", sendAt);
 					json::FindStringField(session.payloadJson, "account", account);
+					try {
+						const auto parsedPayload = nlohmann::json::parse(session.payloadJson);
+						if (parsedPayload.contains("attachmentPaths") && parsedPayload["attachmentPaths"].is_array()) {
+							for (const auto& item : parsedPayload["attachmentPaths"]) {
+								if (item.is_string()) {
+									attachmentPaths.push_back(item.get<std::string>());
+								}
+							}
+						}
+					}
+					catch (...) {
+					}
+					if (attachmentPaths.empty()) {
+						attachmentPaths = ResolveAttachmentPaths(session.payloadJson, body);
+					}
 
 					if (!approve) {
 						store.RemoveToken(token);
@@ -1593,6 +1811,7 @@ namespace blazeclaw::gateway::executors {
 						subject,
 						body,
 						account,
+						attachmentPaths,
 						transportBackend,
 						transportStatus,
 						transportOutput,

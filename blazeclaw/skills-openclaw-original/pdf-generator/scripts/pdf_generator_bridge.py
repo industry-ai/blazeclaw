@@ -287,15 +287,25 @@ def main() -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(pdf_bytes)
 
+        output_pdf = str(output_path)
         _emit(
             {
                 "ok": True,
                 "tool": "pdf_generator.generate",
                 "input": str(input_path) if input_path is not None else "(inline_markdown)",
-                "output": str(output_path),
+                "output": output_pdf,
+                "output_pdf": output_pdf,
                 "bytes": len(pdf_bytes),
                 "title": title,
                 "author": author,
+                "attachments": [
+                    {
+                        "path": output_pdf,
+                        "name": output_path.name,
+                        "mimeType": "application/pdf",
+                    }
+                ],
+                "artifact_paths": [output_pdf],
             }
         )
     except Exception as ex:

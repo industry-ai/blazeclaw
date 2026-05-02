@@ -132,24 +132,79 @@ async function sendEmail(options) {
     };
 }
 
-// Read file content for attachments
-function readAttachment(filePath) {
-    validateReadPath(filePath);
-    if (!fs.existsSync(filePath)) {
+function stageAttachmentIntoAllowedDir(filePath) {
+    if (!config.allowedReadDirs.length) {
+        throw new Error(`Attachment file not allowed and ALLOWED_READ_DIRS is empty: ${filePath}`);
+    }
+
+    const targetRoot = config.allowedReadDirs[0].replace(/^~/, os.homedir());
+    const stagedDir = path.join(path.resolve(targetRoot), 'blazeclaw-staged-attachments');
+    fs.mkdirSync(stagedDir, { recursive: true });
+
+    const sourcePath = path.resolve(filePath.replace(/^~/, os.homedir()));
+    if (!fs.existsSync(sourcePath)) {
         throw new Error(`Attachment file not found: ${filePath}`);
     }
+
+    const stagedName = `${Date.now()}_${path.basename(sourcePath)}`;
+    const stagedPath = path.join(stagedDir, stagedName);
+    fs.copyFileSync(sourcePath, stagedPath);
+    return stagedPath;
+}
+
+// Read file content for attachments
+function readAttachment(filePath) {
+    let effectivePath = filePath;
+    try {
+        validateReadPath(effectivePath);
+    } catch (err) {
+        const message = String(err && err.message ? err.message : err || '');
+        if (message.includes('outside allowed read directories')) {
+            effectivePath = stageAttachmentIntoAllowedDir(effectivePath);
+            validateReadPath(effectivePath);
+        } else {
+            throw err;
+        }
+    }
+
+    if (!fs.existsSync(effectivePath)) {
+        throw new Error(`Attachment file not found: ${effectivePath}`);
+    }
     return {
-        filename: path.basename(filePath),
-        path: path.resolve(filePath),
+        filename: path.basename(effectivePath),
+        path: path.resolve(effectivePath),
     };
+}
+
+function extractPdfPathsFromText(text) {
+    const source = String(text || '');
+    if (!source) return [];
+
+    const matches = source.match(/[A-Za-z]:[\\/][^"'<>|\r\n]+?\.pdf/gi) || [];
+    const unique = [];
+    for (const raw of matches) {
+        const normalized = raw.replace(/\\+/g, '\\').trim();
+        if (!normalized) continue;
+        if (!unique.includes(normalized)) {
+            unique.push(normalized);
+        }
+    }
+    return unique;
 }
 
 // Send email with file content
 async function sendEmailWithContent(options) {
-    // Handle attachments
+    // Handle explicit attachments
     if (options.attach) {
-        const attachFiles = options.attach.split(',').map(f => f.trim());
+        const attachFiles = options.attach.split(',').map(f => f.trim()).filter(Boolean);
         options.attachments = attachFiles.map(f => readAttachment(f));
+        return await sendEmail(options);
+    }
+
+    // Auto-attach local PDF paths mentioned in body/text/html when --attach is omitted
+    const inferred = extractPdfPathsFromText(`${options.body || ''}\n${options.text || ''}\n${options.html || ''}`);
+    if (inferred.length) {
+        options.attachments = inferred.map(f => readAttachment(f));
     }
 
     return await sendEmail(options);
