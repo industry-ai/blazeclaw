@@ -217,3 +217,54 @@ TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[s
 
 	std::filesystem::remove_all(workspaceRoot);
 }
+
+TEST_CASE("SkillsCatalogService discovers configured sourceDir skill-creator-0.1.0", "[skills][catalog][openclaw-original][source-dir]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("skill_creator_source_dir");
+
+	const auto configuredRoot = workspaceRoot / "custom-openclaw-skills";
+	const auto skillDir = configuredRoot / "skill-creator-0.1.0";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: skill-creator\n"
+		L"description: Guide for creating effective skills\n"
+		L"metadata: {\"openclaw\":{\"emoji\":\":hammer_and_wrench:\"}}\n"
+		L"---\n"
+		L"# Skill Creator\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.openclawOriginal.sourceDir = L"custom-openclaw-skills";
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService service;
+	const auto snapshot = service.LoadCatalog(workspaceRoot, config);
+
+	const auto entryIt = std::find_if(
+		snapshot.entries.begin(),
+		snapshot.entries.end(),
+		[](const blazeclaw::core::SkillsCatalogEntry& entry) {
+			return entry.skillName == L"skill-creator" &&
+				entry.sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal;
+		});
+	REQUIRE(entryIt != snapshot.entries.end());
+	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalActivationState.value() ==
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::Imported);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(L"missing tool manifest") != std::wstring::npos;
+			}));
+
+	std::filesystem::remove_all(workspaceRoot);
+}

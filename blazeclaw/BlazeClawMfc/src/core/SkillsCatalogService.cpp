@@ -797,12 +797,23 @@ namespace blazeclaw::core {
 
 		const auto openClawOriginalOverride =
 			ReadEnvVar(L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+		const std::filesystem::path openClawOriginalDefaultRoot = ResolveDefaultSkillsRoot(
+			workspaceRoot / L"skills-openclaw-original",
+			workspaceRoot / L"blazeclaw" / L"skills-openclaw-original");
+		const std::wstring configuredOpenClawOriginalSourceDir =
+			Trim(appConfig.skills.openclawOriginal.sourceDir);
+		const std::filesystem::path openClawOriginalConfiguredRoot =
+			configuredOpenClawOriginalSourceDir.empty()
+			? openClawOriginalDefaultRoot
+			: ResolveRootPath(
+				workspaceRoot,
+				configuredOpenClawOriginalSourceDir);
 		const std::filesystem::path openClawOriginalRoot =
 			openClawOriginalOverride.has_value()
 			? ResolveRootPath(workspaceRoot, openClawOriginalOverride.value())
 			: ResolveDefaultSkillsRoot(
-				workspaceRoot / L"skills-openclaw-original",
-				workspaceRoot / L"blazeclaw" / L"skills-openclaw-original");
+				openClawOriginalConfiguredRoot,
+				openClawOriginalDefaultRoot);
 		roots.push_back({
 			.kind = SkillsSourceKind::OpenClawOriginal,
 			.precedence = 6,

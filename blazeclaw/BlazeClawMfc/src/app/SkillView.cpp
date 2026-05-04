@@ -121,6 +121,22 @@ namespace {
 		{
 			payload["openclawOriginalMetadataConvertedFromClawdbot"] = false;
 		}
+		if (!payload.contains("browserGroup") || !payload["browserGroup"].is_string())
+		{
+			payload["browserGroup"] = "";
+		}
+		if (!payload.contains("browserDisplayName") || !payload["browserDisplayName"].is_string())
+		{
+			payload["browserDisplayName"] = skillKey;
+		}
+		if (!payload.contains("browserSourceLabel") || !payload["browserSourceLabel"].is_string())
+		{
+			payload["browserSourceLabel"] = payload.value("source", defaultSource);
+		}
+		if (!payload.contains("browserVariantLabel") || !payload["browserVariantLabel"].is_string())
+		{
+			payload["browserVariantLabel"] = "";
+		}
 
 		return payload.dump();
 	}
@@ -130,7 +146,13 @@ namespace {
 		Json payload = Json::parse(payloadJson, nullptr, false);
 		if (payload.is_discarded() || !payload.is_object())
 		{
-			return "needs-porting";
+			return "imported";
+		}
+
+		const std::string browserGroup = payload.value("browserGroup", "");
+		if (!browserGroup.empty())
+		{
+			return browserGroup;
 		}
 
 		const std::string activation = payload.value("openclawOriginalActivationState", "");
@@ -142,7 +164,7 @@ namespace {
 		{
 			return "enabled";
 		}
-		return "needs-porting";
+		return "imported";
 	}
 
 	std::string BuildOpenClawOriginalDisplayName(
@@ -155,11 +177,14 @@ namespace {
 			return skillKey;
 		}
 
-		std::string label = skillKey;
-		if (payload.value("openclawOriginalMissingToolManifest", false))
+		const std::string browserDisplayName =
+			payload.value("browserDisplayName", std::string());
+		if (!browserDisplayName.empty())
 		{
-			label += " [missing tool-manifest.json]";
+			return browserDisplayName;
 		}
+
+		std::string label = skillKey;
 		if (payload.value("openclawOriginalMetadataConvertedFromClawdbot", false))
 		{
 			label += " [metadata converted from clawdbot]";
@@ -545,8 +570,21 @@ void CSkillView::FillSkillView()
 			HTREEITEM groupNode = nullptr;
 			if (groupIt == categoryItems.end())
 			{
+				std::string openClawGroupLabel = openClawGroup;
+				if (openClawGroup == "imported")
+				{
+					openClawGroupLabel = "imported";
+				}
+				else if (openClawGroup == "enabled")
+				{
+					openClawGroupLabel = "enabled";
+				}
+				else if (openClawGroup == "failed")
+				{
+					openClawGroupLabel = "failed";
+				}
 				groupNode = m_wndSkillView.InsertItem(
-					CString(CA2W(openClawGroup.c_str(), CP_UTF8)),
+					CString(CA2W(openClawGroupLabel.c_str(), CP_UTF8)),
 					1,
 					1,
 					parentCategoryNode);

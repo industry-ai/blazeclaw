@@ -75,6 +75,10 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> openClawOriginalImportDiagnostics;
 		bool openClawOriginalMetadataConvertedFromClawdbot = false;
 		bool openClawOriginalMissingToolManifest = false;
+		std::string browserGroup;
+		std::string browserDisplayName;
+		std::string browserSourceLabel;
+		std::string browserVariantLabel;
 	};
 
 	struct SkillsCatalogGatewayState {

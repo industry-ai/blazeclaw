@@ -76,6 +76,20 @@ TEST_CASE(
 	REQUIRE(source.find("\"requiresEnv\"") != std::string::npos);
 	REQUIRE(source.find("\"requiresConfig\"") != std::string::npos);
 	REQUIRE(source.find("\"configPathHints\"") != std::string::npos);
+	REQUIRE(source.find("\"browserGroup\"") != std::string::npos);
+	REQUIRE(source.find("\"browserDisplayName\"") != std::string::npos);
+	REQUIRE(source.find("\"browserSourceLabel\"") != std::string::npos);
+	REQUIRE(source.find("\"browserVariantLabel\"") != std::string::npos);
+}
+
+TEST_CASE(
+	"SkillView openclaw-original browser contract uses imported grouping without manifest warning suffix",
+	"[skills][skillview][openclaw-original][contract]")
+{
+	const std::string source = ReadSkillViewSource();
+	REQUIRE(source.find("return \"imported\";") != std::string::npos);
+	REQUIRE(source.find("[missing tool-manifest.json]") == std::string::npos);
+	REQUIRE(source.find("browserDisplayName") != std::string::npos);
 }
 
 TEST_CASE(

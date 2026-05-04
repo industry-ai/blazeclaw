@@ -475,7 +475,7 @@ std::string SerializeSkillCatalogEntry(
 		EscapeJsonLocal(entry.openClawOriginalOrigin) +
 		",\"openclawOriginalOrigin\":\"" +
 		EscapeJsonLocal(entry.openClawOriginalOrigin) +
-		"\",\"openclawOriginalImportDiagnostics\":" +
+		",\"openclawOriginalImportDiagnostics\":" +
 		SerializeStringArrayLocal(entry.openClawOriginalImportDiagnostics) +
 		",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
 		std::string(entry.openClawOriginalMetadataConvertedFromClawdbot
@@ -485,7 +485,15 @@ std::string SerializeSkillCatalogEntry(
 		std::string(entry.openClawOriginalMissingToolManifest
 			? "true"
 			: "false") +
-		",\"disableModelInvocation\":" +
+		",\"browserGroup\":\"" +
+		EscapeJsonLocal(entry.browserGroup) +
+		"\",\"browserDisplayName\":\"" +
+		EscapeJsonLocal(entry.browserDisplayName) +
+		"\",\"browserSourceLabel\":\"" +
+		EscapeJsonLocal(entry.browserSourceLabel) +
+		"\",\"browserVariantLabel\":\"" +
+		EscapeJsonLocal(entry.browserVariantLabel) +
+		"\",\"disableModelInvocation\":" +
 		std::string(entry.disableModelInvocation ? "true" : "false") +
 		",\"validFrontmatter\":" +
 		std::string(entry.validFrontmatter ? "true" : "false") +

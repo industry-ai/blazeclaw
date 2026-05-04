@@ -183,6 +183,12 @@ namespace blazeclaw::core {
 			gatewayEntry.description = ToNarrow(entry.description);
 			gatewayEntry.source = ToNarrow(
 				SkillsCatalogService::SourceKindLabel(entry.sourceKind));
+			gatewayEntry.browserGroup = entry.sourceKind == SkillsSourceKind::OpenClawOriginal
+				? "imported"
+				: std::string();
+			gatewayEntry.browserDisplayName = gatewayEntry.name;
+			gatewayEntry.browserSourceLabel = gatewayEntry.source;
+			gatewayEntry.browserVariantLabel.clear();
 			gatewayEntry.precedence = entry.precedence;
 			gatewayEntry.eligible = eligibility != nullptr ? eligibility->eligible : false;
 			gatewayEntry.disabled = eligibility != nullptr ? eligibility->disabled : false;
@@ -238,6 +244,42 @@ namespace blazeclaw::core {
 					return lowered.find(L"missing tool manifest") !=
 						std::wstring::npos;
 				});
+			if (!gatewayEntry.openClawOriginalActivationState.empty()) {
+				if (gatewayEntry.openClawOriginalActivationState == "failed") {
+					gatewayEntry.browserGroup = "failed";
+				}
+				else if (gatewayEntry.openClawOriginalActivationState == "tool_enabled") {
+					gatewayEntry.browserGroup = "enabled";
+				}
+				else if (gatewayEntry.openClawOriginalActivationState == "imported") {
+					gatewayEntry.browserGroup = "imported";
+				}
+			}
+			const std::string directoryName =
+				ToNarrow(entry.skillDir.filename().wstring());
+			if (entry.sourceKind == SkillsSourceKind::OpenClawOriginal) {
+				gatewayEntry.browserSourceLabel = "openclaw-original";
+				gatewayEntry.browserVariantLabel = directoryName.empty()
+					? gatewayEntry.browserSourceLabel
+					: directoryName;
+			}
+			else if (entry.sourceKind == SkillsSourceKind::Bundled ||
+				entry.sourceKind == SkillsSourceKind::Managed) {
+				gatewayEntry.browserVariantLabel = directoryName.empty()
+					? gatewayEntry.browserSourceLabel
+					: directoryName;
+			}
+			if (!gatewayEntry.browserVariantLabel.empty() &&
+				gatewayEntry.browserVariantLabel != gatewayEntry.name) {
+				gatewayEntry.browserDisplayName +=
+					" [" + gatewayEntry.browserVariantLabel + "]";
+			}
+			if (!gatewayEntry.browserSourceLabel.empty() &&
+				gatewayEntry.browserSourceLabel != gatewayEntry.browserVariantLabel &&
+				gatewayEntry.browserSourceLabel != gatewayEntry.name) {
+				gatewayEntry.browserDisplayName +=
+					" — " + gatewayEntry.browserSourceLabel;
+			}
 			return gatewayEntry;
 		}
 
