@@ -448,7 +448,6 @@ std::string SerializeSkillCatalogEntry(
 		std::string(entry.installExecutable ? "true" : "false") +
 		",\"installReason\":\"" +
 		EscapeJsonLocal(entry.installReason) +
-		"\"" +
 		"\",\"description\":\"" +
 		EscapeJsonLocal(entry.description) +
 		"\",\"source\":\"" +
@@ -473,9 +472,7 @@ std::string SerializeSkillCatalogEntry(
 		EscapeJsonLocal(entry.openClawOriginalActivationState) +
 		"\",\"openclawOriginalOrigin\":\"" +
 		EscapeJsonLocal(entry.openClawOriginalOrigin) +
-		",\"openclawOriginalOrigin\":\"" +
-		EscapeJsonLocal(entry.openClawOriginalOrigin) +
-		",\"openclawOriginalImportDiagnostics\":" +
+		"\",\"openclawOriginalImportDiagnostics\":" +
 		SerializeStringArrayLocal(entry.openClawOriginalImportDiagnostics) +
 		",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
 		std::string(entry.openClawOriginalMetadataConvertedFromClawdbot

@@ -4,6 +4,13 @@
 #include "core/SkillsEligibilityService.h"
 #include "core/SkillsGatewayProjectionService.h"
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 #include <catch2/catch_all.hpp>
 #include <algorithm>
 #include <cstdlib>
