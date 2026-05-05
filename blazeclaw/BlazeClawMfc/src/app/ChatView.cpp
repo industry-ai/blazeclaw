@@ -1017,7 +1017,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 		BuildRunTaskDeltasParams(runId),
 		response))
 	{
-		frame->AddFindStatusLine(
+		frame->AddToolStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
 				std::string("runId=") + runId +
@@ -1045,7 +1045,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 					blazeclaw::gateway::json::Trim(response.payloadJson.value()));
 		}
 
-		frame->AddFindStatusLine(
+		frame->AddToolStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
 				detail));
@@ -1076,7 +1076,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 
 		detail += " payload=" + TruncateDiagnosticText(payloadTrimmed);
 
-		frame->AddFindStatusLine(
+		frame->AddToolStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
 				detail));
@@ -1086,7 +1086,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 	const auto taskDeltaObjects = SplitTopLevelObjects(taskDeltasRaw);
 	if (taskDeltaObjects.empty())
 	{
-		frame->AddFindStatusLine(
+		frame->AddToolStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
 				std::string("runId=") + runId +
@@ -1094,7 +1094,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 		return;
 	}
 
-	frame->AddFindStatusLine(
+	frame->AddToolStatusLine(
 		BuildDeepSeekDiagnosticLine(
 			"skill-path",
 			std::string("runId=") + runId + " tried skill paths:"));
@@ -1129,7 +1129,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 			if (emitted.find(fallbackLine) == emitted.end())
 			{
 				emitted.insert(fallbackLine);
-				frame->AddFindStatusLine(
+				frame->AddToolStatusLine(
 					CString(CA2W(fallbackLine.c_str(), CP_UTF8)));
 			}
 			continue;
@@ -1154,7 +1154,7 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 		}
 
 		emitted.insert(label);
-		frame->AddFindStatusLine(CString(CA2W((std::string("  - ") + label).c_str(), CP_UTF8)));
+		frame->AddToolStatusLine(CString(CA2W((std::string("  - ") + label).c_str(), CP_UTF8)));
 	}
 }
 

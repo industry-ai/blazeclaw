@@ -15,6 +15,7 @@ class COutlookBar : public CMFCOutlookBar
 };
 
 constexpr UINT kMsgCreateMdiGroup = WM_USER + 0x100;  // custom message for deferred tab split
+constexpr UINT kMsgAppendToolStatusLine = WM_USER + 0x101;  // append line to Output.Tool from non-UI threads
 
 class CMainFrame final : public CMDIFrameWndEx
 {
@@ -29,8 +30,8 @@ public:
 public:
 	void AddChatStatusLine(const CString& line);
 	void AddChatStatusBlock(const CString& text);
-	void AddFindStatusLine(const CString& line);
-	void AddFindStatusBlock(const CString& text);
+	void AddToolStatusLine(const CString& line);
+	void AddToolStatusBlock(const CString& text);
 	void RefreshSkillView();
 
 	// Overrides
@@ -38,6 +39,7 @@ public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 protected:
 	afx_msg LRESULT OnCreateMdiGroup(WPARAM, LPARAM);
+	afx_msg LRESULT OnAppendToolStatusLine(WPARAM, LPARAM);
 
 	// Implementation
 public:

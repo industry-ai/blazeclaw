@@ -112,7 +112,9 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_CHAT, &CMainFrame::OnWindowNewWebViewChat)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_MARKDOWN, &CMainFrame::OnWindowNewWebViewMarkdown)
 	ON_WM_SETTINGCHANGE()
+
 	ON_MESSAGE(kMsgCreateMdiGroup, &CMainFrame::OnCreateMdiGroup)
+	ON_MESSAGE(kMsgAppendToolStatusLine, &CMainFrame::OnAppendToolStatusLine)
 
 	ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
@@ -148,6 +150,18 @@ CMainFrame::~CMainFrame()
 LRESULT CMainFrame::OnCreateMdiGroup(WPARAM, LPARAM)
 {
 	CreateTwoTabbedGroups();
+	return 0;
+}
+
+LRESULT CMainFrame::OnAppendToolStatusLine(WPARAM, LPARAM lParam)
+{
+	std::unique_ptr<CString> line(reinterpret_cast<CString*>(lParam));
+	if (!line)
+	{
+		return 0;
+	}
+
+	AddToolStatusLine(*line);
 	return 0;
 }
 
@@ -188,24 +202,24 @@ void CMainFrame::AddChatStatusBlock(const CString& text)
 	m_wndOutput.AddChatStatusBlock(text);
 }
 
-void CMainFrame::AddFindStatusLine(const CString& line)
+void CMainFrame::AddToolStatusLine(const CString& line)
 {
 	if (!::IsWindow(m_hWnd))
 	{
 		return;
 	}
 
-	m_wndOutput.AddFindStatusLine(line);
+	m_wndOutput.AddToolStatusLine(line);
 }
 
-void CMainFrame::AddFindStatusBlock(const CString& text)
+void CMainFrame::AddToolStatusBlock(const CString& text)
 {
 	if (!::IsWindow(m_hWnd))
 	{
 		return;
 	}
 
-	m_wndOutput.AddFindStatusBlock(text);
+	m_wndOutput.AddToolStatusBlock(text);
 }
 
 void CMainFrame::RefreshSkillView()

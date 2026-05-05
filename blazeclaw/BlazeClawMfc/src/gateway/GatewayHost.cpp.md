@@ -1,14 +1,72 @@
 # GatewayHost — tracking notes
 
-**Related documentation:** `blazeclaw/docs/index.md` (optimization summary + Phases A–**G** + next-wave / follow-on / horizon items; MSBuild validation), `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimizations §12 incl. §12.7–§12.9; phased plan §13), `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `docs/compare/OPENCLAW_GATEWAY_SERVER_TS_CAPABILITY_GAP_AND_PORTING_PLAN.md` (**CLOSED** — `server.ts` façade: **`ServiceManager` + `GatewayHost` + transport**; **`TruncateUtf8CloseReason`** / `BuildClosePayload`; **`test_hooks::ResetGatewayModelCatalogCacheForTest`** stub; **Debug \| x64** build clean; re-open §7 only), `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring — **`GatewayHostBindingCoordinator`** owns policy + embeddings **`Set*`** bodies; **task-delta recency** / `TaskDeltaRepository::EnforceRetentionLimit`), `blazeclaw/docs/BUILD_AND_CI.md` (Phase E canonical MSBuild + **`Invoke-BlazeClawOptimizationValidation.ps1`** Phases A+B+F+E; **Phase G** pointers), `blazeclaw/docs/SKILL_PORTING.md` (Phase F: **`Verify-SkillPortingPlans.ps1`**, Catch2 **`[skills][phasef][contract]`**), `blazeclaw/docs/PROTOCOL_CODEGEN.md` (codegen workflow, **Thin façade checklist**, Phase A–B scripts §7, `protocol::ReplayFromStored` for idempotency replay), `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+## Index
 
-This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
+0. [Overview](#overview)
+1. [Ongoing architecture direction (thin façade, split TUs, shared protocol)](#ongoing-architecture-direction-thin-facade-split-tus-shared-protocol)
+2. [Intended role (from `IGatewayHostRuntime` and usage)](#intended-role-from-igatewayhostruntime-and-usage)
+	- [2.1 `RegisterDefaultHandlers()` call order (maintain when adding methods)](#registerdefaulthandlers-call-order-maintain-when-adding-methods)
+	- [2.2 `protocol::OkResponse` (success handler boilerplate)](#protocolokresponse-success-handler-boilerplate)
+	- [2.3 Table-driven static registrations](#table-driven-static-registrations)
+	- [2.4 `protocol::EncodeValidatedEvent` (event wire encoding + schema check)](#protocolencodevalidatedevent-event-wire-encoding-schema-check)
+	- [2.5 `GatewayJsonSerializers` (registry / task-delta JSON helpers)](#gatewayjsonserializers-registry-task-delta-json-helpers)
+	- [2.6 Lightweight JSON builder (`GatewayJsonBuilder`)](#lightweight-json-builder-gatewayjsonbuilder)
+	- [2.7 `RequestParamsView` (params wrapper)](#requestparamsview-params-wrapper)
+3. [Member functions — grouped by functionality](#member-functions-grouped-by-functionality)
+	- [3.1 Lifecycle and bootstrap](#lifecycle-and-bootstrap)
+	- [3.2 `IGatewayHostRuntime` and routing](#igatewayhostruntime-and-routing)
+	- [3.3 Protocol handler registration (dispatcher seeding)](#protocol-handler-registration-dispatcher-seeding)
+	- [3.4 Transport and inbound/outbound pumping](#transport-and-inboundoutbound-pumping)
+	- [3.5 Push / lifecycle event frame builders](#push-lifecycle-event-frame-builders)
+	- [3.6 In-process runtime tools (tool registry surface)](#in-process-runtime-tools-tool-registry-surface)
+	- [3.7 Task delta persistence (backing chat/runtime)](#task-delta-persistence-backing-chatruntime)
+	- [3.8 Dependency injection / shell wiring (callbacks and snapshot state)](#dependency-injection-shell-wiring-callbacks-and-snapshot-state)
+	- [3.9 Introspection, warnings, and test hooks](#introspection-warnings-and-test-hooks)
+	- [3.10 Static helper](#static-helper)
+4. [Where implementations live (translation units)](#where-implementations-live-translation-units)
+5. [Refactoring suggestions (align responsibility with “gateway host”)](#refactoring-suggestions-align-responsibility-with-gateway-host)
+6. [GatewayHost.cpp Size-Reduction Analysis](#gatewayhost.cpp-size-reduction-analysis)
+	- [6.1 Main Size Drivers](#main-size-drivers)
+	- [6.2 Practical Ways to Reduce File Size](#practical-ways-to-reduce-file-size)
+	- [6.3 Recommended Execution Order](#recommended-execution-order)
+	- [6.4 Notes / Constraints](#notes-constraints)
 
-**Thin façade invariant:** `GatewayHost` / **`GatewayHost.cpp`** stay narrow: **transport**, **routing**, **lifecycle**, **event-frame helpers**, and **one** default-registration chain — **`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`** (`GatewayHostRegistrationCoordinator.*`). Do **not** re-grow **“god lambdas”**: huge anonymous `Register` blocks or single megabyte files that mix **unrelated** gateway method families. Put new behavior in **`GatewayHost.Handlers.*`** (or manifest/generated/static tables), not back into `GatewayHost.cpp`. See §**Ongoing architecture direction** below.
+
+## 0. Overview
+
+**Related documentation:** 
+
+- `blazeclaw/docs/index.md` (optimization summary + Phases A–**G** + next-wave / follow-on / horizon items; MSBuild validation), 
+- `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimizations §12 incl. §12.7–§12.9; phased plan §13), 
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), 
+- `docs/compare/OPENCLAW_GATEWAY_SERVER_TS_CAPABILITY_GAP_AND_PORTING_PLAN.md` (**CLOSED** — `server.ts` façade: **`ServiceManager` + `GatewayHost` + transport**; **`TruncateUtf8CloseReason`** / `BuildClosePayload`; **`test_hooks::ResetGatewayModelCatalogCacheForTest`** stub; **Debug \| x64** build clean; re-open §7 only), 
+- `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring — **`GatewayHostBindingCoordinator`** owns policy + embeddings **`Set*`** bodies; **task-delta recency** / `TaskDeltaRepository::EnforceRetentionLimit`), 
+- `blazeclaw/docs/BUILD_AND_CI.md` (Phase E canonical MSBuild + **`Invoke-BlazeClawOptimizationValidation.ps1`** Phases A+B+F+E; **Phase G** pointers), 
+- `blazeclaw/docs/SKILL_PORTING.md` (Phase F: **`Verify-SkillPortingPlans.ps1`**, Catch2 **`[skills][phasef][contract]`**), 
+- `blazeclaw/docs/PROTOCOL_CODEGEN.md` (codegen workflow, **Thin façade checklist**, Phase A–B scripts §7, `protocol::ReplayFromStored` for idempotency replay), 
+- `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`), 
+- `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), 
+- `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+
+This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). 
+The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
+
+**Thin façade invariant:** 
+
+- `GatewayHost` / **`GatewayHost.cpp`** stay narrow: **transport**, **routing**, **lifecycle**, **event-frame 
+  helpers**, and **one** default-registration chain — **`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`** 
+  (`GatewayHostRegistrationCoordinator.*`). 
+- Do **not** re-grow **“god lambdas”**: huge anonymous `Register` blocks or single megabyte files that 
+  mix **unrelated** gateway method families. Put new behavior in **`GatewayHost.Handlers.*`** (or manifest 
+  / generated / static tables), not back into `GatewayHost.cpp`. See §**Ongoing architecture direction** 
+  below.
 
 ---
 
-## Ongoing architecture direction (thin façade, split TUs, shared protocol)
+[Back to index](#index)
+
+
+## 1. Ongoing architecture direction (thin facade, split TUs, shared protocol)
 
 Keep **`GatewayHost` / `GatewayHost.cpp`** as a **thin façade**: transport, routing, lifecycle, event-frame helpers, and **one** default-registration entry (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`). **Do not** re-grow **“god lambdas”**— huge anonymous `Register` blocks or megabyte single files that mix unrelated method families.
 
@@ -24,11 +82,14 @@ Keep **`GatewayHost` / `GatewayHost.cpp`** as a **thin façade**: transport, rou
 
 ---
 
-## Intended role (from `IGatewayHostRuntime` and usage)
+[Back to index](#index)
+
+
+## 2. Intended role (from `IGatewayHostRuntime` and usage)
 
 `GatewayHost` implements `IGatewayHostRuntime` (`RouteRequest`, `IsHealthy`) and acts as a **composition root** for the in-process gateway: `GatewayMethodDispatcher`, `GatewayWebSocketTransport`, agent/channel/session/tool registries, extension lifecycle, chat pipeline orchestration, policy guard, event fanout, task-delta persistence, and routing to a staged runtime (`GatewayHostEx`) for selected methods (e.g. `chat.send`). In practice it also exposes **transport I/O**, **event frame builders**, **runtime tool registration**, and many **setter** entry points used by the desktop shell.
 
-### `RegisterDefaultHandlers()` call order (maintain when adding methods)
+### 2.1 `RegisterDefaultHandlers()` call order (maintain when adding methods)
 
 `GatewayHost::RegisterDefaultHandlers()` delegates to **`GatewayHostRegistration::RegisterDefaultHandlerSequence`** (`GatewayHostRegistrationCoordinator.h` / `.cpp`). That **single** function is a **`friend`** of `GatewayHost` and sequences the private `Register*Handlers` calls with **comment-labelled domain phases** (the calls cannot be split into nested free functions in another TU without losing `friend` access). The **global order** of those private calls is unchanged from the list below.
 
@@ -51,7 +112,9 @@ Keep **`GatewayHost` / `GatewayHost.cpp`** as a **thin façade**: transport, rou
 
 Duplicate method names across registrars still overwrite the same dispatcher slot—keep names unique or rely on last registration intentionally.
 
-### `protocol::OkResponse` (success handler boilerplate)
+[Back to index](#index)
+
+### 2.2 `protocol::OkResponse` (success handler boilerplate)
 
 Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, std::string payloadJson)` for the usual case, and `OkResponseOptionalPayload(const RequestFrame& request, std::optional<std::string> payloadJson)` when the body may be omitted (e.g. inline policy skip)—kept as a **separate** function name so string-literal payloads do not hit overload ambiguity with `std::optional`. Handler lambdas return `return protocol::OkResponse(request, …);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = …, .error = std::nullopt }`.
 
@@ -67,7 +130,9 @@ Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`
 
 Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog; **`GatewayHostHandlersRuntime.h`** + **`GatewayHost.Handlers.Runtime.*.cpp`** for the runtime `RegisterAll` split; **`GatewayHostRuntimeLocalHelpers.cpp`** for shared runtime helper bodies), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
-### Table-driven static registrations
+[Back to index](#index)
+
+### 2.3 Table-driven static registrations
 
 Two mechanisms cover **fixed JSON** success handlers:
 
@@ -75,7 +140,9 @@ Two mechanisms cover **fixed JSON** success handlers:
 
 2. **`GatewayHandlers.manifest.json` + `Generate-GatewayHandlerCatalog.ps1`** — already table-driven: `kind: "static"` methods emit the same pattern into `generated/GatewayHandlerCatalog.Generated.cpp`; `kind: "toolsMetric"` uses token templates. Prefer the manifest when methods belong to the generated scope-cluster catalog; use the C++ table for ad-hoc static batches (e.g. event key grid) without editing the generator.
 
-### `protocol::EncodeValidatedEvent` (event wire encoding + schema check)
+[Back to index](#index)
+
+### 2.4 `protocol::EncodeValidatedEvent` (event wire encoding + schema check)
 
 Declared in `GatewayProtocolCodec.h`, implemented in `GatewayProtocolCodec.cpp`:
 
@@ -85,7 +152,9 @@ Builds an `EventFrame` (`stateVersion` = `seq`), runs `GatewayProtocolSchemaVali
 
 Used by `GatewayHost::Build*EventFrame` methods and by `GatewayEventFanoutService::BuildChatLifecycleEventFrame`. The `validationStage` string must stay JSON-safe (historically alphanumeric / dotted segments); it is inserted into the fallback payload without extra escaping.
 
-### `GatewayJsonSerializers` (registry / task-delta JSON helpers)
+[Back to index](#index)
+
+### 2.5 `GatewayJsonSerializers` (registry / task-delta JSON helpers)
 
 Declared in `GatewayJsonSerializers.h`, implemented in `GatewayJsonSerializers.cpp`:
 
@@ -95,7 +164,9 @@ Declared in `GatewayJsonSerializers.h`, implemented in `GatewayJsonSerializers.c
 
 `GatewayHost.cpp` keeps a one-line anonymous wrapper `EscapeJson` → `EscapeJsonString` so existing handler code that still calls `EscapeJson(...)` for ad-hoc payloads is unchanged.
 
-### Lightweight JSON builder (`GatewayJsonBuilder`)
+[Back to index](#index)
+
+### 2.6 Lightweight JSON builder (`GatewayJsonBuilder`)
 
 Declared in `GatewayJsonBuilder.h`, implemented in `GatewayJsonBuilder.cpp`. Helpers build **string-table JSON** (not a DOM); string values use `EscapeJsonString` from `GatewayJsonSerializers`.
 
@@ -109,7 +180,9 @@ Declared in `GatewayJsonBuilder.h`, implemented in `GatewayJsonBuilder.cpp`. Hel
 
 Used in `GatewayHost.cpp` for `BuildModelJson` and `BuildMemorySearchEnvelope` (matches `JsonArray` of per-match objects). The **DeepSeek config object** fragment and **fixed event-name list** for catalog queries live in **`GatewayHostCatalogHelpers.*`** (`BuildGatewayDeepSeekConfigJson`, `GatewayEventCatalogNames`, `MaskGatewaySecret`) so multiple handler TUs share one wire-stable definition.
 
-### `RequestParamsView` (params wrapper)
+[Back to index](#index)
+
+### 2.7 `RequestParamsView` (params wrapper)
 
 Declared in `GatewayRequestParams.h`, implemented in `GatewayRequestParams.cpp`. Wraps `request.paramsJson` (the optional raw params object string) with the same behavior as the former `Extract*Param` helpers:
 
@@ -124,11 +197,14 @@ Handlers may call `RequestParamsView(request.paramsJson).GetString("field")` inl
 
 ---
 
-## Member functions — grouped by functionality
+[Back to index](#index)
+
+
+## 3. Member functions — grouped by functionality
 
 Counts: **45 public** members + **26 private** members = **71** instance/static methods (excluding nested type definitions).
 
-### 1. Lifecycle and bootstrap
+### 3.1 Lifecycle and bootstrap
 
 | Member | Notes |
 |--------|--------|
@@ -149,7 +225,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | *(private)* `StartRuntimeSubscriptions` | |
 | *(private)* `FinalizeRuntimeInitialization` | |
 
-### 2. `IGatewayHostRuntime` and routing
+[Back to index](#index)
+
+### 3.2 `IGatewayHostRuntime` and routing
 
 | Member | Notes |
 |--------|--------|
@@ -157,7 +235,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `IsHealthy` | Override; currently tied to `m_dispatchInitialized` |
 | *(private)* `RouteRequestLegacy` | `m_dispatcher.Dispatch(request)` |
 
-### 3. Protocol handler registration (dispatcher seeding)
+[Back to index](#index)
+
+### 3.3 Protocol handler registration (dispatcher seeding)
 
 | Member | Notes |
 |--------|--------|
@@ -178,7 +258,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | *(private)* `RegisterRuntimeHandlers` | `GatewayHost.Handlers.Runtime.cpp` — delegates to **`handlers::runtime::*Handlers::RegisterAll`** (`GatewayHostHandlersRuntime.h`; **`RegisterAll`** bodies in **`GatewayHost.Handlers.Runtime.Surface.cpp`** / **`.ChatPipeline.cpp`** / **`.OrchestrationStreaming.cpp`**; helper implementations in **`GatewayHostRuntimeLocalHelpers.cpp`** via **`GatewayHost.Handlers.RuntimeHelpers.inl`**; static metric table in `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp`) |
 | *(private)* `RegisterTransportHandlers` | `GatewayHost.Handlers.Transport.cpp` |
 
-### 4. Transport and inbound/outbound pumping
+[Back to index](#index)
+
+### 3.4 Transport and inbound/outbound pumping
 
 | Member | Notes |
 |--------|--------|
@@ -188,7 +270,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `PumpNetworkOnce` | |
 | `HandleInboundText` | Text-oriented inbound path |
 
-### 5. Push / lifecycle event frame builders
+[Back to index](#index)
+
+### 3.5 Push / lifecycle event frame builders
 
 | Member | Notes |
 |--------|--------|
@@ -201,7 +285,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `BuildAgentUpdateEventFrame` | |
 | `BuildToolsCatalogUpdateEventFrame` | |
 
-### 6. In-process runtime tools (tool registry surface)
+[Back to index](#index)
+
+### 3.6 In-process runtime tools (tool registry surface)
 
 | Member | Notes |
 |--------|--------|
@@ -211,14 +297,18 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `RegisterRuntimeTool` | |
 | `RegisterRuntimeToolV2` | |
 
-### 7. Task delta persistence (backing chat/runtime)
+[Back to index](#index)
+
+### 3.7 Task delta persistence (backing chat/runtime)
 
 | Member | Notes |
 |--------|--------|
 | *(private)* `LoadPersistedTaskDeltas` | |
 | *(private)* `PersistTaskDeltas` | `const`; persists via repository state |
 
-### 8. Dependency injection / shell wiring (callbacks and snapshot state)
+[Back to index](#index)
+
+### 3.8 Dependency injection / shell wiring (callbacks and snapshot state)
 
 | Member | Notes |
 |--------|--------|
@@ -237,7 +327,9 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 
 **Sequencing:** At startup, **`ServiceManager::WireGatewayCallbacks`** → **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** attaches skills/schema, **embedded + email policy** (`BindGatewayPolicyCallbacks`), **`ServiceManager::BindToolRuntimeCallbacks`** (runtime tool registration), chat/abort, then embeddings — see **`blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`** §2 and **`blazeclaw/docs/GATEWAY_CORE_WIRING.md`**. **Task-delta retention:** after **`LoadPersistedTaskDeltas`**, **`EnforceRetentionLimit`** may evict old runs; non-zero evictions emit **`gateway.taskdelta.retention.evicted`** (`reason`: **`persistence_load`**).
 
-### 9. Introspection, warnings, and test hooks
+[Back to index](#index)
+
+### 3.9 Introspection, warnings, and test hooks
 
 | Member | Notes |
 |--------|--------|
@@ -245,15 +337,26 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `LastWarning` | |
 | *(private)* `EnsureFixtureParityValidated` | Parity / fixture validation |
 
-### 10. Static helper
+[Back to index](#index)
+
+### 3.10 Static helper
 
 | Member | Notes |
 |--------|--------|
 | `ListReservedChatSlashCommandNames` | Reserved slash command names for chat |
 
+[Back to index](#index)
+
+### 3.11 `GatewayHost::ExecuteRuntimeTool` and `ExecuteRuntimeToolV2`
+
+These two functions are runtime tool execution entry points.
+
 ---
 
-## Where implementations live (translation units)
+[Back to index](#index)
+
+
+## 4. Where implementations live (translation units)
 
 | Area | Primary files |
 |------|----------------|
@@ -290,7 +393,10 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 
 ---
 
-## Refactoring suggestions (align responsibility with “gateway host”)
+[Back to index](#index)
+
+
+## 5. Refactoring suggestions (align responsibility with “gateway host”)
 
 These aim to keep **one clear façade** for the shell while shrinking what `GatewayHost` *does* itself.
 
@@ -317,18 +423,23 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 
 ---
 
-## GatewayHost.cpp Size-Reduction Analysis
+[Back to index](#index)
+
+
+## 6. GatewayHost.cpp Size-Reduction Analysis
 
 `GatewayHost.cpp` is **much smaller** than before: default gateway methods live in **`GatewayHost.Handlers.*`** translation units behind **`RegisterAll`** helpers; this file keeps routing, lifecycle, event builders, and staged runtime wiring.
 
-### Main Size Drivers
+### 6.1 Main Size Drivers
 
 1. ~~Extremely long `RegisterDefaultHandlers()` method~~ **`RegisterDefaultHandlers()` is a one-line coordinator;** domain registration is split across `GatewayHost.Handlers.*` and generated/manifest outputs. Remaining volume here: **routing** (`RouteRequest` / `GatewayHostRouter`), bootstrap, and **non-dispatcher** helpers.
 2. ~~Repeated event-frame construction + schema-validation fallback in `Build*EventFrame` methods.~~ Centralized in `protocol::EncodeValidatedEvent` (see subsection above).
 3. Repeated manual JSON string formatting in handlers (`{"x":...}` patterns). Success `ResponseFrame` construction is centralized via `protocol::OkResponse`; JSON *content* is still mostly manual concatenation.
 4. Repeated parameter extraction patterns (`ExtractStringParam`, `ExtractBooleanParam`, `ExtractNumericParam`) used the same way across handlers.
 
-### Practical Ways to Reduce File Size
+[Back to index](#index)
+
+### 6.2 Practical Ways to Reduce File Size
 
 #### 1) Split handler registration by domain (highest impact) — **done for default gateway surface**
 
@@ -383,7 +494,9 @@ Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonS
 
 `RequestParamsView` replaces the former `ExtractStringParam` / `ExtractBooleanParam` / `ExtractNumericParam` / `ExtractObjectParam` helpers in `GatewayHost.cpp`. Handlers use `RequestParamsView(request.paramsJson).Get…` or a single `const RequestParamsView params(request.paramsJson);` when reading several fields (see subsection **`RequestParamsView`** above).
 
-### Recommended Execution Order
+[Back to index](#index)
+
+### 6.3 Recommended Execution Order
 
 1. ~~Split `RegisterDefaultHandlers()` by domain.~~ **Done** (see §1 above).
 2. ~~Add `OkResponse` helper and replace boilerplate.~~ **Done** — see `protocol::OkResponse` in `GatewayProtocolModels.h` and the subsection `protocol::OkResponse` (success handler boilerplate) above.
@@ -392,7 +505,9 @@ Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonS
 5. ~~Move serializers to dedicated files.~~ **Done** — see **`GatewayJsonSerializers`** (`GatewayJsonSerializers.h` / `.cpp`) and §6 in the size-reduction section below.
 6. ~~Optionally add lightweight JSON builder and params wrapper.~~ **Done** — **`GatewayJsonBuilder`** (`GatewayJsonBuilder.h` / `.cpp`) and **`RequestParamsView`** (`GatewayRequestParams.h` / `.cpp`); see subsections above and §5 / §7 below.
 
-### Notes / Constraints
+[Back to index](#index)
+
+### 6.4 Notes / Constraints
 
 - This file appears intentionally seed-heavy for protocol coverage; avoid changing external behavior while refactoring.
 - **Guard the façade:** `GatewayHost.cpp` must not become the home for bulk `m_dispatcher.Register` lambdas again—keep the **thin** split (coordinator entry + `GatewayHost.Handlers.*`). See §**Ongoing architecture direction** and **`blazeclaw/docs/PROTOCOL_CODEGEN.md`** §2 / §6.
@@ -400,3 +515,6 @@ Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonS
 - Refactor in small steps with build + protocol tests after each stage.
 - `generated/GatewayHandlerCatalog.Generated.cpp` is emitted by `tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1`, which now generates `protocol::OkResponse(request, std::move(payload))` for static and tools-metric handlers—re-run the script after manifest changes.
 - Adding **new fixed-payload** methods: either append a `kind: "static"` block to `src/gateway/GatewayHandlers.manifest.json` and regenerate, **or** append a row to a `StaticPayloadHandlerEntry` array and call `RegisterStaticPayloadHandlers` (as in `GatewayHost.Handlers.Events.cpp`). Do not duplicate the same method name in both paths.
+
+[Back to index](#index)
+

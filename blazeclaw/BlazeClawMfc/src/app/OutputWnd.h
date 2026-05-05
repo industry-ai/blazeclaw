@@ -45,8 +45,8 @@ public:
 	void UpdateFonts();
 	void AddChatStatusLine(const CString& line);
 	void AddChatStatusBlock(const CString& text);
-	void AddFindStatusLine(const CString& line);
-	void AddFindStatusBlock(const CString& text);
+	void AddToolStatusLine(const CString& line);
+	void AddToolStatusBlock(const CString& text);
 
 	// Attributes
 protected:

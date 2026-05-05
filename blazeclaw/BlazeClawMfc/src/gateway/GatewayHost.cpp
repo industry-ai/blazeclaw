@@ -24,6 +24,7 @@
 #include "GatewayMethodSurfaceAudit.h"
 #include "GatewayHttpAuthService.h"
 #include "Telemetry.h"
+#include "../app/MainFrame.h"
 
 #include <algorithm>
 #include <iterator>
@@ -1218,6 +1219,28 @@ namespace blazeclaw::gateway {
 
 	ToolExecuteResultV2 GatewayHost::ExecuteRuntimeToolV2(
 		const ToolExecuteRequestV2& request) {
+#ifdef _DEBUG
+		const std::string payload =
+			std::string("{\"tool\":") + JsonString(request.tool) +
+			",\"argsJson\":" + (request.argsJson.has_value() ? JsonString(request.argsJson.value()) : "null") +
+			"}";
+		//EmitTelemetryEvent("gateway.tool.execute.v2.request", payload);
+		//EmitTelemetryEvent("gateway.skills.execute.v2.request", payload);
+		const std::string findLine =
+			std::string("[skills.execute.v2.request] tool=") + request.tool +
+			", payload=" + payload;
+		if (auto* app = AfxGetApp(); app != nullptr && app->m_pMainWnd != nullptr) {
+			auto* line = new CString(CA2W(findLine.c_str(), CP_UTF8));
+			if (!app->m_pMainWnd->PostMessage(kMsgAppendToolStatusLine, 0, reinterpret_cast<LPARAM>(line))) {
+				delete line;
+			}
+		}
+
+		TRACE(L"【GatewayHost::ExecuteRuntimeToolV2】 tool=%s, argsJson=%s",
+			request.tool.c_str(),
+			request.argsJson.has_value() ? request.argsJson->c_str() : "null");
+#endif
+
 		return m_toolRegistry.ExecuteV2(request);
 	}
 

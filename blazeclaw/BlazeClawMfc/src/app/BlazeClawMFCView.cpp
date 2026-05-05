@@ -938,7 +938,7 @@ namespace {
 			return;
 		}
 
-		mainFrame->AddFindStatusLine(line);
+		mainFrame->AddToolStatusLine(line);
 	}
 
 	void AppendFindSkillPathStatus(
@@ -2760,7 +2760,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			if (emittedInBatch.find(line) == emittedInBatch.end())
 			{
 				emittedInBatch.insert(line);
-				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			continue;
 		}
@@ -2801,7 +2801,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			if (emittedInBatch.find(line) == emittedInBatch.end())
 			{
 				emittedInBatch.insert(line);
-				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			continue;
 		}
@@ -2830,7 +2830,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 		}
 
 		emittedInBatch.insert(line);
-		mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+		mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 	}
 }
 
@@ -2948,7 +2948,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 					320);
 		}
 
-		mainFrame->AddFindStatusLine(
+		mainFrame->AddToolStatusLine(
 			CString(CA2W(detail.c_str(), CP_UTF8)));
 		return;
 	}
@@ -2981,7 +2981,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				blazeclaw::gateway::json::Trim(response.payloadJson.value()),
 				320);
 
-		mainFrame->AddFindStatusLine(CString(CA2W(detail.c_str(), CP_UTF8)));
+		mainFrame->AddToolStatusLine(CString(CA2W(detail.c_str(), CP_UTF8)));
 		return;
 	}
 
@@ -2991,7 +2991,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 		return;
 	}
 
-	mainFrame->AddFindStatusLine(CString(CA2W(
+	mainFrame->AddToolStatusLine(CString(CA2W(
 		(std::string("[SkillPath] runId=") + normalizedRunId + " tried paths:").c_str(),
 		CP_UTF8)));
 
@@ -3040,7 +3040,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 		}
 
 		emitted.insert(line);
-		mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+		mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 	}
 
 	if (!hasToolResult)
@@ -3088,7 +3088,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				}
 
 				emitted.insert(line);
-				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			else if (phase == "final")
 			{
@@ -3122,7 +3122,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				}
 
 				emitted.insert(line);
-				mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 		}
 	}
