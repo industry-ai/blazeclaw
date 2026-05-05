@@ -3587,6 +3587,10 @@ namespace blazeclaw::gateway {
 						hints.push_back("skills.sandbox.status");
 					}
 
+					if (state.executionReadinessMismatchCount > 0) {
+						hints.push_back("skills.execution.readiness");
+					}
+
 					std::string hintsJson = "[";
 					for (std::size_t index = 0; index < hints.size(); ++index) {
 						if (index > 0) {
@@ -3600,6 +3604,34 @@ namespace blazeclaw::gateway {
 					}
 
 					hintsJson += "]";
+					std::string mismatchSampleJson = "[";
+					for (std::size_t index = 0;
+						index < state.executionReadinessMismatchSample.size();
+						++index) {
+						if (index > 0) {
+							mismatchSampleJson += ",";
+						}
+						mismatchSampleJson +=
+							"\"" +
+							EscapeJsonLocal(state.executionReadinessMismatchSample[index]) +
+							"\"";
+					}
+					mismatchSampleJson += "]";
+
+					std::string effectiveRootsJson = "[";
+					for (std::size_t index = 0;
+						index < state.effectiveSkillRoots.size();
+						++index) {
+						if (index > 0) {
+							effectiveRootsJson += ",";
+						}
+						effectiveRootsJson +=
+							"\"" +
+							EscapeJsonLocal(state.effectiveSkillRoots[index]) +
+							"\"";
+					}
+					effectiveRootsJson += "]";
+
 					return protocol::OkResponse(request, "{\"warnings\":" +
 						std::to_string(state.warningCount) +
 						",\"installBlocked\":" +
@@ -3630,6 +3662,18 @@ namespace blazeclaw::gateway {
 						std::to_string(state.dispatchRequiredSkillCount) +
 						",\"dispatchRequiredMissing\":" +
 						std::to_string(state.dispatchRequiredMissingCount) +
+						",\"projectedToolDispatchCount\":" +
+						std::to_string(state.projectedToolDispatchCount) +
+						",\"runtimeRegisteredSkillToolCount\":" +
+						std::to_string(state.runtimeRegisteredSkillToolCount) +
+						",\"executionReadinessMismatchCount\":" +
+						std::to_string(state.executionReadinessMismatchCount) +
+						",\"executionReadinessMismatchSample\":" +
+						mismatchSampleJson +
+						",\"effectiveSkillRootCount\":" +
+						std::to_string(state.effectiveSkillRootCount) +
+						",\"effectiveSkillRoots\":" +
+						effectiveRootsJson +
 						",\"entryConfigRaw\":" +
 						std::to_string(state.entryConfigRawCount) +
 						",\"entryConfigNormalized\":" +

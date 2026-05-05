@@ -755,14 +755,21 @@ namespace blazeclaw::gateway {
 	void GatewayHost::SetSkillsCatalogState(SkillsCatalogGatewayState state) {
 		std::vector<ToolCatalogEntry> catalogSkillTools;
 		catalogSkillTools.reserve(state.entries.size());
+		std::unordered_set<std::string> expectedDispatchToolIds;
 		for (const auto& entry : state.entries) {
 			if (entry.commandToolName.empty()) {
 				continue;
 			}
 
+			const std::string toolId = json::Trim(entry.commandToolName);
+			if (toolId.empty()) {
+				continue;
+			}
+			expectedDispatchToolIds.insert(toolId);
+
 			catalogSkillTools.push_back(ToolCatalogEntry{
-				.id = entry.commandToolName,
-				.label = entry.commandName.empty() ? entry.commandToolName : entry.commandName,
+				.id = toolId,
+				.label = entry.commandName.empty() ? toolId : entry.commandName,
 				.category = "skill",
 				.skillKey = entry.skillKey.empty() ? entry.name : entry.skillKey,
 				.installKind = "skill",
@@ -779,12 +786,52 @@ namespace blazeclaw::gateway {
 					"blazeclaw/skills-openclaw-original",
 					"skills",
 					"skills-openclaw-original",
-				});
+				},
+				m_preferredSkillRootDirectories.empty());
 		EmitSkillRootDiagnostics("set_skills_catalog_state", resolvedDirectories);
 		m_toolRegistry.SyncSkillToolsManifestFirst(
 			resolvedDirectories,
 			catalogSkillTools,
 			true);
+
+		const auto runtimeTools = m_toolRegistry.List();
+		std::unordered_set<std::string> runtimeSkillToolIds;
+		runtimeSkillToolIds.reserve(runtimeTools.size());
+		for (const auto& tool : runtimeTools) {
+			if (tool.category != "skill") {
+				continue;
+			}
+
+			runtimeSkillToolIds.insert(tool.id);
+		}
+
+		state.projectedToolDispatchCount = expectedDispatchToolIds.size();
+		state.runtimeRegisteredSkillToolCount = runtimeSkillToolIds.size();
+		state.executionReadinessMismatchCount = 0;
+		state.executionReadinessMismatchSample.clear();
+		for (const auto& expectedToolId : expectedDispatchToolIds) {
+			if (runtimeSkillToolIds.find(expectedToolId) != runtimeSkillToolIds.end()) {
+				continue;
+			}
+
+			++state.executionReadinessMismatchCount;
+			if (state.executionReadinessMismatchSample.size() < 10) {
+				state.executionReadinessMismatchSample.push_back(expectedToolId);
+			}
+		}
+		for (const auto& runtimeToolId : runtimeSkillToolIds) {
+			if (expectedDispatchToolIds.find(runtimeToolId) != expectedDispatchToolIds.end()) {
+				continue;
+			}
+
+			++state.executionReadinessMismatchCount;
+			if (state.executionReadinessMismatchSample.size() < 10) {
+				state.executionReadinessMismatchSample.push_back(runtimeToolId);
+			}
+		}
+		state.effectiveSkillRootCount = resolvedDirectories.size();
+		state.effectiveSkillRoots = resolvedDirectories;
+
 		m_skillsCatalogState = std::move(state);
 	}
 
@@ -1190,7 +1237,7 @@ namespace blazeclaw::gateway {
 		const std::vector<std::string>& directories,
 		const bool emitCatalogUpdateEvent) {
 		const std::vector<std::string> resolvedDirectories =
-			ResolveAbsoluteSkillDirectories(directories);
+			ResolveAbsoluteSkillDirectories(directories, false);
 		EmitSkillRootDiagnostics("reload_skill_tools_from_directories", resolvedDirectories);
 		for (const auto& directory : resolvedDirectories) {
 			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1221,8 +1268,19 @@ namespace blazeclaw::gateway {
 			"}");
 	}
 
+	void GatewayHost::SetPreferredSkillRootDirectories(std::vector<std::string> directories) {
+		m_preferredSkillRootDirectories.clear();
+		m_preferredSkillRootDirectories.reserve(directories.size());
+		for (auto& directory : directories) {
+			if (!directory.empty()) {
+				m_preferredSkillRootDirectories.push_back(std::move(directory));
+			}
+		}
+	}
+
 	std::vector<std::string> GatewayHost::ResolveAbsoluteSkillDirectories(
-		const std::vector<std::string>& hintDirectories) const {
+		const std::vector<std::string>& hintDirectories,
+		const bool includeDefaultRoots) const {
 		wchar_t modulePathBuffer[MAX_PATH] = {};
 		std::filesystem::path moduleDir;
 		if (GetModuleFileNameW(nullptr, modulePathBuffer, MAX_PATH) > 0) {
@@ -1259,36 +1317,44 @@ namespace blazeclaw::gateway {
 			return value;
 		};
 
-		const std::optional<std::string> genericOverride =
-			readEnvOverride("BLAZECLAW_SKILLS_ROOT");
-		const std::optional<std::string> bundledOverride =
-			readEnvOverride("BLAZECLAW_SKILLS_BUNDLED_ROOT");
-		const std::optional<std::string> openClawOverride =
-			readEnvOverride("BLAZECLAW_SKILLS_OPENCLAW_ROOT");
+		if (includeDefaultRoots) {
+			const std::optional<std::string> genericOverride =
+				readEnvOverride("BLAZECLAW_SKILLS_ROOT");
+			const std::optional<std::string> bundledOverride =
+				readEnvOverride("BLAZECLAW_SKILLS_BUNDLED_ROOT");
+			const std::optional<std::string> openClawOverride =
+				readEnvOverride("BLAZECLAW_SKILLS_OPENCLAW_ROOT");
 
-		for (const auto& path : skills::ResolveSkillRoots(
-			skills::SkillRootKind::Bundled,
-			moduleDir,
-			currentDir,
-			genericOverride,
-			bundledOverride).resolvedRoots) {
-			pushUnique(path);
+			for (const auto& path : skills::ResolveSkillRoots(
+				skills::SkillRootKind::Bundled,
+				moduleDir,
+				currentDir,
+				genericOverride,
+				bundledOverride).resolvedRoots) {
+				pushUnique(path);
+			}
+			for (const auto& path : skills::ResolveSkillRoots(
+				skills::SkillRootKind::Core,
+				moduleDir,
+				currentDir,
+				genericOverride,
+				std::nullopt).resolvedRoots) {
+				pushUnique(path);
+			}
+			for (const auto& path : skills::ResolveSkillRoots(
+				skills::SkillRootKind::OpenClawOriginal,
+				moduleDir,
+				currentDir,
+				genericOverride,
+				openClawOverride).resolvedRoots) {
+				pushUnique(path);
+			}
 		}
-		for (const auto& path : skills::ResolveSkillRoots(
-			skills::SkillRootKind::Core,
-			moduleDir,
-			currentDir,
-			genericOverride,
-			std::nullopt).resolvedRoots) {
-			pushUnique(path);
-		}
-		for (const auto& path : skills::ResolveSkillRoots(
-			skills::SkillRootKind::OpenClawOriginal,
-			moduleDir,
-			currentDir,
-			genericOverride,
-			openClawOverride).resolvedRoots) {
-			pushUnique(path);
+
+		for (const auto& preferred : m_preferredSkillRootDirectories) {
+			if (!preferred.empty()) {
+				pushUnique(preferred);
+			}
 		}
 
 		for (const auto& hint : hintDirectories) {
@@ -1466,13 +1532,37 @@ namespace blazeclaw::gateway {
 
 		toolsJson += "]";
 
+		std::string mismatchSampleJson = "[";
+		for (std::size_t i = 0; i < m_skillsCatalogState.executionReadinessMismatchSample.size(); ++i) {
+			if (i > 0) {
+				mismatchSampleJson += ",";
+			}
+			mismatchSampleJson += JsonString(m_skillsCatalogState.executionReadinessMismatchSample[i]);
+		}
+		mismatchSampleJson += "]";
+
+		std::string effectiveRootsJson = "[";
+		for (std::size_t i = 0; i < m_skillsCatalogState.effectiveSkillRoots.size(); ++i) {
+			if (i > 0) {
+				effectiveRootsJson += ",";
+			}
+			effectiveRootsJson += JsonString(m_skillsCatalogState.effectiveSkillRoots[i]);
+		}
+		effectiveRootsJson += "]";
+
 		const std::string diagnosticsJson =
 			"{\"catalogRegistered\":" + std::to_string(sourceDiagnostics.catalogRegistered) +
 			",\"manifestRegistered\":" + std::to_string(sourceDiagnostics.manifestRegistered) +
 			",\"catalogRejected\":" + std::to_string(sourceDiagnostics.catalogRejected) +
 			",\"manifestRejected\":" + std::to_string(sourceDiagnostics.manifestRejected) +
 			",\"manifestsGenerated\":" + std::to_string(sourceDiagnostics.manifestsGenerated) +
-			",\"manifestGenerationFailed\":" + std::to_string(sourceDiagnostics.manifestGenerationFailed) + "}";
+			",\"manifestGenerationFailed\":" + std::to_string(sourceDiagnostics.manifestGenerationFailed) +
+			",\"projectedToolDispatchCount\":" + std::to_string(m_skillsCatalogState.projectedToolDispatchCount) +
+			",\"runtimeRegisteredSkillToolCount\":" + std::to_string(m_skillsCatalogState.runtimeRegisteredSkillToolCount) +
+			",\"executionReadinessMismatchCount\":" + std::to_string(m_skillsCatalogState.executionReadinessMismatchCount) +
+			",\"executionReadinessMismatchSample\":" + mismatchSampleJson +
+			",\"effectiveSkillRootCount\":" + std::to_string(m_skillsCatalogState.effectiveSkillRootCount) +
+			",\"effectiveSkillRoots\":" + effectiveRootsJson + "}";
 
 		return protocol::EncodeValidatedEvent(
 			"gateway.tools.catalog.update",

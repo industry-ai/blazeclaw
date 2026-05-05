@@ -201,6 +201,11 @@ namespace blazeclaw::core {
 		gatewaySkillsState.watchDebounceMs = context.watch.debounceMs;
 		gatewaySkillsState.watchReason = toNarrow(context.watch.reason);
 		gatewaySkillsState.prompt = toNarrow(context.prompt.prompt);
+		if (context.effectiveSkillRoots != nullptr) {
+			gatewaySkillsState.effectiveSkillRoots = *context.effectiveSkillRoots;
+			gatewaySkillsState.effectiveSkillRootCount =
+				context.effectiveSkillRoots->size();
+		}
 		gatewaySkillsState.sandboxSyncOk = context.sync.success;
 		gatewaySkillsState.sandboxDestinationNamingMode =
 			toNarrow(context.sync.destinationNamingMode);

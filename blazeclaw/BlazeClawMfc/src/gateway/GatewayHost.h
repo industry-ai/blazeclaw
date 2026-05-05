@@ -123,6 +123,12 @@ namespace blazeclaw::gateway {
 		std::size_t commandSourceContributionCount = 0;
 		std::size_t dispatchRequiredSkillCount = 0;
 		std::size_t dispatchRequiredMissingCount = 0;
+		std::size_t projectedToolDispatchCount = 0;
+		std::size_t runtimeRegisteredSkillToolCount = 0;
+		std::size_t executionReadinessMismatchCount = 0;
+		std::vector<std::string> executionReadinessMismatchSample;
+		std::size_t effectiveSkillRootCount = 0;
+		std::vector<std::string> effectiveSkillRoots;
 		std::size_t bundleCommandRootsScannedCount = 0;
 		std::size_t bundleCommandFilesLoadedCount = 0;
 		std::size_t bundleCommandFilesSkippedDisabledCount = 0;
@@ -413,8 +419,10 @@ namespace blazeclaw::gateway {
 		void ReloadSkillToolsFromDirectories(
 			const std::vector<std::string>& directories,
 			bool emitCatalogUpdateEvent);
+		void SetPreferredSkillRootDirectories(std::vector<std::string> directories);
 		[[nodiscard]] std::vector<std::string> ResolveAbsoluteSkillDirectories(
-			const std::vector<std::string>& hintDirectories) const;
+			const std::vector<std::string>& hintDirectories,
+			bool includeDefaultRoots = true) const;
 		void EmitSkillRootDiagnostics(
 			const char* stage,
 			const std::vector<std::string>& resolvedDirectories) const;
@@ -554,6 +562,7 @@ namespace blazeclaw::gateway {
 		std::uint16_t m_runtimeGatewayPort = 18789;
 		std::string m_runtimeAgentModel = "default";
 		bool m_runtimeAgentStreaming = true;
+		std::vector<std::string> m_preferredSkillRootDirectories;
 		std::string m_runtimeDeepSeekApiKey;
 		std::string m_runtimeDeepSeekBaseUrl = "https://api.deepseek.com";
 		std::string m_runtimeDeepSeekDefaultModel = "deepseek/deepseek-chat";

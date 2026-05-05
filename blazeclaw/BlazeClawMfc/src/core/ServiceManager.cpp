@@ -30,6 +30,7 @@
 #include <filesystem>
 #include <fstream>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <Windows.h>
@@ -843,6 +844,57 @@ namespace blazeclaw::core {
 			}
 
 			return startPath;
+		}
+
+		std::string NormalizeDirectoryPathUtf8(const std::filesystem::path& path) {
+			if (path.empty()) {
+				return {};
+			}
+
+			std::error_code ec;
+			const auto canonical = std::filesystem::weakly_canonical(path, ec);
+			const auto normalized = ec ? path.lexically_normal() : canonical.lexically_normal();
+			return normalized.string();
+		}
+
+		std::vector<std::string> BuildCanonicalSkillRootSnapshot(
+			const std::filesystem::path& workspaceRoot,
+			const blazeclaw::config::AppConfig& config) {
+			std::vector<std::string> roots;
+			std::set<std::string> seen;
+			const auto pushUnique = [&roots, &seen](const std::filesystem::path& path) {
+				const std::string normalized = NormalizeDirectoryPathUtf8(path);
+				if (normalized.empty()) {
+					return;
+				}
+				if (seen.insert(normalized).second) {
+					roots.push_back(normalized);
+				}
+			};
+
+			const auto pushIfDir = [&pushUnique](const std::filesystem::path& path) {
+				std::error_code ec;
+				if (std::filesystem::is_directory(path, ec) && !ec) {
+					pushUnique(path);
+				}
+			};
+
+			pushIfDir(workspaceRoot / L"skills-bundled");
+			pushIfDir(workspaceRoot / L"skills");
+			pushIfDir(workspaceRoot / L"skills-openclaw-original");
+			pushIfDir(workspaceRoot / L"blazeclaw" / L"skills-bundled");
+			pushIfDir(workspaceRoot / L"blazeclaw" / L"skills");
+			pushIfDir(workspaceRoot / L"blazeclaw" / L"skills-openclaw-original");
+
+			const std::filesystem::path managedOpenClawRoot =
+				workspaceRoot / L".blazeclaw" / L"skills" / L"openclaw-original";
+			pushIfDir(managedOpenClawRoot);
+
+			if (!config.skills.openclawOriginal.sourceDir.empty()) {
+				pushIfDir(workspaceRoot / std::filesystem::path(config.skills.openclawOriginal.sourceDir));
+			}
+
+			return roots;
 		}
 
 		std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
@@ -2163,6 +2215,7 @@ namespace blazeclaw::core {
 				.securityScan = m_skillSecurityScan,
 				.hookExecution = m_hookExecution,
 				.skillsConfig = m_activeConfig.skills,
+				.effectiveSkillRoots = &m_effectiveSkillRoots,
 				.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
 				.hooksLastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
 				.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
@@ -2241,6 +2294,13 @@ namespace blazeclaw::core {
 		const auto commandDescriptors =
 			SkillsAgentCommandDescriptorPolicy::BuildDescriptors(config, m_agentsScope);
 
+		const auto resolvedWorkspaceRoot = ResolveWorkspaceRootForSkills(
+			std::filesystem::current_path());
+		m_effectiveSkillRoots = BuildCanonicalSkillRootSnapshot(
+			resolvedWorkspaceRoot,
+			config);
+		m_gatewayHost.SetPreferredSkillRootDirectories(m_effectiveSkillRoots);
+
 		m_skillsHooksCoordinator.RefreshSkillsState(
 			config,
 			forceRefresh,
@@ -2275,8 +2335,7 @@ namespace blazeclaw::core {
 				.runSnapshot = m_skillsRunSnapshot,
 				.securityScan = m_skillSecurityScan,
 				.watch = m_skillsWatch,
-			 .workspaceRoot = ResolveWorkspaceRootForSkills(
-					std::filesystem::current_path()),
+			 .workspaceRoot = resolvedWorkspaceRoot,
 				.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection,
 			});
 
@@ -2327,22 +2386,15 @@ namespace blazeclaw::core {
 			return;
 		}
 
-		const auto workspaceRoot = ResolveWorkspaceRootForSkills(
-			std::filesystem::current_path());
-		const std::filesystem::path managedRoot =
-			workspaceRoot / L".blazeclaw" / L"skills" / L"openclaw-original";
-		const std::filesystem::path sourceRoot =
-			workspaceRoot /
-			std::filesystem::path(config.skills.openclawOriginal.sourceDir);
+		std::vector<std::string> openClawToolRoots = m_effectiveSkillRoots;
+		if (openClawToolRoots.empty()) {
+			const auto workspaceRoot = ResolveWorkspaceRootForSkills(
+				std::filesystem::current_path());
+			openClawToolRoots = BuildCanonicalSkillRootSnapshot(workspaceRoot, config);
+		}
 
-		m_gatewayHost.ReloadSkillToolsFromDirectories(
-			{
-				WideToNarrowAscii(managedRoot.wstring()),
-				WideToNarrowAscii(sourceRoot.wstring()),
-				WideToNarrowAscii(
-					(workspaceRoot / L"blazeclaw" / L"skills-openclaw-original").wstring()),
-			},
-			true);
+		m_gatewayHost.SetPreferredSkillRootDirectories(openClawToolRoots);
+		m_gatewayHost.ReloadSkillToolsFromDirectories(openClawToolRoots, true);
 	}
 
 	void ServiceManager::EmitOpenClawOriginalTelemetry() const {

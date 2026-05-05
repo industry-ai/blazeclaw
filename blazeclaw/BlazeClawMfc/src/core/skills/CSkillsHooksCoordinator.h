@@ -63,6 +63,7 @@ namespace blazeclaw::core {
 			const SkillSecurityScanSnapshot& securityScan;
 			const HookExecutionSnapshot& hookExecution;
 			const blazeclaw::config::SkillsConfig& skillsConfig;
+			const std::vector<std::string>* effectiveSkillRoots = nullptr;
 
 			bool hooksGovernanceReportingEnabled = false;
 			std::wstring hooksLastGovernanceReportPath;

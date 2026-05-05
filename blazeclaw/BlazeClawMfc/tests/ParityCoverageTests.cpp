@@ -327,6 +327,14 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(diagnosticsResponse.payloadJson->find("\"entryConfigMalformed\":23") !=
 		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"projectedToolDispatchCount\":0") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"runtimeRegisteredSkillToolCount\":0") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"executionReadinessMismatchCount\":0") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"effectiveSkillRootCount\":") !=
+		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("skills.local-loader.verified-open") !=
 		std::string::npos);

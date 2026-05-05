@@ -500,6 +500,7 @@ namespace blazeclaw::core {
 		std::size_t m_bundleCommandFilesSkippedEmptyPromptCount = 0;
 		std::size_t m_bundleCommandFilesSkippedInvalidNameCount = 0;
 		std::size_t m_bundleCommandFilesRejectedUnsafeCount = 0;
+		std::vector<std::string> m_effectiveSkillRoots;
 		SkillSecurityScanSnapshot m_skillSecurityScan;
 		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;

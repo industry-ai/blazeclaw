@@ -105,6 +105,10 @@ namespace blazeclaw::gateway::protocol {
 					SetIssue(issue, "schema_invalid_event", "`gateway.tools.catalog.update` requires array field `tools`.");
 					return false;
 				}
+				if (!IsFieldValueType(payload, "skillToolSources", '{')) {
+					SetIssue(issue, "schema_invalid_event", "`gateway.tools.catalog.update` requires object field `skillToolSources`.");
+					return false;
+				}
 				if (IsArrayFieldExplicitlyEmpty(payload, "tools")) {
 					return true;
 				}

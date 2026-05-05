@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "gateway/GatewayHost.h"
 #include "gateway/GatewayToolRegistry.h"
 
 #ifdef min
@@ -10,6 +11,7 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -321,3 +323,48 @@ TEST_CASE("Skill root resolver returns equivalent imap-smtp roots across repo an
 	REQUIRE(std::filesystem::exists(repoScript));
 	REQUIRE(std::filesystem::exists(projectScript));
 }
+
+TEST_CASE("GatewayHost skill directories resolver stays parity-stable across repo and project launch roots", "[gateway][tools][skills][resolver][host]") {
+	blazeclaw::gateway::GatewayHost host;
+	const auto workspaceRoot = std::filesystem::current_path();
+	const auto projectRoot = workspaceRoot;
+	const auto repoRoot = projectRoot.parent_path();
+
+	const auto resolveForCwd = [&host](const std::filesystem::path& cwd) {
+		std::error_code ec;
+		const auto previous = std::filesystem::current_path();
+		std::filesystem::current_path(cwd, ec);
+		REQUIRE_FALSE(ec);
+
+		const auto resolved = host.ResolveAbsoluteSkillDirectories(
+			{ "blazeclaw/skills", "skills", "blazeclaw/skills-openclaw-original", "skills-openclaw-original" },
+			true);
+
+		std::filesystem::current_path(previous, ec);
+		REQUIRE_FALSE(ec);
+		return resolved;
+	};
+
+	const auto repoResolved = resolveForCwd(repoRoot);
+	const auto projectResolved = resolveForCwd(projectRoot);
+	REQUIRE_FALSE(repoResolved.empty());
+	REQUIRE_FALSE(projectResolved.empty());
+
+	const auto findCoreSkills = [](const std::vector<std::string>& roots) {
+		return std::find_if(
+			roots.begin(),
+			roots.end(),
+			[](const std::string& path) {
+				return path.find("skills") != std::string::npos;
+			}) != roots.end();
+	};
+	REQUIRE(findCoreSkills(repoResolved));
+	REQUIRE(findCoreSkills(projectResolved));
+
+	auto sortedRepoResolved = repoResolved;
+	auto sortedProjectResolved = projectResolved;
+	std::sort(sortedRepoResolved.begin(), sortedRepoResolved.end());
+	std::sort(sortedProjectResolved.begin(), sortedProjectResolved.end());
+	REQUIRE(sortedRepoResolved == sortedProjectResolved);
+}
+
