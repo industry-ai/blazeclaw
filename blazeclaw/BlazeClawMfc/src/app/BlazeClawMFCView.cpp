@@ -931,14 +931,20 @@ namespace {
 
 	void AppendFindSkillPathLine(const CString& line)
 	{
-		auto* mainFrame =
-			dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-		if (mainFrame == nullptr)
+		auto* app = AfxGetApp();
+		if (app == nullptr || app->m_pMainWnd == nullptr)
 		{
 			return;
 		}
 
-		mainFrame->AddToolStatusLine(line);
+		auto* messageLine = new CString(line);
+		if (!app->m_pMainWnd->PostMessage(
+			kMsgAppendToolStatusLine,
+			0,
+			reinterpret_cast<LPARAM>(messageLine)))
+		{
+			delete messageLine;
+		}
 	}
 
 	void AppendFindSkillPathStatus(
@@ -2187,7 +2193,7 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
 			{
 				// Async to avoid UI-thread blocking inside batch handling.
-				ReportRunSkillPathsToFindOutput(runId);
+				ReportRunSkillPathsToToolOutput(runId);
 			}
 
 			const std::string finalAssistantText =
@@ -2720,12 +2726,6 @@ LRESULT CBlazeClawMFCView::OnSkillPathLookupCompleted(
 
 void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRaw)
 {
-	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-	if (mainFrame == nullptr)
-	{
-		return;
-	}
-
 	std::unordered_set<std::string> emittedInBatch;
 	for (const auto& eventJson : SplitTopLevelObjects(eventsRaw))
 	{
@@ -2760,7 +2760,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			if (emittedInBatch.find(line) == emittedInBatch.end())
 			{
 				emittedInBatch.insert(line);
-				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			continue;
 		}
@@ -2801,7 +2801,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			if (emittedInBatch.find(line) == emittedInBatch.end())
 			{
 				emittedInBatch.insert(line);
-				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			continue;
 		}
@@ -2830,11 +2830,11 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 		}
 
 		emittedInBatch.insert(line);
-		mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+		AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 	}
 }
 
-void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId)
+void CBlazeClawMFCView::ReportRunSkillPathsToToolOutput(const std::string& runId)
 {
 	const std::string normalizedRunId = blazeclaw::gateway::json::Trim(runId);
 	if (normalizedRunId.empty())
@@ -2910,12 +2910,6 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 	const blazeclaw::gateway::protocol::ResponseFrame& response,
 	const std::uint64_t elapsedMs)
 {
-	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-	if (mainFrame == nullptr)
-	{
-		return;
-	}
-
 	AppendChatProcedureStatusLine(
 		L"skills.path.lookup.timing",
 		"runId=" + normalizedRunId +
@@ -2948,7 +2942,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 					320);
 		}
 
-		mainFrame->AddToolStatusLine(
+		AppendFindSkillPathLine(
 			CString(CA2W(detail.c_str(), CP_UTF8)));
 		return;
 	}
@@ -2981,7 +2975,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				blazeclaw::gateway::json::Trim(response.payloadJson.value()),
 				320);
 
-		mainFrame->AddToolStatusLine(CString(CA2W(detail.c_str(), CP_UTF8)));
+		AppendFindSkillPathLine(CString(CA2W(detail.c_str(), CP_UTF8)));
 		return;
 	}
 
@@ -2991,7 +2985,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 		return;
 	}
 
-	mainFrame->AddToolStatusLine(CString(CA2W(
+	AppendFindSkillPathLine(CString(CA2W(
 		(std::string("[SkillPath] runId=") + normalizedRunId + " tried paths:").c_str(),
 		CP_UTF8)));
 
@@ -3040,7 +3034,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 		}
 
 		emitted.insert(line);
-		mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+		AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 	}
 
 	if (!hasToolResult)
@@ -3088,7 +3082,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				}
 
 				emitted.insert(line);
-				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 			else if (phase == "final")
 			{
@@ -3122,7 +3116,7 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 				}
 
 				emitted.insert(line);
-				mainFrame->AddToolStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+				AppendFindSkillPathLine(CString(CA2W(line.c_str(), CP_UTF8)));
 			}
 		}
 	}
@@ -3371,7 +3365,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			{
 				for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
 				{
-					ReportRunSkillPathsToFindOutput(runId);
+					ReportRunSkillPathsToToolOutput(runId);
 				}
 			}
 		}
@@ -3472,7 +3466,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		{
 			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
 			{
-				ReportRunSkillPathsToFindOutput(runId);
+				ReportRunSkillPathsToToolOutput(runId);
 			}
 		}
 	}

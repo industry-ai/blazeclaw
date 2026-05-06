@@ -361,7 +361,7 @@ The runtime enters **strict ordered preflight** for weather+email intent, but on
 
 4. **Improve SkillPath reporting for preflight-only failures** ✅
    - Implemented in `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`:
-     - `ReportRunSkillPathsToFindOutput(...)` now emits fallback summaries from `phase=preflight` and `phase=final` task deltas when no `tool_result` rows are present.
+     - `ReportRunSkillPathsToToolOutput(...)` now emits fallback summaries from `phase=preflight` and `phase=final` task deltas when no `tool_result` rows are present.
 
 5. **Validate runtime tool availability assumptions** ✅
    - Implemented in `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.ChatPipeline.cpp`:

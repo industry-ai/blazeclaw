@@ -116,7 +116,7 @@ protected:
 	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
-	void ReportRunSkillPathsToFindOutput(const std::string& runId);
+	void ReportRunSkillPathsToToolOutput(const std::string& runId);
 	void ProcessRunSkillPathLookupResult(
 		const std::string& normalizedRunId,
 		const blazeclaw::gateway::protocol::ResponseFrame& response,

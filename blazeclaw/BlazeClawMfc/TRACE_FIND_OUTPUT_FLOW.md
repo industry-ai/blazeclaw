@@ -27,7 +27,7 @@ These create formatted lines like:
 - `[SkillPath] tools.execute.error - status=error code=...`
 
 ### A2. Terminal run summary from task deltas
-Method: `CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId)`
+Method: `CBlazeClawMFCView::ReportRunSkillPathsToToolOutput(const std::string& runId)`
 
 Creates lines:
 - `[SkillPath] runId=<id> tried paths:`
