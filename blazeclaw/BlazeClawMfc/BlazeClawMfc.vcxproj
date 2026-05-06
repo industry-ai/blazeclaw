@@ -106,6 +106,7 @@
     <ClInclude Include="src\app\ChatUiStartupResolver.h" />
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
+    <ClInclude Include="src\app\CMgrMessage.h" />
     <ClInclude Include="src\app\EventTransport.h" />
     <ClInclude Include="src\app\SkillView.h" />
     <ClInclude Include="src\app\FileView.h" />
@@ -305,6 +306,7 @@
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />
+    <ClCompile Include="src\app\CMgrMessage.cpp" />
     <ClCompile Include="src\app\EventTransport.cpp" />
     <ClCompile Include="src\app\SkillView.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
@@ -495,6 +497,7 @@
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <!-- Tests moved to a separate test project BlazeClawMfc.Tests.vcxproj -->
+    <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
   </ItemGroup>

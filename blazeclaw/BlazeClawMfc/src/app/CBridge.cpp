@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "CBridge.h"
+#include "CMgrMessage.h"
 
 #include "../gateway/GatewayJsonUtils.h"
 
@@ -308,14 +309,15 @@ void CBridge::StartEventsPollAsync()
 				.payloadJson = pollResponse.payloadJson,
 			};
 
-			if (!::PostMessage(
+			CMgrMessage::Instance().PostOwnedPayloadToHwnd(
 				hwnd,
 				completedMessage,
-				reinterpret_cast<WPARAM>(payload),
-				0))
-			{
-				delete payload;
-			}
+				payload,
+				true,
+				[](void* raw)
+				{
+					delete static_cast<CBridgePollCompletionPayload*>(raw);
+				});
 		})
 		.detach();
 }

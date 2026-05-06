@@ -38,6 +38,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\CMgrMessageTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigLoaderTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigSchemaServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
@@ -211,6 +212,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\filesystem\\SafeOpenSync.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\DiagnosticsRegressionComparator.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\app\\CMgrMessage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.h" />
@@ -218,3 +220,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+

@@ -3,6 +3,7 @@
 #include "framework.h"
 
 #include "BlazeClawMfcApp.h"
+#include "CMgrMessage.h"
 #include <atlconv.h>
 #include <optional>
 #include <algorithm>
@@ -145,7 +146,9 @@ CMainFrame::CMainFrame() noexcept
 }
 
 CMainFrame::~CMainFrame()
-{}
+{
+	CMgrMessage::Instance().Shutdown();
+}
 
 LRESULT CMainFrame::OnCreateMdiGroup(WPARAM, LPARAM)
 {
@@ -274,6 +277,16 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CMDIFrameWndEx::OnCreate(lpCreateStruct) == -1)
 		return -1;
+
+	CMgrMessage::Instance().Initialize(m_hWnd);
+	CMgrMessage::Instance().RegisterMessage({
+		.messageId = kMsgAppendToolStatusLine,
+		.name = "kMsgAppendToolStatusLine",
+		.producer = "CMgrMessage producer helpers",
+		.consumer = "CMainFrame::OnAppendToolStatusLine",
+		.payloadContract = "LPARAM: CString*",
+		.threadContract = "Produced on worker/UI, consumed on UI"
+	});
 
 	BOOL bNameValid;
 

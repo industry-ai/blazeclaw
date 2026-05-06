@@ -23,9 +23,12 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 #include "MainFrame.h"
+#include "CMgrMessage.h"
 #include "ChatUiStartupResolver.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/GatewayProtocolModels.h"
+
+#include <functional>
 
 #include <cwctype>
 #include <cctype>
@@ -938,12 +941,12 @@ namespace {
 		}
 
 		auto* messageLine = new CString(line);
-		if (!app->m_pMainWnd->PostMessage(
+		CMgrMessage::Instance().Initialize(app->m_pMainWnd->GetSafeHwnd());
+		if (!CMgrMessage::Instance().PostOwnedToolStatusLine(
 			kMsgAppendToolStatusLine,
-			0,
-			reinterpret_cast<LPARAM>(messageLine)))
+			messageLine))
 		{
-			delete messageLine;
+			return;
 		}
 	}
 
@@ -2893,14 +2896,15 @@ void CBlazeClawMFCView::ReportRunSkillPathsToToolOutput(const std::string& runId
 				.elapsedMs = GetTickCount64() - startedAtMs,
 				.response = std::move(response),
 			};
-			if (!::PostMessage(
+			CMgrMessage::Instance().PostOwnedPayloadToHwnd(
 				hwnd,
 				kSkillPathLookupCompletedMessage,
-				reinterpret_cast<WPARAM>(payload),
-				0))
-			{
-				delete payload;
-			}
+				payload,
+				true,
+				[](void* raw)
+				{
+					delete static_cast<SkillPathLookupCompletionPayload*>(raw);
+				});
 		})
 		.detach();
 }
@@ -3138,6 +3142,85 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	std::string channel;
 	if (!blazeclaw::gateway::json::FindStringField(message, "channel", channel))
+	{
+		CMgrMessage::Instance().DispatchWebChannelMessage("", message);
+		return;
+	}
+
+	std::unordered_map<std::string, std::function<bool()>> localHandlers;
+	localHandlers.emplace(
+		"blazeclaw.gateway.lifecycle.subscribe",
+		[this]() -> bool
+		{
+			m_bridge.ResetLifecycle();
+			PumpBridgeLifecycle();
+			return true;
+		});
+	localHandlers.emplace(
+		"blazeclaw.gateway.chat.push.state",
+		[this, &message]() -> bool
+		{
+			std::string state;
+			std::string reason;
+			blazeclaw::gateway::json::FindStringField(message, "state", state);
+			blazeclaw::gateway::json::FindStringField(message, "reason", reason);
+			const std::string lowered = ToLowerAscii(state);
+			if (lowered == "connected" || lowered == "reconnected")
+			{
+				m_bridge.HandlePushConnected(reason.empty() ? "push-state-connected" : reason);
+				return true;
+			}
+			if (lowered == "disconnected" || lowered == "degraded")
+			{
+				m_bridge.HandlePushDisconnected(reason.empty() ? "push-state-disconnected" : reason);
+				return true;
+			}
+			return false;
+		});
+	localHandlers.emplace(
+		"blazeclaw.gateway.chat.push.event",
+		[this, &message]() -> bool
+		{
+			std::string eventRaw;
+			if (!blazeclaw::gateway::json::FindRawField(message, "event", eventRaw))
+			{
+				return false;
+			}
+			std::string seqRaw;
+			std::optional<std::uint64_t> seq;
+			if (blazeclaw::gateway::json::FindRawField(message, "seq", seqRaw))
+			{
+				try
+				{
+					seq = static_cast<std::uint64_t>(std::stoull(blazeclaw::gateway::json::Trim(seqRaw)));
+				}
+				catch (...)
+				{
+					seq = std::nullopt;
+				}
+			}
+			m_bridge.HandlePushChatEventFrame(eventRaw, seq);
+			return true;
+		});
+	localHandlers.emplace(
+		"openclaw.ws.shim.ready",
+		[this, &message]() -> bool
+		{
+			AppendChatProcedureStatusLine(L"runtime.shim.ready", message);
+			return true;
+		});
+
+	CMgrMessage::Instance().ClearWebChannelHandlers();
+	for (auto& entry : localHandlers)
+	{
+		CMgrMessage::Instance().RegisterWebChannelHandler(
+			entry.first,
+			[fn = std::move(entry.second)](const std::string&) mutable -> bool
+			{
+				return fn();
+			});
+	}
+	if (CMgrMessage::Instance().DispatchWebChannelMessage(channel, message))
 	{
 		return;
 	}
