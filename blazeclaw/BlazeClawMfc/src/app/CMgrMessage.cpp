@@ -138,6 +138,7 @@ bool CMgrMessage::PostToHwnd(
 		std::lock_guard<std::mutex> lock(m_mutex);
 		engine = m_engine;
 	}
+
 	if (!engine)
 	{
 		m_postFailures.fetch_add(1, std::memory_order_relaxed);

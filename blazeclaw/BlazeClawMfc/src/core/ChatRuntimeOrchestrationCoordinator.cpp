@@ -50,20 +50,20 @@ ChatRuntimeOrchestrationCoordinator::RunEmbeddedToolOrchestrationOrProvider(
 	const std::string& resolvedPromptForRunNarrow,
 	const std::string& runtimeMessage,
 	const std::string& activeProvider,
-	const std::string& activeModel) {
+	const std::string& activeModel)
+{
 	auto toolBindings = manager.BuildEmbeddedToolBindings();
 
-	const bool canaryEligible = manager.IsEmbeddedDynamicLoopCanaryEligible(
-		activeProvider,
-		sessionId);
+	const bool canaryEligible = manager.IsEmbeddedDynamicLoopCanaryEligible(activeProvider, sessionId);
 	const bool promotionReady = manager.IsEmbeddedDynamicLoopPromotionReady();
 	const bool enableEmbeddedDynamicLoop =
 		manager.m_activeConfig.embedded.dynamicToolLoopEnabled &&
 		(canaryEligible || promotionReady);
-	manager.m_state.embeddedRuntime.lastDynamicLoopEnabled = enableEmbeddedDynamicLoop;
-	manager.m_state.embeddedRuntime.lastCanaryEligible = canaryEligible;
-	manager.m_state.embeddedRuntime.lastPromotionReady = promotionReady;
-	manager.m_state.embeddedRuntime.lastFallbackUsed = false;
+
+	manager.m_state.embeddedRuntime.lastDynamicLoopEnabled	= enableEmbeddedDynamicLoop;
+	manager.m_state.embeddedRuntime.lastCanaryEligible		= canaryEligible;
+	manager.m_state.embeddedRuntime.lastPromotionReady		= promotionReady;
+	manager.m_state.embeddedRuntime.lastFallbackUsed		= false;
 	manager.m_state.embeddedRuntime.lastFallbackReason.clear();
 
 	const auto embeddedExecution = manager.m_piEmbeddedService.ExecuteRun(
@@ -94,6 +94,7 @@ ChatRuntimeOrchestrationCoordinator::RunEmbeddedToolOrchestrationOrProvider(
 				return manager.IsEmbeddedRunCancelled(runId);
 			},
 		});
+
 	manager.ClearEmbeddedRunCancelled(request.runId);
 
 	if (!embeddedExecution.accepted) {
