@@ -3,9 +3,11 @@
 
 #include "EmbeddingsService.h"
 #include "ServiceManager.h"
+#include "../app/CMgrMessage.h"
 #include "../gateway/Telemetry.h"
 
 #include <algorithm>
+#include <afxstr.h>
 #include <cctype>
 #include <string>
 #include <vector>
@@ -346,6 +348,11 @@ namespace blazeclaw::core {
 						resolvedPrompt.wide,
 						static_cast<std::size_t>(
 							manager.m_activeConfig.skills.limits.maxSkillsPromptChars));
+				constexpr UINT kMsgAppendToolStatusLine = WM_USER + 0x101;
+				const std::wstring runtimeMessageWide = Utf8ToWide(runtimeMessage);
+				CMgrMessage::Instance().PostOwnedToolStatusLine(
+					kMsgAppendToolStatusLine,
+					new CString(runtimeMessageWide.c_str()));
 				const std::string activeProvider = manager.m_activeChatProvider;
 				const std::string activeModel = manager.m_activeChatModel;
 				auto executeRequest = [&manager,
