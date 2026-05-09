@@ -1,8 +1,6 @@
 #include "pch.h"
 #include "GatewayHostEx.h"
 
-#include "GatewayHost.h"
-
 namespace blazeclaw::gateway {
 
 	GatewayHostEx::GatewayHostEx(const GatewayHostExDependencies& dependencies) noexcept
@@ -10,7 +8,7 @@ namespace blazeclaw::gateway {
 
 	protocol::ResponseFrame GatewayHostEx::RouteRequest(
 		const protocol::RequestFrame& request) const {
-		if (m_dependencies.legacyHost == nullptr) {
+		if (!m_dependencies.routeLegacyRequest) {
 			return protocol::ErrorResponse(
 				request,
 				protocol::ErrorShape{
@@ -22,12 +20,12 @@ namespace blazeclaw::gateway {
 				});
 		}
 
-		return m_dependencies.legacyHost->RouteRequestLegacy(request);
+		return m_dependencies.routeLegacyRequest(request);
 	}
 
 	bool GatewayHostEx::IsHealthy() const noexcept {
-		return m_dependencies.legacyHost != nullptr &&
-			m_dependencies.legacyHost->IsHealthy();
+		return m_dependencies.isLegacyHealthy &&
+			m_dependencies.isLegacyHealthy();
 	}
 
 } // namespace blazeclaw::gateway

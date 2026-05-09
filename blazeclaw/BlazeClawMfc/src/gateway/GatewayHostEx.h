@@ -2,13 +2,15 @@
 
 #include "IGatewayHostRuntime.h"
 
+#include <functional>
+
 namespace blazeclaw::gateway {
 
-	class GatewayHost;
 	class ChatRunPipelineOrchestrator;
 
 	struct GatewayHostExDependencies {
-		const GatewayHost* legacyHost = nullptr;
+		std::function<protocol::ResponseFrame(const protocol::RequestFrame&)> routeLegacyRequest;
+		std::function<bool()> isLegacyHealthy;
 		const ChatRunPipelineOrchestrator* stagePipeline = nullptr;
 	};
 

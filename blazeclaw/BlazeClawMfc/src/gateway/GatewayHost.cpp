@@ -382,7 +382,12 @@ namespace blazeclaw::gateway {
 		if (!m_stageRuntimeHost) {
 			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
 				GatewayHostExDependencies{
-					.legacyHost = this,
+					.routeLegacyRequest = [this](const protocol::RequestFrame& request) {
+						return RouteRequestLegacy(request);
+					},
+					.isLegacyHealthy = [this]() {
+						return IsHealthy();
+					},
 					.stagePipeline = &m_chatRunPipelineOrchestrator,
 				});
 		}
@@ -1738,7 +1743,12 @@ namespace blazeclaw::gateway {
 		if (mutableThis->m_stageRuntimeHost == nullptr) {
 			mutableThis->m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
 				GatewayHostExDependencies{
-					.legacyHost = this,
+					.routeLegacyRequest = [this](const protocol::RequestFrame& routedRequest) {
+						return RouteRequestLegacy(routedRequest);
+					},
+					.isLegacyHealthy = [this]() {
+						return IsHealthy();
+					},
 					.stagePipeline = &m_chatRunPipelineOrchestrator,
 				});
 		}
