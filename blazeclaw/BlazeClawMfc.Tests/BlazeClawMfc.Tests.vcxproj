@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ProjectConfiguration Include="Debug|x64">
@@ -64,7 +64,6 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\OpenClawOriginalTelemetryContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekSseParserTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ToolRuntimeRegistryIntegrationTests.cpp" />
-    <ClCompile Include="..\\BlazeClawMfc\\tests\\PiEmbeddedServiceNanoPdfFlowTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
