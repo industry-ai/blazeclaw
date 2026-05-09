@@ -411,7 +411,19 @@ namespace blazeclaw::gateway {
 		}
 
 		const std::string catalogPath = ResolveExtensionsCatalogPath();
+		const auto extensionCatalogLoadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
 		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
+		const auto extensionCatalogLoadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
+		EmitTelemetryEvent(
+			"gateway.startup.extensions.catalog_load",
+			std::string("{\"catalogPath\":") + JsonString(catalogPath) +
+			",\"elapsedMs\":" +
+			std::to_string(extensionCatalogLoadEndMs >= extensionCatalogLoadStartMs
+				? (extensionCatalogLoadEndMs - extensionCatalogLoadStartMs)
+				: 0) +
+			"}");
 		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
 			"blazeclaw/skills-bundled",
 			"blazeclaw/skills",
@@ -420,10 +432,14 @@ namespace blazeclaw::gateway {
 			"skills-openclaw-original",
 		});
 		EmitSkillRootDiagnostics("start_runtime_services", m_runtimeResolvedSkillDirectories);
+		const auto startupSkillLoadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
+		std::size_t startupSkillLoadedTotal = 0;
 		for (const auto& directory : m_runtimeResolvedSkillDirectories) {
 			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now().time_since_epoch()).count();
 			const auto loadedCount = m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+			startupSkillLoadedTotal += loadedCount;
 			const auto loadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now().time_since_epoch()).count();
 			EmitTelemetryEvent(
@@ -433,9 +449,32 @@ namespace blazeclaw::gateway {
 				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
 				"}");
 		}
+		const auto startupSkillLoadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
+		EmitTelemetryEvent(
+			"gateway.startup.skills.aggregate_load",
+			std::string("{\"roots\":") + std::to_string(m_runtimeResolvedSkillDirectories.size()) +
+			",\"loadedTotal\":" + std::to_string(startupSkillLoadedTotal) +
+			",\"elapsedMs\":" +
+			std::to_string(startupSkillLoadEndMs >= startupSkillLoadStartMs
+				? (startupSkillLoadEndMs - startupSkillLoadStartMs)
+				: 0) +
+			"}");
 
+		const auto extensionActivationStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+		const auto extensionActivationEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count();
+		EmitTelemetryEvent(
+			"gateway.startup.extensions.activation",
+			std::string("{\"catalogPath\":") + JsonString(catalogPath) +
+			",\"elapsedMs\":" +
+			std::to_string(extensionActivationEndMs >= extensionActivationStartMs
+				? (extensionActivationEndMs - extensionActivationStartMs)
+				: 0) +
+			"}");
 		const auto* extensionRegistry =
 			m_pluginRuntimeState.RequireActiveRegistry(
 				&m_extensionLifecycle.GetExtensions(),
