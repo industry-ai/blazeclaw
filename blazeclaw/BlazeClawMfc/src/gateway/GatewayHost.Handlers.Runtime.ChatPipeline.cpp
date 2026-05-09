@@ -2135,9 +2135,37 @@ namespace blazeclaw::gateway {
 								emitAssistantDeltaChunk(assistantText, assistantText.size());
 							}
 							else {
-								const std::size_t n =
-									(std::min)(assistantText.size(), std::size_t{ 64 });
-								emitAssistantDeltaChunk(assistantText.substr(0, n), n);
+								bool emittedIncrementalProviderDeltas = false;
+								std::size_t incrementalCursor = 0;
+								for (const auto& providerDelta : assistantDeltas) {
+									if (providerDelta.empty()) {
+										continue;
+									}
+									if (incrementalCursor + providerDelta.size() > assistantText.size()) {
+										emittedIncrementalProviderDeltas = false;
+										incrementalCursor = 0;
+										break;
+									}
+									const std::string expectedChunk = assistantText.substr(incrementalCursor, providerDelta.size());
+									if (expectedChunk != providerDelta) {
+										emittedIncrementalProviderDeltas = false;
+										incrementalCursor = 0;
+										break;
+									}
+									incrementalCursor += providerDelta.size();
+									emitAssistantDeltaChunk(providerDelta, incrementalCursor);
+									emittedIncrementalProviderDeltas = true;
+								}
+								if (!emittedIncrementalProviderDeltas || incrementalCursor == 0) {
+									const std::size_t n =
+										(std::min)(assistantText.size(), std::size_t{ 64 });
+									emitAssistantDeltaChunk(assistantText.substr(0, n), n);
+									EmitTelemetryEvent(
+										"gateway.chat.send.synthetic_fallback",
+										std::string("{\"runId\":") + JsonString(runId) +
+										",\"sessionKey\":" + JsonString(sessionKey) +
+										",\"reason\":\"provider_deltas_not_prefix_consistent\"}");
+								}
 							}
 						}
 						else if (!assistantText.empty()) {
