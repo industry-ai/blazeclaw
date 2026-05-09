@@ -801,7 +801,43 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, host.ExportParityLifecycleTraceJson());
 			});
 		host.m_dispatcher.Register("gateway.health", [&host](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"status\":\"ok\",\"running\":" + std::string(host.IsRunning() ? "true" : "false") + "}");
+			const bool queueRuntimeReady =
+				host.m_dispatchInitialized &&
+				host.m_runtimeHandlersInitialized &&
+				host.m_runtimeQueueCapacity > 0;
+			const bool embeddingsRuntimeReady =
+				host.m_embeddingsGenerateCallback || host.m_embeddingsBatchCallback;
+			const bool remoteProviderReady = !host.m_runtimeDeepSeekApiKey.empty();
+			const bool backendReady =
+				queueRuntimeReady && embeddingsRuntimeReady && remoteProviderReady;
+			const bool hostCoreReady =
+				host.m_running &&
+				host.m_initialized &&
+				host.m_dispatchInitialized &&
+				host.m_runtimeHandlersInitialized;
+			const bool ready = hostCoreReady && backendReady;
+
+			return protocol::OkResponse(request, "{\"status\":\"" + std::string(ready ? "ok" : "degraded") +
+				"\",\"running\":" + std::string(host.IsRunning() ? "true" : "false") +
+				",\"ready\":" + std::string(ready ? "true" : "false") +
+				",\"backendReady\":" + std::string(backendReady ? "true" : "false") +
+				",\"backend\":{\"queueRuntime\":{\"ready\":" +
+				std::string(queueRuntimeReady ? "true" : "false") +
+				",\"queueDepth\":" + std::to_string(host.m_runtimeQueueDepth) +
+				",\"running\":" + std::to_string(host.m_runtimeRunningCount) +
+				",\"capacity\":" + std::to_string(host.m_runtimeQueueCapacity) +
+				"},\"embeddingsRuntime\":{\"ready\":" +
+				std::string(embeddingsRuntimeReady ? "true" : "false") +
+				",\"generateCallbackConfigured\":" +
+				std::string(host.m_embeddingsGenerateCallback ? "true" : "false") +
+				",\"batchCallbackConfigured\":" +
+				std::string(host.m_embeddingsBatchCallback ? "true" : "false") +
+				"},\"remoteProvider\":{\"ready\":" +
+				std::string(remoteProviderReady ? "true" : "false") +
+				",\"provider\":\"deepseek\",\"apiKeyConfigured\":" +
+				std::string(remoteProviderReady ? "true" : "false") +
+				",\"baseUrl\":" + JsonString(host.m_runtimeDeepSeekBaseUrl) +
+				"}}}");
 			});
 		host.m_dispatcher.Register("status", [&host](const protocol::RequestFrame& request) {
 			auto forwarded = request;

@@ -146,6 +146,19 @@ namespace blazeclaw::gateway {
 				[&host](const protocol::RequestFrame& request) {
 					const auto health =
 						executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
+					const std::uint64_t generatedAtEpochMs =
+						health.generatedAtEpochMs > 0
+						? health.generatedAtEpochMs
+						: static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+							std::chrono::system_clock::now().time_since_epoch()).count());
+					const std::uint64_t expiresAtEpochMs = generatedAtEpochMs + health.ttlMs;
+					const bool queueRuntimeReady =
+						host.m_dispatchInitialized &&
+						host.m_runtimeHandlersInitialized &&
+						host.m_runtimeQueueCapacity > 0;
+					const bool embeddingsRuntimeReady =
+						host.m_embeddingsGenerateCallback || host.m_embeddingsBatchCallback;
+					const bool remoteProviderReady = !host.m_runtimeDeepSeekApiKey.empty();
 
 					std::string probesJson = "[";
 					for (std::size_t index = 0; index < health.probes.size(); ++index) {
@@ -166,6 +179,36 @@ namespace blazeclaw::gateway {
 							",\"expiresAtEpochMs\":" +
 							std::to_string(probe.expiresAtEpochMs) + "}";
 					}
+					if (!health.probes.empty()) {
+						probesJson += ",";
+					}
+					probesJson +=
+						"{\"key\":\"backend:queue_runtime\""
+						",\"state\":\"" + std::string(queueRuntimeReady ? "ready" : "degraded") +
+						"\",\"reasonCode\":\"" + std::string(queueRuntimeReady ? "ok" : "queue_runtime_unavailable") +
+						"\",\"reasonMessage\":\"" + std::string(queueRuntimeReady
+							? "queue runtime and dispatcher initialized"
+							: "queue runtime requires initialized dispatcher/handlers and positive capacity") +
+						"\",\"checkedAtEpochMs\":" + std::to_string(generatedAtEpochMs) +
+						",\"expiresAtEpochMs\":" + std::to_string(expiresAtEpochMs) + "}";
+					probesJson +=
+						",{\"key\":\"backend:embeddings_runtime\""
+						",\"state\":\"" + std::string(embeddingsRuntimeReady ? "ready" : "degraded") +
+						"\",\"reasonCode\":\"" + std::string(embeddingsRuntimeReady ? "ok" : "embeddings_runtime_unavailable") +
+						"\",\"reasonMessage\":\"" + std::string(embeddingsRuntimeReady
+							? "embeddings callbacks configured"
+							: "embeddings callbacks are not configured") +
+						"\",\"checkedAtEpochMs\":" + std::to_string(generatedAtEpochMs) +
+						",\"expiresAtEpochMs\":" + std::to_string(expiresAtEpochMs) + "}";
+					probesJson +=
+						",{\"key\":\"backend:remote_provider\""
+						",\"state\":\"" + std::string(remoteProviderReady ? "ready" : "degraded") +
+						"\",\"reasonCode\":\"" + std::string(remoteProviderReady ? "ok" : "remote_provider_unavailable") +
+						"\",\"reasonMessage\":\"" + std::string(remoteProviderReady
+							? "remote provider credentials configured"
+							: "remote provider credentials are not configured") +
+						"\",\"checkedAtEpochMs\":" + std::to_string(generatedAtEpochMs) +
+						",\"expiresAtEpochMs\":" + std::to_string(expiresAtEpochMs) + "}";
 					probesJson += "]";
 
 					const auto runtimeTools = host.ListRuntimeTools();
@@ -278,14 +321,31 @@ namespace blazeclaw::gateway {
 						: "missing_required_tools";
 					return protocol::OkResponse(request, "{\"probes\":" + probesJson +
 						",\"count\":" +
-						std::to_string(health.probes.size()) +
+						std::to_string(health.probes.size() + 3) +
 						",\"generatedAtEpochMs\":" +
-						std::to_string(health.generatedAtEpochMs) +
+						std::to_string(generatedAtEpochMs) +
 						",\"ttlMs\":" + std::to_string(health.ttlMs) +
 						",\"requiredToolsReady\":" +
 						std::string(requiredToolsReady ? "true" : "false") +
 						",\"requiredTools\":" + requiredToolsJson +
 						",\"missingRequiredTools\":" + missingRequiredToolsJson +
+						",\"backend\":{\"queueRuntime\":{\"ready\":" +
+						std::string(queueRuntimeReady ? "true" : "false") +
+						",\"queueDepth\":" + std::to_string(host.m_runtimeQueueDepth) +
+						",\"running\":" + std::to_string(host.m_runtimeRunningCount) +
+						",\"capacity\":" + std::to_string(host.m_runtimeQueueCapacity) +
+						"},\"embeddingsRuntime\":{\"ready\":" +
+						std::string(embeddingsRuntimeReady ? "true" : "false") +
+						",\"generateCallbackConfigured\":" +
+						std::string(host.m_embeddingsGenerateCallback ? "true" : "false") +
+						",\"batchCallbackConfigured\":" +
+						std::string(host.m_embeddingsBatchCallback ? "true" : "false") +
+						"},\"remoteProvider\":{\"ready\":" +
+						std::string(remoteProviderReady ? "true" : "false") +
+						",\"provider\":\"deepseek\",\"apiKeyConfigured\":" +
+						std::string(remoteProviderReady ? "true" : "false") +
+						",\"baseUrl\":" + JsonString(host.m_runtimeDeepSeekBaseUrl) +
+						"}}" +
 						",\"diagnosticStatus\":" +
 						JsonString(diagnosticStatus) + "}");
 				});
@@ -293,11 +353,22 @@ namespace blazeclaw::gateway {
 			host.m_dispatcher.Register(
 				"gateway.runtime.health.readiness",
 				[&host](const protocol::RequestFrame& request) {
-					const bool ready =
+					const bool queueRuntimeReady =
+						host.m_dispatchInitialized &&
+						host.m_runtimeHandlersInitialized &&
+						host.m_runtimeQueueCapacity > 0;
+					const bool embeddingsRuntimeReady =
+						host.m_embeddingsGenerateCallback || host.m_embeddingsBatchCallback;
+					const bool remoteProviderReady = !host.m_runtimeDeepSeekApiKey.empty();
+					const bool backendReady =
+						queueRuntimeReady && embeddingsRuntimeReady && remoteProviderReady;
+
+					const bool hostCoreReady =
 						host.m_running &&
 						host.m_initialized &&
 						host.m_dispatchInitialized &&
 						host.m_runtimeHandlersInitialized;
+					const bool ready = hostCoreReady && backendReady;
 
 					std::string reasonsJson = "[";
 					bool first = true;
@@ -321,6 +392,15 @@ namespace blazeclaw::gateway {
 					if (!host.m_runtimeHandlersInitialized) {
 						appendReason("runtime_handlers_not_initialized");
 					}
+					if (!queueRuntimeReady) {
+						appendReason("queue_runtime_unavailable");
+					}
+					if (!embeddingsRuntimeReady) {
+						appendReason("embeddings_runtime_unavailable");
+					}
+					if (!remoteProviderReady) {
+						appendReason("remote_provider_unavailable");
+					}
 
 					reasonsJson += "]";
 
@@ -334,6 +414,25 @@ namespace blazeclaw::gateway {
 						std::string(host.m_dispatchInitialized ? "true" : "false") +
 						",\"runtimeHandlersInitialized\":" +
 						std::string(host.m_runtimeHandlersInitialized ? "true" : "false") +
+						",\"backendReady\":" +
+						std::string(backendReady ? "true" : "false") +
+						",\"backend\":{\"queueRuntime\":{\"ready\":" +
+						std::string(queueRuntimeReady ? "true" : "false") +
+						",\"queueDepth\":" + std::to_string(host.m_runtimeQueueDepth) +
+						",\"running\":" + std::to_string(host.m_runtimeRunningCount) +
+						",\"capacity\":" + std::to_string(host.m_runtimeQueueCapacity) +
+						"},\"embeddingsRuntime\":{\"ready\":" +
+						std::string(embeddingsRuntimeReady ? "true" : "false") +
+						",\"generateCallbackConfigured\":" +
+						std::string(host.m_embeddingsGenerateCallback ? "true" : "false") +
+						",\"batchCallbackConfigured\":" +
+						std::string(host.m_embeddingsBatchCallback ? "true" : "false") +
+						"},\"remoteProvider\":{\"ready\":" +
+						std::string(remoteProviderReady ? "true" : "false") +
+						",\"provider\":\"deepseek\",\"apiKeyConfigured\":" +
+						std::string(remoteProviderReady ? "true" : "false") +
+						",\"baseUrl\":" + JsonString(host.m_runtimeDeepSeekBaseUrl) +
+						"}}" +
 						",\"reasons\":" + reasonsJson +
 						"}");
 				});
