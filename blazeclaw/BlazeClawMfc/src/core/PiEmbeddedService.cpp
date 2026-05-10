@@ -493,8 +493,10 @@ namespace blazeclaw::core {
 				return plan;
 			}
 
-			const std::string promptWindow =
-				ToLowerCopy(request.skillsPrompt + "\n" + request.run.message);
+			// Only derive dynamic tool plans from the user's current message.
+			// Using the injected skills prompt here causes false-positive matches
+			// for nearly every run because that prompt enumerates available tools.
+			const std::string promptWindow = ToLowerCopy(request.run.message);
 			std::set<std::string> visited;
 
 			for (std::size_t step = 0; step < maxSteps; ++step) {
