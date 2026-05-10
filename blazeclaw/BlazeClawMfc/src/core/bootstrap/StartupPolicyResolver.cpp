@@ -508,7 +508,7 @@ namespace blazeclaw::core::bootstrap {
 		RuntimeOrchestrationPolicySettings settings;
 		settings.localModelStartupLoadEnabled = ReadBoolEnvOrDefault(
 			L"BLAZECLAW_LOCALMODEL_STARTUP_LOAD_ENABLED",
-			false);
+			true);
 		settings.startupSkillsRefreshEnabled = ReadBoolEnvOrDefault(
 			L"BLAZECLAW_SKILLS_STARTUP_REFRESH_ENABLED",
 			false);

@@ -302,8 +302,11 @@ namespace {
 		if (!runtime.tokenizerPath.empty()) {
 			blazeclaw::core::localmodel::TokenizerBridge tokenizer;
 			std::string tokenizerLoadError;
-			const std::filesystem::path tokenizerPath(
-				ToWide(runtime.tokenizerPath));
+			std::filesystem::path tokenizerPath(ToWide(runtime.tokenizerPath));
+			if (tokenizerPath.is_relative()) {
+				tokenizerPath =
+					std::filesystem::path(config.localModel.storageRoot) / tokenizerPath;
+			}
 			if (!tokenizer.Load(tokenizerPath, tokenizerLoadError)) {
 				const CString tokenizerErrorLine(
 					(L"[Chat] startup.localModel.tokenizer.roundtrip - load_failed: " +
@@ -351,15 +354,25 @@ namespace {
 		}
 
 		if (runtime.ready) {
-			AppendMainFrameStatusLine(
-				L"[Chat] startup.localModel.qwenContract - promptTemplate=qwen3-chat markers=<|im_start|>/<|im_end|> decodeStop=<|im_end|>");
+			const bool llamaRuntime =
+				runtime.effectiveExecutionProvider == "llama.cpp" ||
+				runtime.provider == "llama.cpp" ||
+				runtime.modelPath.ends_with(".gguf");
+			if (!llamaRuntime) {
+				AppendMainFrameStatusLine(
+					L"[Chat] startup.localModel.qwenContract - promptTemplate=qwen3-chat markers=<|im_start|>/<|im_end|> decodeStop=<|im_end|>");
+			}
 			if (services.LocalModelActivationEnabled()) {
 				AppendMainFrameStatusLine(
-					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
+					llamaRuntime
+					? L"[Chat] startup.localModel.loaded - local llama.cpp GGUF runtime ready and active"
+					: L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
 			}
 			else {
 				AppendMainFrameStatusLine(
-					L"[Chat] startup.localModel.loaded - local ONNX runtime ready but fallback is active");
+					llamaRuntime
+					? L"[Chat] startup.localModel.loaded - local llama.cpp GGUF runtime ready but fallback is active"
+					: L"[Chat] startup.localModel.loaded - local ONNX runtime ready but fallback is active");
 			}
 			return;
 		}
