@@ -144,18 +144,44 @@ namespace blazeclaw::core::localmodel {
 
 		std::optional<std::filesystem::path> ResolveLlamaCliExecutable() {
 			std::vector<std::filesystem::path> baseDirs;
-			char* raw = nullptr;
-			size_t rawSize = 0;
-			if (_dupenv_s(&raw, &rawSize, "BLAZECLAW_LLAMA_CPP_BIN_DIR") == 0 && raw != nullptr) {
-				const std::string envBin(raw);
-				free(raw);
-				if (!envBin.empty()) {
-					baseDirs.emplace_back(envBin);
+			auto appendEnvDir = [&baseDirs](const char* envName) {
+				char* raw = nullptr;
+				size_t rawSize = 0;
+				if (_dupenv_s(&raw, &rawSize, envName) == 0 && raw != nullptr) {
+					const std::string value(raw);
+					free(raw);
+					if (!value.empty()) {
+						baseDirs.emplace_back(value);
+					}
+				}
+			};
+
+			appendEnvDir("BLAZECLAW_LLAMA_CPP_BIN_DIR");
+
+			char* rawRoot = nullptr;
+			size_t rawRootSize = 0;
+			if (_dupenv_s(&rawRoot, &rawRootSize, "BLAZECLAW_LLAMA_CPP_ROOT") == 0 && rawRoot != nullptr) {
+				const std::filesystem::path root(rawRoot);
+				free(rawRoot);
+				if (!root.empty()) {
+					baseDirs.emplace_back(root / "build" / "bin");
+					baseDirs.emplace_back(root / "bin");
 				}
 			}
 
-			baseDirs.emplace_back(std::filesystem::path("..") / "llama.cpp" / "build" / "bin");
+			std::error_code cwdEc;
+			const auto cwd = std::filesystem::current_path(cwdEc);
+			if (!cwdEc) {
+				baseDirs.emplace_back(cwd / "llama.cpp" / "build" / "bin");
+				baseDirs.emplace_back(cwd / ".." / "llama.cpp" / "build" / "bin");
+				baseDirs.emplace_back(cwd / ".." / ".." / "llama.cpp" / "build" / "bin");
+				baseDirs.emplace_back(cwd / ".." / ".." / ".." / "llama.cpp" / "build" / "bin");
+			}
+
 			baseDirs.emplace_back(std::filesystem::path("llama.cpp") / "build" / "bin");
+			baseDirs.emplace_back(std::filesystem::path("..") / "llama.cpp" / "build" / "bin");
+			baseDirs.emplace_back(std::filesystem::path("..") / ".." / "llama.cpp" / "build" / "bin");
+			baseDirs.emplace_back(std::filesystem::path("..") / ".." / ".." / "llama.cpp" / "build" / "bin");
 
 			const std::vector<std::wstring> exeNames = {
 				L"llama-cli.exe",
