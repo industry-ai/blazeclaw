@@ -54,10 +54,11 @@
     <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetName>BlazeClaw</TargetName>
-    <LlamaCppRoot Condition="'$(LlamaCppRoot)'==''">$(SolutionDir)..\llama.cpp</LlamaCppRoot>
+    <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(SolutionDir)llama.cpp\include\llama.h')">$(SolutionDir)llama.cpp</LlamaCppRoot>
+    <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(ProjectDir)..\llama.cpp\include\llama.h')">$(ProjectDir)..\llama.cpp</LlamaCppRoot>
     <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include;$(LlamaCppRoot)\ggml\include</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\lib</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\bin</LlamaCppBinDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\src\$(Configuration);$(LlamaCppRoot)\build\ggml\src\$(Configuration)</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\bin\$(Configuration)</LlamaCppBinDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -75,8 +76,11 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(LlamaCppLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(LlamaCppRoot)\build\src\$(Configuration)\llama.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-base.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -98,8 +102,11 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(LlamaCppLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(LlamaCppRoot)\build\src\$(Configuration)\llama.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-base.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />
@@ -530,28 +537,29 @@
     <OnnxRuntimeGpuOverrideDir>$(SolutionDir)third_party\onnxruntime-gpu\runtimes\win-x64\native</OnnxRuntimeGpuOverrideDir>
   </PropertyGroup>
   <PropertyGroup>
-    <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and '$(BLAZECLAW_LLAMA_CPP_ROOT)'!=''">$(BLAZECLAW_LLAMA_CPP_ROOT)</LlamaCppRoot>
+    <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and '$(BLAZECLAW_LLAMA_CPP_ROOT)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_ROOT)\include\llama.h')">$(BLAZECLAW_LLAMA_CPP_ROOT)</LlamaCppRoot>
+    <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(ProjectDir)..\llama.cpp\include\llama.h')">$(ProjectDir)..\llama.cpp</LlamaCppRoot>
     <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(ProjectDir)third_party\llama.cpp\include\llama.h')">$(ProjectDir)third_party\llama.cpp</LlamaCppRoot>
     <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(SolutionDir)third_party\llama.cpp\include\llama.h')">$(SolutionDir)third_party\llama.cpp</LlamaCppRoot>
     <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(SolutionDir)..\third_party\llama.cpp\include\llama.h')">$(SolutionDir)..\third_party\llama.cpp</LlamaCppRoot>
-    <LlamaCppRoot Condition="'$(LlamaCppRoot)'==''">$(ProjectDir)third_party\llama.cpp</LlamaCppRoot>
+    <LlamaCppRoot Condition="'$(LlamaCppRoot)'==''">$(ProjectDir)..\llama.cpp</LlamaCppRoot>
     <LlamaCppSourceRevision>vendor-snapshot-2026-04-17</LlamaCppSourceRevision>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_LIB_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_LIB_DIR)</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_BIN_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_BIN_DIR)</LlamaCppBinDir>
-    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\windows\x64\Debug\lib</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\windows\x64\Debug\bin</LlamaCppBinDir>
+    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)\llama.h')">$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)</LlamaCppIncludeDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_LIB_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_LIB_DIR)\llama.lib')">$(BLAZECLAW_LLAMA_CPP_LIB_DIR)</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_BIN_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_BIN_DIR)\llama.dll')">$(BLAZECLAW_LLAMA_CPP_BIN_DIR)</LlamaCppBinDir>
+    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include;$(LlamaCppRoot)\ggml\include</LlamaCppIncludeDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\src\Debug;$(LlamaCppRoot)\build\ggml\src\Debug</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\bin\Debug</LlamaCppBinDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_LIB_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_LIB_DIR)</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_BIN_DIR)'!=''">$(BLAZECLAW_LLAMA_CPP_BIN_DIR)</LlamaCppBinDir>
-    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\windows\x64\Release\lib</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\windows\x64\Release\bin</LlamaCppBinDir>
+    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)\llama.h')">$(BLAZECLAW_LLAMA_CPP_INCLUDE_DIR)</LlamaCppIncludeDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_LIB_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_LIB_DIR)\llama.lib')">$(BLAZECLAW_LLAMA_CPP_LIB_DIR)</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'=='' and '$(BLAZECLAW_LLAMA_CPP_BIN_DIR)'!='' and Exists('$(BLAZECLAW_LLAMA_CPP_BIN_DIR)\llama.dll')">$(BLAZECLAW_LLAMA_CPP_BIN_DIR)</LlamaCppBinDir>
+    <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include;$(LlamaCppRoot)\ggml\include</LlamaCppIncludeDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\src\Release;$(LlamaCppRoot)\build\ggml\src\Release</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\bin\Release</LlamaCppBinDir>
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(OnnxRuntimeGpuOverrideDir)')">
     <BlazeClawOnnxRuntimeGpuOverrideAssets Include="$(OnnxRuntimeGpuOverrideDir)\*.dll" />

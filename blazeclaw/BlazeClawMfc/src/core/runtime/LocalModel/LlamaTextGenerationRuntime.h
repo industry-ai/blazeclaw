@@ -41,9 +41,10 @@ namespace blazeclaw::core::localmodel {
 			const std::string& details);
 
 		mutable std::mutex m_mutex;
+		std::mutex m_generationMutex;
 		blazeclaw::config::AppConfig m_config;
 		LocalModelRuntimeSnapshot m_snapshot;
-		std::unique_ptr<SessionState> m_sessionState;
+		std::shared_ptr<SessionState> m_sessionState;
 		std::unordered_map<std::string, bool> m_cancelFlagsByRunId;
 	};
 
