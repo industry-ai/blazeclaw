@@ -3,8 +3,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <sstream>
 #include <vector>
+#include <Windows.h>
 
 #if __has_include(<llama.h>)
 #include <llama.h>
@@ -17,11 +21,30 @@ namespace blazeclaw::core::localmodel {
 
 	namespace {
 
+		struct ProcessStreamResult {
+			bool started = false;
+			bool cancelled = false;
+			DWORD exitCode = static_cast<DWORD>(-1);
+			std::string output;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
 		std::string ToNarrow(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
 			for (const wchar_t ch : value) {
 				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+
+			return output;
+		}
+
+		std::wstring ToWide(const std::string& value) {
+			std::wstring output;
+			output.reserve(value.size());
+			for (const char ch : value) {
+				output.push_back(static_cast<wchar_t>(static_cast<unsigned char>(ch)));
 			}
 
 			return output;
@@ -80,6 +103,239 @@ namespace blazeclaw::core::localmodel {
 
 			return static_cast<double>(generatedTokens) * 1000.0 /
 				static_cast<double>(latencyMs);
+		}
+
+		std::wstring QuoteCommandToken(const std::wstring& token) {
+			if (token.empty()) {
+				return L"\"\"";
+			}
+
+			const bool hasWhitespace =
+				token.find_first_of(L" \t\r\n\"") != std::wstring::npos;
+			if (!hasWhitespace) {
+				return token;
+			}
+
+			std::wstring quoted;
+			quoted.reserve(token.size() + 2);
+			quoted.push_back(L'\"');
+			for (const wchar_t ch : token) {
+				if (ch == L'\"') {
+					quoted += L"\\\"";
+				}
+				else {
+					quoted.push_back(ch);
+				}
+			}
+			quoted.push_back(L'\"');
+			return quoted;
+		}
+
+		std::wstring BuildCommandLine(const std::vector<std::wstring>& tokens) {
+			std::wstring commandLine;
+			for (std::size_t i = 0; i < tokens.size(); ++i) {
+				if (i > 0) {
+					commandLine.push_back(L' ');
+				}
+				commandLine += QuoteCommandToken(tokens[i]);
+			}
+			return commandLine;
+		}
+
+		std::optional<std::filesystem::path> ResolveLlamaCliExecutable() {
+			std::vector<std::filesystem::path> baseDirs;
+			char* raw = nullptr;
+			size_t rawSize = 0;
+			if (_dupenv_s(&raw, &rawSize, "BLAZECLAW_LLAMA_CPP_BIN_DIR") == 0 && raw != nullptr) {
+				const std::string envBin(raw);
+				free(raw);
+				if (!envBin.empty()) {
+					baseDirs.emplace_back(envBin);
+				}
+			}
+
+			baseDirs.emplace_back(std::filesystem::path("..") / "llama.cpp" / "build" / "bin");
+			baseDirs.emplace_back(std::filesystem::path("llama.cpp") / "build" / "bin");
+
+			const std::vector<std::wstring> exeNames = {
+				L"llama-cli.exe",
+				L"main.exe",
+			};
+
+			for (const auto& dir : baseDirs) {
+				std::error_code ec;
+				const auto normalized = std::filesystem::weakly_canonical(dir, ec);
+				const auto root = ec ? dir : normalized;
+				for (const auto& exeName : exeNames) {
+					const auto candidate = root / exeName;
+					if (std::filesystem::exists(candidate, ec) && !ec) {
+						return candidate;
+					}
+				}
+			}
+
+			for (const auto& exeName : exeNames) {
+				const std::filesystem::path candidate(exeName);
+				std::error_code ec;
+				if (std::filesystem::exists(candidate, ec) && !ec) {
+					return candidate;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		void DrainPipeAvailable(
+			HANDLE readPipe,
+			std::string& output,
+			const std::function<void(const std::string&)>& onChunk) {
+			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
+				return;
+			}
+
+			for (;;) {
+				DWORD available = 0;
+				if (!PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) ||
+					available == 0) {
+					break;
+				}
+
+				char buffer[4096]{};
+				DWORD bytesRead = 0;
+				if (!ReadFile(
+					readPipe,
+					buffer,
+					(std::min)(available, static_cast<DWORD>(sizeof(buffer))),
+					&bytesRead,
+					nullptr) || bytesRead == 0) {
+					break;
+				}
+
+				output.append(buffer, buffer + bytesRead);
+				if (onChunk) {
+					onChunk(std::string(buffer, buffer + bytesRead));
+				}
+			}
+		}
+
+		ProcessStreamResult RunProcessWithStreaming(
+			const std::vector<std::wstring>& commandTokens,
+			const std::function<bool()>& shouldCancel,
+			const std::function<void(const std::string&)>& onChunk) {
+			ProcessStreamResult result;
+			if (commandTokens.empty()) {
+				result.errorCode = "invalid_args";
+				result.errorMessage = "command is empty";
+				return result;
+			}
+
+			SECURITY_ATTRIBUTES security{};
+			security.nLength = sizeof(security);
+			security.bInheritHandle = TRUE;
+			security.lpSecurityDescriptor = nullptr;
+
+			HANDLE outputRead = nullptr;
+			HANDLE outputWrite = nullptr;
+			if (!CreatePipe(&outputRead, &outputWrite, &security, 0)) {
+				result.errorCode = "pipe_create_failed";
+				result.errorMessage = "failed to create process pipe";
+				return result;
+			}
+			SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0);
+
+			STARTUPINFOW startupInfo{};
+			startupInfo.cb = sizeof(startupInfo);
+			startupInfo.dwFlags = STARTF_USESTDHANDLES;
+			startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+			startupInfo.hStdOutput = outputWrite;
+			startupInfo.hStdError = outputWrite;
+
+			PROCESS_INFORMATION processInfo{};
+			std::wstring commandLine = BuildCommandLine(commandTokens);
+			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
+			mutableCommand.push_back(L'\0');
+
+			const BOOL created = CreateProcessW(
+				nullptr,
+				mutableCommand.data(),
+				nullptr,
+				nullptr,
+				TRUE,
+				CREATE_NO_WINDOW,
+				nullptr,
+				nullptr,
+				&startupInfo,
+				&processInfo);
+
+			CloseHandle(outputWrite);
+			outputWrite = nullptr;
+
+			if (!created) {
+				result.errorCode = "process_start_failed";
+				result.errorMessage = "failed to start llama process";
+				if (outputRead != nullptr) {
+					CloseHandle(outputRead);
+				}
+				return result;
+			}
+
+			result.started = true;
+			for (;;) {
+				if (shouldCancel && shouldCancel()) {
+					TerminateProcess(processInfo.hProcess, 125);
+					WaitForSingleObject(processInfo.hProcess, 2000);
+					result.cancelled = true;
+					break;
+				}
+
+				const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, 50);
+				DrainPipeAvailable(outputRead, result.output, onChunk);
+				if (waitResult == WAIT_OBJECT_0) {
+					break;
+				}
+				if (waitResult == WAIT_FAILED) {
+					result.errorCode = "process_wait_failed";
+					result.errorMessage = "failed to wait for llama process";
+					break;
+				}
+			}
+
+			DrainPipeAvailable(outputRead, result.output, onChunk);
+			if (outputRead != nullptr) {
+				CloseHandle(outputRead);
+			}
+
+			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
+			CloseHandle(processInfo.hThread);
+			CloseHandle(processInfo.hProcess);
+			return result;
+		}
+
+		std::string TrimAscii(const std::string& value) {
+			std::size_t start = 0;
+			while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+				++start;
+			}
+			std::size_t end = value.size();
+			while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+				--end;
+			}
+			return value.substr(start, end - start);
+		}
+
+		std::uint32_t ApproximateGeneratedTokens(const std::string& text) {
+			const auto trimmed = TrimAscii(text);
+			if (trimmed.empty()) {
+				return 0;
+			}
+
+			std::istringstream stream(trimmed);
+			std::string token;
+			std::uint32_t count = 0;
+			while (stream >> token) {
+				++count;
+			}
+			return count > 0 ? count : 1;
 		}
 
 	} // namespace
@@ -301,77 +557,135 @@ namespace blazeclaw::core::localmodel {
 			reinterpret_cast<void*>(1),
 			clearCancelFlag);
 
-		const std::string placeholder =
-			"llama.cpp runtime adapter is active. Native token generation "
-			"backend wiring will execute here.";
-		std::vector<std::string> chunks;
-		std::size_t cursor = 0;
-		while (cursor < placeholder.size()) {
-			const std::size_t nextSpace = placeholder.find(' ', cursor);
-			if (nextSpace == std::string::npos) {
-				chunks.push_back(placeholder.substr(cursor));
-				break;
-			}
-
-			chunks.push_back(placeholder.substr(cursor, nextSpace - cursor + 1));
-			cursor = nextSpace + 1;
+		std::string modelPath;
+		std::uint32_t maxTokens = 0;
+		double temperature = 0.0;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			modelPath = m_snapshot.modelPath;
+			maxTokens = request.maxTokens.has_value() ? request.maxTokens.value() : m_snapshot.maxTokens;
+			temperature = request.temperature.has_value() ? request.temperature.value() : m_snapshot.temperature;
 		}
 
-		std::string generated;
-		std::uint32_t generatedTokens = 0;
-		const std::uint32_t maxTokens =
-			request.maxTokens.has_value() ? request.maxTokens.value() : m_snapshot.maxTokens;
+		auto isCancelled = [this, &request]() {
+			if (request.runId.empty()) {
+				return false;
+			}
 
-		for (const auto& chunk : chunks) {
-			bool cancelled = false;
+			std::lock_guard<std::mutex> lock(m_mutex);
+			const auto it = m_cancelFlagsByRunId.find(request.runId);
+			return it != m_cancelFlagsByRunId.end() && it->second;
+		};
+
+		if (isCancelled()) {
+			result.ok = false;
+			result.cancelled = true;
+			result.modelId = modelPath;
+			result.generatedTokens = 0;
+			result.error = TextGenerationError{
+				.code = TextGenerationErrorCode::Cancelled,
+				.message = "Generation cancelled.",
+			};
+			result.latencyMs = ElapsedMs(startedAt);
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
-				if (!request.runId.empty()) {
-					const auto it = m_cancelFlagsByRunId.find(request.runId);
-					cancelled = it != m_cancelFlagsByRunId.end() && it->second;
-				}
+				++m_snapshot.requestsCancelled;
+				m_snapshot.lastLatencyMs = result.latencyMs;
+				m_snapshot.lastGeneratedTokens = 0;
 			}
-
-			if (cancelled) {
-				result.ok = false;
-				result.cancelled = true;
-				result.modelId = m_snapshot.modelPath;
-				result.generatedTokens = generatedTokens;
-				result.error = TextGenerationError{
-					.code = TextGenerationErrorCode::Cancelled,
-					.message = "Generation cancelled.",
-				};
-				result.latencyMs = ElapsedMs(startedAt);
-				{
-					std::lock_guard<std::mutex> lock(m_mutex);
-					++m_snapshot.requestsCancelled;
-					m_snapshot.lastLatencyMs = result.latencyMs;
-					m_snapshot.lastGeneratedTokens = generatedTokens;
-				}
-				return result;
-			}
-
-			if (generatedTokens >= maxTokens) {
-				break;
-			}
-
-			generated += chunk;
-			++generatedTokens;
-			if (onDelta) {
-				onDelta(generated);
-			}
+			return result;
 		}
 
-		result.ok = !generated.empty();
-		result.text = generated;
-		result.modelId = m_snapshot.modelPath;
+		auto cliExecutable = ResolveLlamaCliExecutable();
+		if (!cliExecutable.has_value()) {
+			result.ok = false;
+			result.modelId = modelPath;
+			result.error = TextGenerationError{
+				.code = TextGenerationErrorCode::RuntimeUnavailable,
+				.message =
+				"Unable to resolve llama.cpp CLI executable (llama-cli.exe/main.exe). Set BLAZECLAW_LLAMA_CPP_BIN_DIR.",
+			};
+			result.latencyMs = ElapsedMs(startedAt);
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				++m_snapshot.requestsFailed;
+				m_snapshot.lastLatencyMs = result.latencyMs;
+				m_snapshot.lastGeneratedTokens = 0;
+			}
+			return result;
+		}
+
+		std::vector<std::wstring> commandTokens;
+		commandTokens.push_back(cliExecutable->wstring());
+		commandTokens.push_back(L"-m");
+		commandTokens.push_back(ToWide(modelPath));
+		commandTokens.push_back(L"-p");
+		commandTokens.push_back(ToWide(request.prompt));
+		commandTokens.push_back(L"-n");
+		commandTokens.push_back(ToWide(std::to_string(maxTokens)));
+		commandTokens.push_back(L"--temp");
+		commandTokens.push_back(ToWide(std::to_string(temperature)));
+		commandTokens.push_back(L"--no-display-prompt");
+
+		std::string generated;
+		auto processResult = RunProcessWithStreaming(
+			commandTokens,
+			isCancelled,
+			[&generated, &onDelta](const std::string& chunk) {
+				if (chunk.empty()) {
+					return;
+				}
+
+				generated += chunk;
+				if (onDelta) {
+					onDelta(generated);
+				}
+			});
+
+		const auto trimmedGenerated = TrimAscii(generated);
+		const std::uint32_t generatedTokens = ApproximateGeneratedTokens(trimmedGenerated);
+
+		if (processResult.cancelled || isCancelled()) {
+			result.ok = false;
+			result.cancelled = true;
+			result.modelId = modelPath;
+			result.generatedTokens = generatedTokens;
+			result.error = TextGenerationError{
+				.code = TextGenerationErrorCode::Cancelled,
+				.message = "Generation cancelled.",
+			};
+			result.latencyMs = ElapsedMs(startedAt);
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				++m_snapshot.requestsCancelled;
+				m_snapshot.lastLatencyMs = result.latencyMs;
+				m_snapshot.lastGeneratedTokens = generatedTokens;
+			}
+			return result;
+		}
+
+		result.ok = !trimmedGenerated.empty();
+		result.text = trimmedGenerated;
+		result.modelId = modelPath;
 		result.generatedTokens = generatedTokens;
 		result.latencyMs = ElapsedMs(startedAt);
 		if (!result.ok) {
-			result.error = TextGenerationError{
-				.code = TextGenerationErrorCode::EmptyOutput,
-				.message = "No tokens were generated.",
-			};
+			if (!processResult.started || !processResult.errorCode.empty() || processResult.exitCode != 0) {
+				const std::string reason =
+					!processResult.errorMessage.empty()
+					? processResult.errorMessage
+					: ("llama-cli exited with code " + std::to_string(static_cast<unsigned long long>(processResult.exitCode)));
+				result.error = TextGenerationError{
+					.code = TextGenerationErrorCode::InferenceFailed,
+					.message = reason,
+				};
+			}
+			else {
+				result.error = TextGenerationError{
+					.code = TextGenerationErrorCode::EmptyOutput,
+					.message = "No tokens were generated.",
+				};
+			}
 		}
 
 		{
