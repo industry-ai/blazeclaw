@@ -36,17 +36,17 @@ namespace blazeclaw::core::localmodel {
 
 		BackendInitGuard g_backendInitGuard{};
 
-		#if BLAZECLAW_HAS_LLAMACPP
-				struct SamplerHolder {
-					llama_sampler* value = nullptr;
-					~SamplerHolder() {
-						if (value != nullptr) {
-							llama_sampler_free(value);
-							value = nullptr;
-						}
-					}
-				};
-		#endif
+#if BLAZECLAW_HAS_LLAMACPP
+		struct SamplerHolder {
+			llama_sampler* value = nullptr;
+			~SamplerHolder() {
+				if (value != nullptr) {
+					llama_sampler_free(value);
+					value = nullptr;
+				}
+			}
+		};
+#endif
 
 		std::string ToNarrow(const std::wstring& value) {
 			std::string output;
@@ -140,65 +140,65 @@ namespace blazeclaw::core::localmodel {
 			return count > 0 ? count : 1;
 		}
 
-		#if BLAZECLAW_HAS_LLAMACPP
-				std::vector<llama_token> TokenizePrompt(
-					const llama_vocab* vocab,
-					const std::string& prompt) {
-					if (vocab == nullptr || prompt.empty()) {
-						return {};
-					}
+#if BLAZECLAW_HAS_LLAMACPP
+		std::vector<llama_token> TokenizePrompt(
+			const llama_vocab* vocab,
+			const std::string& prompt) {
+			if (vocab == nullptr || prompt.empty()) {
+				return {};
+			}
 
-					const int32_t requested = static_cast<int32_t>(prompt.size()) + 8;
-					std::vector<llama_token> tokens(static_cast<std::size_t>(requested));
-					int32_t count = llama_tokenize(
-						vocab,
-						prompt.c_str(),
-						static_cast<int32_t>(prompt.size()),
-						tokens.data(),
-						requested,
-						true,
-						false);
-					if (count < 0) {
-						const int32_t needed = -count;
-						tokens.assign(static_cast<std::size_t>(needed), 0);
-						count = llama_tokenize(
-							vocab,
-							prompt.c_str(),
-							static_cast<int32_t>(prompt.size()),
-							tokens.data(),
-							needed,
-							true,
-							false);
-					}
+			const int32_t requested = static_cast<int32_t>(prompt.size()) + 8;
+			std::vector<llama_token> tokens(static_cast<std::size_t>(requested));
+			int32_t count = llama_tokenize(
+				vocab,
+				prompt.c_str(),
+				static_cast<int32_t>(prompt.size()),
+				tokens.data(),
+				requested,
+				true,
+				false);
+			if (count < 0) {
+				const int32_t needed = -count;
+				tokens.assign(static_cast<std::size_t>(needed), 0);
+				count = llama_tokenize(
+					vocab,
+					prompt.c_str(),
+					static_cast<int32_t>(prompt.size()),
+					tokens.data(),
+					needed,
+					true,
+					false);
+			}
 
-					if (count <= 0) {
-						return {};
-					}
+			if (count <= 0) {
+				return {};
+			}
 
-					tokens.resize(static_cast<std::size_t>(count));
-					return tokens;
-				}
+			tokens.resize(static_cast<std::size_t>(count));
+			return tokens;
+		}
 
-				std::string TokenToText(const llama_vocab* vocab, const llama_token token) {
-					if (vocab == nullptr) {
-						return {};
-					}
+		std::string TokenToText(const llama_vocab* vocab, const llama_token token) {
+			if (vocab == nullptr) {
+				return {};
+			}
 
-					char piece[512]{};
-					const int32_t pieceLen = llama_token_to_piece(
-						vocab,
-						token,
-						piece,
-						static_cast<int32_t>(sizeof(piece)),
-						0,
-						true);
-					if (pieceLen <= 0) {
-						return {};
-					}
+			char piece[512]{};
+			const int32_t pieceLen = llama_token_to_piece(
+				vocab,
+				token,
+				piece,
+				static_cast<int32_t>(sizeof(piece)),
+				0,
+				true);
+			if (pieceLen <= 0) {
+				return {};
+			}
 
-					return std::string(piece, piece + pieceLen);
-				}
-		#endif
+			return std::string(piece, piece + pieceLen);
+		}
+#endif
 
 	} // namespace
 
@@ -353,6 +353,17 @@ namespace blazeclaw::core::localmodel {
 		modelParams.use_mmap = true;
 		modelParams.use_mlock = false;
 
+		const bool gpuOffloadSupported = llama_supports_gpu_offload();
+		TraceRuntime(
+			"model.load.diagnostics",
+			{},
+			"gpuOffloadSupported=" + std::string(gpuOffloadSupported ? "true" : "false") +
+			" configuredGpuLayers=" + std::to_string(modelParams.n_gpu_layers) +
+			" flashAttention=" + std::string(m_config.localModel.llama.flashAttention ? "true" : "false") +
+			" contextLength=" + std::to_string(m_config.localModel.llama.contextLength) +
+			" batchSize=" + std::to_string(m_config.localModel.llama.batchSize) +
+			" threads=" + std::to_string(m_config.localModel.llama.threads));
+
 		nextSession->model =
 			llama_model_load_from_file(m_snapshot.modelPath.c_str(), modelParams);
 		if (nextSession->model == nullptr) {
@@ -422,7 +433,10 @@ namespace blazeclaw::core::localmodel {
 		TraceRuntime(
 			"model.load.success",
 			{},
-			"status=ready model=" + m_snapshot.modelPath);
+			"status=ready model=" + m_snapshot.modelPath +
+			" gpuOffloadSupported=" + std::string(gpuOffloadSupported ? "true" : "false") +
+			" configuredGpuLayers=" + std::to_string(modelParams.n_gpu_layers) +
+			" executionProvider=" + m_snapshot.effectiveExecutionProvider);
 		return true;
 #else
 		m_snapshot.ready = false;
@@ -539,7 +553,7 @@ namespace blazeclaw::core::localmodel {
 			std::lock_guard<std::mutex> lock(m_mutex);
 			const auto it = m_cancelFlagsByRunId.find(request.runId);
 			return it != m_cancelFlagsByRunId.end() && it->second;
-		};
+			};
 
 		if (isCancelled()) {
 			result.ok = false;

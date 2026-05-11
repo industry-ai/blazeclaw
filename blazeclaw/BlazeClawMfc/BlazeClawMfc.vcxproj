@@ -56,9 +56,11 @@
     <TargetName>BlazeClaw</TargetName>
     <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(SolutionDir)llama.cpp\include\llama.h')">$(SolutionDir)llama.cpp</LlamaCppRoot>
     <LlamaCppRoot Condition="'$(LlamaCppRoot)'=='' and Exists('$(ProjectDir)..\llama.cpp\include\llama.h')">$(ProjectDir)..\llama.cpp</LlamaCppRoot>
+    <LlamaCppBuildRoot Condition="'$(LlamaCppBuildRoot)'=='' and Exists('$(LlamaCppRoot)\build-cuda-vs2022cmake\CMakeCache.txt')">$(LlamaCppRoot)\build-cuda-vs2022cmake</LlamaCppBuildRoot>
+    <LlamaCppBuildRoot Condition="'$(LlamaCppBuildRoot)'=='' and Exists('$(LlamaCppRoot)\build\CMakeCache.txt')">$(LlamaCppRoot)\build</LlamaCppBuildRoot>
     <LlamaCppIncludeDir Condition="'$(LlamaCppIncludeDir)'==''">$(LlamaCppRoot)\include;$(LlamaCppRoot)\ggml\include</LlamaCppIncludeDir>
-    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppRoot)\build\src\$(Configuration);$(LlamaCppRoot)\build\ggml\src\$(Configuration)</LlamaCppLibDir>
-    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppRoot)\build\bin\$(Configuration)</LlamaCppBinDir>
+    <LlamaCppLibDir Condition="'$(LlamaCppLibDir)'==''">$(LlamaCppBuildRoot)\src\$(Configuration);$(LlamaCppBuildRoot)\ggml\src\$(Configuration)</LlamaCppLibDir>
+    <LlamaCppBinDir Condition="'$(LlamaCppBinDir)'==''">$(LlamaCppBuildRoot)\bin\$(Configuration)</LlamaCppBinDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -75,11 +77,11 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(LlamaCppLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(LlamaCppRoot)\build\src\$(Configuration)\llama.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-base.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(LlamaCppLibDir);$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(LlamaCppBuildRoot)\src\$(Configuration)\llama.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-base.lib;$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration)\ggml-cuda.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)"</Command>
+      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -101,11 +103,11 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(LlamaCppLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(LlamaCppRoot)\build\src\$(Configuration)\llama.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppRoot)\build\ggml\src\$(Configuration)\ggml-base.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(LlamaCppLibDir);$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(LlamaCppBuildRoot)\src\$(Configuration)\llama.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-base.lib;$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration)\ggml-cuda.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)"</Command>
+      <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
