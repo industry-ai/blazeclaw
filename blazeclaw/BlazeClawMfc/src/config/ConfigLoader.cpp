@@ -9,6 +9,10 @@
 #include <functional>
 #include <vector>
 
+#if defined(_WIN32)
+#include <Windows.h>
+#endif
+
 namespace blazeclaw::config {
 
 	namespace {
@@ -451,6 +455,20 @@ namespace blazeclaw::config {
 			if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
 				continue;
 			}
+
+#if defined(_WIN32)
+			if (trimmedLine.rfind(L"env.", 0) == 0) {
+				const auto eq = trimmedLine.find(L'=', 4);
+				if (eq != std::wstring::npos && eq > 4) {
+					std::wstring name = Trim(trimmedLine.substr(4, eq - 4));
+					const std::wstring value = Trim(trimmedLine.substr(eq + 1));
+					if (!name.empty() && name.rfind(L"BLAZECLAW_", 0) == 0) {
+						(void)::SetEnvironmentVariableW(name.c_str(), value.c_str());
+					}
+				}
+				continue;
+			}
+#endif
 
 			if (trimmedLine.rfind(L"channel=", 0) == 0) {
 				outConfig.enabledChannels.push_back(Trim(trimmedLine.substr(8)));

@@ -1814,6 +1814,10 @@
             return committed;
         }
 
+        function hasBufferedAssistantStream() {
+            return typeof state.streamText === "string" && state.streamText.trim().length > 0;
+        }
+
         function clearRunState() {
             state.streamText = "";
             state.runId = null;
@@ -2076,6 +2080,7 @@
             noteInboundChatEvent,
             markTerminalRun,
             hasTerminalRun,
+            hasBufferedAssistantStream,
             scheduleHistoryReconcile,
             getStructuredTranscript: function () {
                 return Array.isArray(state.structuredTranscript)

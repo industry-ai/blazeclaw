@@ -40,11 +40,13 @@ namespace blazeclaw::core {
 
 	void CChatRuntime::StopWorker()
 	{
+		std::string cancelActiveRunId;
 		std::vector<std::shared_ptr<ChatRuntimeJob>> abandonedJobs;
 		{
 			std::lock_guard<std::mutex> lock(m_queueMutex);
 			m_workerStopRequested = true;
 			m_workerAvailable = false;
+			cancelActiveRunId = m_activeRunId;
 			abandonedJobs.assign(m_queue.begin(), m_queue.end());
 			m_queue.clear();
 			m_jobsByRunId.clear();
@@ -58,6 +60,11 @@ namespace blazeclaw::core {
 					stateIt->second.errorCode = m_cfg.errorWorkerUnavailable;
 				}
 			}
+		}
+
+		if (!cancelActiveRunId.empty() && m_deps.cancelActiveRuntime)
+		{
+			(void)m_deps.cancelActiveRuntime(cancelActiveRunId);
 		}
 
 		m_queueCv.notify_all();
@@ -339,6 +346,19 @@ namespace blazeclaw::core {
 			}
 			else if (job->execute)
 			{
+				{
+					std::lock_guard<std::mutex> activeLock(m_queueMutex);
+					m_activeRunId = job->request.runId;
+				}
+				struct ClearActiveRunId {
+					CChatRuntime* self;
+					~ClearActiveRunId()
+					{
+						std::lock_guard<std::mutex> lock(self->m_queueMutex);
+						self->m_activeRunId.clear();
+					}
+				} clearActiveRunId{this};
+
 				const std::uint64_t executeStartedAtMs = CurrentEpochMs();
 				result = job->execute();
 				const std::uint64_t executeCompletedAtMs = CurrentEpochMs();

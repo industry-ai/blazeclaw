@@ -368,9 +368,15 @@ namespace blazeclaw::core::localmodel {
 		}
 
 		llama_context_params contextParams = llama_context_default_params();
-		contextParams.n_ctx = m_config.localModel.llama.contextLength;
-		contextParams.n_batch = m_config.localModel.llama.batchSize;
-		contextParams.n_ubatch = m_config.localModel.llama.batchSize;
+		const int32_t configuredContextLength = (std::max)(
+			1,
+			static_cast<int32_t>(m_config.localModel.llama.contextLength));
+		const int32_t configuredBatchSize = (std::max)(
+			1,
+			static_cast<int32_t>(m_config.localModel.llama.batchSize));
+		contextParams.n_ctx = configuredContextLength;
+		contextParams.n_batch = configuredBatchSize;
+		contextParams.n_ubatch = configuredBatchSize;
 		contextParams.n_threads = static_cast<int32_t>(m_config.localModel.llama.threads);
 		contextParams.n_threads_batch = static_cast<int32_t>(m_config.localModel.llama.threads);
 		contextParams.embeddings = false;
@@ -506,6 +512,8 @@ namespace blazeclaw::core::localmodel {
 #if BLAZECLAW_HAS_LLAMACPP
 		llama_context* context = nullptr;
 		const llama_vocab* vocab = nullptr;
+		int32_t batchSize = 0;
+		int32_t contextLength = 0;
 #endif
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
@@ -514,6 +522,8 @@ namespace blazeclaw::core::localmodel {
 			temperature = request.temperature.has_value() ? request.temperature.value() : m_snapshot.temperature;
 			sessionState = m_sessionState;
 #if BLAZECLAW_HAS_LLAMACPP
+			batchSize = static_cast<int32_t>(m_config.localModel.llama.batchSize);
+			contextLength = static_cast<int32_t>(m_config.localModel.llama.contextLength);
 			if (sessionState) {
 				context = sessionState->context;
 				vocab = sessionState->vocab;
@@ -605,10 +615,38 @@ namespace blazeclaw::core::localmodel {
 			maxTokens = 1;
 		}
 
+		if (batchSize <= 0) {
+			batchSize = 1;
+		}
+
+		int32_t prefillLimit = batchSize;
+		if (contextLength > 1) {
+			prefillLimit = (std::min)(prefillLimit, contextLength - 1);
+		}
+		if (prefillLimit <= 0) {
+			prefillLimit = 1;
+		}
+
+		const llama_token* prefillTokens = promptTokens.data();
+		int32_t prefillCount = static_cast<int32_t>(promptTokens.size());
+		std::vector<llama_token> truncatedPromptTokens;
+		if (prefillCount > prefillLimit) {
+			truncatedPromptTokens.assign(
+				promptTokens.end() - prefillLimit,
+				promptTokens.end());
+			const llama_token bosToken = llama_vocab_bos(vocab);
+			if (bosToken >= 0 && !truncatedPromptTokens.empty() &&
+				truncatedPromptTokens.front() != bosToken) {
+				truncatedPromptTokens.front() = bosToken;
+			}
+			prefillTokens = truncatedPromptTokens.data();
+			prefillCount = static_cast<int32_t>(truncatedPromptTokens.size());
+		}
+
 		llama_memory_clear(llama_get_memory(context), false);
 		auto promptBatch = llama_batch_get_one(
-			const_cast<llama_token*>(promptTokens.data()),
-			static_cast<int32_t>(promptTokens.size()));
+			const_cast<llama_token*>(prefillTokens),
+			prefillCount);
 		if (llama_decode(context, promptBatch) != 0) {
 			result.ok = false;
 			result.modelId = modelPath;

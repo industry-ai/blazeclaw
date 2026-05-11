@@ -115,6 +115,8 @@ namespace blazeclaw::core {
 		std::thread m_workerThread;
 		bool m_workerStopRequested = false;
 		bool m_workerAvailable = false;
+		/// Set while the worker thread is inside `job->execute()` (long-running provider work).
+		std::string m_activeRunId;
 		ChatRuntimeMetrics m_metrics;
 	};
 

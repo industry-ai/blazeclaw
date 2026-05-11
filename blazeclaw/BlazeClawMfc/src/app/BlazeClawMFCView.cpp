@@ -349,13 +349,26 @@ namespace {
 				continue;
 			}
 
-			// If the event state is not one of the terminal states, record it for diagnostics
-			if (state != "final" &&
-				state != "error" &&
-				state != "aborted" &&
-				state != "needs_approval")
+			// Terminal states contribute run ids for startup diagnostics; mid-flight states are ignored.
+			const bool isTerminalChatState =
+				state == "final" ||
+				state == "completed" ||
+				state == "error" ||
+				state == "aborted" ||
+				state == "needs_approval";
+			const bool isKnownNonTerminalChatState =
+				state == "queued" ||
+				state == "started" ||
+				state == "delta";
+
+			if (!isTerminalChatState && !isKnownNonTerminalChatState)
 			{
 				AppendStartupEventDiagnostic(L"startup.chat.event.unexpected_state", state);
+				continue;
+			}
+
+			if (!isTerminalChatState)
+			{
 				continue;
 			}
 
@@ -1157,12 +1170,16 @@ namespace {
 	{
 		const std::size_t finalPos =
 			eventsRaw.find("\"state\":\"final\"");
-		if (finalPos != std::string::npos)
+		const std::size_t completedPos =
+			eventsRaw.find("\"state\":\"completed\"");
+		const std::size_t terminalSuccessPos =
+			finalPos != std::string::npos ? finalPos : completedPos;
+		if (terminalSuccessPos != std::string::npos)
 		{
 			std::string extracted;
 			if (TryExtractJsonStringAfterKey(
 				eventsRaw,
-				finalPos,
+				terminalSuccessPos,
 				"text",
 				extracted))
 			{

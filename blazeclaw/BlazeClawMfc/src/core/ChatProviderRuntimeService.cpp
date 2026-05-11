@@ -283,7 +283,8 @@ namespace blazeclaw::core {
 						return;
 					}
 
-					streamedLocalText += delta;
+					// GenerateStream passes cumulative assistant text, not a per-token delta slice.
+					streamedLocalText = delta;
 					streamedLocalSnapshots.push_back(streamedLocalText);
 					if (request.onAssistantDelta) {
 						request.onAssistantDelta(streamedLocalText);
@@ -318,7 +319,10 @@ namespace blazeclaw::core {
 				};
 			}
 
-			std::string assistantText = streamedLocalText.empty()
+			// Prefer the runtime's final trimmed text. Stream callbacks must match, but using the
+			// canonical `localResult.text` avoids gateway streamCursor vs assistantText size mismatch
+			// (which prevents terminal chat events from enqueueing and leaves the UI blank).
+			std::string assistantText = !localResult.text.empty()
 				? localResult.text
 				: streamedLocalText;
 			std::string modelId = localResult.modelId;

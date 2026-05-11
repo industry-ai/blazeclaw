@@ -80,6 +80,7 @@
 
         function isTerminalEventState(eventState) {
             return eventState === "final" ||
+                eventState === "completed" ||
                 eventState === "aborted" ||
                 eventState === "error" ||
                 eventState === "needs_approval";
@@ -209,7 +210,7 @@
                     }
 
                     let shouldReconcile = false;
-                    if (event.state === "final") {
+                    if (event.state === "final" || event.state === "completed") {
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
                         if (otherFinal && text && !controller.isSilentReplyText(text)) {
@@ -266,16 +267,20 @@
                     continue;
                 }
 
-                if (event.state === "final") {
+                if (event.state === "final" || event.state === "completed") {
                     const normalizedFinal = normalizeFinalAssistantMessage(event.message);
                     const text = controller.consumeTerminalText(normalizedFinal || event.message);
                     let shouldReconcile = false;
                     if (text) {
-                        if (state.streamText) {
+                        const streamedThisTurn =
+                            (typeof controller.hasBufferedAssistantStream === "function" &&
+                                controller.hasBufferedAssistantStream()) ||
+                            Boolean(state.streamText);
+                        if (streamedThisTurn) {
                             controller.commitStreamTranscriptFinal({
                                 runId,
                                 text,
-                                terminalState: "final",
+                                terminalState: event.state === "completed" ? "completed" : "final",
                             });
                             addOrReplaceStream(text);
                             finalizeStream();
@@ -288,7 +293,7 @@
                     }
 
                     if (runId) {
-                        controller.markTerminalRun(runId, "final");
+                        controller.markTerminalRun(runId, event.state === "completed" ? "completed" : "final");
                     }
                     controller.clearRunState();
                     if (shouldReconcile) {
@@ -321,7 +326,11 @@
                             terminalState: "needs_approval",
                         });
 
-                        if (state.streamText) {
+                        const streamedThisTurnApproval =
+                            (typeof controller.hasBufferedAssistantStream === "function" &&
+                                controller.hasBufferedAssistantStream()) ||
+                            Boolean(state.streamText);
+                        if (streamedThisTurnApproval) {
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
