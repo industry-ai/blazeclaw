@@ -77,7 +77,7 @@
 
             const meta = document.createElement("div");
             meta.className = "meta";
-            meta.textContent = `token=${String(item.token || "")} 路 status=${String(item.status || "pending")}`;
+            meta.textContent = `token=${String(item.token || "")} · status=${String(item.status || "pending")}`;
             card.appendChild(meta);
 
             if (String(item.status || "pending") === "pending") {
@@ -119,7 +119,7 @@
                         }
                     }
                     const missingSummary = missingParts.length
-                        ? `missing=${missingParts.join("|")} 路 `
+                        ? `missing=${missingParts.join("|")} · `
                         : "";
                     let remediation = "Repair dependency/configuration and retry approval.";
                     if (item.remediation) {
@@ -131,7 +131,7 @@
                         ? `${item.installHint ? ` install: ${String(item.installHint)}` : ""}${item.configHint ? ` config: ${String(item.configHint)}` : ""}`
                         : "";
                     const precheckDetails = (item.readinessKnown && !item.readinessReady)
-                        ? ` precheck: ${item.readinessCode ? `code=${String(item.readinessCode)} 路 ` : ""}${item.readinessMessage ? String(item.readinessMessage) : "Email backend is not ready."}`
+                        ? ` precheck: ${item.readinessCode ? `code=${String(item.readinessCode)} · ` : ""}${item.readinessMessage ? String(item.readinessMessage) : "Email backend is not ready."}`
                         : "";
                     guide.textContent = `[backend stack incomplete] ${missingSummary}${remediation}${executionDetails}${precheckDetails}`;
                     card.appendChild(guide);
@@ -558,7 +558,7 @@
                 : "subscription: inactive";
             const status = String(state.sessionCompactionStatus || "").trim();
             state.sessionControlStatusEl.textContent = status
-                ? `${subscription} 鈥?${status}`
+                ? `${subscription} — ${status}`
                 : subscription;
         }
     }
@@ -738,7 +738,7 @@
         const panel = String(state.agentsPanel || "overview");
         const rows = [];
 
-        rows.push(`<div class="agents-surface-title">Agents control-plane 鈥?${panel}</div>`);
+        rows.push(`<div class="agents-surface-title">Agents control-plane ??${panel}</div>`);
 
         if (state.agentsLoading) {
             rows.push("<div class=\"agents-row\">Loading agents...</div>");
@@ -1306,12 +1306,12 @@
                     ? Number(state.observabilityLastUpdatedMs)
                     : 0;
 
-                rows.push(`<div class=\"agents-row\">Health: ${escapeHtml(String(health && health.status || "(unknown)"))} 路 running=${health && health.running ? "yes" : "no"}</div>`);
-                rows.push(`<div class=\"agents-row\">Transport: ${transport && transport.running ? "running" : "idle"} 路 endpoint=${escapeHtml(String(transport && transport.endpoint || "(n/a)"))} 路 connections=${escapeHtml(String(transport && transport.connections || 0))}</div>`);
-                rows.push(`<div class=\"agents-row\">Heartbeat: connected=${heartbeat && heartbeat.connected ? "yes" : "no"} 路 lastHeartbeatMs=${escapeHtml(String(heartbeat && heartbeat.lastHeartbeatMs || 0))}</div>`);
+                rows.push(`<div class=\"agents-row\">Health: ${escapeHtml(String(health && health.status || "(unknown)"))} · running=${health && health.running ? "yes" : "no"}</div>`);
+                rows.push(`<div class=\"agents-row\">Transport: ${transport && transport.running ? "running" : "idle"} · endpoint=${escapeHtml(String(transport && transport.endpoint || "(n/a)"))} · connections=${escapeHtml(String(transport && transport.connections || 0))}</div>`);
+                rows.push(`<div class=\"agents-row\">Heartbeat: connected=${heartbeat && heartbeat.connected ? "yes" : "no"} · lastHeartbeatMs=${escapeHtml(String(heartbeat && heartbeat.lastHeartbeatMs || 0))}</div>`);
                 rows.push(`<div class=\"agents-row\">Health details endpoint: ${escapeHtml(String(details && details.transport && details.transport.endpoint || "(n/a)"))}</div>`);
                 rows.push(`<div class=\"agents-row\">Models available: ${models.length}</div>`);
-                rows.push(`<div class=\"agents-row\">Logs entries: ${logs.length} 路 paused=${paused ? "yes" : "no"} 路 lastUpdatedMs=${lastUpdated || "(none)"}</div>`);
+                rows.push(`<div class=\"agents-row\">Logs entries: ${logs.length} · paused=${paused ? "yes" : "no"} · lastUpdatedMs=${lastUpdated || "(none)"}</div>`);
                 if (logs.length > 0) {
                     const firstLog = logs[0] || {};
                     rows.push(`<div class=\"agents-row\">Latest log: [${escapeHtml(String(firstLog.level || "info"))}] ${escapeHtml(String(firstLog.message || ""))}</div>`);
@@ -1550,8 +1550,8 @@
             }
 
             const dreamingStateLabel = dreamingStatus && dreamingStatus.enabled ? "active" : "idle";
-            rows.push(`<div class=\"agents-row\">Dreaming ${dreamingStateLabel} 路 ${escapeHtml(dreamPhrase)}</div>`);
-            rows.push(`<div class=\"agents-row\">Plugin id: ${escapeHtml(String(state.dreamingResolvedPluginId || "(unresolved)"))} 路 Config hash: ${escapeHtml(String(state.dreamingConfigSnapshotHash || "(missing)"))}</div>`);
+            rows.push(`<div class=\"agents-row\">Dreaming ${dreamingStateLabel} · ${escapeHtml(dreamPhrase)}</div>`);
+            rows.push(`<div class=\"agents-row\">Plugin id: ${escapeHtml(String(state.dreamingResolvedPluginId || "(unresolved)"))} · Config hash: ${escapeHtml(String(state.dreamingConfigSnapshotHash || "(missing)"))}</div>`);
             const storageMode = String(dreamingStatus && dreamingStatus.storageMode || "inline");
             const timeZone = String(dreamingStatus && dreamingStatus.timezone || "(n/a)");
 
@@ -1565,17 +1565,17 @@
                 promotedTodayCount = Number(dreamingStatus.promotedToday);
             }
 
-            rows.push(`<div class=\"agents-row\">Storage=${escapeHtml(storageMode)} 路 TZ=${escapeHtml(timeZone)} 路 Short-term=${shortTermCount} 路 Promoted today=${promotedTodayCount}</div>`);
+            rows.push(`<div class=\"agents-row\">Storage=${escapeHtml(storageMode)} · TZ=${escapeHtml(timeZone)} · Short-term=${shortTermCount} · Promoted today=${promotedTodayCount}</div>`);
 
             if (subTab === "scene") {
                 if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.light) {
-                    rows.push(`<div class=\"agents-row\">Light phase: ${dreamingStatus.phases.light.enabled ? "on" : "off"} 路 cron=${escapeHtml(String(dreamingStatus.phases.light.cron || ""))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Light phase: ${dreamingStatus.phases.light.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.light.cron || ""))}</div>`);
                 }
                 if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.deep) {
-                    rows.push(`<div class=\"agents-row\">Deep phase: ${dreamingStatus.phases.deep.enabled ? "on" : "off"} 路 cron=${escapeHtml(String(dreamingStatus.phases.deep.cron || ""))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Deep phase: ${dreamingStatus.phases.deep.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.deep.cron || ""))}</div>`);
                 }
                 if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.rem) {
-                    rows.push(`<div class=\"agents-row\">REM phase: ${dreamingStatus.phases.rem.enabled ? "on" : "off"} 路 cron=${escapeHtml(String(dreamingStatus.phases.rem.cron || ""))}</div>`);
+                    rows.push(`<div class=\"agents-row\">REM phase: ${dreamingStatus.phases.rem.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.rem.cron || ""))}</div>`);
                 }
             }
 
@@ -1612,12 +1612,12 @@
                     + `<button class=\"agents-chip${waitingRecentActiveClass}\" data-dreaming-sort=\"recent\">Sort recent</button> `
                     + `<button class=\"agents-chip${waitingSignalsActiveClass}\" data-dreaming-sort=\"signals\">Sort signals</button>`
                     + "</div>");
-                rows.push(`<div class=\"agents-row\">Grounded staged: ${groundedEntries.length} 路 Waiting short-term: ${waitingEntries.length} 路 Promoted: ${promotedEntries.length}</div>`);
+                rows.push(`<div class=\"agents-row\">Grounded staged: ${groundedEntries.length} · Waiting short-term: ${waitingEntries.length} · Promoted: ${promotedEntries.length}</div>`);
 
                 const renderEntry = (entry, meta) => {
                     const snippet = escapeHtml(String(entry && entry.snippet || ""));
                     const source = escapeHtml(formatRange(entry && entry.path, entry && entry.startLine, entry && entry.endLine));
-                    const metaText = escapeHtml(meta.filter((part) => String(part || "").trim().length > 0).join(" 路 "));
+                    const metaText = escapeHtml(meta.filter((part) => String(part || "").trim().length > 0).join(" · "));
                     return `<div class=\"agents-row\"><div>${snippet}</div><div>${source}</div><div>${metaText}</div></div>`;
                 };
 
@@ -2959,7 +2959,13 @@
     const eventsModule = window.BlazeClawChatEvents.createEventsModule({
         state,
         controller,
-        addMessage,
+        addMessage(text, kind) {
+            if (typeof controller.appendChatBubble === "function") {
+                controller.appendChatBubble(text, kind);
+                return;
+            }
+            addMessage(text, kind);
+        },
         appendToolLifecycleRow,
         setStatus,
         updateComposerState,

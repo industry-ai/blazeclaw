@@ -38,13 +38,43 @@
         return "";
     }
 
+    function stripChatTemplateMarkers(text) {
+        const raw = String(text || "");
+        return raw
+            .replace(/<\|[^>]*\|>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+    }
+
     function parseTextFromMessage(message) {
+        if (typeof message === "string") {
+            const trimmed = message.trim();
+            if (!trimmed) {
+                return "";
+            }
+            if (
+                (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                (trimmed.startsWith("[") && trimmed.endsWith("]"))
+            ) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (parsed && typeof parsed === "object") {
+                        return stripChatTemplateMarkers(parseTextFromMessage(parsed));
+                    }
+                } catch (_) {
+                    /* fall through to plain text */
+                }
+            }
+
+            return stripChatTemplateMarkers(trimmed);
+        }
+
         if (!message || typeof message !== "object") {
             return "";
         }
 
         if (typeof message.text === "string") {
-            return message.text;
+            return stripChatTemplateMarkers(message.text);
         }
 
         if (Array.isArray(message.content)) {
@@ -55,7 +85,7 @@
                     lines.push(line);
                 }
             }
-            return lines.join("\n").trim();
+            return stripChatTemplateMarkers(lines.join("\n").trim());
         }
 
         return "";
@@ -436,6 +466,13 @@
             rawAddMessage(text, kind);
         }
 
+        // Must be used for bridge / chat.event driven bubbles. The view's raw addMessage
+        // (index.js) re-renders from structuredTranscript when that mode is on and does not
+        // record new rows by itself, so calling it directly would drop assistant text.
+        function appendChatBubble(text, kind) {
+            addMessage(text, kind);
+        }
+
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
         const finalizeStream = opts.finalizeStream || function () { };
         const updateComposerState = opts.updateComposerState || function () { };
@@ -471,6 +508,9 @@
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
         state.reconcileTimer = state.reconcileTimer || null;
+        state.reconcileFollowupTimers = Array.isArray(state.reconcileFollowupTimers)
+            ? state.reconcileFollowupTimers
+            : [];
         state.runWatchdogTimer = state.runWatchdogTimer || null;
         state.runWatchdogStartedAtMs = Number.isFinite(state.runWatchdogStartedAtMs)
             ? Number(state.runWatchdogStartedAtMs)
@@ -1822,6 +1862,16 @@
             state.streamText = "";
             state.runId = null;
             state.streamTranscriptDraft = null;
+            if (state.reconcileTimer) {
+                clearTimeout(state.reconcileTimer);
+                state.reconcileTimer = null;
+            }
+            if (Array.isArray(state.reconcileFollowupTimers)) {
+                for (const timerId of state.reconcileFollowupTimers) {
+                    clearTimeout(timerId);
+                }
+                state.reconcileFollowupTimers = [];
+            }
             stopRunWatchdog();
             if (state.abortBtn) {
                 state.abortBtn.disabled = true;
@@ -1857,11 +1907,24 @@
             if (state.reconcileTimer) {
                 clearTimeout(state.reconcileTimer);
             }
+            if (Array.isArray(state.reconcileFollowupTimers)) {
+                for (const timerId of state.reconcileFollowupTimers) {
+                    clearTimeout(timerId);
+                }
+            }
+            state.reconcileFollowupTimers = [];
 
             state.reconcileTimer = setTimeout(() => {
                 state.reconcileTimer = null;
                 void loadHistory();
-            }, 120);
+            }, 250);
+
+            const followMs = [900, 2400];
+            for (const delay of followMs) {
+                state.reconcileFollowupTimers.push(setTimeout(() => {
+                    void loadHistory();
+                }, delay));
+            }
         }
 
         function readFileAsDataUrl(file) {
@@ -2078,6 +2141,7 @@
             parseApprovalTokenFromText,
             executeExecApprovalAction,
             noteInboundChatEvent,
+            appendChatBubble,
             markTerminalRun,
             hasTerminalRun,
             hasBufferedAssistantStream,
@@ -2109,6 +2173,7 @@
             bridgeQueue: [],
             terminalRunStates: new Map(),
             reconcileTimer: null,
+            reconcileFollowupTimers: [],
             runWatchdogTimer: null,
             runWatchdogStartedAtMs: 0,
             runWatchdogLastInboundEventMs: 0,

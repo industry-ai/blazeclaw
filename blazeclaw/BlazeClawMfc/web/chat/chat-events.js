@@ -87,9 +87,18 @@
         }
 
         function normalizeInboundBridgeEvent(rawMessage) {
+            let normalized = rawMessage;
+            if (typeof normalized === "string") {
+                try {
+                    normalized = JSON.parse(normalized);
+                } catch (_) {
+                    return null;
+                }
+            }
+
             let message = null;
-            if (rawMessage && typeof rawMessage === "object") {
-                message = rawMessage;
+            if (normalized && typeof normalized === "object") {
+                message = normalized;
             }
             if (!message) {
                 return null;
@@ -168,13 +177,20 @@
             upsertApprovalToken(approvalToken, "Email scheduling approval required");
         }
 
+        function normalizeSessionKeyLocal(value) {
+            const trimmed = String(value || "").trim();
+            return trimmed || "main";
+        }
+
         function handleChatEvents(events) {
             if (!Array.isArray(events)) {
                 return;
             }
 
+            const activeSession = normalizeSessionKeyLocal(state.sessionKey);
+
             for (const event of events) {
-                if (!event || event.sessionKey !== state.sessionKey) {
+                if (!event || normalizeSessionKeyLocal(event.sessionKey) !== activeSession) {
                     continue;
                 }
 
@@ -484,7 +500,8 @@
             }
 
             if (message.channel === "blazeclaw.gateway.chat.events") {
-                handleChatEvents(message.events);
+                const batch = message.events;
+                handleChatEvents(Array.isArray(batch) ? batch : []);
                 return;
             }
 

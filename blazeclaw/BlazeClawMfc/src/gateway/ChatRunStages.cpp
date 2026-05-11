@@ -552,7 +552,10 @@ namespace blazeclaw::gateway {
 	}
 
 	ChatRunStageResult ChatRuntimeStage::Execute(ChatRunStageContext& context) const {
-		if (!context.requestId.empty()) {
+		if (!context.idempotencyKey.empty()) {
+			context.runId = context.idempotencyKey;
+		}
+		else if (!context.requestId.empty()) {
 			context.runId = context.requestId;
 		}
 		else {
