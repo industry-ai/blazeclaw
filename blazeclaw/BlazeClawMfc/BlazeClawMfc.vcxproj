@@ -68,7 +68,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -90,7 +90,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -100,6 +100,7 @@
     <ClInclude Include="src\app\calendarbar.h" />
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatView.h" />
+    <ClInclude Include="src\app\VoiceRecorder.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\ClassView.h" />
     <ClInclude Include="src\app\FileView.h" />
@@ -166,6 +167,7 @@
     <ClCompile Include="src\app\calendarbar.cpp" />
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
+    <ClCompile Include="src\app\VoiceRecorder.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />
     <ClCompile Include="src\app\ClassView.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
