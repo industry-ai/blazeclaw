@@ -38,6 +38,7 @@ namespace blazeclaw::core::speechrecognition {
 			const std::string& details);
 
 		mutable std::mutex m_mutex;
+		mutable std::mutex m_cancelMutex;
 		blazeclaw::config::AppConfig m_config;
 		SpeechRecognitionRuntimeSnapshot m_snapshot;
 		std::unique_ptr<SessionState> m_sessionState;

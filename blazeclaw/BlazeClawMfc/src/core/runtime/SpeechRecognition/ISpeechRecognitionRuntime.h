@@ -18,6 +18,10 @@ namespace blazeclaw::core::speechrecognition {
 		InvalidInput,
 		AudioNotFound,
 		InvalidAudioFormat,
+		AudioDecodeFailed,
+		FeatureExtractionFailed,
+		TokenizerLoadFailed,
+		DecoderFailed,
 		InferenceFailed,
 		RuntimeUnavailable,
 		Cancelled,
@@ -46,6 +50,20 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint64_t transcribeRequestsCancelled = 0;
 		std::uint64_t cumulativeLatencyMs = 0;
 		std::uint32_t lastLatencyMs = 0;
+		std::uint32_t lastPreprocessLatencyMs = 0;
+		std::uint32_t lastInferenceLatencyMs = 0;
+		std::uint32_t lastDecodeLatencyMs = 0;
+		std::uint32_t lastAudioDurationMs = 0;
+		std::uint32_t lastInputSampleRate = 0;
+		std::uint32_t lastInputChannels = 0;
+		bool lastInputResampled = false;
+		std::uint32_t lastFeatureFrames = 0;
+		std::uint32_t lastFeatureBins = 0;
+		std::string modelVariant;
+		std::string encoderModelPath;
+		std::string decoderInitModelPath;
+		std::string decoderStepModelPath;
+		std::string tokenizerPath;
 		std::string status;
 		std::optional<SpeechRecognitionError> error;
 	};
