@@ -30,6 +30,7 @@
 #include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
+#include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 #include "SkillsStartupCoordinator.h"
 #include "SubagentRegistryService.h"
 #include "HookCatalogService.h"
@@ -122,6 +123,7 @@ namespace blazeclaw::core {
 		[[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
 		[[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
 		[[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
+		[[nodiscard]] const speechrecognition::SpeechRecognitionRuntimeSnapshot& SpeechRecognition() const noexcept;
 		[[nodiscard]] const localmodel::LocalModelRuntimeSnapshot& LocalModelRuntime() const noexcept;
 		[[nodiscard]] bool LocalModelRolloutEligible() const noexcept;
 		[[nodiscard]] bool LocalModelActivationEnabled() const noexcept;
@@ -349,10 +351,8 @@ namespace blazeclaw::core {
 
 			struct ChatRuntimeState {
 				bool asyncQueueEnabled = true;
-				std::uint64_t queueWaitTimeoutMs =
-					ServiceManager::kChatRuntimeQueueWaitTimeoutMs;
-				std::uint64_t executionTimeoutMs =
-					ServiceManager::kChatRuntimeExecutionTimeoutMs;
+				std::uint64_t queueWaitTimeoutMs = 0;
+				std::uint64_t executionTimeoutMs = 0;
 			};
 
 			struct GatewayLifecycleState {
@@ -452,6 +452,8 @@ namespace blazeclaw::core {
 		AcpSpawnDecision m_lastAcpDecision;
 		OnnxEmbeddingsService m_embeddingsService;
 		EmbeddingsServiceSnapshot m_embeddings;
+		speechrecognition::SpeechRecognitionRuntime m_speechRecognitionRuntime;
+		speechrecognition::SpeechRecognitionRuntimeSnapshot m_speechRecognition;
 		std::unique_ptr<localmodel::ITextGenerationRuntime> m_localModelRuntime;
 		localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
 		bool m_localModelRolloutEligible = false;

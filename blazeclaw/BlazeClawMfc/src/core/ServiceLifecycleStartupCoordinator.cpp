@@ -6,6 +6,7 @@
 #include "runtime/CChatRuntime.h"
 #include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
+#include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 
 #include <algorithm>
 #include <cctype>
@@ -240,6 +241,10 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		manager.m_embeddings = manager.m_embeddingsService.Snapshot();
 		AppendStartupTrace("ServiceManager.Start.embeddings.ready");
 
+		manager.m_speechRecognitionRuntime.Configure(manager.m_activeConfig);
+		manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
+		AppendStartupTrace("ServiceManager.Start.speech.configured");
+
 		manager.m_localModelRolloutEligible = manager.IsLocalModelRolloutEligible();
 		manager.m_localModelActivationEnabled = false;
 		manager.m_localModelActivationReason.clear();
@@ -290,6 +295,9 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		}
 		manager.m_localModelRuntimeSnapshot = manager.m_localModelRuntime->Snapshot();
 		AppendStartupTrace("ServiceManager.Start.localmodel.afterLoad");
+		manager.m_speechRecognitionRuntime.LoadModel();
+		manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
+		AppendStartupTrace("ServiceManager.Start.speech.afterLoad");
 		if (!localModelLoaded && manager.m_localModelRuntimeSnapshot.status.empty()) {
 			manager.m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
 				? "load_failed"

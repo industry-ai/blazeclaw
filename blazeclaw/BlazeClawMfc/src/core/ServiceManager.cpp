@@ -22,6 +22,7 @@
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
 #include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
+#include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 
 #include <cctype>
 #include <chrono>
@@ -3543,6 +3544,10 @@ namespace blazeclaw::core {
 
 	const EmbeddingsServiceSnapshot& ServiceManager::Embeddings() const noexcept {
 		return m_embeddings;
+	}
+
+	const speechrecognition::SpeechRecognitionRuntimeSnapshot& ServiceManager::SpeechRecognition() const noexcept {
+		return m_speechRecognition;
 	}
 
 	const localmodel::LocalModelRuntimeSnapshot& ServiceManager::LocalModelRuntime() const noexcept {

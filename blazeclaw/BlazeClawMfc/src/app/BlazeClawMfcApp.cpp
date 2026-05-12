@@ -210,6 +210,47 @@ namespace {
 		AppendMainFrameStatusLine(errorLine);
 	}
 
+	void AppendStartupSpeechStatus(
+		const blazeclaw::config::AppConfig& config,
+		const blazeclaw::core::ServiceManager& services) {
+		if (!config.speechRecognition.enabled) {
+			AppendMainFrameStatusLine(
+				L"[Speech] startup.disabled - speechRecognition.enabled=false");
+			return;
+		}
+
+		const auto runtime = services.SpeechRecognition();
+		CString configLine;
+		configLine.Format(
+			L"[Speech] startup.config - provider=%s stage=%s model=%s language=%s sampleRate=%u threads=%u mode=%s",
+			config.speechRecognition.provider.c_str(),
+			config.speechRecognition.rolloutStage.c_str(),
+			config.speechRecognition.modelPath.c_str(),
+			config.speechRecognition.language.c_str(),
+			config.speechRecognition.sampleRate,
+			config.speechRecognition.threads,
+			config.speechRecognition.executionMode.c_str());
+		AppendMainFrameStatusLine(configLine);
+
+		CString runtimeLine;
+		runtimeLine.Format(
+			L"[Speech] startup.runtime - ready=%s status=%s provider=%s model=%s loadAttempts=%llu loadFailures=%llu transcribeCompleted=%llu",
+			runtime.ready ? L"true" : L"false",
+			ToWide(runtime.status).c_str(),
+			ToWide(runtime.provider).c_str(),
+			ToWide(runtime.modelPath).c_str(),
+			static_cast<unsigned long long>(runtime.modelLoadAttempts),
+			static_cast<unsigned long long>(runtime.modelLoadFailures),
+			static_cast<unsigned long long>(runtime.transcribeRequestsCompleted));
+		AppendMainFrameStatusLine(runtimeLine);
+
+		if (runtime.error.has_value()) {
+			const CString errorLine(
+				(L"[Speech] startup.error - " + ToWide(runtime.error->message)).c_str());
+			AppendMainFrameStatusLine(errorLine);
+		}
+	}
+
 	void AppendStartupLocalModelStatus(
 		const blazeclaw::config::AppConfig& config,
 		const blazeclaw::core::ServiceManager& services) {
@@ -620,6 +661,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	if (m_serviceManager.IsRunning()) {
 		AppendStartupLocalModelStatus(m_config, m_serviceManager);
 		AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
+		AppendStartupSpeechStatus(m_config, m_serviceManager);
 	}
 	else {
 		AppendMainFrameStatusLine(

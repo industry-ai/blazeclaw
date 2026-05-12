@@ -323,12 +323,32 @@ namespace blazeclaw::gateway {
 			std::string errorMessage;
 		};
 
+		struct SpeechTranscribeRequest {
+			std::string runId;
+			std::string sessionId;
+			std::string audioPath;
+			std::string language;
+			std::string prompt;
+		};
+
+		struct SpeechTranscribeResult {
+			bool ok = false;
+			bool cancelled = false;
+			std::string text;
+			std::string language;
+			std::uint32_t latencyMs = 0;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
 		using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
 		using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
 		using EmbeddingsGenerateCallback =
 			std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
 		using EmbeddingsBatchCallback =
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
+		using SpeechTranscribeCallback =
+			std::function<SpeechTranscribeResult(const SpeechTranscribeRequest&)>;
 		using ParityLifecycleExportCallback = std::function<std::string()>;
 
 		[[nodiscard]] static std::vector<std::string>
@@ -377,6 +397,9 @@ namespace blazeclaw::gateway {
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
+		void SetSpeechTranscribeCallback(SpeechTranscribeCallback callback);
+		[[nodiscard]] SpeechTranscribeResult TranscribeSpeech(
+			const SpeechTranscribeRequest& request) const;
 		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
 		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
 		[[nodiscard]] const GatewayRuntimeContext& RuntimeContext() const noexcept {
@@ -664,6 +687,7 @@ namespace blazeclaw::gateway {
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
+		SpeechTranscribeCallback m_speechTranscribeCallback;
 		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };

@@ -233,6 +233,33 @@ namespace blazeclaw::core {
 
 				return gatewayResult;
 			});
+
+		manager.m_gatewayHost.SetSpeechTranscribeCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::SpeechTranscribeRequest& request) {
+				const auto result = manager.m_speechRecognitionRuntime.Transcribe(
+					speechrecognition::SpeechTranscribeRequest{
+						.runId = request.runId,
+						.sessionId = request.sessionId,
+						.audioPath = request.audioPath,
+						.language = request.language,
+						.prompt = request.prompt,
+					});
+				manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
+
+				blazeclaw::gateway::GatewayHost::SpeechTranscribeResult gatewayResult;
+				gatewayResult.ok = result.ok;
+				gatewayResult.cancelled = result.cancelled;
+				gatewayResult.text = result.text;
+				gatewayResult.language = result.language;
+				gatewayResult.latencyMs = result.latencyMs;
+				if (result.error.has_value()) {
+					gatewayResult.errorCode =
+						speechrecognition::SpeechRecognitionErrorCodeToString(result.error->code);
+					gatewayResult.errorMessage = result.error->message;
+				}
+
+				return gatewayResult;
+			});
 	}
 
 	void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManager& manager) {

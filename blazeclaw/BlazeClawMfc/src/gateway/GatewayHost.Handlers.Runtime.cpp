@@ -8,6 +8,7 @@ namespace blazeclaw::gateway {
 		BindRuntimeContext();
 		handlers::runtime::RuntimeSurfaceHandlers::RegisterAll(*this);
 		handlers::runtime::ChatPipelineHandlers::RegisterAll(*this);
+		handlers::runtime::SpeechRecognitionHandlers::RegisterAll(*this);
 		handlers::runtime::RuntimeOrchestrationStreamingHandlers::RegisterAll(*this);
 	}
 

@@ -1599,6 +1599,54 @@
             await sendPayload(message, pendingAttachments, forceError, { detached: false });
         }
 
+        async function transcribeSpeech(options) {
+            const sendOptions = options && typeof options === "object"
+                ? options
+                : {};
+            if (!state.bridgeAvailable) {
+                return;
+            }
+
+            const audioPath = String(sendOptions.audioPath || "").trim();
+            const prompt = String(sendOptions.prompt || "").trim();
+            const language = String(sendOptions.language || "").trim();
+            const requestOverride = typeof sendOptions.requestOverride === "function"
+                ? sendOptions.requestOverride
+                : null;
+            const transcriptRequest = {
+                sessionId: state.sessionKey,
+                runId: nextId(),
+                prompt: prompt || String(state.inputEl && state.inputEl.value || "").trim(),
+            };
+            if (audioPath) {
+                transcriptRequest.audioPath = audioPath;
+            }
+            if (language) {
+                transcriptRequest.language = language;
+            }
+
+            try {
+                const response = await requestWithOverride(
+                    "speech.transcribe",
+                    transcriptRequest,
+                    requestOverride);
+                const payload = response && response.payload && typeof response.payload === "object"
+                    ? response.payload
+                    : {};
+                const transcriptText = String(payload.text || payload.transcript || "").trim();
+                if (transcriptText && state.inputEl) {
+                    state.inputEl.value = transcriptText;
+                    persistDraftForSession();
+                    await send(false);
+                    return;
+                }
+                updateComposerState();
+            } catch (error) {
+                addMessage(`speech transcribe error: ${String(error)}`, "error");
+                updateComposerState();
+            }
+        }
+
         async function processSendQueue() {
             if (state.runId || state.sendQueue.length === 0) {
                 return;
@@ -2138,6 +2186,7 @@
             getSlashCommandHints,
             processSendQueue,
             sendDetachedMessage,
+            transcribeSpeech,
             parseApprovalTokenFromText,
             executeExecApprovalAction,
             noteInboundChatEvent,

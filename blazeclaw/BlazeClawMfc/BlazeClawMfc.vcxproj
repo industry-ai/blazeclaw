@@ -158,6 +158,9 @@
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\runtime\pch.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
@@ -356,7 +359,9 @@
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />

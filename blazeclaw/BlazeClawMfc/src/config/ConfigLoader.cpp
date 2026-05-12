@@ -1031,6 +1031,64 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.enabled=", 0) == 0) {
+				outConfig.speechRecognition.enabled = ParseBool(trimmedLine.substr(15), false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.provider=", 0) == 0) {
+				outConfig.speechRecognition.provider = ToLowerTrim(trimmedLine.substr(16));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.rolloutStage=", 0) == 0) {
+				outConfig.speechRecognition.rolloutStage = Trim(trimmedLine.substr(20));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.storageRoot=", 0) == 0) {
+				outConfig.speechRecognition.storageRoot = Trim(trimmedLine.substr(19));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.model_path=", 0) == 0) {
+				outConfig.speechRecognition.modelPath = Trim(trimmedLine.substr(18));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.language=", 0) == 0) {
+				outConfig.speechRecognition.language = Trim(trimmedLine.substr(16));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.sample_rate=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(19), value) && value > 0) {
+					outConfig.speechRecognition.sampleRate = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.threads=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(15), value) && value > 0) {
+					outConfig.speechRecognition.threads = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.execution_mode=", 0) == 0) {
+				const std::wstring normalized = ToLowerTrim(trimmedLine.substr(22));
+				outConfig.speechRecognition.executionMode =
+					normalized == L"parallel" ? L"parallel" : L"sequential";
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.verbose_metrics=", 0) == 0) {
+				outConfig.speechRecognition.verboseMetrics = ParseBool(trimmedLine.substr(23), false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"deepseek.apiKey=", 0) == 0) {
 				outConfig.deepseekApiKey = Trim(trimmedLine.substr(std::wstring(L"deepseek.apiKey=").size()));
 				continue;
@@ -1709,6 +1767,14 @@ namespace blazeclaw::config {
 			outConfig.embeddings.provider);
 		outConfig.embeddings.executionMode = NormalizeEmbeddingsExecutionMode(
 			outConfig.embeddings.executionMode);
+		outConfig.speechRecognition.provider = ToLowerTrim(outConfig.speechRecognition.provider);
+		if (outConfig.speechRecognition.provider.empty()) {
+			outConfig.speechRecognition.provider = L"onnx";
+		}
+		outConfig.speechRecognition.executionMode =
+			ToLowerTrim(outConfig.speechRecognition.executionMode) == L"parallel"
+			? L"parallel"
+			: L"sequential";
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
 		if (outConfig.localModel.provider == L"llama.cpp") {
@@ -1735,6 +1801,14 @@ namespace blazeclaw::config {
 
 		if (outConfig.embeddings.maxSequenceLength == 0) {
 			outConfig.embeddings.maxSequenceLength = 256;
+		}
+
+		if (outConfig.speechRecognition.sampleRate == 0) {
+			outConfig.speechRecognition.sampleRate = 16000;
+		}
+
+		if (outConfig.speechRecognition.threads == 0) {
+			outConfig.speechRecognition.threads = 4;
 		}
 
 		if (outConfig.localModel.maxTokens == 0) {

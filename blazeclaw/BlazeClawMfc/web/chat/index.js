@@ -33,6 +33,7 @@
     state.sendErrBtn = document.getElementById("sendErrBtn");
     state.attachBtn = document.getElementById("attachBtn");
     state.attachInput = document.getElementById("attachInput");
+    state.speechTranscribeBtn = document.getElementById("speechTranscribeBtn");
     state.abortBtn = document.getElementById("abortBtn");
     state.sessionSelect = document.getElementById("sessionSelect");
     state.modelSelect = document.getElementById("modelSelect");
@@ -2356,6 +2357,9 @@
         state.sendErrBtn.disabled = !canSend;
         state.abortBtn.disabled = !state.bridgeAvailable || !state.runId;
         state.attachBtn.disabled = !state.bridgeAvailable;
+        if (state.speechTranscribeBtn) {
+            state.speechTranscribeBtn.disabled = !state.bridgeAvailable;
+        }
         if (state.sessionSelect) {
             state.sessionSelect.disabled = !state.bridgeAvailable;
         }
@@ -2425,6 +2429,14 @@
         },
     });
 
+    if (state.speechTranscribeBtn) {
+        state.speechTranscribeBtn.addEventListener("click", () => {
+            const prompt = String(state.inputEl.value || "").trim();
+            void controller.transcribeSpeech({
+                prompt,
+            });
+        });
+    }
     if (state.sessionSubscribeBtn) {
         state.sessionSubscribeBtn.addEventListener("click", () => {
             void controller.subscribeSessionUpdates().then(() => {

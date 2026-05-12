@@ -482,11 +482,25 @@ namespace blazeclaw::config {
 		LlamaRuntimeConfig llama;
 	};
 
+	struct SpeechRecognitionConfig {
+		bool enabled = false;
+		std::wstring provider = L"onnx";
+		std::wstring rolloutStage = L"dev";
+		std::wstring storageRoot = L"models/chat/qwen3-asr-1.7b-onnx";
+		std::wstring modelPath;
+		std::wstring language = L"und";
+		std::uint32_t sampleRate = 16000;
+		std::uint32_t threads = 4;
+		std::wstring executionMode = L"sequential"; // "parallel" or "sequential"
+		bool verboseMetrics = false;
+	};
+
 	struct AppConfig {
 		GatewayConfig gateway;
 		AgentConfig agent;
 		ChatUiConfig chat;
 		LocalModelConfig localModel;
+		SpeechRecognitionConfig speechRecognition;
 		AgentsConfig agents;
 		AcpRuntimeConfig acp;
 		EmbeddedRuntimeConfig embedded;

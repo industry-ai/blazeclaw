@@ -17,6 +17,11 @@ struct ChatPipelineHandlers {
 	static void RegisterAll(GatewayHost& host);
 };
 
+/// ASR transcription gateway surface.
+struct SpeechRecognitionHandlers {
+	static void RegisterAll(GatewayHost& host);
+};
+
 /// Orchestration/status, streaming, models/failover tail, and static metric tables invocation.
 struct RuntimeOrchestrationStreamingHandlers {
 	static void RegisterAll(GatewayHost& host);

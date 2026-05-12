@@ -1228,6 +1228,28 @@ namespace blazeclaw::gateway {
 		m_embeddingsBatchCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetSpeechTranscribeCallback(
+		SpeechTranscribeCallback callback) {
+		m_speechTranscribeCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechTranscribeResult GatewayHost::TranscribeSpeech(
+		const SpeechTranscribeRequest& request) const {
+		if (!m_speechTranscribeCallback) {
+			return SpeechTranscribeResult{
+				.ok = false,
+				.cancelled = false,
+				.text = {},
+				.language = {},
+				.latencyMs = 0,
+				.errorCode = "speech_runtime_unavailable",
+				.errorMessage = "speech transcription runtime callback is not configured",
+			};
+		}
+
+		return m_speechTranscribeCallback(request);
+	}
+
 	void GatewayHost::SetParityLifecycleExportCallback(
 		ParityLifecycleExportCallback callback) {
 		m_parityLifecycleExport = std::move(callback);
