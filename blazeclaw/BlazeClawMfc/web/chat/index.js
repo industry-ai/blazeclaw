@@ -2987,6 +2987,12 @@
         onNeedsApprovalEvent: scheduleNeedsApprovalQueueWatch,
     });
 
+    if (typeof controller.setPolledEventsHandler === "function") {
+        controller.setPolledEventsHandler(function (events) {
+            eventsModule.handleChatEvents(Array.isArray(events) ? events : []);
+        });
+    }
+
     const composerModule = window.BlazeClawChatComposer.createComposerModule({
         state,
         controller,

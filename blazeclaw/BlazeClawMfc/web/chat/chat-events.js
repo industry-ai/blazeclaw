@@ -284,20 +284,22 @@
                 }
 
                 if (event.state === "final" || event.state === "completed") {
+                    const terminalState = event.state === "completed" ? "completed" : "final";
                     const normalizedFinal = normalizeFinalAssistantMessage(event.message);
                     const text = controller.consumeTerminalText(normalizedFinal || event.message);
                     let shouldReconcile = false;
                     if (text) {
+                        controller.commitStreamTranscriptFinal({
+                            runId,
+                            text,
+                            terminalState,
+                        });
+
                         const streamedThisTurn =
                             (typeof controller.hasBufferedAssistantStream === "function" &&
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurn) {
-                            controller.commitStreamTranscriptFinal({
-                                runId,
-                                text,
-                                terminalState: event.state === "completed" ? "completed" : "final",
-                            });
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
@@ -309,7 +311,7 @@
                     }
 
                     if (runId) {
-                        controller.markTerminalRun(runId, event.state === "completed" ? "completed" : "final");
+                        controller.markTerminalRun(runId, terminalState);
                     }
                     controller.clearRunState();
                     if (shouldReconcile) {
@@ -374,8 +376,16 @@
                             text,
                             terminalState: "aborted",
                         });
-                        addOrReplaceStream(text);
-                        finalizeStream();
+                        const streamedThisTurnAborted =
+                            (typeof controller.hasBufferedAssistantStream === "function" &&
+                                controller.hasBufferedAssistantStream()) ||
+                            Boolean(state.streamText);
+                        if (streamedThisTurnAborted) {
+                            addOrReplaceStream(text);
+                            finalizeStream();
+                        } else {
+                            addMessage(text, "peer");
+                        }
                     } else {
                         shouldReconcile = true;
                     }
@@ -703,6 +713,72 @@
             }),
                 "needs_approval (non-stream path) should upsert approval token directly");
             summary.push("needs_approval without stream text");
+        }
+
+        {
+            const state = createRegressionState();
+            state.streamText = "";
+            const messageRows = [];
+            const transcriptCommits = [];
+
+            const module = createEventsModule({
+                state,
+                controller: {
+                    hasTerminalRun: function () { return false; },
+                    markTerminalRun: function () { },
+                    clearRunState: function () { },
+                    scheduleHistoryReconcile: function () { },
+                    parseTextFromMessage: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    consumeTerminalText: function (message) {
+                        if (message && typeof message.text === "string") {
+                            return message.text;
+                        }
+                        return "";
+                    },
+                    isSilentReplyText: function (text) {
+                        return typeof text === "string" && /^\s*NO_REPLY\s*$/i.test(text);
+                    },
+                    commitStreamTranscriptFinal: function (payload) {
+                        transcriptCommits.push(payload);
+                        return true;
+                    },
+                    noteInboundChatEvent: function () { },
+                    applyDeltaText: function () { },
+                    hasBufferedAssistantStream: function () { return false; },
+                },
+                addMessage: function (text, kind) {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+                addOrReplaceStream: function () { },
+                finalizeStream: function () { },
+                upsertApprovalToken: function () { },
+            });
+
+            module.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-final-no-stream",
+                state: "final",
+                message: {
+                    role: "assistant",
+                    text: "Weather report sent successfully.",
+                },
+            }]);
+
+            assertRegression(transcriptCommits.length === 1 &&
+                transcriptCommits[0] &&
+                transcriptCommits[0].terminalState === "final" &&
+                transcriptCommits[0].text === "Weather report sent successfully.",
+                "final (non-stream path) should commit transcript terminal state before UI-only render");
+            assertRegression(messageRows.some(function (row) {
+                return row.kind === "peer" && row.text === "Weather report sent successfully.";
+            }),
+                "final (non-stream path) should still render immediate peer response");
+            summary.push("final non-stream transcript-first visibility");
         }
 
         return {

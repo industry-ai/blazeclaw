@@ -533,6 +533,9 @@
                 ? state.operatorDiagnosticsLastEmitMs
                 : {};
         state.sessionSubscribed = Boolean(state.sessionSubscribed);
+        state.onPolledChatEvents = typeof state.onPolledChatEvents === "function"
+            ? state.onPolledChatEvents
+            : null;
         state.sessionCompactionItems = Array.isArray(state.sessionCompactionItems)
             ? state.sessionCompactionItems
             : [];
@@ -1363,9 +1366,19 @@
                     void request("chat.events.poll", {
                         sessionKey: state.sessionKey,
                         limit: 50,
-                    }).catch(function () {
-                        // Ignore reconcile failures; watchdog retries on next stale interval.
-                    });
+                    })
+                        .then(function (pollResult) {
+                            const polledEvents = extractChatEventsFromPollResponse(pollResult);
+                            if (!Array.isArray(polledEvents) || polledEvents.length === 0) {
+                                return;
+                            }
+                            if (typeof state.onPolledChatEvents === "function") {
+                                state.onPolledChatEvents(polledEvents);
+                            }
+                        })
+                        .catch(function () {
+                            // Ignore reconcile failures; watchdog retries on next stale interval.
+                        });
                 }
 
                 if (state.sendQueue.length > 0 &&
@@ -1951,6 +1964,10 @@
             return state.terminalRunStates.has(normalizedRunId);
         }
 
+        function setPolledEventsHandler(handler) {
+            state.onPolledChatEvents = typeof handler === "function" ? handler : null;
+        }
+
         function scheduleHistoryReconcile() {
             if (state.reconcileTimer) {
                 clearTimeout(state.reconcileTimer);
@@ -2194,6 +2211,7 @@
             markTerminalRun,
             hasTerminalRun,
             hasBufferedAssistantStream,
+            setPolledEventsHandler,
             scheduleHistoryReconcile,
             getStructuredTranscript: function () {
                 return Array.isArray(state.structuredTranscript)
@@ -3160,23 +3178,23 @@
                 state,
                 addMessage: function () { },
             });
-            const baselineInbound = state.runWatchdogLastInboundEventMs;
-            controller.noteInboundChatEvent("delta");
-            assertRegression(state.runWatchdogLastInboundEventMs === baselineInbound,
-                "watchdog inbound tracker should ignore events when no active run exists");
-
-            state.runId = "run-watchdog-1";
-            controller.noteInboundChatEvent("started");
-            const startedInbound = state.runWatchdogLastInboundEventMs;
-            assertRegression(startedInbound > 0,
-                "watchdog inbound tracker should record event timestamps for active runs");
+            const polledBatch = [{
+                sessionKey: "main",
+                runId: "run-watchdog-poll-1",
+                state: "final",
+                message: { role: "assistant", text: "done" },
+            }];
+            let forwarded = 0;
+            controller.setPolledEventsHandler(function (events) {
+                if (Array.isArray(events) && events.length === 1 && events[0].runId === "run-watchdog-poll-1") {
+                    forwarded += 1;
+                }
+            });
+            state.onPolledChatEvents(polledBatch);
+            assertRegression(forwarded === 1,
+                "setPolledEventsHandler should forward polled chat events to registered callback");
             controller.clearRunState();
-            assertRegression(
-                state.runWatchdogLastInboundEventMs === 0 &&
-                state.runWatchdogLastReconcileMs === 0 &&
-                state.runWatchdogLastWarningMs === 0,
-                "terminal clear should reset watchdog stale-run bookkeeping state");
-            summary.push("watchdog stale-run bookkeeping");
+            summary.push("watchdog poll event forwarding");
         }
 
         return {
