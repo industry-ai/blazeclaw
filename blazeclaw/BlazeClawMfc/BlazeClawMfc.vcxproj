@@ -79,6 +79,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(LlamaCppLibDir);$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>$(LlamaCppBuildRoot)\src\$(Configuration)\llama.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-base.lib;$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration)\ggml-cuda.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
@@ -105,6 +106,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(LlamaCppLibDir);$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>$(LlamaCppBuildRoot)\src\$(Configuration)\llama.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-cpu.lib;$(LlamaCppBuildRoot)\ggml\src\$(Configuration)\ggml-base.lib;$(LlamaCppBuildRoot)\ggml\src\ggml-cuda\$(Configuration)\ggml-cuda.lib;Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
@@ -120,6 +122,7 @@
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatUiStartupResolver.h" />
     <ClInclude Include="src\app\ChatView.h" />
+    <ClInclude Include="src\app\VoiceRecorder.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\CMgrMessage.h" />
     <ClInclude Include="src\app\EventTransport.h" />
@@ -323,6 +326,7 @@
     <ClCompile Include="src\app\CBridge.cpp" />
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
+    <ClCompile Include="src\app\VoiceRecorder.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />
     <ClCompile Include="src\app\CMgrMessage.cpp" />
     <ClCompile Include="src\app\EventTransport.cpp" />

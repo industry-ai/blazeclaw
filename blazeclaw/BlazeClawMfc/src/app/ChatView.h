@@ -2,6 +2,7 @@
 
 #include "pch.h"
 #include "ChatInputEdit.h"
+#include "VoiceRecorder.h"
 #include "../gateway/GatewayProtocolModels.h"
 
 #include <cstdint>
@@ -10,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-class CChatView : public CView
+class CChatView : public CView, public IVoiceRecorderCallback
 {
 protected:
 	CChatView() noexcept;
@@ -23,6 +24,7 @@ protected:
 	CButton  m_wndSend;
 	CButton  m_wndAbort;
 	CButton  m_wndAttach;
+	CButton  m_wndVoice;
 
 	struct CHAT_ITEM
 	{
@@ -80,10 +82,13 @@ protected:
 	std::uint64_t m_chatSendGeneration = 1;
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 
-	// Overrides
+   CVoiceRecorder m_voiceRecorder;
+   CString m_strLastVoiceFilePath;  // Last saved voice recording file path
+
+// Overrides
 public:
-	virtual void OnDraw(CDC* /*pDC*/);
-	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+	virtual void OnDraw(CDC* /*pDC*/) override;
+	virtual BOOL PreCreateWindow(CREATESTRUCT& cs) override;
 
 protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
@@ -91,6 +96,7 @@ protected:
 	afx_msg void OnSendClicked();
 	afx_msg void OnAbortClicked();
 	afx_msg void OnAttachClicked();
+	afx_msg void OnVoiceClicked();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg LRESULT OnNativeChatSendCompleted(WPARAM wParam, LPARAM lParam);
@@ -119,5 +125,9 @@ protected:
 	void UpdateItemAt(int index, const CString& strText, BOOL bSelf);
 	void UpdateControlStates();
 	void AddStatusMessage(const CString& message);
-};
 
+	// IVoiceRecorderCallback
+	virtual void OnVoiceDataAvailable(const BYTE* pData, DWORD dwLength) override;
+	virtual void OnVoiceStateChanged(VoiceRecorderState state) override;
+	virtual void OnVoiceError(long nError, const wchar_t* pszDescription) override;
+};

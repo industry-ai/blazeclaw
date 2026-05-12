@@ -295,8 +295,11 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		}
 		manager.m_localModelRuntimeSnapshot = manager.m_localModelRuntime->Snapshot();
 		AppendStartupTrace("ServiceManager.Start.localmodel.afterLoad");
-		manager.m_speechRecognitionRuntime.LoadModel();
+		const bool speechRecognitionLoaded = manager.m_speechRecognitionRuntime.LoadModel();
 		manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
+		if (!speechRecognitionLoaded && manager.m_speechRecognition.status.empty()) {
+			manager.m_speechRecognition.status = "load_failed";
+		}
 		AppendStartupTrace("ServiceManager.Start.speech.afterLoad");
 		if (!localModelLoaded && manager.m_localModelRuntimeSnapshot.status.empty()) {
 			manager.m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled

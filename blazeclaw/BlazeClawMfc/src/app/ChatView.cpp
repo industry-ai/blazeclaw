@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <memory>
 #include <thread>
@@ -29,6 +31,7 @@ namespace {
 	constexpr UINT kInputControlId = 1002;
 	constexpr UINT kAbortButtonControlId = 1003;
 	constexpr UINT kAttachButtonControlId = 1004;
+	constexpr UINT kVoiceButtonControlId = 1005;
 	constexpr char kSilentReplyToken[] = "NO_REPLY";
 	constexpr std::size_t kMaxAttachmentBytes = 5 * 1024 * 1024;
 
@@ -316,6 +319,7 @@ BEGIN_MESSAGE_MAP(CChatView, CView)
 	ON_BN_CLICKED(kSendButtonControlId, &CChatView::OnSendClicked)
 	ON_BN_CLICKED(kAbortButtonControlId, &CChatView::OnAbortClicked)
 	ON_BN_CLICKED(kAttachButtonControlId, &CChatView::OnAttachClicked)
+	ON_BN_CLICKED(kVoiceButtonControlId, &CChatView::OnVoiceClicked)
 END_MESSAGE_MAP()
 
 CChatView::CChatView() noexcept
@@ -328,7 +332,7 @@ BOOL CChatView::PreCreateWindow(CREATESTRUCT& cs)
 
 void CChatView::OnDraw(CDC* /*pDC*/)
 {
-	// 不需要额外绘制，由子控件负责显示
+	// Drawing handled by child controls
 }
 
 int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
@@ -338,7 +342,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 	CRect rcDummy(0, 0, 0, 0);
 
-	// 消息列表
+	// Message list
 	if (!m_wndMsgList.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_BORDER |
 		LBS_NOINTEGRALHEIGHT | LBS_OWNERDRAWVARIABLE | LBS_HASSTRINGS,
 		rcDummy, this, kMsgListControlId))
@@ -347,7 +351,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		return -1;
 	}
 
-	// 输入框
+	// Input edit
 	if (!m_wndInput.Create(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL |
 		ES_MULTILINE | ES_AUTOVSCROLL,
 		rcDummy, this, kInputControlId))
@@ -357,7 +361,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	}
 	m_wndInput.m_pOwner = this;
 
-	// 发送按钮
+	// Send button
 	if (!m_wndSend.Create(_T("发送"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
 		rcDummy, this, kSendButtonControlId))
 	{
@@ -378,6 +382,18 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		TRACE0("Failed to create attach button\n");
 		return -1;
 	}
+
+	// Voice button
+	if (!m_wndVoice.Create(_T("语音"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		rcDummy, this, kVoiceButtonControlId))
+	{
+		TRACE0("Failed to create voice button\n");
+		return -1;
+	}
+
+	// Initialize voice recorder
+	m_voiceRecorder.SetCallback(this);
+	m_voiceRecorder.Initialize(m_hWnd);
 
 	m_chatState.connected = IsGatewayConnected();
 	LoadChatHistoryNative();
@@ -404,11 +420,12 @@ void CChatView::LayoutControls(int cx, int cy)
 	const int nMargin = 8;
 	const int nInputHeight = 64;
 	const int nButtonWidth = 74;
+	const int nVoiceButtonWidth = 74;
 	const int nAttachWidth = 74;
 
 	CRect rcClient(0, 0, cx, cy);
 
-	// 消息列表区域（上方）
+	// Message list (top)
 	CRect rcList = rcClient;
 	rcList.DeflateRect(nMargin, nMargin, nMargin, 0);
 	rcList.bottom -= (nMargin + nInputHeight + nMargin);
@@ -417,7 +434,7 @@ void CChatView::LayoutControls(int cx, int cy)
 
 	m_wndMsgList.MoveWindow(rcList);
 
-	// 输入框和按钮区域（下方）
+	// Bottom bar
 	CRect rcBottom = rcClient;
 	rcBottom.DeflateRect(nMargin, 0, nMargin, nMargin);
 	rcBottom.top = rcBottom.bottom - nInputHeight;
@@ -429,17 +446,21 @@ void CChatView::LayoutControls(int cx, int cy)
 	CRect rcAbort = rcButton;
 	rcAbort.left -= (nButtonWidth + nMargin);
 	rcAbort.right -= (nButtonWidth + nMargin);
+	CRect rcVoice = rcAbort;
+	rcVoice.left -= (nVoiceButtonWidth + nMargin);
+	rcVoice.right -= (nVoiceButtonWidth + nMargin);
 
 	CRect rcAttach = rcBottom;
 	rcAttach.right = rcAttach.left + nAttachWidth;
 
 	CRect rcEdit = rcBottom;
 	rcEdit.left = rcAttach.right + nMargin;
-	rcEdit.right = rcAbort.left - nMargin;
+	rcEdit.right = rcVoice.left - nMargin;
 
 	m_wndInput.MoveWindow(rcEdit);
 	m_wndSend.MoveWindow(rcButton);
 	m_wndAbort.MoveWindow(rcAbort);
+	m_wndVoice.MoveWindow(rcVoice);
 	m_wndAttach.MoveWindow(rcAttach);
 }
 
@@ -514,6 +535,49 @@ void CChatView::OnAttachClicked()
 	UpdateControlStates();
 }
 
+void CChatView::OnVoiceClicked()
+{
+	if (m_voiceRecorder.GetState() == VoiceRecorderState::Recording)
+	{
+		// Stop recording (WAV file written from memory buffer after Stop())
+		m_voiceRecorder.StopRecording();
+	}
+	else
+	{
+		// Get exe directory path
+		WCHAR exePath[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+		// Remove filename, keep directory
+		LPWSTR p = wcsrchr(exePath, L'\\');
+		if (p != nullptr) *p = L'\0';
+
+		// Create BlazeClawRecordings subfolder
+		CString recordingsDir;
+		recordingsDir.Format(L"%s\\BlazeClawRecordings", exePath);
+		CreateDirectoryW(recordingsDir, nullptr);
+
+		// Generate filename with timestamp
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		CStringW fileName;
+		fileName.Format(L"recording_%04d%02d%02d_%02d%02d%02d.wav",
+			st.wYear, st.wMonth, st.wDay,
+			st.wHour, st.wMinute, st.wSecond);
+
+		CStringW filePathW = recordingsDir + L"\\" + fileName;
+
+		// Save file path for display after recording stops
+		m_strLastVoiceFilePath = filePathW;
+
+		if (!m_voiceRecorder.StartRecording(filePathW))
+		{
+			AfxMessageBox(L"Failed to start recording. Please check your microphone.");
+		}
+	}
+
+	UpdateControlStates();
+}
+
 void CChatView::OnTimer(UINT_PTR nIDEvent)
 {
 	if (nIDEvent == m_chatPollTimerId && nIDEvent != 0)
@@ -535,7 +599,33 @@ void CChatView::OnDestroy()
 		m_chatPollTimerId = 0;
 	}
 
+	m_voiceRecorder.Shutdown();
+
 	CView::OnDestroy();
+}
+
+void CChatView::OnVoiceDataAvailable(const BYTE* /*pData*/, DWORD /*dwLength*/)
+{
+	// Data is written directly to file during recording
+}
+
+void CChatView::OnVoiceStateChanged(VoiceRecorderState state)
+{
+	if (state == VoiceRecorderState::Idle && !m_strLastVoiceFilePath.IsEmpty())
+	{
+		CString msg;
+		msg.Format(L"[Voice] Saved: %s", m_strLastVoiceFilePath.GetString());
+		AddStatusMessage(msg);
+	}
+	UpdateControlStates();
+}
+
+void CChatView::OnVoiceError(long nError, const wchar_t* pszDescription)
+{
+	CString msg;
+	msg.Format(L"[Voice] Recording error (%d): %s", nError, pszDescription);
+	AddStatusMessage(msg);
+	m_wndVoice.SetWindowText(_T("语音"));
 }
 
 bool CChatView::IsGatewayConnected() const
@@ -1432,6 +1522,21 @@ void CChatView::UpdateControlStates()
 	m_wndAbort.EnableWindow(m_chatState.connected && m_chatState.chatRunId.has_value());
 	m_wndAttach.EnableWindow(m_chatState.connected && !busy);
 
+	// Voice button: show "Stop" during recording, "语音" when idle
+	if (m_voiceRecorder.GetState() == VoiceRecorderState::Recording)
+	{
+		m_wndVoice.SetWindowText(_T("Stop"));
+		m_wndVoice.EnableWindow(TRUE);
+		m_wndSend.EnableWindow(FALSE);
+		m_wndInput.EnableWindow(FALSE);
+		m_wndAttach.EnableWindow(FALSE);
+	}
+	else
+	{
+		m_wndVoice.SetWindowText(_T("语音"));
+		m_wndVoice.EnableWindow(m_chatState.connected && !busy);
+	}
+
 	CString sendText = m_chatState.chatSending ? L"发送中" : L"发送";
 	m_wndSend.SetWindowText(sendText);
 	CString attachText;
@@ -1458,7 +1563,6 @@ int CChatView::AppendMessage(const CString& strText, BOOL bSelf)
 	m_wndMsgList.AddString(_T(""));
 	if (nIndex != LB_ERR && nIndex != LB_ERRSPACE)
 	{
-		// 触发重新测量高度并滚动到底部
 		m_wndMsgList.Invalidate();
 		m_wndMsgList.UpdateWindow();
 		m_wndMsgList.SetCurSel(nIndex);
@@ -1481,7 +1585,6 @@ static void DrawBubble(CDC& dc, const CRect& rcBubble, bool bSelf)
 	CRect rr = rcBubble;
 	dc.RoundRect(rr, CPoint(10, 10));
 
-	// 小尾巴（简化三角形）
 	POINT pts[3]{};
 	if (bSelf)
 	{
@@ -1515,17 +1618,14 @@ void CChatView::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMIS)
 		return;
 	}
 
+	const CHAT_ITEM& item = m_items[(int)lpMIS->itemID];
+
 	CRect rcClient;
 	m_wndMsgList.GetClientRect(&rcClient);
 
-	const int outerMarginH = 10;
 	const int outerMarginV = 6;
 	const int bubblePaddingH = 10;
 	const int bubblePaddingV = 6;
-	const int tail = 10;
-
-	const int maxBubbleWidth = max(120, (int)(rcClient.Width() * 0.70f));
-	const int maxTextWidth = maxBubbleWidth - 2 * bubblePaddingH;
 
 	CDC* pDC = m_wndMsgList.GetDC();
 	if (pDC == nullptr)
@@ -1534,17 +1634,21 @@ void CChatView::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMIS)
 		return;
 	}
 
+	const int maxBubbleWidth = max(120, (int)(rcClient.Width() * 0.70f));
+	const int maxTextWidth = maxBubbleWidth - 2 * bubblePaddingH;
+
 	CFont* pOldFont = pDC->SelectObject(m_wndMsgList.GetFont());
 
 	CRect rcCalc(0, 0, maxTextWidth, 0);
-	pDC->DrawText(m_items[(int)lpMIS->itemID].text, rcCalc,
+	pDC->DrawText(item.text, rcCalc,
 		DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX);
 
 	pDC->SelectObject(pOldFont);
-	m_wndMsgList.ReleaseDC(pDC);
 
 	const int bubbleH = rcCalc.Height() + 2 * bubblePaddingV;
-	const int itemH = bubbleH + 2 * outerMarginV;
+	int itemH = bubbleH + 2 * outerMarginV;
+
+	m_wndMsgList.ReleaseDC(pDC);
 	lpMIS->itemHeight = max(28, itemH);
 }
 
@@ -1611,4 +1715,3 @@ void CChatView::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDIS)
 	dc.SelectObject(pOldFont);
 	dc.Detach();
 }
-
