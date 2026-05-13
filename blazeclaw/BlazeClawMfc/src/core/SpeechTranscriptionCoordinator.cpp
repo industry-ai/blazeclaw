@@ -12,6 +12,38 @@ namespace blazeclaw::core {
 		using blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode;
 		using blazeclaw::core::speechrecognition::SpeechSessionStage;
 
+		const char* ExecutionStageToString(const SpeechExecutionStage stage) {
+			switch (stage) {
+			case SpeechExecutionStage::Queued:
+				return "queued";
+			case SpeechExecutionStage::Recording:
+				return "recording";
+			case SpeechExecutionStage::Stopped:
+				return "stopped";
+			case SpeechExecutionStage::Transcribing:
+				return "transcribing";
+			case SpeechExecutionStage::Completed:
+				return "completed";
+			case SpeechExecutionStage::Failed:
+				return "failed";
+			case SpeechExecutionStage::Cancelled:
+				return "cancelled";
+			default:
+				return "unknown";
+			}
+		}
+
+		std::string AudioPathForLog(const std::string& audioPath) {
+			if (audioPath.empty()) {
+				return "<empty>";
+			}
+			constexpr std::size_t kMaxChars = 192;
+			if (audioPath.size() <= kMaxChars) {
+				return audioPath;
+			}
+			return audioPath.substr(0, kMaxChars) + "...";
+		}
+
 		SpeechExecutionStage ToExecutionStage(const SpeechSessionStage stage) {
 			switch (stage) {
 			case SpeechSessionStage::Recording:
@@ -64,6 +96,11 @@ namespace blazeclaw::core {
 						accepted.accepted = false;
 						accepted.executionState = existingIt->second;
 						accepted.error = BuildBusySessionError(request.sessionId);
+						TRACE(
+							"[SpeechTranscriptionCoordinator][accept.rejected_busy_session] sessionId=%S runId=%S stage=%S\n",
+							request.sessionId.c_str(),
+							existingIt->second.runId.c_str(),
+							ExecutionStageToString(existingIt->second.stage));
 						return accepted;
 					}
 				}
@@ -77,6 +114,10 @@ namespace blazeclaw::core {
 					.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
 					.message = "speech transcription run is already active",
 				};
+				TRACE(
+					"[SpeechTranscriptionCoordinator][accept.rejected_busy_run] runId=%S stage=%S\n",
+					trackingRunId.c_str(),
+					ExecutionStageToString(runIt->second.stage));
 				return accepted;
 			}
 
@@ -93,6 +134,12 @@ namespace blazeclaw::core {
 		if (callback) {
 			callback(state);
 		}
+		TRACE(
+			"[SpeechTranscriptionCoordinator][accept.accepted] sessionId=%S runId=%S audioPath=%S stage=%S\n",
+			state.sessionId.c_str(),
+			state.runId.c_str(),
+			AudioPathForLog(state.audioPath).c_str(),
+			ExecutionStageToString(state.stage));
 		return accepted;
 	}
 
@@ -148,6 +195,11 @@ namespace blazeclaw::core {
 		if (callback) {
 			callback(transcribingState);
 		}
+		TRACE(
+			"[SpeechTranscriptionCoordinator][execute.start] sessionId=%S runId=%S audioPath=%S\n",
+			accepted.executionState.sessionId.c_str(),
+			accepted.executionState.runId.c_str(),
+			AudioPathForLog(accepted.executionState.audioPath).c_str());
 
 		const auto result = runtime.Transcribe(speechrecognition::SpeechTranscribeRequest{
 			.runId = accepted.executionState.runId,
@@ -182,6 +234,13 @@ namespace blazeclaw::core {
 		if (completedCallback) {
 			completedCallback(completedState);
 		}
+		TRACE(
+			"[SpeechTranscriptionCoordinator][execute.completed] sessionId=%S runId=%S stage=%S cancelled=%d latencyMs=%u\n",
+			completedState.sessionId.c_str(),
+			completedState.runId.c_str(),
+			ExecutionStageToString(completedState.stage),
+			completedState.cancelRequested ? 1 : 0,
+			completedState.latencyMs);
 
 		return result;
 	}
@@ -210,7 +269,12 @@ namespace blazeclaw::core {
 			callback(cancelledState);
 		}
 
-		return runtime.Cancel(runId);
+		const bool cancelled = runtime.Cancel(runId);
+		TRACE(
+			"[SpeechTranscriptionCoordinator][cancel.requested] runId=%S source=api accepted=%d\n",
+			runId.c_str(),
+			cancelled ? 1 : 0);
+		return cancelled;
 	}
 
 	void SpeechTranscriptionCoordinator::Shutdown(RuntimeInterface& runtime) {
@@ -236,6 +300,9 @@ namespace blazeclaw::core {
 
 		for (const auto& runId : activeRunIds) {
 			(void)runtime.Cancel(runId);
+			TRACE(
+				"[SpeechTranscriptionCoordinator][cancel.requested] runId=%S source=shutdown accepted=1\n",
+				runId.c_str());
 		}
 
 		if (callback) {
@@ -243,6 +310,10 @@ namespace blazeclaw::core {
 				callback(state);
 			}
 		}
+		TRACE(
+			"[SpeechTranscriptionCoordinator][shutdown.summary] cancelledRuns=%zu clearedSessions=%zu\n",
+			activeRunIds.size(),
+			static_cast<std::size_t>(cancelledStates.size()));
 	}
 
 	bool SpeechTranscriptionCoordinator::IsTerminal(

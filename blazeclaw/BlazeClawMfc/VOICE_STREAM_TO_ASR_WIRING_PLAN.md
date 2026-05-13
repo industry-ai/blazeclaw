@@ -306,24 +306,44 @@ Step 8 outcome:
 - the speech runtime and recorder teardown behavior remain compatible with the WAV-file handoff and async dispatch architecture
 
 ### Step 9: Expand diagnostics
-Add targeted debug logging for speech orchestration.
+Status: completed
 
-Recommended log lines:
-- request accepted with `sessionId`, `runId`, `audioPath`
-- background transcription started
-- preprocessing completed with sample rate / duration / frames
-- inference completed with latency
-- final transcript length / language
-- cancellation source
-- shutdown drain/cancel summary
+Added targeted debug logging for speech orchestration so stalls can be localized quickly across admission, runtime execution, cancellation, and shutdown.
 
-This should make it obvious whether the stall is:
-- recording
-- file handoff
-- queue dispatch
-- ONNX inference
-- callback/event delivery
-- UI state restoration
+Implemented rollout:
+- added coordinator diagnostics for:
+  - request accepted (`sessionId`, `runId`, `audioPath`)
+  - admission rejection for duplicate session/run
+  - background transcription started
+  - terminal execution stage with latency
+  - cancellation source (`api` vs `shutdown`)
+  - shutdown summary counts
+- added runtime diagnostics for:
+  - request accepted at runtime boundary
+  - preprocessing completed (`sampleRate`, `durationMs`, `frames`)
+  - inference completed with latency
+  - final transcript summary (`length`, `language`, `latencyMs`)
+  - cancellation checkpoints (`before_preprocessing`, `before_inference`, `during_decode`)
+  - runtime cancel entry (`source=coordinator_or_shutdown`)
+- added service teardown diagnostics for:
+  - speech shutdown drain/cancel summary with counter deltas
+  - native recording stop result payload (`ok`, `audioPath`, `error`)
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP9_DIAGNOSTICS.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.cpp`
+- `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechRecognitionRuntime.cpp`
+- `BlazeClawMfc/src/core/ServiceManager.cpp`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_WIRING_PLAN.md`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP9_DIAGNOSTICS.md`
+- `docs/README.md`
+
+Step 9 outcome:
+- speech execution now emits stage-aligned diagnostics from coordinator through runtime and shutdown cleanup
+- cancellation source and checkpoint stage are visible in logs
+- shutdown diagnostics now include explicit speech drain/cancel and recorder-stop summaries
 
 ### Step 10: Validate incrementally
 Validate in small passes:

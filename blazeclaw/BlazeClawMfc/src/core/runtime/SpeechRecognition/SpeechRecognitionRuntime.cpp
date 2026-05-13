@@ -462,6 +462,10 @@ namespace blazeclaw::core::speechrecognition {
 		result.sessionState.segment = std::nullopt;
 		const auto startedAt = std::chrono::steady_clock::now();
 		++m_snapshot.transcribeRequestsStarted;
+		TraceRuntime(
+			"transcribe.request.accepted",
+			request.runId,
+			"sessionId=" + request.sessionId + " audioPath=" + request.audioPath);
 
 		if (request.audioPath.empty()) {
 			result.ok = false;
@@ -722,6 +726,10 @@ namespace blazeclaw::core::speechrecognition {
 			++m_snapshot.transcribeRequestsCancelled;
 			m_snapshot.status = "cancelled";
 			m_snapshot.error = result.error;
+			TraceRuntime(
+				"transcribe.cancelled",
+				request.runId,
+				"source=runtime_checkpoint stage=before_preprocessing");
 			return result;
 		}
 
@@ -779,6 +787,12 @@ namespace blazeclaw::core::speechrecognition {
 			std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - preprocessStart)
 				.count());
+		TraceRuntime(
+			"transcribe.preprocessing.completed",
+			request.runId,
+			"sampleRate=" + std::to_string(m_snapshot.lastInputSampleRate) +
+			" durationMs=" + std::to_string(m_snapshot.lastAudioDurationMs) +
+			" frames=" + std::to_string(m_snapshot.lastFeatureFrames));
 
 		if (isCancelled()) {
 			result.ok = false;
@@ -793,6 +807,10 @@ namespace blazeclaw::core::speechrecognition {
 			++m_snapshot.transcribeRequestsCancelled;
 			m_snapshot.status = "cancelled";
 			m_snapshot.error = result.error;
+			TraceRuntime(
+				"transcribe.cancelled",
+				request.runId,
+				"source=runtime_checkpoint stage=before_inference");
 			return result;
 		}
 
@@ -893,6 +911,10 @@ namespace blazeclaw::core::speechrecognition {
 					++m_snapshot.transcribeRequestsCancelled;
 					m_snapshot.status = "cancelled";
 					m_snapshot.error = result.error;
+					TraceRuntime(
+						"transcribe.cancelled",
+						request.runId,
+						"source=runtime_checkpoint stage=during_decode");
 					return result;
 				}
 
@@ -1060,6 +1082,10 @@ namespace blazeclaw::core::speechrecognition {
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::steady_clock::now() - inferenceStart)
 					.count());
+			TraceRuntime(
+				"transcribe.inference.completed",
+				request.runId,
+				"latencyMs=" + std::to_string(m_snapshot.lastInferenceLatencyMs));
 
 			const auto decodeStart = std::chrono::steady_clock::now();
 			result.text = decodeTokens(generatedIds, m_sessionState->tokenById);
@@ -1085,6 +1111,12 @@ namespace blazeclaw::core::speechrecognition {
 			result.language = request.language.empty() ? m_snapshot.language : request.language;
 			result.latencyMs = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - startedAt).count());
+			TraceRuntime(
+				"transcribe.transcript.completed",
+				request.runId,
+				"length=" + std::to_string(result.text.size()) +
+				" language=" + result.language +
+				" latencyMs=" + std::to_string(result.latencyMs));
 			result.sessionState.stage = SpeechSessionStage::Completed;
 			result.sessionState.transcriptText = result.text;
 			result.sessionState.language = result.language;
@@ -1123,6 +1155,7 @@ namespace blazeclaw::core::speechrecognition {
 		}
 		std::lock_guard<std::mutex> lock(m_cancelMutex);
 		m_cancelFlagsByRunId[runId] = true;
+		TraceRuntime("cancel.requested", runId, "source=coordinator_or_shutdown");
 		return true;
 	}
 

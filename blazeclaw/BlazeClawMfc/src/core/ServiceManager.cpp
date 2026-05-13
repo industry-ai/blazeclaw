@@ -2979,15 +2979,31 @@ namespace blazeclaw::core {
 		RegisterGatewayOwnedRuntimeCleanup(
 			"speech_transcription_shutdown",
 			[this]() {
+				const auto preShutdownSnapshot = m_speechRecognitionRuntime.Snapshot();
 				m_speechTranscriptionCoordinator.Shutdown(m_speechRecognitionRuntime);
 				m_speechRecognition = m_speechRecognitionRuntime.Snapshot();
+				const std::int64_t cancelledDelta = static_cast<std::int64_t>(m_speechRecognition.transcribeRequestsCancelled) -
+					static_cast<std::int64_t>(preShutdownSnapshot.transcribeRequestsCancelled);
+				TRACE(
+					"[ServiceManager][speech.shutdown.summary] started=%u completed=%u failed=%u cancelled=%u cancelledDelta=%lld status=%S\n",
+					m_speechRecognition.transcribeRequestsStarted,
+					m_speechRecognition.transcribeRequestsCompleted,
+					m_speechRecognition.transcribeRequestsFailed,
+					m_speechRecognition.transcribeRequestsCancelled,
+					cancelledDelta,
+					m_speechRecognition.status.c_str());
 				RecordGatewayLifecycleTransition("speech.transcription.shutdown");
 			});
 
 		RegisterGatewayOwnedRuntimeCleanup(
 			"native_recording_stop",
 			[this]() {
-				(void)m_gatewayHost.StopNativeRecording();
+				auto stopResult = m_gatewayHost.StopNativeRecording();
+				TRACE(
+					"[ServiceManager][native_recording.stop] ok=%d audioPath=%S error=%S\n",
+					stopResult.ok ? 1 : 0,
+					stopResult.audioPath.c_str(),
+					stopResult.errorMessage.c_str());
 				RecordGatewayLifecycleTransition("native_recording.stop");
 			});
 
