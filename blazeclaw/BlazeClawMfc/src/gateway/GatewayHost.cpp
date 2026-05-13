@@ -27,6 +27,7 @@
 #include "../app/MainFrame.h"
 #include "../app/BlazeClawMfcApp.h"
 #include "../app/ChatView.h"
+#include "../app/VoiceRecorder.h"
 
 #include <algorithm>
 #include <iterator>
@@ -182,6 +183,37 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
+		struct FallbackRecordingState {
+			CVoiceRecorder recorder;
+			CStringW lastFilePath;
+			bool initialized = false;
+		};
+
+		FallbackRecordingState& GetFallbackRecordingState() {
+			static FallbackRecordingState state;
+			return state;
+		}
+
+		CStringW BuildRecordingFilePath() {
+			WCHAR exePath[MAX_PATH] = {};
+			GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+			LPWSTR p = wcsrchr(exePath, L'\\');
+			if (p != nullptr) {
+				*p = L'\0';
+			}
+			CString recordingsDir;
+			recordingsDir.Format(L"%s\\BlazeClawRecordings", exePath);
+			CreateDirectoryW(recordingsDir, nullptr);
+
+			SYSTEMTIME st;
+			GetLocalTime(&st);
+			CStringW fileName;
+			fileName.Format(L"recording_%04d%02d%02d_%02d%02d%02d.wav",
+				st.wYear, st.wMonth, st.wDay,
+				st.wHour, st.wMinute, st.wSecond);
+			return recordingsDir + L"\\" + fileName;
+		}
+
 		GatewayHost::ChatRuntimeResult::TaskDeltaEntry NormalizePersistedTaskDelta(
 			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& source,
 			const std::string& runId,
@@ -290,32 +322,31 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
+		CStringW filePathW = BuildRecordingFilePath();
 		CChatView* chat = main->GetActiveChatView();
-		if (chat == nullptr) {
-			result.ok = false;
-			result.errorMessage = "chat view not active";
+		if (chat != nullptr) {
+			if (!chat->StartRecordingToPath(filePathW)) {
+				result.ok = false;
+				result.errorMessage = "failed to start recording";
+				return result;
+			}
+
+			result.ok = true;
 			return result;
 		}
 
-		// Build recordings directory inside exe dir
-		WCHAR exePath[MAX_PATH] = {};
-		GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-		LPWSTR p = wcsrchr(exePath, L'\\');
-		if (p != nullptr) { *p = L'\0'; }
-		CString recordingsDir;
-		recordingsDir.Format(L"%s\\BlazeClawRecordings", exePath);
-		CreateDirectoryW(recordingsDir, nullptr);
+		auto& fallback = GetFallbackRecordingState();
+		if (!fallback.initialized) {
+			if (!fallback.recorder.Initialize(main->GetSafeHwnd())) {
+				result.ok = false;
+				result.errorMessage = "failed to initialize fallback recorder";
+				return result;
+			}
+			fallback.initialized = true;
+		}
 
-		SYSTEMTIME st;
-		GetLocalTime(&st);
-		CStringW fileName;
-		fileName.Format(L"recording_%04d%02d%02d_%02d%02d%02d.wav",
-			st.wYear, st.wMonth, st.wDay,
-			st.wHour, st.wMinute, st.wSecond);
-
-		CStringW filePathW = recordingsDir + L"\\" + fileName;
-
-		if (!chat->StartRecordingToPath(filePathW)) {
+		fallback.lastFilePath = filePathW;
+		if (!fallback.recorder.StartRecording(filePathW.GetString())) {
 			result.ok = false;
 			result.errorMessage = "failed to start recording";
 			return result;
@@ -342,14 +373,19 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
+		CStringW lastPath;
 		CChatView* chat = main->GetActiveChatView();
-		if (chat == nullptr) {
-			result.ok = false;
-			result.errorMessage = "chat view not active";
-			return result;
+		if (chat != nullptr) {
+			lastPath = chat->StopRecordingAndGetPath();
+		}
+		else {
+			auto& fallback = GetFallbackRecordingState();
+			if (fallback.recorder.GetState() == VoiceRecorderState::Recording) {
+				fallback.recorder.StopRecording();
+			}
+			lastPath = fallback.lastFilePath;
 		}
 
-		CStringW lastPath = chat->StopRecordingAndGetPath();
 		if (lastPath.IsEmpty()) {
 			result.ok = false;
 			result.errorMessage = "no recording available";

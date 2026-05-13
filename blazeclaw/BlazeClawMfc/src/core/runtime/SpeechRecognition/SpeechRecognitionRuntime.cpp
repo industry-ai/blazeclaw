@@ -91,6 +91,79 @@ namespace blazeclaw::core::speechrecognition {
 			return mode == "parallel" ? "parallel" : "sequential";
 		}
 
+		std::filesystem::path ResolveConfiguredPath(
+			const std::wstring& configuredPath,
+			const std::wstring& storageRoot) {
+			std::filesystem::path configured = configuredPath.empty()
+				? std::filesystem::path(storageRoot)
+				: std::filesystem::path(configuredPath);
+			if (configured.empty()) {
+				return {};
+			}
+
+			if (configured.is_absolute()) {
+				return configured.lexically_normal();
+			}
+
+			std::error_code ec;
+			const std::filesystem::path configDirectory =
+				std::filesystem::current_path(ec);
+			ec.clear();
+
+			std::filesystem::path executableDirectory;
+			std::array<wchar_t, MAX_PATH> modulePath{};
+			const DWORD moduleLength = ::GetModuleFileNameW(
+				nullptr,
+				modulePath.data(),
+				static_cast<DWORD>(modulePath.size()));
+			if (moduleLength > 0) {
+				executableDirectory = std::filesystem::path(
+					std::wstring(modulePath.data(), moduleLength))
+					.parent_path();
+			}
+
+			std::vector<std::filesystem::path> candidates;
+			candidates.reserve(12);
+
+			auto appendWithAncestors = [&candidates](
+				const std::filesystem::path& base,
+				const std::filesystem::path& relativePath) {
+					if (base.empty()) {
+						return;
+					}
+
+					std::filesystem::path cursor = base;
+					while (!cursor.empty()) {
+						candidates.push_back(cursor / relativePath);
+						if (!cursor.has_parent_path()) {
+							break;
+						}
+
+						const std::filesystem::path parent = cursor.parent_path();
+						if (parent == cursor) {
+							break;
+						}
+
+						cursor = parent;
+					}
+				};
+
+			appendWithAncestors(configDirectory, configured);
+			appendWithAncestors(executableDirectory, configured);
+			candidates.push_back(configured);
+
+			for (const auto& candidate : candidates) {
+				const std::filesystem::path normalized = candidate.lexically_normal();
+				ec.clear();
+				if (std::filesystem::exists(normalized, ec) && !ec) {
+					return normalized;
+				}
+			}
+
+			return candidates.empty() ? configured.lexically_normal() :
+				candidates.front().lexically_normal();
+		}
+
 		std::uint32_t ReadLe32(const std::uint8_t* ptr) {
 			return static_cast<std::uint32_t>(ptr[0]) |
 				(static_cast<std::uint32_t>(ptr[1]) << 8) |
@@ -239,8 +312,11 @@ namespace blazeclaw::core::speechrecognition {
 			return false;
 		}
 
-		const std::filesystem::path rootPath = m_config.speechRecognition.modelPath;
-		if (m_snapshot.modelPath.empty() || !std::filesystem::exists(rootPath)) {
+		const std::filesystem::path rootPath = ResolveConfiguredPath(
+			m_config.speechRecognition.modelPath,
+			m_config.speechRecognition.storageRoot);
+		m_snapshot.modelPath = ToNarrow(rootPath.wstring());
+		if (rootPath.empty() || !std::filesystem::exists(rootPath)) {
 			outResult.ok = false;
 			outResult.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::ModelNotFound,
