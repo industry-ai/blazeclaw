@@ -72,6 +72,7 @@ namespace {
 	constexpr UINT kBridgePollCompletedMessage = WM_APP + 0x2A1;
 	constexpr UINT kSkillPathLookupCompletedMessage = WM_APP + 0x2A2;
 	constexpr UINT kSpeechRpcCompletedMessage = WM_APP + 0x2A3;
+	constexpr UINT kSpeechLifecycleDispatchMessage = WM_APP + 0x2A4;
 	constexpr std::uint32_t kBridgePollIntervalActiveMs = 300;
 	constexpr std::uint32_t kBridgePollIntervalIdleMs = 1000;
 	constexpr std::uint32_t kBridgePollIntervalFailureMs = 3000;
@@ -95,6 +96,11 @@ namespace {
 	{
 		std::string correlationId;
 		blazeclaw::gateway::protocol::ResponseFrame response;
+	};
+
+	struct SpeechLifecycleDispatchPayload
+	{
+		std::string payloadJson;
 	};
 
 	std::uint32_t ComputeFailureBackoffMs(const std::uint32_t failureCount)
@@ -1425,6 +1431,119 @@ namespace {
 		return json;
 	}
 
+	std::string BuildSpeechLifecyclePayloadJson(
+		const std::string& stage,
+		const std::string& sessionId,
+		const std::string& runId,
+		const std::string& audioPath,
+		const std::string& text,
+		const std::string& language,
+		const std::uint64_t latencyMs,
+		const bool cancelled,
+		const std::string& errorCode,
+		const std::string& errorMessage,
+		const std::string& errorClass)
+	{
+		std::string payload = "{";
+		payload += "\"stage\":" + JsonString(stage);
+		payload += ",\"sessionId\":" + JsonString(sessionId);
+		payload += ",\"runId\":" + JsonString(runId);
+		payload += ",\"audioPath\":" + JsonString(audioPath);
+		payload += ",\"text\":" + JsonString(text);
+		payload += ",\"language\":" + JsonString(language);
+		payload += ",\"latencyMs\":" + std::to_string(latencyMs);
+		payload += ",\"cancelled\":" + std::string(cancelled ? "true" : "false");
+		payload += ",\"errorCode\":" + JsonString(errorCode);
+		payload += ",\"errorMessage\":" + JsonString(errorMessage);
+		payload += ",\"errorClass\":" + JsonString(errorClass);
+		payload += "}";
+		return payload;
+	}
+
+	std::string BuildSpeechLifecyclePayloadFromTranscribeResponse(
+		const blazeclaw::gateway::protocol::ResponseFrame& response)
+	{
+		if (!response.ok || !response.payloadJson.has_value())
+		{
+			return {};
+		}
+
+		const std::string& payloadJson = response.payloadJson.value();
+		std::string stage;
+		if (!blazeclaw::gateway::json::FindStringField(payloadJson, "stage", stage))
+		{
+			blazeclaw::gateway::json::FindStringField(payloadJson, "errorCode", stage);
+		}
+		if (stage.empty())
+		{
+			if (blazeclaw::gateway::json::IsFieldValueType(payloadJson, "speechSession", '{'))
+			{
+				std::string speechSessionRaw;
+				if (blazeclaw::gateway::json::FindRawField(payloadJson, "speechSession", speechSessionRaw))
+				{
+					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "stage", stage);
+				}
+			}
+		}
+
+		if (stage.empty())
+		{
+			return {};
+		}
+
+		std::string speechSessionRaw;
+		const bool hasSpeechSession =
+			blazeclaw::gateway::json::FindRawField(payloadJson, "speechSession", speechSessionRaw) &&
+			blazeclaw::gateway::json::IsJsonObjectShape(speechSessionRaw);
+		const std::string& stateSource = hasSpeechSession ? speechSessionRaw : payloadJson;
+
+		std::string sessionId;
+		blazeclaw::gateway::json::FindStringField(stateSource, "sessionId", sessionId);
+		std::string runId;
+		blazeclaw::gateway::json::FindStringField(stateSource, "runId", runId);
+		std::string audioPath;
+		blazeclaw::gateway::json::FindStringField(stateSource, "audioPath", audioPath);
+		std::string text;
+		if (!blazeclaw::gateway::json::FindStringField(stateSource, "text", text))
+		{
+			blazeclaw::gateway::json::FindStringField(payloadJson, "text", text);
+		}
+		std::string language;
+		if (!blazeclaw::gateway::json::FindStringField(stateSource, "language", language))
+		{
+			blazeclaw::gateway::json::FindStringField(payloadJson, "language", language);
+		}
+		std::uint64_t latencyMs = 0;
+		if (!blazeclaw::gateway::json::FindUInt64Field(stateSource, "latencyMs", latencyMs))
+		{
+			blazeclaw::gateway::json::FindUInt64Field(payloadJson, "latencyMs", latencyMs);
+		}
+		bool cancelled = false;
+		if (!blazeclaw::gateway::json::FindBoolField(stateSource, "cancelled", cancelled))
+		{
+			blazeclaw::gateway::json::FindBoolField(payloadJson, "cancelled", cancelled);
+		}
+		std::string errorCode;
+		blazeclaw::gateway::json::FindStringField(payloadJson, "errorCode", errorCode);
+		std::string errorMessage;
+		blazeclaw::gateway::json::FindStringField(payloadJson, "errorMessage", errorMessage);
+		std::string errorClass;
+		blazeclaw::gateway::json::FindStringField(payloadJson, "errorClass", errorClass);
+
+		return BuildSpeechLifecyclePayloadJson(
+			stage,
+			sessionId,
+			runId,
+			audioPath,
+			text,
+			language,
+			latencyMs,
+			cancelled,
+			errorCode,
+			errorMessage,
+			errorClass);
+	}
+
 	bool IsToolExecuteMethod(const std::string& method)
 	{
 		return method == "gateway.tools.call.execute";
@@ -2006,6 +2125,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_MESSAGE(kBridgePollCompletedMessage, &CBlazeClawMFCView::OnBridgePollCompleted)
 	ON_MESSAGE(kSkillPathLookupCompletedMessage, &CBlazeClawMFCView::OnSkillPathLookupCompleted)
 	ON_MESSAGE(kSpeechRpcCompletedMessage, &CBlazeClawMFCView::OnSpeechRpcCompleted)
+	ON_MESSAGE(kSpeechLifecycleDispatchMessage, &CBlazeClawMFCView::OnSpeechLifecycleDispatched)
 	ON_WM_CONTEXTMENU()
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
@@ -2775,10 +2895,39 @@ LRESULT CBlazeClawMFCView::OnSpeechRpcCompleted(
 		return 0;
 	}
 
+	const std::string lifecyclePayloadJson =
+		BuildSpeechLifecyclePayloadFromTranscribeResponse(payload->response);
+	if (!lifecyclePayloadJson.empty())
+	{
+		EmitSpeechLifecycleEvent(lifecyclePayloadJson);
+	}
+
 	const std::string responseJson = BuildBridgeRpcResultJson(
 		payload->response,
 		payload->correlationId);
 	m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, responseJson);
+	delete payload;
+	return 0;
+}
+
+LRESULT CBlazeClawMFCView::OnSpeechLifecycleDispatched(
+	WPARAM wParam,
+	LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+
+	auto* payload =
+		reinterpret_cast<SpeechLifecycleDispatchPayload*>(wParam);
+	if (payload == nullptr)
+	{
+		return 0;
+	}
+
+	if (!payload->payloadJson.empty())
+	{
+		EmitSpeechLifecycleEvent(payload->payloadJson);
+	}
+
 	delete payload;
 	return 0;
 }
@@ -3605,6 +3754,53 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			return;
 		}
 
+		std::string sessionId;
+		if (paramsJson.has_value())
+		{
+			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
+		}
+		if (sessionId.empty())
+		{
+			sessionId = m_bridgeSessionId;
+		}
+
+		std::string runId;
+		if (paramsJson.has_value())
+		{
+			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "runId", runId);
+		}
+
+		std::string audioPath;
+		if (paramsJson.has_value())
+		{
+			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "audioPath", audioPath);
+		}
+
+		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+			"queued",
+			sessionId,
+			runId,
+			audioPath,
+			"",
+			"",
+			0,
+			false,
+			"",
+			"",
+			"status"));
+		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+			"transcribing",
+			sessionId,
+			runId,
+			audioPath,
+			"",
+			"",
+			0,
+			false,
+			"",
+			"",
+			"status"));
+
 		std::thread(
 			[hwnd, request, correlationId]()
 			{
@@ -3648,6 +3844,64 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		return;
 	}
 	const auto response = app->RouteGatewayRequest(request);
+	if (response.ok && response.payloadJson.has_value())
+	{
+		if (method == "gateway.speech.startRecording")
+		{
+			std::string sessionId;
+			if (paramsJson.has_value())
+			{
+				blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
+			}
+			if (sessionId.empty())
+			{
+				sessionId = m_bridgeSessionId;
+			}
+
+			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+				"recording",
+				sessionId,
+				"",
+				"",
+				"",
+				"",
+				0,
+				false,
+				"",
+				"",
+				"status"));
+		}
+		else if (method == "gateway.speech.stopRecording")
+		{
+			std::string sessionId;
+			if (paramsJson.has_value())
+			{
+				blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
+			}
+			if (sessionId.empty())
+			{
+				sessionId = m_bridgeSessionId;
+			}
+
+			std::string audioPath;
+			blazeclaw::gateway::json::FindStringField(
+				response.payloadJson.value(),
+				"audioPath",
+				audioPath);
+			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+				"stopped",
+				sessionId,
+				"",
+				audioPath,
+				"",
+				"",
+				0,
+				false,
+				"",
+				"",
+				"status"));
+		}
+	}
 	if (method == "chat.events.poll" &&
 		response.ok &&
 		response.payloadJson.has_value())

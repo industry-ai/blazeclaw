@@ -154,6 +154,7 @@ protected:
 	afx_msg LRESULT OnBridgePollCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnSkillPathLookupCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnSpeechRpcCompleted(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnSpeechLifecycleDispatched(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:

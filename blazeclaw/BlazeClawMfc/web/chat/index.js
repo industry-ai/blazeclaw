@@ -2422,12 +2422,26 @@
             const speechSessionState = state.speechSessionState && typeof state.speechSessionState === "object"
                 ? state.speechSessionState
                 : null;
-            const speechBusy = speechSessionState
-                ? String(speechSessionState.stage || "").trim() === "transcribing"
-                : false;
-            state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || speechBusy;
+            const speechStage = speechSessionState
+                ? String(speechSessionState.stage || "").trim()
+                : "";
+            const speechBusy = speechStage === "queued" ||
+                speechStage === "recording" ||
+                speechStage === "transcribing";
+            const recordingActive = speechStage === "recording";
+            state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || (speechBusy && !recordingActive);
             if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
                 state.speechTranscribeBtn.disabled = true;
+            }
+
+            if (recordingActive) {
+                state.speechTranscribeBtn.textContent = "Recording... (click to stop)";
+            } else if (speechStage === "queued") {
+                state.speechTranscribeBtn.textContent = "Queued...";
+            } else if (speechStage === "transcribing") {
+                state.speechTranscribeBtn.textContent = "Transcribing...";
+            } else {
+                state.speechTranscribeBtn.textContent = "Transcribe";
             }
         }
         if (state.sessionSelect) {
@@ -2501,52 +2515,67 @@
     });
 
     if (state.speechTranscribeBtn) {
-        let recordingActive = false;
         let recordingBusy = false;
         state.speechTranscribeBtn.addEventListener("click", async () => {
             if (recordingBusy) {
                 return;
             }
 
+            const speechSessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+                ? state.speechSessionState
+                : null;
+            const speechStage = speechSessionState
+                ? String(speechSessionState.stage || "").trim()
+                : "";
+
             recordingBusy = true;
             try {
-                if (!recordingActive) {
-                    await controller.request("gateway.speech.startRecording", {});
-                    recordingActive = true;
-                    state.speechTranscribeBtn.textContent = "Recording... (click to stop)";
+                if (speechStage !== "recording") {
+                    await controller.request("gateway.speech.startRecording", {
+                        sessionId: state.sessionKey,
+                    });
+                    if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                        controller.applySpeechLifecycleUpdate({
+                            stage: "recording",
+                            sessionId: state.sessionKey,
+                            runId: "",
+                            text: "",
+                            errorCode: "",
+                            errorMessage: "",
+                            errorClass: "status",
+                        });
+                    }
+                    updateComposerState();
                     return;
                 }
 
-                const stopResponse = await controller.request("gateway.speech.stopRecording", {});
+                const stopResponse = await controller.request("gateway.speech.stopRecording", {
+                    sessionId: state.sessionKey,
+                });
                 const payload = stopResponse && typeof stopResponse.payload === "object"
                     ? stopResponse.payload
                     : {};
                 const audioPath = String(payload.audioPath || "").trim();
 
-                recordingActive = false;
-                state.speechTranscribeBtn.textContent = "Transcribe";
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate({
+                        stage: "stopped",
+                        sessionId: state.sessionKey,
+                        audioPath,
+                        text: "",
+                        errorCode: "",
+                        errorMessage: "",
+                        errorClass: "status",
+                    });
+                }
 
                 if (!audioPath) {
                     addMessage("speech recording failed: no audio path returned", "error");
+                    updateComposerState();
                     return;
                 }
 
                 const prompt = String(state.inputEl.value || "").trim();
-                state.speechSessionState = {
-                    ...(state.speechSessionState && typeof state.speechSessionState === "object"
-                        ? state.speechSessionState
-                        : {}),
-                    stage: "transcribing",
-                    text: "",
-                    segmentText: "",
-                    segmentFinal: true,
-                    segmentSequence: 0,
-                    errorCode: "",
-                    errorMessage: "",
-                    updatedAtMs: Date.now(),
-                };
-                state.speechTranscribeBtn.textContent = "Transcribing...";
-                updateComposerState();
                 await controller.transcribeSpeech({ audioPath, prompt });
                 if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                     state.speechSessionState = controller.getSpeechSessionStateSnapshot();
@@ -2555,8 +2584,14 @@
             } catch (e) {
                 const message = String(e || "speech recording failed");
                 addMessage(`speech recording error: ${message}`, "error");
-                recordingActive = false;
-                state.speechTranscribeBtn.textContent = "Transcribe";
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate({
+                        stage: "failed",
+                        errorCode: "recording_failed",
+                        errorMessage: message,
+                        errorClass: "toast",
+                    });
+                }
             } finally {
                 recordingBusy = false;
                 updateComposerState();

@@ -743,7 +743,7 @@
                 : {};
             const speechSession = source.speechSession && typeof source.speechSession === "object"
                 ? source.speechSession
-                : {};
+                : source;
             const segment = speechSession.segment && typeof speechSession.segment === "object"
                 ? speechSession.segment
                 : null;
@@ -765,6 +765,12 @@
                 segmentSequence,
                 runId: String(speechSession.runId || source.runId || "").trim(),
                 sessionId: String(speechSession.sessionId || source.sessionId || "").trim(),
+                audioPath: String(speechSession.audioPath || source.audioPath || "").trim(),
+                language: String(speechSession.language || source.language || "").trim(),
+                latencyMs: Number.isFinite(Number(speechSession.latencyMs || source.latencyMs))
+                    ? Number(speechSession.latencyMs || source.latencyMs)
+                    : 0,
+                cancelled: Boolean(speechSession.cancelled || source.cancelled),
                 errorCode: String(source.errorCode || "").trim(),
                 errorMessage: String(source.errorMessage || "").trim(),
                 errorClass: String(source.errorClass || "status").trim() || "status",
@@ -925,6 +931,10 @@
                     segmentSequence: 0,
                     runId: "",
                     sessionId: "",
+                    audioPath: "",
+                    language: "",
+                    latencyMs: 0,
+                    cancelled: false,
                     errorCode: "",
                     errorMessage: "",
                     errorClass: "status",
@@ -1883,6 +1893,19 @@
             await sendPayload(message, pendingAttachments, forceError, { detached: false });
         }
 
+        function applySpeechLifecycleUpdate(payload) {
+            const normalized = normalizeSpeechSessionPayload(payload);
+            const previous = state.speechSessionState && typeof state.speechSessionState === "object"
+                ? state.speechSessionState
+                : {};
+            state.speechSessionState = {
+                ...previous,
+                ...normalized,
+                updatedAtMs: Date.now(),
+            };
+            return { ...state.speechSessionState };
+        }
+
         async function transcribeSpeech(options) {
             const sendOptions = options && typeof options === "object"
                 ? options
@@ -1908,6 +1931,18 @@
             if (language) {
                 transcriptRequest.language = language;
             }
+
+            applySpeechLifecycleUpdate({
+                stage: "queued",
+                sessionId: transcriptRequest.sessionId,
+                runId: transcriptRequest.runId,
+                audioPath,
+                text: "",
+                errorCode: "",
+                errorMessage: "",
+                errorClass: "status",
+            });
+            updateComposerState();
 
             try {
                 const response = await requestWithOverride(
@@ -2530,6 +2565,7 @@
             processSendQueue,
             sendDetachedMessage,
             transcribeSpeech,
+            applySpeechLifecycleUpdate,
             loadSpeechCapabilities,
             loadSpeechErrorPolicy,
             getSpeechCapabilitiesSnapshot,

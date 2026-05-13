@@ -139,6 +139,10 @@
                     return { channel: "blazeclaw.gateway.tools.lifecycle", ...payload };
                 }
 
+                if (topic === "speech.lifecycle") {
+                    return { channel: "blazeclaw.gateway.speech.lifecycle", ...payload };
+                }
+
                 return null;
             }
 
@@ -528,6 +532,14 @@
                     }
                 }
                 appendToolLifecycleRow(message);
+                return;
+            }
+
+            if (message.channel === "blazeclaw.gateway.speech.lifecycle") {
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate(message);
+                }
+                updateComposerState();
                 return;
             }
 

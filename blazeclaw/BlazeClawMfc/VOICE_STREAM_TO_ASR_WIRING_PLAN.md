@@ -192,9 +192,28 @@ Step 5 outcome:
 - later lifecycle streaming and shutdown hardening now have a coordinator-level source of truth to build on
 
 ### Step 6: Stream state back to WebView
+Status: completed
+
 Expose stage updates so the user sees progress instead of a hung button.
 
-Minimum events to emit:
+Implemented rollout:
+- added a dedicated speech lifecycle bridge topic (`speech.lifecycle`) and compatibility channel (`blazeclaw.gateway.speech.lifecycle`)
+- emitted recording lifecycle updates from the WebView-host RPC boundary for:
+  - `gateway.speech.startRecording` -> `recording`
+  - `gateway.speech.stopRecording` -> `stopped`
+- emitted transcription lifecycle updates from the async transcription boundary for:
+  - queued before detached dispatch
+  - transcribing before runtime execution
+  - terminal stage (`completed`/`failed`/`cancelled`) from the final `speech.transcribe` response payload on UI-thread completion
+- normalized canonical transport speech lifecycle events in `chat-events.js` and routed them into controller state updates
+- added controller-level `applySpeechLifecycleUpdate(...)` to merge streamed lifecycle payloads into `state.speechSessionState`
+- updated the WebView speech button/UI behavior to render from streamed lifecycle state:
+  - `Recording... (click to stop)` while recording
+  - `Queued...` while queued
+  - `Transcribing...` while transcribing
+  - restored `Transcribe` on terminal states
+
+Minimum events now emitted:
 - recording started
 - recording stopped
 - transcription queued
@@ -203,15 +222,27 @@ Minimum events to emit:
 - transcription failed
 - transcription cancelled
 
-WebView behavior updates:
+WebView behavior updates completed:
 - disable/relabel `Transcribe` button while background STT is running
 - show status text for queued/transcribing states
 - restore controls on completion/failure/cancel
 
-Files likely involved:
-- `BlazeClawMfc/web/chat/index.js`
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP6_WEBVIEW_STATE_STREAMING.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/app/EventTransport.h`
+- `BlazeClawMfc/src/app/EventTransport.cpp`
+- `BlazeClawMfc/src/app/BlazeClawMFCView.h`
+- `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`
+- `BlazeClawMfc/web/chat/chat-events.js`
 - `BlazeClawMfc/web/chat/chat-controller.js`
-- `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
+- `BlazeClawMfc/web/chat/index.js`
+
+Step 6 outcome:
+- speech lifecycle now streams through the native bridge into WebView state
+- the speech button no longer relies on optimistic local toggles only
+- queued/transcribing/terminal progress is visible in Web chat state while preserving the Step 3 async transcription boundary
 
 ### Step 7: Inject final transcript into the existing chat pipeline
 When STT completes successfully:
