@@ -245,13 +245,31 @@ Step 6 outcome:
 - queued/transcribing/terminal progress is visible in Web chat state while preserving the Step 3 async transcription boundary
 
 ### Step 7: Inject final transcript into the existing chat pipeline
+Status: completed
+
 When STT completes successfully:
 - publish the transcript as the user message
 - preserve `sessionId`, `runId`, audio path, language, and latency metadata
 - reuse the existing `chat.send` / orchestration entry path already used today
 
+Implemented rollout:
+- the WebView speech controller now forwards completed speech transcripts through `sendPayload(...)` rather than copying text into the input and re-sending it as a plain typed message
+- speech provenance now travels with the `chat.send` request as:
+  - `transcriptInjection`
+  - `speechArtifact`
+  - speech session metadata fields such as `sessionId`, `runId`, `audioPath`, `language`, and `latencyMs`
+- the gateway speech handler continues to populate the same `speechSession` / `transcriptInjection` / `speechArtifact` shapes when a transcript is produced
+- the chat pipeline already recognizes these fields and preserves voice-input provenance during orchestration, so voice transcript submissions now follow the same tool-routing/chat logic as typed input while remaining traceable as speech-derived
+
 Validation target:
 - a completed transcript should flow through the same skills/tool-routing/chat logic as typed input
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP7_TRANSCRIPT_INJECTION.md`
+
+Files updated in this step:
+- `BlazeClawMfc/web/chat/chat-controller.js`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_WIRING_PLAN.md`
 
 ### Step 8: Harden cancellation and shutdown
 Ensure app exit and debug stop do not hang.

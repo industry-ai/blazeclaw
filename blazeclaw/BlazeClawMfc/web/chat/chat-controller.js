@@ -1784,6 +1784,9 @@
             const requestOverride = typeof sendOptions.requestOverride === "function"
                 ? sendOptions.requestOverride
                 : null;
+            const speechContext = sendOptions.speechContext && typeof sendOptions.speechContext === "object"
+                ? sendOptions.speechContext
+                : null;
             const userMessage = String(message || "").trim();
             const payloadAttachments = Array.isArray(attachments) ? attachments : [];
 
@@ -1823,7 +1826,7 @@
                 .filter((x) => x !== null);
 
             try {
-                const sendResult = await requestWithOverride("chat.send", {
+                const chatParams = {
                     sessionKey: state.sessionKey,
                     message: userMessage,
                     deliver: detached,
@@ -1836,7 +1839,34 @@
                     bodyForAgent: userMessage,
                     clientMode: "webchat",
                     attachments: apiAttachments,
-                }, requestOverride);
+                };
+                if (speechContext) {
+                    if (speechContext.transcriptInjection && typeof speechContext.transcriptInjection === "object") {
+                        chatParams.transcriptInjection = { ...speechContext.transcriptInjection };
+                    }
+                    if (speechContext.speechArtifact && typeof speechContext.speechArtifact === "object") {
+                        chatParams.speechArtifact = { ...speechContext.speechArtifact };
+                    }
+                    if (typeof speechContext.sessionId === "string" && speechContext.sessionId.trim()) {
+                        chatParams.sessionId = speechContext.sessionId.trim();
+                    }
+                    if (typeof speechContext.runId === "string" && speechContext.runId.trim()) {
+                        chatParams.runId = speechContext.runId.trim();
+                    }
+                    if (typeof speechContext.audioPath === "string" && speechContext.audioPath.trim()) {
+                        chatParams.audioPath = speechContext.audioPath.trim();
+                    }
+                    if (typeof speechContext.language === "string" && speechContext.language.trim()) {
+                        chatParams.language = speechContext.language.trim();
+                    }
+                    if (Number.isFinite(Number(speechContext.latencyMs))) {
+                        chatParams.latencyMs = Number(speechContext.latencyMs);
+                    }
+                    if (typeof speechContext.source === "string" && speechContext.source.trim()) {
+                        chatParams.source = speechContext.source.trim();
+                    }
+                }
+                const sendResult = await requestWithOverride("chat.send", chatParams, requestOverride);
 
                 const serverRunId = extractRunIdFromSendResult(sendResult);
 
@@ -1954,10 +1984,41 @@
                     : {};
                 state.speechSessionState = normalizeSpeechSessionPayload(payload);
                 const transcriptText = String(payload.text || payload.transcript || "").trim();
-                if (transcriptText && state.inputEl) {
-                    state.inputEl.value = transcriptText;
-                    persistDraftForSession();
-                    await send(false);
+                if (transcriptText) {
+                    await sendPayload(transcriptText, [], false, {
+                        detached: false,
+                        requestOverride,
+                        speechContext: {
+                            source: "voice",
+                            sessionId: String(payload.sessionId || state.sessionKey || "").trim(),
+                            runId: String(payload.executionRunId || payload.runId || payload.speechSession && payload.speechSession.runId || "").trim(),
+                            audioPath: String(payload.audioPath || payload.speechSession && payload.speechSession.audioPath || "").trim(),
+                            language: String(payload.language || payload.speechSession && payload.speechSession.language || "").trim(),
+                            latencyMs: Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : Number(payload.speechSession && payload.speechSession.latencyMs || 0),
+                            transcriptInjection: payload.transcriptInjection && typeof payload.transcriptInjection === "object"
+                                ? payload.transcriptInjection
+                                : {
+                                    source: "voice",
+                                    ingestMethod: "speech.transcribe",
+                                    sessionId: String(payload.sessionId || state.sessionKey || "").trim(),
+                                    runId: String(payload.executionRunId || payload.runId || payload.speechSession && payload.speechSession.runId || "").trim(),
+                                    requestCorrelationId: String(payload.requestCorrelationId || payload.id || "").trim(),
+                                    orchestrationSurface: "chat.send",
+                                },
+                            speechArtifact: payload.speechArtifact && typeof payload.speechArtifact === "object"
+                                ? payload.speechArtifact
+                                : {
+                                    type: "voice_transcript",
+                                    source: "speech.transcribe",
+                                    audioPath: String(payload.audioPath || payload.speechSession && payload.speechSession.audioPath || "").trim(),
+                                    text: transcriptText,
+                                    language: String(payload.language || payload.speechSession && payload.speechSession.language || "").trim(),
+                                    latencyMs: Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : Number(payload.speechSession && payload.speechSession.latencyMs || 0),
+                                    stage: String(payload.stage || payload.speechSession && payload.speechSession.stage || "completed").trim(),
+                                    hasSegment: Boolean(payload.speechSession && payload.speechSession.segment),
+                                },
+                        },
+                    });
                     return;
                 }
 
