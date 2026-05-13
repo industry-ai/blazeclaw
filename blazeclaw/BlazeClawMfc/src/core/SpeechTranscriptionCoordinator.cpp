@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "SpeechTranscriptionCoordinator.h"
 
+#include <vector>
+
 namespace blazeclaw::core {
 
 	namespace {
@@ -209,6 +211,38 @@ namespace blazeclaw::core {
 		}
 
 		return runtime.Cancel(runId);
+	}
+
+	void SpeechTranscriptionCoordinator::Shutdown(RuntimeInterface& runtime) {
+		ExecutionUpdateCallback callback;
+		std::vector<ExecutionState> cancelledStates;
+		std::vector<std::string> activeRunIds;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			callback = m_executionUpdateCallback;
+			m_executionUpdateCallback = {};
+			for (auto& entry : m_executionByRunId) {
+				if (IsTerminal(entry.second.stage)) {
+					continue;
+				}
+				entry.second.cancelRequested = true;
+				entry.second.stage = SpeechExecutionStage::Cancelled;
+				cancelledStates.push_back(entry.second);
+				activeRunIds.push_back(entry.first);
+			}
+			m_executionByRunId.clear();
+			m_sessionRunBySessionId.clear();
+		}
+
+		for (const auto& runId : activeRunIds) {
+			(void)runtime.Cancel(runId);
+		}
+
+		if (callback) {
+			for (const auto& state : cancelledStates) {
+				callback(state);
+			}
+		}
 	}
 
 	bool SpeechTranscriptionCoordinator::IsTerminal(

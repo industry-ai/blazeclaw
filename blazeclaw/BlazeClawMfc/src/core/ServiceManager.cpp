@@ -2977,6 +2977,21 @@ namespace blazeclaw::core {
 			});
 
 		RegisterGatewayOwnedRuntimeCleanup(
+			"speech_transcription_shutdown",
+			[this]() {
+				m_speechTranscriptionCoordinator.Shutdown(m_speechRecognitionRuntime);
+				m_speechRecognition = m_speechRecognitionRuntime.Snapshot();
+				RecordGatewayLifecycleTransition("speech.transcription.shutdown");
+			});
+
+		RegisterGatewayOwnedRuntimeCleanup(
+			"native_recording_stop",
+			[this]() {
+				(void)m_gatewayHost.StopNativeRecording();
+				RecordGatewayLifecycleTransition("native_recording.stop");
+			});
+
+		RegisterGatewayOwnedRuntimeCleanup(
 			"plugin_global_stop",
 			[this]() {
 				m_gatewayHost.NotifyPluginGlobalStopPrelude();

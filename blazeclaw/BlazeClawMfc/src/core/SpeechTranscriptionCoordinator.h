@@ -37,6 +37,8 @@ namespace blazeclaw::core {
 			RuntimeInterface& runtime,
 			const std::string& runId);
 
+		void Shutdown(RuntimeInterface& runtime);
+
 	private:
 		[[nodiscard]] static bool IsTerminal(
 			speechrecognition::SpeechExecutionStage stage);

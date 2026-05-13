@@ -272,18 +272,38 @@ Files updated in this step:
 - `BlazeClawMfc/VOICE_STREAM_TO_ASR_WIRING_PLAN.md`
 
 ### Step 8: Harden cancellation and shutdown
-Ensure app exit and debug stop do not hang.
+Status: completed
 
-Required safeguards:
-- cancel in-flight speech jobs on shutdown
-- avoid waiting forever on worker completion from the UI thread
-- ensure any background thread checks cancellation before preprocessing, inference, and decode loops
-- make sure recorder shutdown and speech worker shutdown happen in deterministic order
+Implemented shutdown hardening so speech teardown is deterministic and exit/debug-stop no longer relies on in-flight work naturally finishing.
 
-Files likely involved:
-- `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechRecognitionRuntime.cpp`
-- gateway/service shutdown wiring in app/core bootstrap code
-- recorder shutdown path in gateway fallback recording flow
+Implemented rollout:
+- added `SpeechTranscriptionCoordinator::Shutdown(...)` to cancel and clear all tracked speech runs during service teardown
+- registered a `speech_transcription_shutdown` cleanup hook in `ServiceManager` so in-flight speech work is cancelled before gateway/runtime teardown completes
+- registered a `native_recording_stop` cleanup hook so any active recorder is stopped before speech shutdown finishes
+- preserved the existing detached WebView transcription worker model, so the UI thread never waits on worker completion during shutdown
+- refreshed the speech runtime snapshot after cancellation cleanup so post-shutdown diagnostics reflect the stopped state
+
+Important behavior preserved:
+- `SpeechRecognitionRuntime::Transcribe(...)` still runs off the UI thread
+- runtime cancellation checkpoints before preprocessing, before inference, and during decode remain intact
+- recorder teardown still follows the existing deterministic stop/write/close behavior
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP8_SHUTDOWN_HARDENING.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.h`
+- `BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.cpp`
+- `BlazeClawMfc/src/core/ServiceManager.cpp`
+- `BlazeClawMfc/src/core/ServiceManager.h`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_WIRING_PLAN.md`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP8_SHUTDOWN_HARDENING.md`
+- `docs/README.md`
+
+Step 8 outcome:
+- the shutdown path now cancels active speech runs and stops native recording in a defined order
+- app exit and debug stop no longer depend on worker completion on the UI thread
+- the speech runtime and recorder teardown behavior remain compatible with the WAV-file handoff and async dispatch architecture
 
 ### Step 9: Expand diagnostics
 Add targeted debug logging for speech orchestration.
