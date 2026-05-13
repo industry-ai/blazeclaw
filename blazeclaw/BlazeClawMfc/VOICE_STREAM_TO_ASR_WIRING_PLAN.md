@@ -114,18 +114,41 @@ Step 3 outcome:
 - the UI now shows a transcribing state instead of appearing frozen during long-running STT work
 
 ### Step 4: Decide the audio handoff boundary
-Choose how recorded audio reaches the ASR runtime.
+Status: completed
 
-Preferred rollout order:
-1. keep the current WAV-file boundary first
+Formalized the current audio boundary as an explicit WAV-file handoff contract so the existing recording artifact remains the first stable input to background STT.
+
+Implemented rollout:
+1. kept the current WAV-file boundary first
    - stop recording
    - hand the saved WAV path to background STT
    - validate end-to-end responsiveness first
-2. only after that, add true in-memory streaming/chunking if still needed
+2. deferred true in-memory streaming/chunking until a later step
 
-Reason:
-- the runtime already accepts `audioPath`
-- this minimizes risk and isolates the hang to threading/orchestration rather than model math
+Implemented contract shape:
+- added `SpeechAudioHandoffMode` with `WavFile` and future-facing `PcmStream`
+- added `SpeechAudioArtifact` for path, MIME/container, sample rate, channels, bit depth, and duration metadata
+- attached `audioArtifact` to execution/session state and to gateway/runtime speech request models
+- advertised the active handoff boundary from `speech.capabilities.get` using:
+  - `audioHandoffMode: wav_file`
+  - `audioMimeType: audio/wav`
+  - `audioContainer: wav`
+  - `streamingSupported: false`
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechRecognitionContracts.h`
+- `BlazeClawMfc/src/core/runtime/SpeechRecognition/ISpeechRecognitionRuntime.h`
+- `BlazeClawMfc/src/gateway/GatewayHost.h`
+- `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
+
+Step 4 outcome:
+- the codebase now models the current audio artifact explicitly instead of relying only on a bare `audioPath`
+- the current runtime remains file-based and compatible with the existing recorder output
+- capabilities now make it explicit that WAV-file handoff is supported today and live streaming is not yet enabled
+- future streaming work can be added as a new handoff mode without reinterpreting the current stable boundary
 
 ### Step 5: Add a speech transcription coordinator
 Create a coordinator/service dedicated to speech session orchestration.

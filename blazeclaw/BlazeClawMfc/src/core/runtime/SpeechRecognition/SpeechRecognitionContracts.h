@@ -49,6 +49,22 @@ namespace blazeclaw::core::speechrecognition {
 		Cancelled,
 	};
 
+	enum class SpeechAudioHandoffMode {
+		WavFile,
+		PcmStream,
+	};
+
+	struct SpeechAudioArtifact {
+		SpeechAudioHandoffMode handoffMode = SpeechAudioHandoffMode::WavFile;
+		std::string path;
+		std::string mimeType = "audio/wav";
+		std::string container = "wav";
+		std::uint32_t sampleRate = 16000;
+		std::uint32_t channels = 1;
+		std::uint32_t bitsPerSample = 16;
+		std::uint32_t durationMs = 0;
+	};
+
 	struct SpeechTranscriptSegment {
 		std::string text;
 		bool final = false;
@@ -60,6 +76,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::string runId;
 		SpeechSessionStage stage = SpeechSessionStage::Idle;
 		std::string audioPath;
+		std::optional<SpeechAudioArtifact> audioArtifact;
 		std::string transcriptText;
 		std::string language;
 		std::uint32_t latencyMs = 0;
@@ -73,6 +90,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::string runId;
 		SpeechExecutionStage stage = SpeechExecutionStage::Queued;
 		std::string audioPath;
+		std::optional<SpeechAudioArtifact> audioArtifact;
 		std::string transcriptText;
 		std::string language;
 		std::string prompt;

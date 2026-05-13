@@ -535,6 +535,7 @@
     <None Include="VOICE_STREAM_TO_ASR_STEP1_TRACE.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP2_CONTRACT.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP3_ASYNC_DISPATCH.md" />
+    <None Include="VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md" />
     <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat-controller.js" />
     <None Include="web\chat\index.css" />

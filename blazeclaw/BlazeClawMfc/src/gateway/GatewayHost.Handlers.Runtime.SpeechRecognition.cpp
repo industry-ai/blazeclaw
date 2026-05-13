@@ -103,6 +103,10 @@ namespace blazeclaw::gateway {
 								{ "supported", JsonBool(sttSupported) },
 								{ "ready", JsonBool(sttReady) },
 								{ "mode", JsonString("record-then-transcribe") },
+								{ "audioHandoffMode", JsonString("wav_file") },
+								{ "audioMimeType", JsonString("audio/wav") },
+								{ "audioContainer", JsonString("wav") },
+								{ "streamingSupported", JsonBool(false) },
 							}) },
 							{ "transcript", JsonObject({
 								{ "supportsSegments", JsonBool(incrementalSegmentSupported) },

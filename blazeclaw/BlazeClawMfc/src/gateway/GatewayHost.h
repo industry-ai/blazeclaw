@@ -331,6 +331,7 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionId;
 			std::string audioPath;
+			std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> audioArtifact;
 			std::string language;
 			std::string prompt;
 		};
@@ -353,6 +354,7 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionId;
 			std::string audioPath;
+			std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> audioArtifact;
 			std::string language;
 			std::string prompt;
 		};
