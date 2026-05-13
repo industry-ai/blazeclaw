@@ -31,6 +31,7 @@
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
+#include "runtime/TextToSpeech/ITextToSpeechRuntime.h"
 #include "SkillsStartupCoordinator.h"
 #include "SubagentRegistryService.h"
 #include "HookCatalogService.h"
@@ -454,6 +455,7 @@ namespace blazeclaw::core {
 		EmbeddingsServiceSnapshot m_embeddings;
 		speechrecognition::SpeechRecognitionRuntime m_speechRecognitionRuntime;
 		speechrecognition::SpeechRecognitionRuntimeSnapshot m_speechRecognition;
+		texttospeech::TextToSpeechRuntimeSnapshot m_textToSpeech;
 		std::unique_ptr<localmodel::ITextGenerationRuntime> m_localModelRuntime;
 		localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
 		bool m_localModelRolloutEligible = false;

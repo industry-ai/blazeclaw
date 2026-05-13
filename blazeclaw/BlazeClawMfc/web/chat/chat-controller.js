@@ -557,6 +557,46 @@
         if (typeof state.assistantAgentId !== "string" && state.assistantAgentId !== null) {
             state.assistantAgentId = null;
         }
+        state.speechCapabilities = state.speechCapabilities && typeof state.speechCapabilities === "object"
+            ? { ...state.speechCapabilities }
+            : {
+                sttSupported: false,
+                sttReady: false,
+                transcriptSupportsSegments: false,
+                transcriptSupportsInterim: false,
+                transcriptSupportsFinal: true,
+                ttsSupported: false,
+                ttsReady: false,
+                lifecycle: [],
+                loaded: false,
+                error: "",
+            };
+        state.speechSessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+            ? { ...state.speechSessionState }
+            : {
+                stage: "idle",
+                text: "",
+                segmentText: "",
+                segmentFinal: true,
+                segmentSequence: 0,
+                runId: "",
+                sessionId: "",
+                errorCode: "",
+                errorMessage: "",
+                errorClass: "status",
+                retryable: false,
+                retryStrategy: "immediate",
+                retryGuidance: "",
+                updatedAtMs: 0,
+            };
+        state.speechErrorPolicy = state.speechErrorPolicy && typeof state.speechErrorPolicy === "object"
+            ? { ...state.speechErrorPolicy }
+            : {
+                loaded: false,
+                defaultClass: "status",
+                map: {},
+                retry: {},
+            };
 
         function nextId() {
             return `web-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -662,6 +702,237 @@
                 return overrideRequest(method, params);
             }
             return request(method, params);
+        }
+
+        function normalizeSpeechCapabilitiesPayload(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const stt = source.stt && typeof source.stt === "object"
+                ? source.stt
+                : {};
+            const transcript = source.transcript && typeof source.transcript === "object"
+                ? source.transcript
+                : {};
+            const tts = source.tts && typeof source.tts === "object"
+                ? source.tts
+                : {};
+            const lifecycle = Array.isArray(source.lifecycle)
+                ? source.lifecycle
+                    .map((value) => String(value || "").trim())
+                    .filter((value) => value.length > 0)
+                : [];
+
+            return {
+                sttSupported: Boolean(stt.supported),
+                sttReady: Boolean(stt.ready),
+                transcriptSupportsSegments: Boolean(transcript.supportsSegments),
+                transcriptSupportsInterim: Boolean(transcript.supportsInterim),
+                transcriptSupportsFinal: transcript.supportsFinal !== false,
+                ttsSupported: Boolean(tts.supported),
+                ttsReady: Boolean(tts.ready),
+                lifecycle,
+                loaded: true,
+                error: "",
+            };
+        }
+
+        function normalizeSpeechSessionPayload(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const speechSession = source.speechSession && typeof source.speechSession === "object"
+                ? source.speechSession
+                : {};
+            const segment = speechSession.segment && typeof speechSession.segment === "object"
+                ? speechSession.segment
+                : null;
+            const stage = String(speechSession.stage || "").trim() || "idle";
+            const sessionText = String(speechSession.text || source.text || source.transcript || "").trim();
+            const segmentText = segment
+                ? String(segment.text || "").trim()
+                : "";
+            let segmentSequence = 0;
+            if (segment && Number.isFinite(Number(segment.sequence))) {
+                segmentSequence = Number(segment.sequence);
+            }
+
+            return {
+                stage,
+                text: sessionText,
+                segmentText,
+                segmentFinal: segment ? Boolean(segment.final) : true,
+                segmentSequence,
+                runId: String(speechSession.runId || source.runId || "").trim(),
+                sessionId: String(speechSession.sessionId || source.sessionId || "").trim(),
+                errorCode: String(source.errorCode || "").trim(),
+                errorMessage: String(source.errorMessage || "").trim(),
+                errorClass: String(source.errorClass || "status").trim() || "status",
+                retryable: Boolean(source.retry && source.retry.retryable),
+                retryStrategy: String(source.retry && source.retry.strategy || "immediate").trim() || "immediate",
+                retryGuidance: String(source.retry && source.retry.guidance || "").trim(),
+                updatedAtMs: Date.now(),
+            };
+        }
+
+        function normalizeSpeechErrorCode(rawCode) {
+            return String(rawCode || "")
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, "_");
+        }
+
+        function normalizeSpeechErrorPolicyPayload(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const errorMap = source.map && typeof source.map === "object"
+                ? source.map
+                : {};
+            const retry = source.retry && typeof source.retry === "object"
+                ? source.retry
+                : {};
+            return {
+                loaded: true,
+                defaultClass: String(source.defaultClass || "status").trim() || "status",
+                map: { ...errorMap },
+                retry: { ...retry },
+            };
+        }
+
+        function classifySpeechError(errorCode, fallbackClass) {
+            const normalizedCode = normalizeSpeechErrorCode(errorCode);
+            const policy = state.speechErrorPolicy && typeof state.speechErrorPolicy === "object"
+                ? state.speechErrorPolicy
+                : null;
+            const defaultClass = policy && typeof policy.defaultClass === "string" && policy.defaultClass.trim()
+                ? policy.defaultClass.trim()
+                : "status";
+            let resolvedClass = String(fallbackClass || "").trim();
+            if (!resolvedClass && policy && policy.map && typeof policy.map === "object") {
+                const mapped = policy.map[normalizedCode] || policy.map[String(errorCode || "").trim()] || policy.map.none;
+                if (typeof mapped === "string" && mapped.trim()) {
+                    resolvedClass = mapped.trim();
+                }
+            }
+            if (!resolvedClass) {
+                resolvedClass = defaultClass;
+            }
+            const retryDescriptor = policy && policy.retry && typeof policy.retry === "object"
+                ? policy.retry[normalizedCode]
+                : null;
+            return {
+                code: normalizedCode,
+                behaviorClass: resolvedClass,
+                retryDescriptor: retryDescriptor && typeof retryDescriptor === "object"
+                    ? retryDescriptor
+                    : null,
+            };
+        }
+
+        async function loadSpeechErrorPolicy(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            try {
+                const response = await requestWithOverride(
+                    "speech.errorPolicy.get",
+                    {},
+                    requestOverride);
+                const payload = response && response.payload && typeof response.payload === "object"
+                    ? response.payload
+                    : {};
+                state.speechErrorPolicy = normalizeSpeechErrorPolicyPayload(payload);
+            } catch (_) {
+                state.speechErrorPolicy = {
+                    loaded: true,
+                    defaultClass: "status",
+                    map: {},
+                    retry: {},
+                };
+            }
+            return { ...state.speechErrorPolicy };
+        }
+
+        async function loadSpeechCapabilities(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+
+            try {
+                const response = await requestWithOverride(
+                    "speech.capabilities.get",
+                    {},
+                    requestOverride);
+                const payload = response && response.payload && typeof response.payload === "object"
+                    ? response.payload
+                    : {};
+                state.speechCapabilities = normalizeSpeechCapabilitiesPayload(payload);
+            } catch (error) {
+                state.speechCapabilities = {
+                    sttSupported: false,
+                    sttReady: false,
+                    transcriptSupportsSegments: false,
+                    transcriptSupportsInterim: false,
+                    transcriptSupportsFinal: true,
+                    ttsSupported: false,
+                    ttsReady: false,
+                    lifecycle: [],
+                    loaded: true,
+                    error: String(error || "speech capability request failed"),
+                };
+            }
+
+            void loadSpeechErrorPolicy({
+                requestOverride,
+            }).catch(() => {
+            });
+            updateComposerState();
+            return { ...state.speechCapabilities };
+        }
+
+        function getSpeechCapabilitiesSnapshot() {
+            return state.speechCapabilities && typeof state.speechCapabilities === "object"
+                ? { ...state.speechCapabilities }
+                : {
+                    sttSupported: false,
+                    sttReady: false,
+                    transcriptSupportsSegments: false,
+                    transcriptSupportsInterim: false,
+                    transcriptSupportsFinal: true,
+                    ttsSupported: false,
+                    ttsReady: false,
+                    lifecycle: [],
+                    loaded: false,
+                    error: "",
+                };
+        }
+
+        function getSpeechSessionStateSnapshot() {
+            return state.speechSessionState && typeof state.speechSessionState === "object"
+                ? { ...state.speechSessionState }
+                : {
+                    stage: "idle",
+                    text: "",
+                    segmentText: "",
+                    segmentFinal: true,
+                    segmentSequence: 0,
+                    runId: "",
+                    sessionId: "",
+                    errorCode: "",
+                    errorMessage: "",
+                    errorClass: "status",
+                    retryable: false,
+                    retryStrategy: "immediate",
+                    retryGuidance: "",
+                    updatedAtMs: 0,
+                };
         }
 
         function emitSessionControlState() {
@@ -1646,6 +1917,7 @@
                 const payload = response && response.payload && typeof response.payload === "object"
                     ? response.payload
                     : {};
+                state.speechSessionState = normalizeSpeechSessionPayload(payload);
                 const transcriptText = String(payload.text || payload.transcript || "").trim();
                 if (transcriptText && state.inputEl) {
                     state.inputEl.value = transcriptText;
@@ -1653,8 +1925,62 @@
                     await send(false);
                     return;
                 }
+
+                const sessionErrorCode = String(state.speechSessionState.errorCode || "").trim();
+                const classified = classifySpeechError(
+                    sessionErrorCode,
+                    String(state.speechSessionState.errorClass || "").trim());
+                if (classified.retryDescriptor && state.speechSessionState.retryGuidance === "") {
+                    state.speechSessionState.retryGuidance = String(classified.retryDescriptor.guidance || "").trim();
+                }
+                if (classified.retryDescriptor && state.speechSessionState.retryStrategy === "immediate") {
+                    const strategy = String(classified.retryDescriptor.strategy || "").trim();
+                    if (strategy) {
+                        state.speechSessionState.retryStrategy = strategy;
+                    }
+                }
+                if (classified.retryDescriptor && !state.speechSessionState.retryable) {
+                    state.speechSessionState.retryable = Boolean(classified.retryDescriptor.retryable);
+                }
+                state.speechSessionState.errorClass = classified.behaviorClass;
+
+                if (!transcriptText && sessionErrorCode) {
+                    if (classified.behaviorClass === "ignore") {
+                        updateComposerState();
+                        return;
+                    }
+
+                    const guidance = state.speechSessionState.retryGuidance
+                        ? ` (${state.speechSessionState.retryGuidance})`
+                        : "";
+                    const msg = `speech transcribe ${sessionErrorCode}${guidance}`;
+                    if (classified.behaviorClass === "status") {
+                        state.speechSessionState.errorMessage = msg;
+                    } else if (classified.behaviorClass === "toast") {
+                        addMessage(msg, "error");
+                    } else {
+                        addMessage(`speech blocking error: ${msg}`, "error");
+                    }
+                }
                 updateComposerState();
             } catch (error) {
+                const classified = classifySpeechError("transcribe_failed", "toast");
+                state.speechSessionState = {
+                    stage: "failed",
+                    text: "",
+                    segmentText: "",
+                    segmentFinal: true,
+                    segmentSequence: 0,
+                    runId: "",
+                    sessionId: "",
+                    errorCode: "transcribe_failed",
+                    errorMessage: String(error || "speech transcribe failed"),
+                    errorClass: classified.behaviorClass,
+                    retryable: false,
+                    retryStrategy: "immediate",
+                    retryGuidance: "Retry after checking microphone/audio input and runtime readiness.",
+                    updatedAtMs: Date.now(),
+                };
                 addMessage(`speech transcribe error: ${String(error)}`, "error");
                 updateComposerState();
             }
@@ -2204,6 +2530,10 @@
             processSendQueue,
             sendDetachedMessage,
             transcribeSpeech,
+            loadSpeechCapabilities,
+            loadSpeechErrorPolicy,
+            getSpeechCapabilitiesSnapshot,
+            getSpeechSessionStateSnapshot,
             parseApprovalTokenFromText,
             executeExecApprovalAction,
             noteInboundChatEvent,
@@ -2271,6 +2601,40 @@
             abortBtn: { disabled: true },
             configCoerceEnabled: false,
             assistantIdentityRequestSeq: 0,
+            speechCapabilities: {
+                sttSupported: false,
+                sttReady: false,
+                transcriptSupportsSegments: false,
+                transcriptSupportsInterim: false,
+                transcriptSupportsFinal: true,
+                ttsSupported: false,
+                ttsReady: false,
+                lifecycle: [],
+                loaded: false,
+                error: "",
+            },
+            speechSessionState: {
+                stage: "idle",
+                text: "",
+                segmentText: "",
+                segmentFinal: true,
+                segmentSequence: 0,
+                runId: "",
+                sessionId: "",
+                errorCode: "",
+                errorMessage: "",
+                errorClass: "status",
+                retryable: false,
+                retryStrategy: "immediate",
+                retryGuidance: "",
+                updatedAtMs: 0,
+            },
+            speechErrorPolicy: {
+                loaded: false,
+                defaultClass: "status",
+                map: {},
+                retry: {},
+            },
             structuredTranscript: [],
             streamTranscriptDraft: null,
         };

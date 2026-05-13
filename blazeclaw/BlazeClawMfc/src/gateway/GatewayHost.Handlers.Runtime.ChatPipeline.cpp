@@ -517,6 +517,27 @@ namespace blazeclaw::gateway {
 					const std::string clientConnectionId = stageContext.clientConnectionId;
 					const bool forceError = stageContext.forceError;
 					const bool hasAttachments = stageContext.hasAttachmentPayload;
+					const RequestParamsView sendParams(request.paramsJson);
+					std::string transcriptInjectionRaw;
+					const bool hasTranscriptInjection =
+						json::FindRawField(request.paramsJson.value_or(std::string()), "transcriptInjection", transcriptInjectionRaw);
+					std::string speechArtifactRaw;
+					const bool hasSpeechArtifact =
+						json::FindRawField(request.paramsJson.value_or(std::string()), "speechArtifact", speechArtifactRaw);
+					std::string transcriptSource = "typed";
+					std::string transcriptSessionId;
+					std::string transcriptRunId;
+					if (hasTranscriptInjection) {
+						json::FindStringField(transcriptInjectionRaw, "source", transcriptSource);
+						json::FindStringField(transcriptInjectionRaw, "sessionId", transcriptSessionId);
+						json::FindStringField(transcriptInjectionRaw, "runId", transcriptRunId);
+						transcriptSource = json::Trim(transcriptSource);
+						transcriptSessionId = json::Trim(transcriptSessionId);
+						transcriptRunId = json::Trim(transcriptRunId);
+						if (transcriptSource.empty()) {
+							transcriptSource = "voice";
+						}
+					}
 					const std::uint64_t nowMs = stageContext.nowEpochMs > 0
 						? stageContext.nowEpochMs
 						: CurrentEpochMsLocal();
@@ -683,8 +704,21 @@ namespace blazeclaw::gateway {
 						std::string(sendControlDecision.toolEvents.wantsToolEvents ? "true" : "false") +
 						",\"reasonCode\":" +
 						JsonString(sendControlDecision.toolEvents.reasonCode) +
-						"}}"
+						"},\"inputSource\":" + JsonString(hasTranscriptInjection ? transcriptSource : "typed") +
+						",\"voiceTranscriptInjected\":" + std::string(hasTranscriptInjection ? "true" : "false") +
+						"}"
 					);
+					EmitTelemetryEvent(
+						"gateway.chat.orchestration.surface.parity",
+						JsonObject({
+							{"runId", JsonString(runId)},
+							{"sessionKey", JsonString(sessionKey)},
+							{"inputSource", JsonString(hasTranscriptInjection ? transcriptSource : "typed")},
+							{"voiceTranscriptInjected", JsonBool(hasTranscriptInjection)},
+							{"orchestrationSurface", JsonString("chat.send")},
+							{"originatingChannel", JsonString(sendControlDecision.route.originatingChannel)},
+							{"explicitDeliverRoute", JsonBool(sendControlDecision.route.explicitDeliverRoute)},
+						}));
 
 					const std::vector<std::string> attachmentMimeTypes =
 						stageContext.attachmentMimeTypes;
@@ -1620,6 +1654,12 @@ namespace blazeclaw::gateway {
 								.originatingChannel = sendControlDecision.route.originatingChannel,
 								.originatingTo = sendControlDecision.route.originatingTo,
 								.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
+								.inputSource = hasTranscriptInjection ? transcriptSource : "typed",
+								.voiceTranscriptInjected = hasTranscriptInjection,
+								.transcriptSessionId = transcriptSessionId,
+								.transcriptRunId = transcriptRunId,
+								.transcriptInjectionJson = hasTranscriptInjection ? transcriptInjectionRaw : std::string(),
+								.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
 							});
 
 						std::size_t streamedDeltaCount = 0;
@@ -2210,6 +2250,12 @@ namespace blazeclaw::gateway {
 								.originatingChannel = sendControlDecision.route.originatingChannel,
 								.originatingTo = sendControlDecision.route.originatingTo,
 								.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
+								.inputSource = hasTranscriptInjection ? transcriptSource : "typed",
+								.voiceTranscriptInjected = hasTranscriptInjection,
+								.transcriptSessionId = transcriptSessionId,
+								.transcriptRunId = transcriptRunId,
+								.transcriptInjectionJson = hasTranscriptInjection ? transcriptInjectionRaw : std::string(),
+								.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
 							});
 					}
 					auto insertedRunIt = host.m_chatRunsById.find(runId);

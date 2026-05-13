@@ -9,6 +9,10 @@
 - Use human-readable UTF-8 characters in source code instead of escaped byte sequences in BlazeClaw files.
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands. Always validate with: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
+
+### UI & UX
+- Target WebView-first UI flows: BlazeClaw currently uses a WebView at BlazeClawMfc/web/chat/index.html via the CBlazeClawMFCView bridge; design parity and UI plans assuming WebView-first implementation.
+- Treat CChatView as a potential future UI path; design parity plans to allow migration to CChatView later, but prioritize WebView parity and validation.
 - For BlazeClaw config UX, keep a dual mechanism: use `config.html` provided by the skill when present; otherwise, use the ported OpenClaw schema-based configuration mechanism.
 
 ## Code Style

@@ -23,6 +23,7 @@
     const NEEDS_APPROVAL_QUEUE_TIMEOUT_MS = 1500;
 
     const statusEl = document.getElementById("status");
+    const speechStatusEl = document.getElementById("speechStatus");
     const assistantIdentityEl = document.getElementById("assistantIdentity");
     const approvalQueueEl = document.getElementById("approvalQueue");
     const messagesEl = document.getElementById("messages");
@@ -52,6 +53,60 @@
 
     function setStatus(text) {
         statusEl.textContent = text;
+    }
+
+    function renderSpeechStatus() {
+        if (!speechStatusEl) {
+            return;
+        }
+
+        const capability = state.speechCapabilities && typeof state.speechCapabilities === "object"
+            ? state.speechCapabilities
+            : null;
+        const sessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+            ? state.speechSessionState
+            : null;
+
+        if (!capability) {
+            speechStatusEl.textContent = "speech: unavailable";
+            return;
+        }
+
+        const parts = [];
+        if (capability.loaded !== true) {
+            parts.push("loading");
+        } else {
+            parts.push(capability.sttReady ? "stt ready" : (capability.sttSupported ? "stt unavailable" : "stt unsupported"));
+            if (capability.transcriptSupportsSegments) {
+                parts.push("segments");
+                parts.push(capability.transcriptSupportsInterim ? "interim" : "final-only");
+            } else {
+                parts.push("final-only");
+            }
+            parts.push(capability.ttsSupported ? "tts available" : "tts off");
+        }
+
+        if (capability.error) {
+            parts.push(`capErr=${String(capability.error)}`);
+        }
+
+        if (sessionState && sessionState.stage) {
+            const stage = String(sessionState.stage).trim();
+            if (stage) {
+                parts.push(`stage=${stage}`);
+            }
+            if (sessionState.segmentText) {
+                const suffix = sessionState.segmentFinal ? "final" : "interim";
+                parts.push(`segment=${suffix}`);
+            } else if (sessionState.text) {
+                parts.push("segment=final");
+            }
+            if (sessionState.errorCode) {
+                parts.push(`err=${String(sessionState.errorCode)}`);
+            }
+        }
+
+        speechStatusEl.textContent = `speech: ${parts.join(" | ")}`;
     }
 
     function renderApprovalQueue() {
@@ -2358,7 +2413,16 @@
         state.abortBtn.disabled = !state.bridgeAvailable || !state.runId;
         state.attachBtn.disabled = !state.bridgeAvailable;
         if (state.speechTranscribeBtn) {
-            state.speechTranscribeBtn.disabled = !state.bridgeAvailable;
+            const speechCapabilities = state.speechCapabilities && typeof state.speechCapabilities === "object"
+                ? state.speechCapabilities
+                : null;
+            const speechReady = speechCapabilities
+                ? (speechCapabilities.loaded !== true || (speechCapabilities.sttSupported && speechCapabilities.sttReady))
+                : true;
+            state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady;
+            if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
+                state.speechTranscribeBtn.disabled = true;
+            }
         }
         if (state.sessionSelect) {
             state.sessionSelect.disabled = !state.bridgeAvailable;
@@ -2392,6 +2456,7 @@
             : "Attach";
 
         renderAssistantIdentity();
+        renderSpeechStatus();
         renderSessionControls();
         if (state.agentsControlPlaneEl) {
             state.agentsControlPlaneEl.hidden = !agentsController;
@@ -2434,6 +2499,11 @@
             const prompt = String(state.inputEl.value || "").trim();
             void controller.transcribeSpeech({
                 prompt,
+            }).then(() => {
+                if (typeof controller.getSpeechSessionStateSnapshot === "function") {
+                    state.speechSessionState = controller.getSpeechSessionStateSnapshot();
+                }
+                updateComposerState();
             });
         });
     }
@@ -2908,6 +2978,16 @@
                 return;
             }
 
+            void controller.loadSpeechCapabilities()
+                .then((snapshot) => {
+                    state.speechCapabilities = snapshot && typeof snapshot === "object"
+                        ? snapshot
+                        : state.speechCapabilities;
+                    updateComposerState();
+                })
+                .catch(() => {
+                });
+
             const activePanel = String(state.agentsPanel || "");
             if (activePanel === "nodes") {
                 emitAgentsTelemetry("nodes.lifecycle.refresh", {
@@ -3023,6 +3103,15 @@
 
         controller.post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });
         controller.flushQueue();
+        void controller.loadSpeechCapabilities()
+            .then((snapshot) => {
+                state.speechCapabilities = snapshot && typeof snapshot === "object"
+                    ? snapshot
+                    : state.speechCapabilities;
+            })
+            .finally(() => {
+                updateComposerState();
+            });
         setStatus("gateway: subscribing...");
         updateComposerState();
     } else {

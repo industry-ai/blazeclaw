@@ -1256,6 +1256,79 @@ namespace blazeclaw::gateway {
 		return m_speechTranscribeCallback(request);
 	}
 
+	void GatewayHost::SetSpeechSpeakCallback(
+		SpeechSpeakCallback callback) {
+		m_speechSpeakCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechSpeakResult GatewayHost::SpeakSpeech(
+		const SpeechSpeakRequest& request) const {
+		if (!m_speechSpeakCallback) {
+			return SpeechSpeakResult{
+				.ok = false,
+				.cancelled = false,
+				.speaking = false,
+				.utteranceId = {},
+				.normalizedText = request.text,
+				.audioPath = {},
+				.voice = request.voice,
+				.provider = request.provider,
+				.model = request.model,
+				.latencyMs = 0,
+				.status = "unavailable",
+				.errorCode = "tts_runtime_unavailable",
+				.errorMessage = "speech synthesis runtime callback is not configured",
+			};
+		}
+
+		return m_speechSpeakCallback(request);
+	}
+
+	void GatewayHost::SetSpeechStopCallback(
+		SpeechStopCallback callback) {
+		m_speechStopCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechStopResult GatewayHost::StopSpeech(
+		const SpeechStopRequest& request) const {
+		if (!m_speechStopCallback) {
+			return SpeechStopResult{
+				.ok = false,
+				.stopped = false,
+				.utteranceId = request.utteranceId,
+				.status = "unavailable",
+				.errorCode = "tts_runtime_unavailable",
+				.errorMessage = "speech synthesis runtime callback is not configured",
+			};
+		}
+
+		return m_speechStopCallback(request);
+	}
+
+	void GatewayHost::SetSpeechStatusCallback(
+		SpeechStatusCallback callback) {
+		m_speechStatusCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechStatusResult GatewayHost::GetSpeechStatus() const {
+		if (!m_speechStatusCallback) {
+			return SpeechStatusResult{
+				.supported = true,
+				.ready = false,
+				.speaking = false,
+				.utteranceId = {},
+				.provider = "default",
+				.model = "default",
+				.voice = "default",
+				.status = "unavailable",
+				.errorCode = "tts_runtime_unavailable",
+				.errorMessage = "speech synthesis runtime callback is not configured",
+			};
+		}
+
+		return m_speechStatusCallback();
+	}
+
 	void GatewayHost::SetParityLifecycleExportCallback(
 		ParityLifecycleExportCallback callback) {
 		m_parityLifecycleExport = std::move(callback);

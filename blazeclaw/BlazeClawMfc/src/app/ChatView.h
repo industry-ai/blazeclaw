@@ -147,6 +147,9 @@ protected:
 		std::uint64_t generation);
 	void UpdateVoiceSessionState(
 		const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState);
+	bool PopulateVoiceTranscribeCompletionFromPayload(
+		const std::string& payload,
+		NativeVoiceTranscribeCompletionPayload& completion) const;
 	LRESULT OnNativeVoiceTranscribeCompleted(WPARAM wParam, LPARAM lParam);
 
 	// IVoiceRecorderCallback

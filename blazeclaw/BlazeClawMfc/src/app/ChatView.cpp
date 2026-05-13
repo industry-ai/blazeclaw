@@ -672,7 +672,33 @@ void CChatView::UpdateVoiceSessionState(
 		default: return std::string("unknown");
 		}
 	}();
-	message.Format(L"[Voice] Session %S", stageText.c_str());
+
+	std::string detail;
+	if (sessionState.segment.has_value())
+	{
+		const auto& segment = sessionState.segment.value();
+		detail = segment.final ? "final segment" : "interim segment";
+		if (!segment.text.empty())
+		{
+			detail += " text=\"";
+			detail += segment.text;
+			detail += "\"";
+		}
+		detail += " sequence=" + std::to_string(segment.sequence);
+	}
+	else if (!sessionState.transcriptText.empty())
+	{
+		detail = "transcript=\"" + sessionState.transcriptText + "\"";
+	}
+
+	if (!detail.empty())
+	{
+		message.Format(L"[Voice] Session %S (%S)", stageText.c_str(), detail.c_str());
+	}
+	else
+	{
+		message.Format(L"[Voice] Session %S", stageText.c_str());
+	}
 	AddStatusMessage(message);
 }
 
@@ -702,19 +728,8 @@ void CChatView::StartVoiceTranscriptionNative(
 	}
 
 	std::thread(
-		[app, audioPath, sessionId, runId, generation, hwnd = GetSafeHwnd()]()
+		[this, app, audioPath, sessionId, runId, generation, hwnd = GetSafeHwnd()]()
 		{
-			auto stageFromString = [](const std::string& stage)
-			{
-				if (stage == "recording") return blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
-				if (stage == "paused") return blazeclaw::core::speechrecognition::SpeechSessionStage::Paused;
-				if (stage == "stopped") return blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped;
-				if (stage == "transcribing") return blazeclaw::core::speechrecognition::SpeechSessionStage::Transcribing;
-				if (stage == "completed") return blazeclaw::core::speechrecognition::SpeechSessionStage::Completed;
-				if (stage == "failed") return blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
-				return blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
-			};
-
 			std::string params =
 				std::string("{\"audioPath\":\"") +
 				EscapeJson(audioPath) +
@@ -750,73 +765,9 @@ void CChatView::StartVoiceTranscriptionNative(
 			}
 			else
 			{
-				const std::string& payload = response.payloadJson.value();
-				std::string stageValue;
-				std::string speechSessionRaw;
-				blazeclaw::gateway::json::FindBoolField(payload, "ok", completion->ok);
-				blazeclaw::gateway::json::FindBoolField(payload, "cancelled", completion->cancelled);
-				blazeclaw::gateway::json::FindStringField(payload, "text", completion->text);
-				blazeclaw::gateway::json::FindStringField(payload, "language", completion->language);
-				blazeclaw::gateway::json::FindStringField(payload, "errorCode", completion->errorCode);
-				blazeclaw::gateway::json::FindStringField(payload, "errorMessage", completion->errorMessage);
-				std::uint64_t latencyRaw = 0;
-				if (blazeclaw::gateway::json::FindUInt64Field(payload, "latencyMs", latencyRaw))
-				{
-					completion->latencyMs = static_cast<std::uint32_t>(latencyRaw);
-				}
-
-				if (blazeclaw::gateway::json::FindRawField(payload, "speechSession", speechSessionRaw))
-				{
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "sessionId", completion->sessionState.sessionId);
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "runId", completion->sessionState.runId);
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "audioPath", completion->sessionState.audioPath);
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "text", completion->sessionState.transcriptText);
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "language", completion->sessionState.language);
-					blazeclaw::gateway::json::FindStringField(speechSessionRaw, "stage", stageValue);
-					std::uint64_t sessionLatencyRaw = 0;
-					if (blazeclaw::gateway::json::FindUInt64Field(speechSessionRaw, "latencyMs", sessionLatencyRaw))
-					{
-						completion->sessionState.latencyMs = static_cast<std::uint32_t>(sessionLatencyRaw);
-					}
-					blazeclaw::gateway::json::FindBoolField(speechSessionRaw, "cancelled", completion->sessionState.cancelled);
-
-					std::string segmentRaw;
-					if (blazeclaw::gateway::json::FindRawField(speechSessionRaw, "segment", segmentRaw))
-					{
-						blazeclaw::core::speechrecognition::SpeechTranscriptSegment segment;
-						blazeclaw::gateway::json::FindStringField(segmentRaw, "text", segment.text);
-						blazeclaw::gateway::json::FindBoolField(segmentRaw, "final", segment.final);
-						std::uint64_t segmentSequence = 0;
-						if (blazeclaw::gateway::json::FindUInt64Field(segmentRaw, "sequence", segmentSequence))
-						{
-							segment.sequence = static_cast<std::uint32_t>(segmentSequence);
-						}
-						completion->sessionState.segment = segment;
-					}
-				}
-
-				completion->sessionState.stage = stageFromString(stageValue);
-				if (completion->sessionState.transcriptText.empty())
-				{
-					completion->sessionState.transcriptText = completion->text;
-				}
-				if (completion->sessionState.language.empty())
-				{
-					completion->sessionState.language = completion->language;
-				}
-				if (completion->sessionState.latencyMs == 0)
-				{
-					completion->sessionState.latencyMs = completion->latencyMs;
-				}
-				if (!completion->ok && !completion->errorMessage.empty())
-				{
-					completion->sessionState.error = blazeclaw::core::speechrecognition::SpeechRecognitionError{
-						.code = completion->cancelled
-							? blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::Cancelled
-							: blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InferenceFailed,
-						.message = completion->errorMessage,
-					};
-				}
+				PopulateVoiceTranscribeCompletionFromPayload(
+					response.payloadJson.value(),
+					*completion);
 			}
 
 			if (!::PostMessage(
@@ -831,6 +782,91 @@ void CChatView::StartVoiceTranscriptionNative(
 			completion.release();
 		})
 		.detach();
+}
+
+bool CChatView::PopulateVoiceTranscribeCompletionFromPayload(
+	const std::string& payload,
+	NativeVoiceTranscribeCompletionPayload& completion) const
+{
+	auto stageFromString = [](const std::string& stage)
+	{
+		if (stage == "recording") return blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
+		if (stage == "paused") return blazeclaw::core::speechrecognition::SpeechSessionStage::Paused;
+		if (stage == "stopped") return blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped;
+		if (stage == "transcribing") return blazeclaw::core::speechrecognition::SpeechSessionStage::Transcribing;
+		if (stage == "completed") return blazeclaw::core::speechrecognition::SpeechSessionStage::Completed;
+		if (stage == "failed") return blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
+		return blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
+	};
+
+	std::string stageValue;
+	std::string speechSessionRaw;
+	blazeclaw::gateway::json::FindBoolField(payload, "ok", completion.ok);
+	blazeclaw::gateway::json::FindBoolField(payload, "cancelled", completion.cancelled);
+	blazeclaw::gateway::json::FindStringField(payload, "text", completion.text);
+	blazeclaw::gateway::json::FindStringField(payload, "language", completion.language);
+	blazeclaw::gateway::json::FindStringField(payload, "errorCode", completion.errorCode);
+	blazeclaw::gateway::json::FindStringField(payload, "errorMessage", completion.errorMessage);
+	std::uint64_t latencyRaw = 0;
+	if (blazeclaw::gateway::json::FindUInt64Field(payload, "latencyMs", latencyRaw))
+	{
+		completion.latencyMs = static_cast<std::uint32_t>(latencyRaw);
+	}
+
+	if (blazeclaw::gateway::json::FindRawField(payload, "speechSession", speechSessionRaw))
+	{
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "sessionId", completion.sessionState.sessionId);
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "runId", completion.sessionState.runId);
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "audioPath", completion.sessionState.audioPath);
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "text", completion.sessionState.transcriptText);
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "language", completion.sessionState.language);
+		blazeclaw::gateway::json::FindStringField(speechSessionRaw, "stage", stageValue);
+		std::uint64_t sessionLatencyRaw = 0;
+		if (blazeclaw::gateway::json::FindUInt64Field(speechSessionRaw, "latencyMs", sessionLatencyRaw))
+		{
+			completion.sessionState.latencyMs = static_cast<std::uint32_t>(sessionLatencyRaw);
+		}
+		blazeclaw::gateway::json::FindBoolField(speechSessionRaw, "cancelled", completion.sessionState.cancelled);
+
+		std::string segmentRaw;
+		if (blazeclaw::gateway::json::FindRawField(speechSessionRaw, "segment", segmentRaw))
+		{
+			blazeclaw::core::speechrecognition::SpeechTranscriptSegment segment;
+			blazeclaw::gateway::json::FindStringField(segmentRaw, "text", segment.text);
+			blazeclaw::gateway::json::FindBoolField(segmentRaw, "final", segment.final);
+			std::uint64_t segmentSequence = 0;
+			if (blazeclaw::gateway::json::FindUInt64Field(segmentRaw, "sequence", segmentSequence))
+			{
+				segment.sequence = static_cast<std::uint32_t>(segmentSequence);
+			}
+			completion.sessionState.segment = segment;
+		}
+	}
+
+	completion.sessionState.stage = stageFromString(stageValue);
+	if (completion.sessionState.transcriptText.empty())
+	{
+		completion.sessionState.transcriptText = completion.text;
+	}
+	if (completion.sessionState.language.empty())
+	{
+		completion.sessionState.language = completion.language;
+	}
+	if (completion.sessionState.latencyMs == 0)
+	{
+		completion.sessionState.latencyMs = completion.latencyMs;
+	}
+	if (!completion.ok && !completion.errorMessage.empty())
+	{
+		completion.sessionState.error = blazeclaw::core::speechrecognition::SpeechRecognitionError{
+			.code = completion.cancelled
+				? blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::Cancelled
+				: blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InferenceFailed,
+			.message = completion.errorMessage,
+		};
+	}
+
+	return true;
 }
 
 LRESULT CChatView::OnNativeVoiceTranscribeCompleted(WPARAM wParam, LPARAM lParam)

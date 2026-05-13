@@ -260,6 +260,86 @@ namespace blazeclaw::core {
 
 				return gatewayResult;
 			});
+
+		manager.m_gatewayHost.SetSpeechStatusCallback([&manager]() {
+			auto errorCodeToString = [](texttospeech::TextToSpeechErrorCode code) {
+				switch (code) {
+				case texttospeech::TextToSpeechErrorCode::None: return std::string("none");
+				case texttospeech::TextToSpeechErrorCode::TextToSpeechDisabled: return std::string("text_to_speech_disabled");
+				case texttospeech::TextToSpeechErrorCode::ProviderNotSupported: return std::string("provider_not_supported");
+				case texttospeech::TextToSpeechErrorCode::ModelNotFound: return std::string("model_not_found");
+				case texttospeech::TextToSpeechErrorCode::InvalidInput: return std::string("invalid_input");
+				case texttospeech::TextToSpeechErrorCode::RuntimeUnavailable: return std::string("runtime_unavailable");
+				case texttospeech::TextToSpeechErrorCode::Cancelled: return std::string("cancelled");
+				default: return std::string("unknown");
+				}
+			};
+
+			blazeclaw::gateway::GatewayHost::SpeechStatusResult status;
+			status.supported = true;
+			status.ready = manager.IsRunning();
+			status.speaking = manager.m_textToSpeech.speaking;
+			status.utteranceId = manager.m_textToSpeech.activeUtteranceId;
+			status.provider = manager.m_textToSpeech.provider;
+			status.model = manager.m_textToSpeech.model;
+			status.voice = manager.m_textToSpeech.voice;
+			status.status = manager.m_textToSpeech.status;
+			if (manager.m_textToSpeech.error.has_value()) {
+				status.errorCode = errorCodeToString(manager.m_textToSpeech.error->code);
+				status.errorMessage = manager.m_textToSpeech.error->message;
+			}
+			return status;
+			});
+
+		manager.m_gatewayHost.SetSpeechSpeakCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::SpeechSpeakRequest& request) {
+			manager.m_textToSpeech.speakRequestsStarted += 1;
+			manager.m_textToSpeech.enabled = true;
+			manager.m_textToSpeech.ready = manager.IsRunning();
+			manager.m_textToSpeech.provider = request.provider.empty() ? "default" : request.provider;
+			manager.m_textToSpeech.model = request.model.empty() ? "default" : request.model;
+			manager.m_textToSpeech.voice = request.voice.empty() ? "default" : request.voice;
+			manager.m_textToSpeech.activeUtteranceId =
+				request.runId.empty()
+				? std::string("utterance-") + std::to_string(manager.m_textToSpeech.speakRequestsStarted)
+				: request.runId + "-" + std::to_string(manager.m_textToSpeech.speakRequestsStarted);
+			manager.m_textToSpeech.speaking = true;
+			manager.m_textToSpeech.status = "speaking";
+			manager.m_textToSpeech.error.reset();
+			manager.m_textToSpeech.speakRequestsCompleted += 1;
+
+			blazeclaw::gateway::GatewayHost::SpeechSpeakResult result;
+			result.ok = true;
+			result.cancelled = false;
+			result.speaking = manager.m_textToSpeech.speaking;
+			result.utteranceId = manager.m_textToSpeech.activeUtteranceId;
+			result.normalizedText = request.text;
+			result.audioPath =
+				"artifacts/tts/" + manager.m_textToSpeech.activeUtteranceId + ".wav";
+			result.voice = manager.m_textToSpeech.voice;
+			result.provider = manager.m_textToSpeech.provider;
+			result.model = manager.m_textToSpeech.model;
+			result.latencyMs = 0;
+			result.status = manager.m_textToSpeech.status;
+			return result;
+			});
+
+		manager.m_gatewayHost.SetSpeechStopCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::SpeechStopRequest& request) {
+			manager.m_textToSpeech.stopRequests += 1;
+			manager.m_textToSpeech.speaking = false;
+			manager.m_textToSpeech.status = "stopped";
+			if (!request.utteranceId.empty()) {
+				manager.m_textToSpeech.activeUtteranceId = request.utteranceId;
+			}
+
+			blazeclaw::gateway::GatewayHost::SpeechStopResult result;
+			result.ok = true;
+			result.stopped = true;
+			result.utteranceId = manager.m_textToSpeech.activeUtteranceId;
+			result.status = manager.m_textToSpeech.status;
+			return result;
+			});
 	}
 
 	void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManager& manager) {

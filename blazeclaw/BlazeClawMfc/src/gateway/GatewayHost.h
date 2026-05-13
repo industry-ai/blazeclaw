@@ -26,6 +26,7 @@
 #include "GatewayNodeWakeService.h"
 #include "GatewayRuntimeContext.h"
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
+#include "../core/runtime/TextToSpeech/ITextToSpeechRuntime.h"
 
 #include <memory>
 
@@ -343,6 +344,59 @@ namespace blazeclaw::gateway {
 			std::string errorMessage;
 		};
 
+		struct SpeechSpeakRequest {
+			std::string runId;
+			std::string sessionId;
+			std::string text;
+			std::string voice;
+			std::string provider;
+			std::string model;
+		};
+
+		struct SpeechSpeakResult {
+			bool ok = false;
+			bool cancelled = false;
+			bool speaking = false;
+			std::string utteranceId;
+			std::string normalizedText;
+			std::string audioPath;
+			std::string voice;
+			std::string provider;
+			std::string model;
+			std::uint32_t latencyMs = 0;
+			std::string status;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
+		struct SpeechStopRequest {
+			std::string runId;
+			std::string sessionId;
+			std::string utteranceId;
+		};
+
+		struct SpeechStopResult {
+			bool ok = false;
+			bool stopped = false;
+			std::string utteranceId;
+			std::string status;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
+		struct SpeechStatusResult {
+			bool supported = true;
+			bool ready = false;
+			bool speaking = false;
+			std::string utteranceId;
+			std::string provider;
+			std::string model;
+			std::string voice;
+			std::string status;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
 		using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
 		using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
 		using EmbeddingsGenerateCallback =
@@ -351,6 +405,12 @@ namespace blazeclaw::gateway {
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 		using SpeechTranscribeCallback =
 			std::function<SpeechTranscribeResult(const SpeechTranscribeRequest&)>;
+		using SpeechSpeakCallback =
+			std::function<SpeechSpeakResult(const SpeechSpeakRequest&)>;
+		using SpeechStopCallback =
+			std::function<SpeechStopResult(const SpeechStopRequest&)>;
+		using SpeechStatusCallback =
+			std::function<SpeechStatusResult()>;
 		using ParityLifecycleExportCallback = std::function<std::string()>;
 
 		[[nodiscard]] static std::vector<std::string>
@@ -402,6 +462,14 @@ namespace blazeclaw::gateway {
 		void SetSpeechTranscribeCallback(SpeechTranscribeCallback callback);
 		[[nodiscard]] SpeechTranscribeResult TranscribeSpeech(
 			const SpeechTranscribeRequest& request) const;
+		void SetSpeechSpeakCallback(SpeechSpeakCallback callback);
+		[[nodiscard]] SpeechSpeakResult SpeakSpeech(
+			const SpeechSpeakRequest& request) const;
+		void SetSpeechStopCallback(SpeechStopCallback callback);
+		[[nodiscard]] SpeechStopResult StopSpeech(
+			const SpeechStopRequest& request) const;
+		void SetSpeechStatusCallback(SpeechStatusCallback callback);
+		[[nodiscard]] SpeechStatusResult GetSpeechStatus() const;
 		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
 		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
 		[[nodiscard]] const GatewayRuntimeContext& RuntimeContext() const noexcept {
@@ -511,6 +579,12 @@ namespace blazeclaw::gateway {
 			std::string originatingChannel = "internal";
 			std::string originatingTo;
 			bool explicitDeliverRoute = false;
+			std::string inputSource = "typed";
+			bool voiceTranscriptInjected = false;
+			std::string transcriptSessionId;
+			std::string transcriptRunId;
+			std::string transcriptInjectionJson;
+			std::string speechArtifactJson;
 		};
 
 		struct OrchestrationPathSelectionState {
@@ -690,6 +764,9 @@ namespace blazeclaw::gateway {
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
 		SpeechTranscribeCallback m_speechTranscribeCallback;
+		SpeechSpeakCallback m_speechSpeakCallback;
+		SpeechStopCallback m_speechStopCallback;
+		SpeechStatusCallback m_speechStatusCallback;
 		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
