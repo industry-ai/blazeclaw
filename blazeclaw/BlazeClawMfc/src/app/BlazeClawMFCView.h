@@ -115,6 +115,7 @@ protected:
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
+	void EmitSpeechLifecycleEvent(const std::string& payloadJson);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
 	void ReportRunSkillPathsToToolOutput(const std::string& runId);
 	void ProcessRunSkillPathLookupResult(

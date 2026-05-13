@@ -2411,6 +2411,16 @@ void CBlazeClawMFCView::PostOpenClawWsClose(
 	m_eventTransport.EmitTopic(BridgeEventTopic::WsClose, closeJson);
 }
 
+void CBlazeClawMFCView::EmitSpeechLifecycleEvent(const std::string& payloadJson)
+{
+	if (payloadJson.empty())
+	{
+		return;
+	}
+
+	m_eventTransport.EmitTopic(BridgeEventTopic::SpeechLifecycle, payloadJson);
+}
+
 void CBlazeClawMFCView::EmitOpenClawChatEvents(
 	const std::string& eventsArrayJson)
 {

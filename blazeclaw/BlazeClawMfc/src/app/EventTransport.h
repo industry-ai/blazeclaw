@@ -14,6 +14,7 @@ enum class BridgeEventTopic
 	PollHealth,
 	ToolsLifecycle,
 	RpcResult,
+	SpeechLifecycle,
 };
 
 class CEventTransport

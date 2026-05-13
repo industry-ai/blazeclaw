@@ -63,6 +63,8 @@ std::string CEventTransport::TopicToString(const BridgeEventTopic topic)
 		return "tools.lifecycle";
 	case BridgeEventTopic::RpcResult:
 		return "rpc.result";
+	case BridgeEventTopic::SpeechLifecycle:
+		return "speech.lifecycle";
 	default:
 		return "unknown";
 	}
@@ -87,6 +89,8 @@ std::vector<std::string> CEventTransport::ResolveCompatibilityChannels(
 		return { "blazeclaw.gateway.tools.lifecycle" };
 	case BridgeEventTopic::RpcResult:
 		return { "blazeclaw.gateway.rpc.result" };
+	case BridgeEventTopic::SpeechLifecycle:
+		return { "blazeclaw.gateway.speech.lifecycle" };
 	default:
 		return {};
 	}
