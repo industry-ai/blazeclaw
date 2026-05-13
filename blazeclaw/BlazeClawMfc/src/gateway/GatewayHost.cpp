@@ -25,6 +25,8 @@
 #include "GatewayHttpAuthService.h"
 #include "Telemetry.h"
 #include "../app/MainFrame.h"
+#include "../app/BlazeClawMfcApp.h"
+#include "../app/ChatView.h"
 
 #include <algorithm>
 #include <iterator>
@@ -269,6 +271,98 @@ namespace blazeclaw::gateway {
 		}
 
 	} // namespace
+
+	GatewayHost::NativeRecordingResult GatewayHost::StartNativeRecording()
+	{
+		NativeRecordingResult result;
+		// Try to locate main frame and chat view to reuse existing recorder
+		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (app == nullptr) {
+			result.ok = false;
+			result.errorMessage = "app unavailable";
+			return result;
+		}
+
+		CMainFrame* main = dynamic_cast<CMainFrame*>(app->GetMainWnd());
+		if (main == nullptr) {
+			result.ok = false;
+			result.errorMessage = "main frame unavailable";
+			return result;
+		}
+
+		CChatView* chat = main->GetActiveChatView();
+		if (chat == nullptr) {
+			result.ok = false;
+			result.errorMessage = "chat view not active";
+			return result;
+		}
+
+		// Build recordings directory inside exe dir
+		WCHAR exePath[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+		LPWSTR p = wcsrchr(exePath, L'\\');
+		if (p != nullptr) { *p = L'\0'; }
+		CString recordingsDir;
+		recordingsDir.Format(L"%s\\BlazeClawRecordings", exePath);
+		CreateDirectoryW(recordingsDir, nullptr);
+
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		CStringW fileName;
+		fileName.Format(L"recording_%04d%02d%02d_%02d%02d%02d.wav",
+			st.wYear, st.wMonth, st.wDay,
+			st.wHour, st.wMinute, st.wSecond);
+
+		CStringW filePathW = recordingsDir + L"\\" + fileName;
+
+		if (!chat->StartRecordingToPath(filePathW)) {
+			result.ok = false;
+			result.errorMessage = "failed to start recording";
+			return result;
+		}
+
+		result.ok = true;
+		return result;
+	}
+
+	GatewayHost::NativeRecordingResult GatewayHost::StopNativeRecording()
+	{
+		NativeRecordingResult result;
+		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (app == nullptr) {
+			result.ok = false;
+			result.errorMessage = "app unavailable";
+			return result;
+		}
+
+		CMainFrame* main = dynamic_cast<CMainFrame*>(app->GetMainWnd());
+		if (main == nullptr) {
+			result.ok = false;
+			result.errorMessage = "main frame unavailable";
+			return result;
+		}
+
+		CChatView* chat = main->GetActiveChatView();
+		if (chat == nullptr) {
+			result.ok = false;
+			result.errorMessage = "chat view not active";
+			return result;
+		}
+
+		CStringW lastPath = chat->StopRecordingAndGetPath();
+		if (lastPath.IsEmpty()) {
+			result.ok = false;
+			result.errorMessage = "no recording available";
+			return result;
+		}
+
+		// Convert to UTF-8 narrow path
+		const std::wstring lastPathWide(lastPath.GetString());
+		std::string pathUtf8 = ToNarrow(lastPathWide);
+		result.ok = true;
+		result.audioPath = pathUtf8;
+		return result;
+	}
 
 	bool GatewayHost::StartLocalDispatchOnly() {
 		if (m_dispatchInitialized) {

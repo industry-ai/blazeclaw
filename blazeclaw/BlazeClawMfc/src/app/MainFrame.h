@@ -14,6 +14,9 @@ class COutlookBar : public CMFCOutlookBar
 	virtual void GetPaneName(CString& strName) const { BOOL bNameValid = strName.LoadString(IDS_OUTLOOKBAR); ASSERT(bNameValid); if (!bNameValid) strName.Empty(); }
 };
 
+// Forward declarations
+class CChatView;
+
 constexpr UINT kMsgCreateMdiGroup = WM_USER + 0x100;  // custom message for deferred tab split
 constexpr UINT kMsgAppendToolStatusLine = WM_USER + 0x101;  // append line to Output.Tool from non-UI threads
 
@@ -21,6 +24,8 @@ class CMainFrame final : public CMDIFrameWndEx
 {
 	DECLARE_DYNAMIC(CMainFrame)
 public:
+	// Return the active ChatView if present, otherwise nullptr
+	CChatView* GetActiveChatView();
 	CMainFrame() noexcept;
 
 	// Attributes

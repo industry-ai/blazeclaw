@@ -152,6 +152,11 @@ protected:
 		NativeVoiceTranscribeCompletionPayload& completion) const;
 	LRESULT OnNativeVoiceTranscribeCompleted(WPARAM wParam, LPARAM lParam);
 
+public:
+	// Helpers for external callers (WebView bridge)
+	bool StartRecordingToPath(const CStringW& filePath);
+	CStringW StopRecordingAndGetPath();
+
 	// IVoiceRecorderCallback
 	virtual void OnVoiceDataAvailable(const BYTE* pData, DWORD dwLength) override;
 	virtual void OnVoiceStateChanged(VoiceRecorderState state) override;

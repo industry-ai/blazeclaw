@@ -53,6 +53,8 @@ namespace {
 			.count());
 	}
 
+// External helpers for native recording control (used by gateway bridge)
+
 	std::string EscapeJson(const std::string& value)
 	{
 		std::string escaped;
@@ -343,6 +345,26 @@ BOOL CChatView::PreCreateWindow(CREATESTRUCT& cs)
 void CChatView::OnDraw(CDC* /*pDC*/)
 {
 	// Drawing handled by child controls
+}
+
+bool CChatView::StartRecordingToPath(const CStringW& filePath)
+{
+	m_strLastVoiceFilePath = filePath;
+	const wchar_t* psz = filePath.GetString();
+	if (!m_voiceRecorder.StartRecording(psz))
+	{
+		return false;
+	}
+	return true;
+}
+
+CStringW CChatView::StopRecordingAndGetPath()
+{
+	if (m_voiceRecorder.GetState() == VoiceRecorderState::Recording)
+	{
+		m_voiceRecorder.StopRecording();
+	}
+	return m_strLastVoiceFilePath;
 }
 
 int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)

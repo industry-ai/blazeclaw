@@ -131,6 +131,30 @@ namespace blazeclaw::gateway {
 				});
 
 			host.RuntimeContext().dispatcher->Register(
+				"gateway.speech.startRecording",
+				[&host](const protocol::RequestFrame& request) {
+					// Start native recording and return an object { ok: bool }
+					const auto result = host.StartNativeRecording();
+					if (!result.ok) {
+						return protocol::ErrorResponse(request, std::string("start_recording_failed"), result.errorMessage);
+					}
+					const std::string payload = JsonObject({ { "ok", JsonBool(true) } });
+					return protocol::OkResponse(request, payload);
+				});
+
+			host.RuntimeContext().dispatcher->Register(
+				"gateway.speech.stopRecording",
+				[&host](const protocol::RequestFrame& request) {
+					// Stop native recording and return audioPath
+					const auto result = host.StopNativeRecording();
+					if (!result.ok) {
+						return protocol::ErrorResponse(request, std::string("stop_recording_failed"), result.errorMessage);
+					}
+					const std::string payload = JsonObject({ { "ok", JsonBool(true) }, { "audioPath", JsonString(result.audioPath) } });
+					return protocol::OkResponse(request, payload);
+				});
+
+			host.RuntimeContext().dispatcher->Register(
 				"speech.errorPolicy.get",
 				[](const protocol::RequestFrame& request) {
 					return protocol::OkResponse(

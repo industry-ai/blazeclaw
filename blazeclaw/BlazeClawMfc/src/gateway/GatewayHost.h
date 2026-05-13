@@ -83,6 +83,8 @@ namespace blazeclaw::gateway {
 		std::string browserVariantLabel;
 	};
 
+		// Native recording bridge result/ops are declared on the GatewayHost class below
+
 	struct SkillsCatalogGatewayState {
 		std::vector<SkillsCatalogGatewayEntry> entries;
 		std::size_t rootsScanned = 0;
@@ -470,6 +472,15 @@ namespace blazeclaw::gateway {
 			const SpeechStopRequest& request) const;
 		void SetSpeechStatusCallback(SpeechStatusCallback callback);
 		[[nodiscard]] SpeechStatusResult GetSpeechStatus() const;
+
+		struct NativeRecordingResult {
+			bool ok = false;
+			std::string audioPath;
+			std::string errorMessage;
+		};
+
+		NativeRecordingResult StartNativeRecording();
+		NativeRecordingResult StopNativeRecording();
 		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
 		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
 		[[nodiscard]] const GatewayRuntimeContext& RuntimeContext() const noexcept {

@@ -2495,16 +2495,51 @@
     });
 
     if (state.speechTranscribeBtn) {
-        state.speechTranscribeBtn.addEventListener("click", () => {
-            const prompt = String(state.inputEl.value || "").trim();
-            void controller.transcribeSpeech({
-                prompt,
-            }).then(() => {
+        let recordingActive = false;
+        let recordingBusy = false;
+        state.speechTranscribeBtn.addEventListener("click", async () => {
+            if (recordingBusy) {
+                return;
+            }
+
+            recordingBusy = true;
+            try {
+                if (!recordingActive) {
+                    await controller.request("gateway.speech.startRecording", {});
+                    recordingActive = true;
+                    state.speechTranscribeBtn.textContent = "Recording... (click to stop)";
+                    return;
+                }
+
+                const stopResponse = await controller.request("gateway.speech.stopRecording", {});
+                const payload = stopResponse && typeof stopResponse.payload === "object"
+                    ? stopResponse.payload
+                    : {};
+                const audioPath = String(payload.audioPath || "").trim();
+
+                recordingActive = false;
+                state.speechTranscribeBtn.textContent = "Transcribe";
+
+                if (!audioPath) {
+                    addMessage("speech recording failed: no audio path returned", "error");
+                    return;
+                }
+
+                const prompt = String(state.inputEl.value || "").trim();
+                await controller.transcribeSpeech({ audioPath, prompt });
                 if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                     state.speechSessionState = controller.getSpeechSessionStateSnapshot();
                 }
                 updateComposerState();
-            });
+            } catch (e) {
+                const message = String(e || "speech recording failed");
+                addMessage(`speech recording error: ${message}`, "error");
+                recordingActive = false;
+                state.speechTranscribeBtn.textContent = "Transcribe";
+            } finally {
+                recordingBusy = false;
+                updateComposerState();
+            }
         });
     }
     if (state.sessionSubscribeBtn) {

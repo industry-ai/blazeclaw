@@ -5,6 +5,7 @@
 #include "BlazeClawMfcApp.h"
 #include "CMgrMessage.h"
 #include <atlconv.h>
+#include "ChatView.h"
 #include <optional>
 #include <algorithm>
 #include <cwctype>
@@ -86,6 +87,16 @@ namespace {
 } // namespace
 // ApiKey dialog declared in its own files
 
+CChatView* CMainFrame::GetActiveChatView()
+{
+	CMDIChildWndEx* activeChild = DYNAMIC_DOWNCAST(CMDIChildWndEx, MDIGetActive());
+	if (activeChild == nullptr) {
+		return nullptr;
+	}
+	CView* activeView = activeChild->GetActiveView();
+	auto* chatView = DYNAMIC_DOWNCAST(CChatView, activeView);
+	return chatView;
+}
 
 IMPLEMENT_DYNAMIC(CMainFrame, CMDIFrameWndEx)
 
