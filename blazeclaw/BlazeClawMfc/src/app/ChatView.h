@@ -50,6 +50,19 @@ protected:
 		std::string errorDetail;
 	};
 
+	struct NativeVoiceTranscribeCompletionPayload
+	{
+		std::uint64_t generation = 0;
+		bool ok = false;
+		bool cancelled = false;
+		std::string text;
+		std::string language;
+		std::uint32_t latencyMs = 0;
+		blazeclaw::core::speechrecognition::SpeechSessionState sessionState;
+		std::string errorCode;
+		std::string errorMessage;
+	};
+
 	struct NativeChatState
 	{
 		bool connected = false;
@@ -81,9 +94,11 @@ protected:
 	std::string m_renderedErrorText;
 	std::uint64_t m_chatSendGeneration = 1;
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
+	std::uint64_t m_voiceTranscribeGeneration = 1;
+	std::optional<blazeclaw::core::speechrecognition::SpeechSessionState> m_voiceSessionState;
 
-   CVoiceRecorder m_voiceRecorder;
-   CString m_strLastVoiceFilePath;  // Last saved voice recording file path
+	CVoiceRecorder m_voiceRecorder;
+	CString m_strLastVoiceFilePath;  // Last saved voice recording file path
 
 // Overrides
 public:
@@ -125,9 +140,19 @@ protected:
 	void UpdateItemAt(int index, const CString& strText, BOOL bSelf);
 	void UpdateControlStates();
 	void AddStatusMessage(const CString& message);
+	void StartVoiceTranscriptionNative(
+		const std::string& audioPath,
+		const std::string& sessionId,
+		const std::string& runId,
+		std::uint64_t generation);
+	void UpdateVoiceSessionState(
+		const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState);
+	LRESULT OnNativeVoiceTranscribeCompleted(WPARAM wParam, LPARAM lParam);
 
 	// IVoiceRecorderCallback
 	virtual void OnVoiceDataAvailable(const BYTE* pData, DWORD dwLength) override;
 	virtual void OnVoiceStateChanged(VoiceRecorderState state) override;
+	virtual void OnVoiceSessionChanged(
+		const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState) override;
 	virtual void OnVoiceError(long nError, const wchar_t* pszDescription) override;
 };

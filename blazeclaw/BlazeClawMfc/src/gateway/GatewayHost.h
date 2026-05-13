@@ -25,6 +25,7 @@
 #include "GatewayNodePendingActionQueue.h"
 #include "GatewayNodeWakeService.h"
 #include "GatewayRuntimeContext.h"
+#include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
 
 #include <memory>
 
@@ -337,6 +338,7 @@ namespace blazeclaw::gateway {
 			std::string text;
 			std::string language;
 			std::uint32_t latencyMs = 0;
+			blazeclaw::core::speechrecognition::SpeechSessionState sessionState;
 			std::string errorCode;
 			std::string errorMessage;
 		};

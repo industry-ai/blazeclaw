@@ -378,6 +378,12 @@ namespace blazeclaw::core::speechrecognition {
 	SpeechTranscribeResult SpeechRecognitionRuntime::Transcribe(const SpeechTranscribeRequest& request) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		SpeechTranscribeResult result;
+		result.sessionState.sessionId = request.sessionId;
+		result.sessionState.runId = request.runId;
+		result.sessionState.audioPath = request.audioPath;
+		result.sessionState.language = request.language.empty() ? ToNarrow(m_config.speechRecognition.language) : request.language;
+		result.sessionState.stage = SpeechSessionStage::Transcribing;
+		result.sessionState.segment = std::nullopt;
 		const auto startedAt = std::chrono::steady_clock::now();
 		++m_snapshot.transcribeRequestsStarted;
 
@@ -387,6 +393,8 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::InvalidInput,
 				.message = "audioPath is required for ASR transcription",
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsFailed;
 			m_snapshot.status = "invalid_input";
 			m_snapshot.error = result.error;
@@ -395,6 +403,8 @@ namespace blazeclaw::core::speechrecognition {
 
 		if (!EnsureLoadedLocked(result)) {
 			++m_snapshot.transcribeRequestsFailed;
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			return result;
 		}
 
@@ -405,6 +415,8 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::AudioNotFound,
 				.message = "audio path not found",
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsFailed;
 			m_snapshot.status = "audio_missing";
 			m_snapshot.error = result.error;
@@ -628,6 +640,9 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::Cancelled,
 				.message = "speech transcription cancelled before preprocessing",
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.cancelled = true;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsCancelled;
 			m_snapshot.status = "cancelled";
 			m_snapshot.error = result.error;
@@ -643,6 +658,8 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::InvalidAudioFormat,
 				.message = wavError.empty() ? "failed to parse wav audio" : wavError,
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsFailed;
 			m_snapshot.status = "invalid_audio";
 			m_snapshot.error = result.error;
@@ -671,6 +688,8 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::FeatureExtractionFailed,
 				.message = "audio too short or feature extraction failed",
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsFailed;
 			m_snapshot.status = "feature_extraction_failed";
 			m_snapshot.error = result.error;
@@ -692,6 +711,9 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::Cancelled,
 				.message = "speech transcription cancelled before inference",
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.cancelled = true;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsCancelled;
 			m_snapshot.status = "cancelled";
 			m_snapshot.error = result.error;
@@ -789,6 +811,9 @@ namespace blazeclaw::core::speechrecognition {
 						.code = SpeechRecognitionErrorCode::Cancelled,
 						.message = "speech transcription cancelled during decode",
 					};
+					result.sessionState.stage = SpeechSessionStage::Failed;
+					result.sessionState.cancelled = true;
+					result.sessionState.error = result.error;
 					++m_snapshot.transcribeRequestsCancelled;
 					m_snapshot.status = "cancelled";
 					m_snapshot.error = result.error;
@@ -972,6 +997,8 @@ namespace blazeclaw::core::speechrecognition {
 					.message = "decoder produced an empty transcript",
 				};
 				result.ok = false;
+				result.sessionState.stage = SpeechSessionStage::Failed;
+				result.sessionState.error = result.error;
 				++m_snapshot.transcribeRequestsFailed;
 				m_snapshot.status = "decoder_failed";
 				m_snapshot.error = result.error;
@@ -982,6 +1009,15 @@ namespace blazeclaw::core::speechrecognition {
 			result.language = request.language.empty() ? m_snapshot.language : request.language;
 			result.latencyMs = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - startedAt).count());
+			result.sessionState.stage = SpeechSessionStage::Completed;
+			result.sessionState.transcriptText = result.text;
+			result.sessionState.language = result.language;
+			result.sessionState.latencyMs = result.latencyMs;
+			result.sessionState.segment = SpeechTranscriptSegment{
+				.text = result.text,
+				.final = true,
+				.sequence = 1,
+			};
 			++m_snapshot.transcribeRequestsCompleted;
 			m_snapshot.lastLatencyMs = result.latencyMs;
 			m_snapshot.cumulativeLatencyMs += result.latencyMs;
@@ -995,6 +1031,8 @@ namespace blazeclaw::core::speechrecognition {
 				.code = SpeechRecognitionErrorCode::InferenceFailed,
 				.message = ex.what(),
 			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
 			++m_snapshot.transcribeRequestsFailed;
 			m_snapshot.status = "inference_failed";
 			m_snapshot.error = result.error;

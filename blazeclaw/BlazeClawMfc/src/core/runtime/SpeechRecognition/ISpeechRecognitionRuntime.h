@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SpeechRecognitionContracts.h"
 #include "../../../config/ConfigModels.h"
 
 #include <cstdint>
@@ -8,29 +9,6 @@
 #include <string>
 
 namespace blazeclaw::core::speechrecognition {
-
-	enum class SpeechRecognitionErrorCode {
-		None,
-		SpeechRecognitionDisabled,
-		ProviderNotSupported,
-		ModelNotFound,
-		ModelLoadFailed,
-		InvalidInput,
-		AudioNotFound,
-		InvalidAudioFormat,
-		AudioDecodeFailed,
-		FeatureExtractionFailed,
-		TokenizerLoadFailed,
-		DecoderFailed,
-		InferenceFailed,
-		RuntimeUnavailable,
-		Cancelled,
-	};
-
-	struct SpeechRecognitionError {
-		SpeechRecognitionErrorCode code = SpeechRecognitionErrorCode::None;
-		std::string message;
-	};
 
 	struct SpeechRecognitionRuntimeSnapshot {
 		bool enabled = false;
@@ -82,10 +60,12 @@ namespace blazeclaw::core::speechrecognition {
 		std::string text;
 		std::string language;
 		std::uint32_t latencyMs = 0;
+		SpeechSessionState sessionState;
 		std::optional<SpeechRecognitionError> error;
 	};
 
-	using SpeechTranscribeCallback = std::function<void(const std::string& text)>;
+	using SpeechTranscribeCallback = std::function<void(
+		const SpeechTranscribeResult& result)>;
 
 	class ISpeechRecognitionRuntime {
 	public:

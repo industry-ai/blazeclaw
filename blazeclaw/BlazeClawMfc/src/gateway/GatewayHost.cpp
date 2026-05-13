@@ -1242,6 +1242,12 @@ namespace blazeclaw::gateway {
 				.text = {},
 				.language = {},
 				.latencyMs = 0,
+				.sessionState = blazeclaw::core::speechrecognition::SpeechSessionState{
+					.sessionId = request.sessionId,
+					.runId = request.runId,
+					.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Failed,
+					.audioPath = request.audioPath,
+				},
 				.errorCode = "speech_runtime_unavailable",
 				.errorMessage = "speech transcription runtime callback is not configured",
 			};

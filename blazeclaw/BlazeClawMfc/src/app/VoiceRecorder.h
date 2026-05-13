@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
+
 #include <mmsystem.h>
 #include <mmreg.h>
 #include <vector>
@@ -39,6 +41,8 @@ public:
     virtual ~IVoiceRecorderCallback() = default;
     virtual void OnVoiceDataAvailable(const BYTE* pData, DWORD dwLength) = 0;
     virtual void OnVoiceStateChanged(VoiceRecorderState state) = 0;
+    virtual void OnVoiceSessionChanged(
+        const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState) = 0;
     virtual void OnVoiceError(long nError, const wchar_t* pszDescription) = 0;
 };
 
@@ -89,6 +93,10 @@ protected:
     void PrepareBuffers();
     void UnprepareBuffers();
     BOOL WriteWavToFile();
+    void UpdateSessionState(
+        blazeclaw::core::speechrecognition::SpeechSessionStage stage);
+    void NotifySessionState(
+        blazeclaw::core::speechrecognition::SpeechSessionStage stage);
 
 private:
     HWND           m_hNotifyWnd;
@@ -96,6 +104,7 @@ private:
     VoiceRecorderConfig m_config;
     VoiceRecorderState m_state;
     IVoiceRecorderCallback* m_pCallback;
+    blazeclaw::core::speechrecognition::SpeechSessionState m_sessionState;
 
     int            m_nDeviceID;
     UINT           m_nBufferCount;

@@ -1,19 +1,40 @@
 #include "pch.h"
 #include "VoiceRecorder.h"
 
+namespace {
+
+std::string ToNarrow(const wchar_t* value)
+{
+    if (value == nullptr)
+    {
+        return {};
+    }
+
+    std::string output;
+    while (*value != L'\0')
+    {
+        output.push_back(static_cast<char>(*value <= 0x7F ? *value : '?'));
+        ++value;
+    }
+    return output;
+}
+
+} // namespace
+
 CVoiceRecorder::CVoiceRecorder()
     : m_hNotifyWnd(nullptr)
     , m_hWaveIn(nullptr)
     , m_state(VoiceRecorderState::Idle)
+    , m_pCallback(nullptr)
     , m_nDeviceID(WAVE_MAPPER)
     , m_nBufferCount(3)
     , m_pWaveHeaders(nullptr)
     , m_pBuffers(nullptr)
     , m_dwRecordedDataSize(0)
-    , m_pCallback(nullptr)
     , m_bInitialized(FALSE)
 {
     m_szFilePath[0] = L'\0';
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
 }
 
 CVoiceRecorder::~CVoiceRecorder()
@@ -38,6 +59,8 @@ BOOL CVoiceRecorder::Initialize(HWND hWnd, const VoiceRecorderConfig& config)
     m_hNotifyWnd = hWnd;
     m_config = config;
     m_nBufferCount = 3;
+    m_sessionState = {};
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
 
     m_bInitialized = TRUE;
     return TRUE;
@@ -90,6 +113,10 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
     // Clear buffer
     m_recordedData.clear();
     m_dwRecordedDataSize = 0;
+    m_sessionState = {};
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
+    m_sessionState.audioPath = ToNarrow(m_szFilePath);
+    NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Recording);
 
     // Open waveform input device
     WAVEFORMATEX wfex = {};
@@ -106,6 +133,12 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
     if (mmResult != MMSYSERR_NOERROR)
     {
         TRACE(L"CVoiceRecorder::StartRecording failed: waveInOpen error=%d\n", mmResult);
+        m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
+        m_sessionState.error = blazeclaw::core::speechrecognition::SpeechRecognitionError{
+            .code = blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::RuntimeUnavailable,
+            .message = "failed to open recording device",
+        };
+        NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Failed);
         if (m_pCallback)
         {
             m_pCallback->OnVoiceError(mmResult, L"Failed to open recording device");
@@ -125,6 +158,12 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
             FreeBuffers();
             waveInClose(m_hWaveIn);
             m_hWaveIn = nullptr;
+            m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
+            m_sessionState.error = blazeclaw::core::speechrecognition::SpeechRecognitionError{
+                .code = blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::RuntimeUnavailable,
+                .message = "failed to add capture buffer",
+            };
+            NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Failed);
             if (m_pCallback)
             {
                 m_pCallback->OnVoiceError(mmResult, L"Failed to add buffer");
@@ -141,6 +180,12 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
         FreeBuffers();
         waveInClose(m_hWaveIn);
         m_hWaveIn = nullptr;
+        m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
+        m_sessionState.error = blazeclaw::core::speechrecognition::SpeechRecognitionError{
+            .code = blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::RuntimeUnavailable,
+            .message = "failed to start capture",
+        };
+        NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Failed);
         if (m_pCallback)
         {
             m_pCallback->OnVoiceError(mmResult, L"Failed to start recording");
@@ -191,6 +236,9 @@ BOOL CVoiceRecorder::StopRecording()
 
     FreeBuffers();
 
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped;
+    NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped);
+
     if (m_pCallback && prevState != VoiceRecorderState::Idle)
     {
         m_pCallback->OnVoiceStateChanged(VoiceRecorderState::Idle);
@@ -213,6 +261,8 @@ BOOL CVoiceRecorder::PauseRecording()
     }
 
     m_state = VoiceRecorderState::Paused;
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Paused;
+    NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Paused);
 
     if (m_pCallback)
     {
@@ -236,6 +286,8 @@ BOOL CVoiceRecorder::ResumeRecording()
     }
 
     m_state = VoiceRecorderState::Recording;
+    m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
+    NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Recording);
 
     if (m_pCallback)
     {
@@ -442,4 +494,25 @@ BOOL CVoiceRecorder::SetInputDevice(int nDeviceIndex)
 {
     m_nDeviceID = (UINT)nDeviceIndex;
     return TRUE;
+}
+
+void CVoiceRecorder::UpdateSessionState(
+    blazeclaw::core::speechrecognition::SpeechSessionStage stage)
+{
+    m_sessionState.stage = stage;
+    m_sessionState.segment.reset();
+    if (stage == blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped)
+    {
+        m_sessionState.audioPath = ToNarrow(m_szFilePath);
+    }
+}
+
+void CVoiceRecorder::NotifySessionState(
+    blazeclaw::core::speechrecognition::SpeechSessionStage stage)
+{
+    UpdateSessionState(stage);
+    if (m_pCallback != nullptr)
+    {
+        m_pCallback->OnVoiceSessionChanged(m_sessionState);
+    }
 }
