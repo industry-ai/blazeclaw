@@ -369,9 +369,66 @@ namespace blazeclaw::gateway {
 					const std::string sessionId = params.GetString("sessionId");
 					const std::string runId = params.GetString("runId");
 
+					const auto accepted = host.AcceptSpeechTranscription(
+						GatewayHost::SpeechExecutionRequest{
+							.runId = runId,
+							.sessionId = sessionId,
+							.audioPath = audioPath,
+							.language = language,
+							.prompt = prompt,
+						});
+					if (!accepted.accepted) {
+						const auto existingExecution =
+							host.GetSpeechExecutionStatus(accepted.executionState.runId);
+						const auto& busyState = existingExecution.found
+							? existingExecution.executionState
+							: accepted.executionState;
+						return protocol::OkResponse(
+							request,
+							JsonObject({
+								{ "ok", JsonBool(false) },
+								{ "cancelled", JsonBool(false) },
+								{ "text", JsonString("") },
+								{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
+								{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
+								{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
+								{ "speechSession", JsonObject({
+									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
+									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
+									{ "stage", JsonString("queued") },
+									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
+									{ "text", JsonString(busyState.transcriptText) },
+									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
+									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
+									{ "cancelled", JsonBool(busyState.cancelRequested) },
+								}) },
+								{ "executionState", JsonObject({
+									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
+									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
+									{ "stage", JsonString("transcribing") },
+									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
+									{ "text", JsonString(busyState.transcriptText) },
+									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
+									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
+									{ "cancelRequested", JsonBool(busyState.cancelRequested) },
+								}) },
+								{ "errorCode", JsonString(accepted.errorCode) },
+								{ "errorMessage", JsonString(accepted.errorMessage) },
+								{ "errorClass", JsonString("status") },
+								{ "retry", JsonObject({
+									{ "retryable", JsonBool(false) },
+									{ "strategy", JsonString("wait") },
+									{ "guidance", JsonString("Speech transcription is already active for this session. Wait for completion before retrying.") },
+								}) },
+								{ "forwardedOk", JsonBool(false) },
+								{ "forwardedMethod", JsonString("") },
+								{ "forwardedPayload", JsonString("{}") },
+							}));
+					}
+
 					const auto transcribe = host.TranscribeSpeech(
 						GatewayHost::SpeechTranscribeRequest{
-							.runId = runId,
+							.runId = accepted.executionState.runId,
 							.sessionId = sessionId,
 							.audioPath = audioPath,
 							.language = language,
@@ -575,8 +632,19 @@ namespace blazeclaw::gateway {
 							{ "language", JsonString(normalizedLanguage) },
 							{ "sessionId", JsonString(sessionId) },
 							{ "runId", JsonString(runId) },
+							{ "executionRunId", JsonString(effectiveRunId) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(transcribe.latencyMs)) },
 							{ "speechSession", speechSessionJson },
+							{ "executionState", JsonObject({
+								{ "sessionId", JsonString(effectiveSessionId) },
+								{ "runId", JsonString(effectiveRunId) },
+								{ "stage", JsonString(normalizedStage) },
+								{ "audioPath", JsonString(transcribe.sessionState.audioPath) },
+								{ "text", JsonString(normalizedText) },
+								{ "language", JsonString(normalizedLanguage) },
+								{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
+								{ "cancelRequested", JsonBool(false) },
+							}) },
 							{ "transcriptInjection", JsonObject({
 								{ "source", JsonString("voice") },
 								{ "ingestMethod", JsonString("speech.transcribe") },

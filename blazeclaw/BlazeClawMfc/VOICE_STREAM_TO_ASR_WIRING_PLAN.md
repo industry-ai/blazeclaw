@@ -151,19 +151,45 @@ Step 4 outcome:
 - future streaming work can be added as a new handoff mode without reinterpreting the current stable boundary
 
 ### Step 5: Add a speech transcription coordinator
-Create a coordinator/service dedicated to speech session orchestration.
+Status: completed
 
-Responsibilities:
-- accept transcribe requests from gateway/UI
-- own worker-thread dispatch
-- map `runId` / `sessionId`
-- propagate stage transitions
-- collect completion/error state
-- handle cancellation during decode/inference
-- avoid duplicate in-flight transcription for the same session unless explicitly allowed
+Implemented a dedicated speech transcription coordinator that now owns admission, active-run tracking, duplicate-session protection, and runtime-backed orchestration for speech transcription requests.
 
-Suggested location:
-- `BlazeClawMfc/src/core/` or `BlazeClawMfc/src/gateway/` beside other orchestration coordinators
+Implemented rollout:
+- added `SpeechTranscriptionCoordinator` under `BlazeClawMfc/src/core/`
+- accepted `SpeechExecutionRequest` separately from low-level runtime execution
+- tracked execution state by coordinator-owned `runId`
+- mapped in-flight `sessionId -> runId`
+- rejected duplicate in-flight transcription for the same session
+- delegated actual inference to the existing `SpeechRecognitionRuntime::Transcribe(...)`
+- forwarded cancellation to the existing runtime cancel path
+
+Gateway/runtime wiring added in this step:
+- `GatewayHost` now exposes coordinator-facing methods for:
+  - `AcceptSpeechTranscription(...)`
+  - `GetSpeechExecutionStatus(...)`
+  - `CancelSpeechTranscription(...)`
+- `GatewayHostBindingCoordinator.cpp` now binds speech transcription through the coordinator instead of binding directly to `SpeechRecognitionRuntime::Transcribe(...)`
+- `speech.transcribe` now performs admission before execution and returns coordinator-managed execution metadata in the response payload
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP5_TRANSCRIPTION_COORDINATOR.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.h`
+- `BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.cpp`
+- `BlazeClawMfc/src/core/ServiceManager.h`
+- `BlazeClawMfc/src/core/GatewayHostBindingCoordinator.cpp`
+- `BlazeClawMfc/src/gateway/GatewayHost.h`
+- `BlazeClawMfc/src/gateway/GatewayHost.cpp`
+- `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
+- `BlazeClawMfc/BlazeClawMfc.vcxproj`
+
+Step 5 outcome:
+- the codebase now has an explicit service dedicated to speech execution orchestration
+- duplicate in-flight transcription for the same session is blocked consistently
+- run/session ownership is modeled above the runtime instead of being implicit in handlers
+- later lifecycle streaming and shutdown hardening now have a coordinator-level source of truth to build on
 
 ### Step 6: Stream state back to WebView
 Expose stage updates so the user sees progress instead of a hung button.

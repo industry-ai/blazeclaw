@@ -431,6 +431,12 @@ namespace blazeclaw::gateway {
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 		using SpeechExecutionUpdateCallback = std::function<void(
 			const blazeclaw::core::speechrecognition::SpeechExecutionState&)>;
+		using SpeechTranscribeAcceptedCallback =
+			std::function<SpeechExecutionAccepted(const SpeechExecutionRequest&)>;
+		using SpeechExecutionStatusCallback =
+			std::function<SpeechExecutionStatus(const std::string& runId)>;
+		using SpeechCancelCallback =
+			std::function<bool(const std::string& runId)>;
 		using SpeechTranscribeCallback =
 			std::function<SpeechTranscribeResult(const SpeechTranscribeRequest&)>;
 		using SpeechSpeakCallback =
@@ -487,6 +493,15 @@ namespace blazeclaw::gateway {
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
+		void SetSpeechExecutionUpdateCallback(SpeechExecutionUpdateCallback callback);
+		void SetSpeechTranscribeAcceptedCallback(SpeechTranscribeAcceptedCallback callback);
+		[[nodiscard]] SpeechExecutionAccepted AcceptSpeechTranscription(
+			const SpeechExecutionRequest& request) const;
+		void SetSpeechExecutionStatusCallback(SpeechExecutionStatusCallback callback);
+		[[nodiscard]] SpeechExecutionStatus GetSpeechExecutionStatus(
+			const std::string& runId) const;
+		void SetSpeechCancelCallback(SpeechCancelCallback callback);
+		[[nodiscard]] bool CancelSpeechTranscription(const std::string& runId) const;
 		void SetSpeechTranscribeCallback(SpeechTranscribeCallback callback);
 		[[nodiscard]] SpeechTranscribeResult TranscribeSpeech(
 			const SpeechTranscribeRequest& request) const;
@@ -800,6 +815,10 @@ namespace blazeclaw::gateway {
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
+		SpeechExecutionUpdateCallback m_speechExecutionUpdateCallback;
+		SpeechTranscribeAcceptedCallback m_speechTranscribeAcceptedCallback;
+		SpeechExecutionStatusCallback m_speechExecutionStatusCallback;
+		SpeechCancelCallback m_speechCancelCallback;
 		SpeechTranscribeCallback m_speechTranscribeCallback;
 		SpeechSpeakCallback m_speechSpeakCallback;
 		SpeechStopCallback m_speechStopCallback;

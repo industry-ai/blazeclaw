@@ -234,13 +234,60 @@ namespace blazeclaw::core {
 				return gatewayResult;
 			});
 
-		manager.m_gatewayHost.SetSpeechTranscribeCallback([&manager](
-			const blazeclaw::gateway::GatewayHost::SpeechTranscribeRequest& request) {
-				const auto result = manager.m_speechRecognitionRuntime.Transcribe(
-					speechrecognition::SpeechTranscribeRequest{
+		manager.m_gatewayHost.SetSpeechExecutionUpdateCallback([&manager](
+			const speechrecognition::SpeechExecutionState& state) {
+				UNREFERENCED_PARAMETER(state);
+			});
+
+		manager.m_gatewayHost.SetSpeechTranscribeAcceptedCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::SpeechExecutionRequest& request) {
+				const auto accepted = manager.m_speechTranscriptionCoordinator.Accept(
+					speechrecognition::SpeechExecutionRequest{
 						.runId = request.runId,
 						.sessionId = request.sessionId,
 						.audioPath = request.audioPath,
+						.audioArtifact = request.audioArtifact,
+						.language = request.language,
+						.prompt = request.prompt,
+					});
+
+				blazeclaw::gateway::GatewayHost::SpeechExecutionAccepted gatewayAccepted;
+				gatewayAccepted.accepted = accepted.accepted;
+				gatewayAccepted.executionState = accepted.executionState;
+				if (accepted.error.has_value()) {
+					gatewayAccepted.errorCode =
+						speechrecognition::SpeechRecognitionErrorCodeToString(accepted.error->code);
+					gatewayAccepted.errorMessage = accepted.error->message;
+				}
+
+				return gatewayAccepted;
+			});
+
+		manager.m_gatewayHost.SetSpeechExecutionStatusCallback([&manager](
+			const std::string& runId) {
+				const auto status = manager.m_speechTranscriptionCoordinator.GetStatus(runId);
+				blazeclaw::gateway::GatewayHost::SpeechExecutionStatus gatewayStatus;
+				gatewayStatus.found = status.found;
+				gatewayStatus.executionState = status.executionState;
+				return gatewayStatus;
+			});
+
+		manager.m_gatewayHost.SetSpeechCancelCallback([&manager](
+			const std::string& runId) {
+				return manager.m_speechTranscriptionCoordinator.Cancel(
+					manager.m_speechRecognitionRuntime,
+					runId);
+			});
+
+		manager.m_gatewayHost.SetSpeechTranscribeCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::SpeechTranscribeRequest& request) {
+				const auto result = manager.m_speechTranscriptionCoordinator.Execute(
+					manager.m_speechRecognitionRuntime,
+					speechrecognition::SpeechExecutionRequest{
+						.runId = request.runId,
+						.sessionId = request.sessionId,
+						.audioPath = request.audioPath,
+						.audioArtifact = request.audioArtifact,
 						.language = request.language,
 						.prompt = request.prompt,
 					});
@@ -252,6 +299,7 @@ namespace blazeclaw::core {
 				gatewayResult.text = result.text;
 				gatewayResult.language = result.language;
 				gatewayResult.latencyMs = result.latencyMs;
+				gatewayResult.sessionState = result.sessionState;
 				if (result.error.has_value()) {
 					gatewayResult.errorCode =
 						speechrecognition::SpeechRecognitionErrorCodeToString(result.error->code);

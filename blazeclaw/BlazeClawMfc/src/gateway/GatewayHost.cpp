@@ -1358,6 +1358,67 @@ namespace blazeclaw::gateway {
 		m_embeddingsBatchCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetSpeechExecutionUpdateCallback(
+		SpeechExecutionUpdateCallback callback) {
+		m_speechExecutionUpdateCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetSpeechTranscribeAcceptedCallback(
+		SpeechTranscribeAcceptedCallback callback) {
+		m_speechTranscribeAcceptedCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechExecutionAccepted GatewayHost::AcceptSpeechTranscription(
+		const SpeechExecutionRequest& request) const {
+		if (!m_speechTranscribeAcceptedCallback) {
+			SpeechExecutionAccepted accepted;
+			accepted.accepted = false;
+			accepted.executionState.sessionId = request.sessionId;
+			accepted.executionState.runId = request.runId;
+			accepted.executionState.audioPath = request.audioPath;
+			accepted.executionState.audioArtifact = request.audioArtifact;
+			accepted.executionState.language = request.language;
+			accepted.executionState.prompt = request.prompt;
+			accepted.executionState.stage = blazeclaw::core::speechrecognition::SpeechExecutionStage::Failed;
+			accepted.errorCode = "speech_runtime_unavailable";
+			accepted.errorMessage = "speech transcription coordinator callback is not configured";
+			return accepted;
+		}
+
+		return m_speechTranscribeAcceptedCallback(request);
+	}
+
+	void GatewayHost::SetSpeechExecutionStatusCallback(
+		SpeechExecutionStatusCallback callback) {
+		m_speechExecutionStatusCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechExecutionStatus GatewayHost::GetSpeechExecutionStatus(
+		const std::string& runId) const {
+		if (!m_speechExecutionStatusCallback) {
+			SpeechExecutionStatus status;
+			status.found = false;
+			status.errorCode = "speech_runtime_unavailable";
+			status.errorMessage = "speech transcription status callback is not configured";
+			return status;
+		}
+
+		return m_speechExecutionStatusCallback(runId);
+	}
+
+	void GatewayHost::SetSpeechCancelCallback(
+		SpeechCancelCallback callback) {
+		m_speechCancelCallback = std::move(callback);
+	}
+
+	bool GatewayHost::CancelSpeechTranscription(const std::string& runId) const {
+		if (!m_speechCancelCallback) {
+			return false;
+		}
+
+		return m_speechCancelCallback(runId);
+	}
+
 	void GatewayHost::SetSpeechTranscribeCallback(
 		SpeechTranscribeCallback callback) {
 		m_speechTranscribeCallback = std::move(callback);
