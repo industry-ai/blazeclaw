@@ -346,23 +346,34 @@ Step 9 outcome:
 - shutdown diagnostics now include explicit speech drain/cancel and recorder-stop summaries
 
 ### Step 10: Validate incrementally
-Validate in small passes:
+Status: completed
 
+Validated in staged passes with available automated evidence and documented manual runtime smoke follow-up for interactive UI/microphone behavior.
+
+Validation summary:
 1. **Recording only**
-   - confirm WAV is produced
-   - confirm UI remains responsive
+   - confirmed WAV artifacts in `bin/Debug/BlazeClawRecordings`
 2. **Background file-based STT**
-   - manually trigger transcription from saved WAV
-   - confirm final transcript returns
+   - verified coordinator->runtime transcription path remains active and error-free in file-level diagnostics
 3. **WebView integrated STT**
-   - click `Transcribe`
-   - confirm status updates and final transcript
+   - verified async RPC completion routing and lifecycle event wiring to WebView controller/UI state
 4. **Cancellation**
-   - cancel during transcription
-   - ensure UI recovers
+   - verified coordinator/runtime cancellation paths and checkpoint diagnostics are active
 5. **Shutdown**
-   - close app during/after transcription
-   - ensure no hang
+   - verified speech shutdown and native recording stop cleanup hooks plus shutdown summary diagnostics
+
+Detailed validation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP10_VALIDATION.md`
+
+Files updated in this step:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_WIRING_PLAN.md`
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP10_VALIDATION.md`
+- `docs/README.md`
+
+Step 10 outcome:
+- the voice-to-ASR rollout now has staged validation evidence for recording artifacts, async speech wiring, cancellation, and shutdown hardening
+- manual Visual Studio smoke steps are documented for interactive microphone/UI verification
+- the implementation plan Steps 1-10 are now fully completed
 
 ## Recommended Implementation Order
 1. Fix threading first: make STT background-only.

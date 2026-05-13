@@ -66,7 +66,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\nlohmann;$(ProjectDir)third_party\catch2\single_include;$(LlamaCppIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\nlohmann;$(ProjectDir)third_party\catch2\single_include;$(LlamaCppIncludeDir);$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\include;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDOWS;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
@@ -91,7 +91,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;$(LlamaCppIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(LlamaCppIncludeDir);$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\include;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDOWS;_AFXDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
@@ -166,11 +166,6 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
-
-    <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
-    <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
-
-    <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
@@ -222,151 +217,6 @@
     <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayHost.h" />
-    <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h" />
-    <ClInclude Include="src\gateway\GatewayRuntimeContext.h" />
-    <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h" />
-    <ClInclude Include="src\gateway\GatewayHostModelHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostProtocolHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersRegistryIntrospection.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersAgentSessionMutation.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersAgentToolSurface.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h" />
-    <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
-    <ClInclude Include="src\gateway\ChatRunStageContext.h" />
-    <ClInclude Include="src\gateway\IChatRunStage.h" />
-    <ClInclude Include="src\gateway\ChatRunStages.h" />
-    <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h" />
-    <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
-    <ClInclude Include="src\gateway\GatewayStaticRegistration.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h" />
-    <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolCodec.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolJson.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolModels.h" />
-    <ClInclude Include="src\gateway\GatewayJsonUtils.h" />
-    <ClInclude Include="src\gateway\GatewayJsonSerializers.h" />
-    <ClInclude Include="src\gateway\GatewayJsonBuilder.h" />
-    <ClInclude Include="src\gateway\GatewaySessionUtilsService.h" />
-    <ClInclude Include="src\gateway\GatewayRequestParams.h" />
-    <ClInclude Include="src\gateway\GatewayHttpAuthService.h" />
-    <ClInclude Include="src\gateway\GatewayNodePairingService.h" />
-    <ClInclude Include="src\gateway\GatewayNodeCatalogService.h" />
-    <ClInclude Include="src\gateway\GatewayNodeCanvasCapabilityService.h" />
-    <ClInclude Include="src\gateway\GatewayNodePendingActionQueue.h" />
-    <ClInclude Include="src\gateway\GatewayNodeWakeService.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
-    <ClInclude Include="src\gateway\TaskDeltaSchemaValidator.h" />
-    <ClInclude Include="src\gateway\TaskDeltaLegacyAdapter.h" />
-    <ClInclude Include="src\gateway\TaskDeltaRepository.h" />
-    <ClInclude Include="src\gateway\RuntimeSequencingPolicy.h" />
-    <ClInclude Include="src\gateway\RuntimeToolCallNormalizer.h" />
-    <ClInclude Include="src\gateway\RuntimeTranscriptGuard.h" />
-    <ClInclude Include="src\gateway\ChatTranscriptStore.h" />
-    <ClInclude Include="src\gateway\ChatAbortCoordinator.h" />
-    <ClInclude Include="src\gateway\ChatHistoryPolicy.h" />
-    <ClInclude Include="src\gateway\ChatRoutePolicy.h" />
-    <ClInclude Include="src\gateway\ToolEventRecipientPolicy.h" />
-    <ClInclude Include="src\gateway\TransportRecipientRegistry.h" />
-    <ClInclude Include="src\gateway\ChatControlPlaneService.h" />
-    <ClInclude Include="src\gateway\FailureClassifier.h" />
-    <ClInclude Include="src\gateway\RunLoopBudget.h" />
-    <ClInclude Include="src\gateway\CompactionCoordinator.h" />
-    <ClInclude Include="src\gateway\ToolResultTruncationCoordinator.h" />
-    <ClInclude Include="src\gateway\AuthProfilePolicyService.h" />
-    <ClInclude Include="src\gateway\ContextEnginePolicySelector.h" />
-    <ClInclude Include="src\gateway\RecoveryPolicyEngine.h" />
-    <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h" />
-    <ClInclude Include="src\gateway\RunSummaryBuilder.h" />
-    <ClInclude Include="src\gateway\BranchDecisionDiagnostics.h" />
-    <ClInclude Include="src\gateway\IGatewayHostRuntime.h" />
-    <ClInclude Include="src\gateway\GatewayHostRouter.h" />
-    <ClInclude Include="src\gateway\GatewayHostEx.h" />
-    <ClInclude Include="src\gateway\GatewayHandshakePolicy.h" />
-    <ClInclude Include="src\gateway\GatewayRequestPolicyGuard.h" />
-    <ClInclude Include="src\gateway\GatewayEventFanoutService.h" />
-    <ClInclude Include="src\gateway\SendPolicyResolver.h" />
-    <ClInclude Include="src\gateway\ToolPolicyPipeline.h" />
-    <ClInclude Include="src\gateway\TranscriptPolicyResolver.h" />
-    <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
-    <ClInclude Include="src\gateway\executors\PythonProcessExecutor.h" />
-    <ClInclude Include="src\gateway\python\EmbeddedPythonRuntimeHost.h" />
-    <ClInclude Include="src\gateway\python\ExternalPythonRuntimeHost.h" />
-    <ClInclude Include="src\gateway\python\IPythonRuntimeHost.h" />
-    <ClInclude Include="src\gateway\python\PythonRuntimeDispatcher.h" />
-    <ClInclude Include="src\gateway\python\PythonRuntimeSelector.h" />
-    <ClInclude Include="src\gateway\PluginHostAdapter.h" />
-    <ClInclude Include="src\gateway\PluginRuntimeStateService.h" />
-    <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayUtf8CloseReason.h" />
-    <ClInclude Include="src\gateway\GatewayTestHooks.h" />
-    <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
-    <ClInclude Include="src\gateway\GatewayNetPolicy.h" />
-    <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
-    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
-    <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
-    <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
-    <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
-    <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
-    <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h" />
-    <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
-    <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
-    <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
-    <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h" />
-    <ClInclude Include="src\\core\\skills\\HooksGovernanceEmitter.h" />
-    <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
-    <ClInclude Include="src\\core\\bootstrap\\StartupPolicyResolver.h" />
-    <ClInclude Include="src\\core\\bootstrap\\StartupFixtureValidator.h" />
-    <ClInclude Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.h" />
-    <ClInclude Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.h" />
-    <ClInclude Include="src\core\filesystem\SafeOpenSync.h" />
-    <ClInclude Include="src\core\SubagentRegistryService.h" />
-    <ClInclude Include="src\core\HookCatalogService.h" />
-    <ClInclude Include="src\core\HookEventService.h" />
-    <ClInclude Include="src\core\HookExecutionService.h" />
-    <ClInclude Include="src\core\SkillsConfigEval.h" />
-    <ClInclude Include="src\core\SharedFrontmatterCompat.h" />
-    <ClInclude Include="src\core\MarkdownFrontmatterCompat.h" />
-    <ClInclude Include="src\core\SkillCommandInvocationService.h" />
-    <ClInclude Include="src\core\SkillsCommandService.h" />
-    <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
-    <ClInclude Include="src\core\SkillsContracts.h" />
-    <ClInclude Include="src\core\SkillsFrontmatterCompat.h" />
-    <ClInclude Include="src\core\OpenClawOriginalImportService.h" />
-    <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
-    <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h" />
-    <ClInclude Include="src\core\SkillsCatalogService.h" />
-    <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
-    <ClInclude Include="src\core\SkillsEligibilityService.h" />
-    <ClInclude Include="src\core\SkillsGatewayPublicationCoordinator.h" />
-    <ClInclude Include="src\core\SkillsFacade.h" />
-    <ClInclude Include="src\core\SkillsInstallService.h" />
-    <ClInclude Include="src\core\SkillsPromptFormatterCompat.h" />
-    <ClInclude Include="src\core\SkillSecurityScanService.h" />
-    <ClInclude Include="src\core\SkillsPromptService.h" />
-    <ClInclude Include="src\core\SkillsSyncService.h" />
-    <ClInclude Include="src\core\SkillsWatchService.h" />
-    <ClInclude Include="src\core\ConfigSchemaService.h" />
-    <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
-    <ClInclude Include="src\core\GatewayHostBindingCoordinator.h" />
-    <ClInclude Include="src\core\ServiceLifecycleStartupCoordinator.h" />
-    <ClInclude Include="src\core\ServiceManager.h" />
-    <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
-    <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
-    <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
-    <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
-    <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
     <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h" />
     <ClInclude Include="src\gateway\GatewayRuntimeContext.h" />
