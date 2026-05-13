@@ -20,7 +20,9 @@ Wire live microphone audio captured from the WebView `Transcribe` flow into the 
 ## Step-by-Step Plan
 
 ### Step 1: Trace the current record -> stop -> transcribe flow
-Inspect and document the exact execution path across these components:
+Status: completed
+
+Inspected and documented the exact execution path across these components:
 - `BlazeClawMfc/web/chat/index.js`
 - `BlazeClawMfc/web/chat/chat-controller.js`
 - `BlazeClawMfc/src/gateway/GatewayHost.cpp`
@@ -28,46 +30,88 @@ Inspect and document the exact execution path across these components:
 - `BlazeClawMfc/src/core/GatewayHostBindingCoordinator.cpp`
 - `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechRecognitionRuntime.cpp`
 
+Detailed trace output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP1_TRACE.md`
+
+Step 1 findings:
+- the WebView `Transcribe` click path awaits `speech.transcribe` synchronously from the browser layer
+- the native WebView bridge routes `blazeclaw.gateway.rpc` inline and does not return `rpc.result` until `RouteGatewayRequest(...)` completes
+- `speech.transcribe` calls `GatewayHost::TranscribeSpeech(...)` synchronously, which is bound directly to `SpeechRecognitionRuntime::Transcribe(...)`
+- `SpeechRecognitionRuntime::Transcribe(...)` performs file I/O, preprocessing, ONNX inference, and decode in one blocking call while holding the runtime mutex
+- on success, the speech handler also performs a nested synchronous `chat.send` dispatch before returning the RPC response
+- cancellation exists inside the runtime, but the traced WebView path has no async boundary, so shutdown and UI responsiveness are still exposed to long-running STT work
+
 Output of this step:
-- identify which calls run on the UI thread
-- identify where the WebView request waits synchronously
-- identify where cancellation and shutdown do not unwind cleanly
+- identified which calls run on the UI/native bridge thread
+- identified where the WebView request waits synchronously
+- identified where cancellation and shutdown do not unwind cleanly
 
 ### Step 2: Define the speech execution contract
-Introduce a clear runtime contract for non-blocking speech work.
+Status: completed
 
-Recommended shape:
-- keep the existing synchronous `Transcribe(...)` method for low-level runtime logic
-- add an async orchestration layer above it instead of driving ONNX directly from the WebView request path
-- define a request/result lifecycle with:
-  - `queued`
-  - `recording`
-  - `stopped`
-  - `transcribing`
-  - `completed`
-  - `failed`
-  - `cancelled`
+Introduced a clear contract for future non-blocking speech work while preserving the existing synchronous runtime inference API.
 
-Files likely involved:
+Implemented contract shape:
+- kept the existing synchronous `Transcribe(...)` method for low-level runtime logic
+- added orchestration-facing contract types above it instead of driving ONNX directly from the future WebView execution path
+- defined a lifecycle with:
+  - `Queued`
+  - `Recording`
+  - `Stopped`
+  - `Transcribing`
+  - `Completed`
+  - `Failed`
+  - `Cancelled`
+
+Implemented runtime contract types:
+- `SpeechExecutionStage`
+- `SpeechExecutionState`
+- `SpeechExecutionRequest`
+- `SpeechExecutionAccepted`
+- `SpeechExecutionStatus`
+- `SpeechExecutionUpdateCallback`
+
+Detailed contract output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP2_CONTRACT.md`
+
+Files updated in this step:
 - `BlazeClawMfc/src/core/runtime/SpeechRecognition/ISpeechRecognitionRuntime.h`
 - `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechRecognitionContracts.h`
 - `BlazeClawMfc/src/gateway/GatewayHost.h`
 
+Step 2 outcome:
+- the codebase now has explicit contract types for admission, execution state, and lifecycle reporting
+- the current synchronous speech runtime path remains intact for later reuse by the Step 3 background coordinator
+- the new execution contract is separate from the existing `SpeechSessionStage` and `SpeechTranscribeResult`, reducing migration risk while enabling the next threading/orchestration step
+
 ### Step 3: Move transcription off the UI thread
-Create a background execution path for STT.
+Status: completed
 
-Recommended implementation:
-- queue speech transcription work onto a worker thread or runtime work queue
-- return control to the WebView immediately after the request is accepted
-- publish progress/completion back through the existing gateway event/bridge mechanism
+Implemented a background execution path for STT at the WebView host bridge boundary.
 
-Important constraint:
-- do not run `SpeechRecognitionRuntime::Transcribe(...)` directly on the WebView/UI call path
+Implemented rollout:
+- `speech.transcribe` is no longer executed inline inside `CBlazeClawMFCView::HandleWebMessageJson(...)`
+- the WebView host now routes `speech.transcribe` on a detached worker thread
+- the worker posts completion back to the view window through existing async message infrastructure
+- the view emits the final `blazeclaw.gateway.rpc.result` from the UI thread after the worker completes
+- the WebView now shows a visible `Transcribing...` state while the async RPC is pending
 
-Files likely involved:
-- `BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
-- `BlazeClawMfc/src/core/GatewayHostBindingCoordinator.cpp`
-- existing async posting/event helper infrastructure already used by chat runtime flows
+Important constraint satisfied:
+- `SpeechRecognitionRuntime::Transcribe(...)` is no longer invoked on the WebView/native bridge UI path
+
+Detailed implementation output:
+- `BlazeClawMfc/VOICE_STREAM_TO_ASR_STEP3_ASYNC_DISPATCH.md`
+
+Files updated in this step:
+- `BlazeClawMfc/src/app/BlazeClawMFCView.h`
+- `BlazeClawMfc/src/app/BlazeClawMFCView.cpp`
+- `BlazeClawMfc/web/chat/index.js`
+
+Step 3 outcome:
+- the blocking speech transcription work is moved off the MFC UI/native bridge thread
+- the existing synchronous gateway/runtime speech path is preserved underneath the new worker-thread wrapper
+- the WebView receives the final speech RPC result through the same bridge result mechanism after background completion
+- the UI now shows a transcribing state instead of appearing frozen during long-running STT work
 
 ### Step 4: Decide the audio handoff boundary
 Choose how recorded audio reaches the ASR runtime.

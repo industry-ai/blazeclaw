@@ -46,6 +46,25 @@ namespace blazeclaw::core::speechrecognition {
 		std::optional<SpeechRecognitionError> error;
 	};
 
+	struct SpeechExecutionRequest {
+		std::string runId;
+		std::string sessionId;
+		std::string audioPath;
+		std::string language;
+		std::string prompt;
+	};
+
+	struct SpeechExecutionAccepted {
+		bool accepted = false;
+		SpeechExecutionState executionState;
+		std::optional<SpeechRecognitionError> error;
+	};
+
+	struct SpeechExecutionStatus {
+		bool found = false;
+		SpeechExecutionState executionState;
+	};
+
 	struct SpeechTranscribeRequest {
 		std::string runId;
 		std::string sessionId;
@@ -63,6 +82,9 @@ namespace blazeclaw::core::speechrecognition {
 		SpeechSessionState sessionState;
 		std::optional<SpeechRecognitionError> error;
 	};
+
+	using SpeechExecutionUpdateCallback = std::function<void(
+		const SpeechExecutionState& state)>;
 
 	using SpeechTranscribeCallback = std::function<void(
 		const SpeechTranscribeResult& result)>;

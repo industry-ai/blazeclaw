@@ -152,6 +152,7 @@ protected:
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
 	afx_msg LRESULT OnBridgePollCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnSkillPathLookupCompleted(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnSpeechRpcCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:

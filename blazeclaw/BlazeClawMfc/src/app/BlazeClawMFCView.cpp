@@ -71,6 +71,7 @@ namespace {
 	constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
 	constexpr UINT kBridgePollCompletedMessage = WM_APP + 0x2A1;
 	constexpr UINT kSkillPathLookupCompletedMessage = WM_APP + 0x2A2;
+	constexpr UINT kSpeechRpcCompletedMessage = WM_APP + 0x2A3;
 	constexpr std::uint32_t kBridgePollIntervalActiveMs = 300;
 	constexpr std::uint32_t kBridgePollIntervalIdleMs = 1000;
 	constexpr std::uint32_t kBridgePollIntervalFailureMs = 3000;
@@ -87,6 +88,12 @@ namespace {
 	{
 		std::string runId;
 		std::uint64_t elapsedMs = 0;
+		blazeclaw::gateway::protocol::ResponseFrame response;
+	};
+
+	struct SpeechRpcCompletionPayload
+	{
+		std::string correlationId;
 		blazeclaw::gateway::protocol::ResponseFrame response;
 	};
 
@@ -1998,6 +2005,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CBlazeClawMFCView::OnFilePrintPreview)
 	ON_MESSAGE(kBridgePollCompletedMessage, &CBlazeClawMFCView::OnBridgePollCompleted)
 	ON_MESSAGE(kSkillPathLookupCompletedMessage, &CBlazeClawMFCView::OnSkillPathLookupCompleted)
+	ON_MESSAGE(kSpeechRpcCompletedMessage, &CBlazeClawMFCView::OnSpeechRpcCompleted)
 	ON_WM_CONTEXTMENU()
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
@@ -2740,6 +2748,27 @@ LRESULT CBlazeClawMFCView::OnSkillPathLookupCompleted(
 		payload->runId,
 		payload->response,
 		payload->elapsedMs);
+	delete payload;
+	return 0;
+}
+
+LRESULT CBlazeClawMFCView::OnSpeechRpcCompleted(
+	WPARAM wParam,
+	LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+
+	auto* payload =
+		reinterpret_cast<SpeechRpcCompletionPayload*>(wParam);
+	if (payload == nullptr)
+	{
+		return 0;
+	}
+
+	const std::string responseJson = BuildBridgeRpcResultJson(
+		payload->response,
+		payload->correlationId);
+	m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, responseJson);
 	delete payload;
 	return 0;
 }
@@ -3553,6 +3582,61 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.method = method,
 		.paramsJson = paramsJson,
 	};
+	if (method == "speech.transcribe")
+	{
+		const HWND hwnd = GetSafeHwnd();
+		if (hwnd == nullptr)
+		{
+			const std::string errorJson =
+				"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
+				JsonString(correlationId) +
+				",\"ok\":false,\"error\":{\"code\":\"view_unavailable\",\"message\":\"Speech transcription view unavailable.\"}}";
+			m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, errorJson);
+			return;
+		}
+
+		std::thread(
+			[hwnd, request, correlationId]()
+			{
+				auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+				blazeclaw::gateway::protocol::ResponseFrame response;
+				if (app == nullptr)
+				{
+					response = blazeclaw::gateway::protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = blazeclaw::gateway::protocol::ErrorShape{
+							.code = "app_unavailable",
+							.message = "Application context unavailable.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+				else
+				{
+					response = app->RouteGatewayRequest(request);
+				}
+
+				auto* payload = new SpeechRpcCompletionPayload{
+					.correlationId = correlationId,
+					.response = std::move(response),
+				};
+				CMgrMessage::Instance().PostOwnedPayloadToHwnd(
+					hwnd,
+					kSpeechRpcCompletedMessage,
+					payload,
+					true,
+					[](void* raw)
+					{
+						delete static_cast<SpeechRpcCompletionPayload*>(raw);
+					});
+			})
+			.detach();
+		return;
+	}
 	const auto response = app->RouteGatewayRequest(request);
 	if (method == "chat.events.poll" &&
 		response.ok &&

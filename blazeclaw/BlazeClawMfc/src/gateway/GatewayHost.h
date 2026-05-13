@@ -327,6 +327,28 @@ namespace blazeclaw::gateway {
 			std::string errorMessage;
 		};
 
+		struct SpeechExecutionRequest {
+			std::string runId;
+			std::string sessionId;
+			std::string audioPath;
+			std::string language;
+			std::string prompt;
+		};
+
+		struct SpeechExecutionAccepted {
+			bool accepted = false;
+			blazeclaw::core::speechrecognition::SpeechExecutionState executionState;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
+		struct SpeechExecutionStatus {
+			bool found = false;
+			blazeclaw::core::speechrecognition::SpeechExecutionState executionState;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
 		struct SpeechTranscribeRequest {
 			std::string runId;
 			std::string sessionId;
@@ -405,6 +427,8 @@ namespace blazeclaw::gateway {
 			std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
 		using EmbeddingsBatchCallback =
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
+		using SpeechExecutionUpdateCallback = std::function<void(
+			const blazeclaw::core::speechrecognition::SpeechExecutionState&)>;
 		using SpeechTranscribeCallback =
 			std::function<SpeechTranscribeResult(const SpeechTranscribeRequest&)>;
 		using SpeechSpeakCallback =

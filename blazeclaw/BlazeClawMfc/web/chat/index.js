@@ -2419,7 +2419,13 @@
             const speechReady = speechCapabilities
                 ? (speechCapabilities.loaded !== true || (speechCapabilities.sttSupported && speechCapabilities.sttReady))
                 : true;
-            state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady;
+            const speechSessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+                ? state.speechSessionState
+                : null;
+            const speechBusy = speechSessionState
+                ? String(speechSessionState.stage || "").trim() === "transcribing"
+                : false;
+            state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || speechBusy;
             if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
                 state.speechTranscribeBtn.disabled = true;
             }
@@ -2526,6 +2532,21 @@
                 }
 
                 const prompt = String(state.inputEl.value || "").trim();
+                state.speechSessionState = {
+                    ...(state.speechSessionState && typeof state.speechSessionState === "object"
+                        ? state.speechSessionState
+                        : {}),
+                    stage: "transcribing",
+                    text: "",
+                    segmentText: "",
+                    segmentFinal: true,
+                    segmentSequence: 0,
+                    errorCode: "",
+                    errorMessage: "",
+                    updatedAtMs: Date.now(),
+                };
+                state.speechTranscribeBtn.textContent = "Transcribing...";
+                updateComposerState();
                 await controller.transcribeSpeech({ audioPath, prompt });
                 if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                     state.speechSessionState = controller.getSpeechSessionStateSnapshot();
