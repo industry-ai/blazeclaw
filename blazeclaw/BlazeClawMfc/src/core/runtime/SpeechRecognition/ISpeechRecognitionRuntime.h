@@ -20,6 +20,10 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint32_t sampleRate = 16000;
 		std::uint32_t threads = 0;
 		std::string executionMode;
+		bool cudaExecutionProviderAvailable = false;
+		bool cudaExecutionProviderEnabled = false;
+		std::string cudaExecutionProviderReason;
+		std::string effectiveExecutionProvider;
 		std::uint64_t modelLoadAttempts = 0;
 		std::uint64_t modelLoadFailures = 0;
 		std::uint64_t transcribeRequestsStarted = 0;

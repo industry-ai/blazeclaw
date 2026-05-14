@@ -1041,6 +1041,11 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.cuda.enabled=", 0) == 0) {
+				outConfig.speechRecognition.cudaEnabled = ParseBool(trimmedLine.substr(20), true);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.rolloutStage=", 0) == 0) {
 				outConfig.speechRecognition.rolloutStage = Trim(trimmedLine.substr(20));
 				continue;

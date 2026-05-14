@@ -23,8 +23,11 @@
 #include <chrono>
 #include <cwctype>
 #include <exception>
+#include <set>
+#include <unordered_set>
 #include <vector>
 #include <Windows.h>
+#include <TlHelp32.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -115,6 +118,197 @@ namespace {
 		}
 
 		mainFrame->AddChatStatusLine(line);
+	}
+
+	std::wstring ToLowerInvariant(std::wstring value) {
+		std::transform(
+			value.begin(),
+			value.end(),
+			value.begin(),
+			[](const wchar_t ch) {
+				return static_cast<wchar_t>(std::towlower(ch));
+			});
+		return value;
+	}
+
+	bool IsTrackedSpeechCudaModule(const std::wstring& moduleNameLower) {
+		static const std::unordered_set<std::wstring> kExactModules = {
+			L"onnxruntime_providers_cuda.dll",
+			L"cudnn64_9.dll",
+			L"cudnn_graph64_9.dll",
+			L"cudnn_engines_precompiled64_9.dll",
+			L"cudnn_engines_runtime_compiled64_9.dll",
+		};
+
+		if (kExactModules.find(moduleNameLower) != kExactModules.end()) {
+			return true;
+		}
+
+		return moduleNameLower.rfind(L"cublas64_", 0) == 0 ||
+			moduleNameLower.rfind(L"cublaslt64_", 0) == 0 ||
+			moduleNameLower.rfind(L"cufft64_", 0) == 0;
+	}
+
+	std::wstring ExtractDigitsAfterPrefix(
+		const std::wstring& moduleNameLower,
+		const std::wstring& prefix) {
+		if (moduleNameLower.rfind(prefix, 0) != 0) {
+			return {};
+		}
+
+		std::size_t cursor = prefix.size();
+		const std::size_t start = cursor;
+		while (cursor < moduleNameLower.size() &&
+			std::iswdigit(moduleNameLower[cursor])) {
+			++cursor;
+		}
+
+		if (cursor == start) {
+			return {};
+		}
+
+		return moduleNameLower.substr(start, cursor - start);
+	}
+
+	std::wstring DetectVersionFamilyTag(const std::wstring& moduleNameLower) {
+		const std::wstring cublas = ExtractDigitsAfterPrefix(moduleNameLower, L"cublas64_");
+		if (!cublas.empty()) {
+			return L"cublas:" + cublas;
+		}
+
+		const std::wstring cublasLt = ExtractDigitsAfterPrefix(moduleNameLower, L"cublaslt64_");
+		if (!cublasLt.empty()) {
+			return L"cublaslt:" + cublasLt;
+		}
+
+		const std::wstring cufft = ExtractDigitsAfterPrefix(moduleNameLower, L"cufft64_");
+		if (!cufft.empty()) {
+			return L"cufft:" + cufft;
+		}
+
+		const std::wstring cudnn = ExtractDigitsAfterPrefix(moduleNameLower, L"cudnn64_");
+		if (!cudnn.empty()) {
+			return L"cudnn:" + cudnn;
+		}
+
+		const std::wstring cudnnGraph = ExtractDigitsAfterPrefix(moduleNameLower, L"cudnn_graph64_");
+		if (!cudnnGraph.empty()) {
+			return L"cudnn_graph:" + cudnnGraph;
+		}
+
+		const std::wstring cudnnEnginePrecompiled =
+			ExtractDigitsAfterPrefix(moduleNameLower, L"cudnn_engines_precompiled64_");
+		if (!cudnnEnginePrecompiled.empty()) {
+			return L"cudnn_engines_precompiled:" + cudnnEnginePrecompiled;
+		}
+
+		const std::wstring cudnnEngineRuntimeCompiled =
+			ExtractDigitsAfterPrefix(moduleNameLower, L"cudnn_engines_runtime_compiled64_");
+		if (!cudnnEngineRuntimeCompiled.empty()) {
+			return L"cudnn_engines_runtime_compiled:" + cudnnEngineRuntimeCompiled;
+		}
+
+		return {};
+	}
+
+	std::wstring JoinValues(const std::set<std::wstring>& values) {
+		if (values.empty()) {
+			return L"none";
+		}
+
+		std::wstring output;
+		for (const auto& value : values) {
+			if (!output.empty()) {
+				output += L",";
+			}
+			output += value;
+		}
+
+		return output;
+	}
+
+	void AppendSpeechCudaModuleInventoryStatus() {
+		const HANDLE snapshot = CreateToolhelp32Snapshot(
+			TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32,
+			GetCurrentProcessId());
+		if (snapshot == INVALID_HANDLE_VALUE) {
+			AppendMainFrameStatusLine(
+				L"[Speech] startup.runtime.cuda.modules - unavailable (module snapshot failed)");
+			return;
+		}
+
+		MODULEENTRY32W moduleEntry{};
+		moduleEntry.dwSize = sizeof(moduleEntry);
+		std::vector<std::pair<std::wstring, std::wstring>> trackedModules;
+		if (Module32FirstW(snapshot, &moduleEntry)) {
+			do {
+				const std::wstring moduleNameLower = ToLowerInvariant(moduleEntry.szModule);
+				if (!IsTrackedSpeechCudaModule(moduleNameLower)) {
+					continue;
+				}
+
+				trackedModules.emplace_back(moduleNameLower, moduleEntry.szExePath);
+			} while (Module32NextW(snapshot, &moduleEntry));
+		}
+
+		CloseHandle(snapshot);
+
+		if (trackedModules.empty()) {
+			AppendMainFrameStatusLine(
+				L"[Speech] startup.runtime.cuda.modules - none of the tracked CUDA/cuDNN runtime DLLs are currently loaded");
+			return;
+		}
+
+		std::set<std::wstring> moduleRoots;
+		std::set<std::wstring> versionFamilies;
+		for (const auto& module : trackedModules) {
+			const std::filesystem::path modulePath = module.second;
+			const std::filesystem::path rootPath = modulePath.parent_path().lexically_normal();
+			if (!rootPath.empty()) {
+				moduleRoots.insert(ToLowerInvariant(rootPath.wstring()));
+			}
+
+			const std::wstring versionFamily = DetectVersionFamilyTag(module.first);
+			if (!versionFamily.empty()) {
+				versionFamilies.insert(versionFamily);
+			}
+		}
+
+		std::sort(trackedModules.begin(), trackedModules.end());
+		for (const auto& module : trackedModules) {
+			CString moduleLine;
+			moduleLine.Format(
+				L"[Speech] startup.runtime.cuda.module - name=%s path=%s",
+				module.first.c_str(),
+				module.second.c_str());
+			AppendMainFrameStatusLine(moduleLine);
+		}
+
+		const bool mixedRoots = moduleRoots.size() > 1;
+		const bool mixedVersions = versionFamilies.size() > 1;
+		const wchar_t* alignmentStatus = (mixedRoots || mixedVersions)
+			? L"mixed"
+			: L"aligned";
+		CString alignmentLine;
+		alignmentLine.Format(
+			L"[Speech] startup.runtime.cuda.alignment - status=%s moduleCount=%llu rootCount=%llu versionFamilyCount=%llu",
+			alignmentStatus,
+			static_cast<unsigned long long>(trackedModules.size()),
+			static_cast<unsigned long long>(moduleRoots.size()),
+			static_cast<unsigned long long>(versionFamilies.size()));
+		AppendMainFrameStatusLine(alignmentLine);
+
+		CString alignmentDetailsLine;
+		alignmentDetailsLine.Format(
+			L"[Speech] startup.runtime.cuda.alignment.details - roots=%s versionFamilies=%s",
+			JoinValues(moduleRoots).c_str(),
+			JoinValues(versionFamilies).c_str());
+		AppendMainFrameStatusLine(alignmentDetailsLine);
+
+		if (mixedRoots || mixedVersions) {
+			AppendMainFrameStatusLine(
+				L"[Speech] startup.runtime.cuda.alignment.recommendation - mixed CUDA/cuDNN runtime stack detected; align DLL roots/versions before enabling speech CUDA in production");
+		}
 	}
 
 	std::filesystem::path ResolveStartupTracePath() {
@@ -216,8 +410,9 @@ namespace {
 		const auto runtime = services.SpeechRecognition();
 		CString configLine;
 		configLine.Format(
-			L"[Speech] startup.config - enabled=%s provider=%s stage=%s storageRoot=%s model=%s language=%s sampleRate=%u threads=%u mode=%s",
+			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s language=%s sampleRate=%u threads=%u mode=%s",
 			config.speechRecognition.enabled ? L"true" : L"false",
+			config.speechRecognition.cudaEnabled ? L"true" : L"false",
 			config.speechRecognition.provider.c_str(),
 			config.speechRecognition.rolloutStage.c_str(),
 			config.speechRecognition.storageRoot.c_str(),
@@ -230,10 +425,11 @@ namespace {
 
 		CString runtimeLine;
 		runtimeLine.Format(
-			L"[Speech] startup.runtime - ready=%s status=%s provider=%s model=%s variant=%s encoder=%s decoderInit=%s tokenizer=%s loadAttempts=%llu loadFailures=%llu transcribeCompleted=%llu",
+			L"[Speech] startup.runtime - ready=%s status=%s provider=%s effectiveProvider=%s model=%s variant=%s encoder=%s decoderInit=%s tokenizer=%s loadAttempts=%llu loadFailures=%llu transcribeCompleted=%llu",
 			runtime.ready ? L"true" : L"false",
 			ToWide(runtime.status).c_str(),
 			ToWide(runtime.provider).c_str(),
+			ToWide(runtime.effectiveExecutionProvider).c_str(),
 			ToWide(runtime.modelPath).c_str(),
 			ToWide(runtime.modelVariant).c_str(),
 			ToWide(runtime.encoderModelPath).c_str(),
@@ -243,6 +439,20 @@ namespace {
 			static_cast<unsigned long long>(runtime.modelLoadFailures),
 			static_cast<unsigned long long>(runtime.transcribeRequestsCompleted));
 		AppendMainFrameStatusLine(runtimeLine);
+
+		const std::wstring cudaReason = runtime.cudaExecutionProviderReason.empty()
+			? std::wstring(L"none")
+			: ToWide(runtime.cudaExecutionProviderReason);
+		CString cudaLine;
+		cudaLine.Format(
+			L"[Speech] startup.runtime.cuda - available=%s enabled=%s reason=%s",
+			runtime.cudaExecutionProviderAvailable ? L"true" : L"false",
+			runtime.cudaExecutionProviderEnabled ? L"true" : L"false",
+			cudaReason.c_str());
+		AppendMainFrameStatusLine(cudaLine);
+		AppendMainFrameStatusLine(
+			L"[Speech] startup.runtime.cuda.policy - cublasMajor=12 cublasLtMajor=12 cufftMajor=12 cudnnMajor=9 guard=enabled latchOnGuardFailure=true");
+		AppendSpeechCudaModuleInventoryStatus();
 
 		if (!config.speechRecognition.enabled) {
 			AppendMainFrameStatusLine(

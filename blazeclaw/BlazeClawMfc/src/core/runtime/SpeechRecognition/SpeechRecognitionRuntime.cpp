@@ -28,6 +28,144 @@ namespace blazeclaw::core::speechrecognition {
 
 	namespace {
 
+#if BLAZECLAW_HAS_ONNXRUNTIME
+		std::vector<int> DetectLoadedModuleMajors(
+			const std::wstring& modulePattern,
+			int minMajor,
+			int maxMajor) {
+			std::vector<int> majors;
+			for (int major = minMajor; major <= maxMajor; ++major) {
+				wchar_t moduleName[MAX_PATH]{};
+				swprintf_s(moduleName, modulePattern.c_str(), major);
+				if (::GetModuleHandleW(moduleName) != nullptr) {
+					majors.push_back(major);
+				}
+			}
+			return majors;
+		}
+
+		bool IsLoadedMajorCompatible(
+			const std::wstring& modulePattern,
+			const char* moduleLabel,
+			int expectedMajor,
+			std::vector<std::string>& violations,
+			std::vector<std::string>& observed) {
+			const auto loadedMajors = DetectLoadedModuleMajors(modulePattern, 0, 20);
+			for (const auto major : loadedMajors) {
+				observed.push_back(std::string(moduleLabel) + "=" + std::to_string(major));
+			}
+
+			for (const auto major : loadedMajors) {
+				if (major != expectedMajor) {
+					violations.push_back(
+						std::string(moduleLabel) +
+						" major=" + std::to_string(major) +
+						" expected=" + std::to_string(expectedMajor));
+				}
+			}
+
+			return violations.empty();
+		}
+
+		bool PassesSpeechCudaCompatibilityGuard(std::string& outReason) {
+			outReason.clear();
+			std::vector<std::string> violations;
+			std::vector<std::string> observed;
+
+			IsLoadedMajorCompatible(L"cublas64_%d.dll", "cublas", 12, violations, observed);
+			IsLoadedMajorCompatible(L"cublasLt64_%d.dll", "cublasLt", 12, violations, observed);
+			IsLoadedMajorCompatible(L"cufft64_%d.dll", "cufft", 12, violations, observed);
+			IsLoadedMajorCompatible(L"cudnn64_%d.dll", "cudnn", 9, violations, observed);
+			IsLoadedMajorCompatible(L"cudnn_graph64_%d.dll", "cudnn_graph", 9, violations, observed);
+			IsLoadedMajorCompatible(L"cudnn_engines_precompiled64_%d.dll", "cudnn_engines_precompiled", 9, violations, observed);
+			IsLoadedMajorCompatible(L"cudnn_engines_runtime_compiled64_%d.dll", "cudnn_engines_runtime_compiled", 9, violations, observed);
+
+			if (violations.empty()) {
+				return true;
+			}
+
+			std::ostringstream oss;
+			oss << "compatibility_guard_blocked";
+			if (!observed.empty()) {
+				oss << " observed=";
+				for (std::size_t i = 0; i < observed.size(); ++i) {
+					if (i > 0) {
+						oss << ",";
+					}
+					oss << observed[i];
+				}
+			}
+			oss << " violations=";
+			for (std::size_t i = 0; i < violations.size(); ++i) {
+				if (i > 0) {
+					oss << ";";
+				}
+				oss << violations[i];
+			}
+
+			outReason = oss.str();
+			return false;
+		}
+
+		void ConfigureDefaultSessionOptions(
+			Ort::SessionOptions& options,
+			const SpeechRecognitionRuntimeSnapshot& snapshot) {
+			const bool useParallelMode = snapshot.executionMode == "parallel";
+			options.SetExecutionMode(
+				useParallelMode
+				? ExecutionMode::ORT_PARALLEL
+				: ExecutionMode::ORT_SEQUENTIAL);
+
+			if (snapshot.threads > 0) {
+				options.SetIntraOpNumThreads(static_cast<int>(snapshot.threads));
+				options.SetInterOpNumThreads(static_cast<int>(snapshot.threads));
+			}
+		}
+
+		bool TryAppendCudaExecutionProvider(
+			Ort::SessionOptions& options,
+			bool& outApiAvailable,
+			std::string& outReason) {
+			outApiAvailable = false;
+			outReason.clear();
+
+			using AppendCudaFn = OrtStatus * (ORT_API_CALL*)(
+				OrtSessionOptions*,
+				int);
+
+			HMODULE onnxRuntimeModule = ::GetModuleHandleW(L"onnxruntime.dll");
+			if (onnxRuntimeModule == nullptr) {
+				outReason = "onnxruntime.dll not loaded";
+				return false;
+			}
+
+			const auto appendCuda = reinterpret_cast<AppendCudaFn>(
+				::GetProcAddress(
+					onnxRuntimeModule,
+					"OrtSessionOptionsAppendExecutionProvider_CUDA"));
+			if (appendCuda == nullptr) {
+				outReason = "CUDA execution provider API unavailable";
+				return false;
+			}
+
+			outApiAvailable = true;
+			OrtStatus* status = appendCuda(
+				options,
+				0);
+			if (status != nullptr) {
+				const OrtApi& api = Ort::GetApi();
+				const char* message = api.GetErrorMessage(status);
+				outReason = message == nullptr
+					? "CUDA provider append failed"
+					: message;
+				api.ReleaseStatus(status);
+				return false;
+			}
+
+			return true;
+		}
+#endif
+
 		constexpr std::uint32_t kDefaultSampleRate = 16000;
 		constexpr std::size_t kMaxDecodeSteps = 128;
 		// Budget applies to the autoregressive decode loop only (encoder is excluded).
@@ -550,6 +688,10 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.sampleRate = m_config.speechRecognition.sampleRate;
 		m_snapshot.threads = m_config.speechRecognition.threads;
 		m_snapshot.executionMode = NormalizeExecutionMode(m_config.speechRecognition.executionMode);
+		m_snapshot.cudaExecutionProviderAvailable = false;
+		m_snapshot.cudaExecutionProviderEnabled = false;
+		m_snapshot.cudaExecutionProviderReason.clear();
+		m_snapshot.effectiveExecutionProvider = "cpu";
 		m_snapshot.verboseMetrics = m_config.speechRecognition.verboseMetrics;
 		m_snapshot.status = "configured";
 	}
@@ -656,25 +798,104 @@ namespace blazeclaw::core::speechrecognition {
 		try {
 			m_sessionState->env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "blazeclaw-speech");
 			m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-			if (m_snapshot.threads > 0) {
-				m_sessionState->options->SetIntraOpNumThreads(static_cast<int>(m_snapshot.threads));
-				m_sessionState->options->SetInterOpNumThreads(static_cast<int>(m_snapshot.threads));
+			ConfigureDefaultSessionOptions(*m_sessionState->options, m_snapshot);
+
+			bool usingCuda = false;
+			bool cudaApiAvailable = false;
+			std::string cudaFallbackReason;
+			if (!m_config.speechRecognition.cudaEnabled) {
+				m_snapshot.cudaExecutionProviderAvailable = false;
+				m_snapshot.cudaExecutionProviderEnabled = false;
+				m_snapshot.cudaExecutionProviderReason = "disabled_by_config";
+				m_snapshot.effectiveExecutionProvider = "cpu";
 			}
-			if (m_snapshot.executionMode == "parallel") {
-				m_sessionState->options->SetExecutionMode(ExecutionMode::ORT_PARALLEL);
+			else if (m_cudaCompatibilityGuardLatched) {
+				m_snapshot.cudaExecutionProviderAvailable = false;
+				m_snapshot.cudaExecutionProviderEnabled = false;
+				m_snapshot.cudaExecutionProviderReason =
+					"compatibility_guard_latched_in_process: " +
+					(m_cudaCompatibilityGuardLatchedReason.empty()
+						? std::string("previous_guard_failure")
+						: m_cudaCompatibilityGuardLatchedReason);
+				m_snapshot.effectiveExecutionProvider = "cpu";
+				TraceRuntime(
+					"runtime.execution_provider.compatibility_guard.latch",
+					std::string(),
+					"state=latched action=skip_cuda_ep_append reason=" +
+					m_snapshot.cudaExecutionProviderReason);
+			}
+			else if (!PassesSpeechCudaCompatibilityGuard(cudaFallbackReason)) {
+				m_snapshot.cudaExecutionProviderAvailable = false;
+				m_snapshot.cudaExecutionProviderEnabled = false;
+				m_snapshot.cudaExecutionProviderReason = cudaFallbackReason;
+				m_snapshot.effectiveExecutionProvider = "cpu";
+				m_cudaCompatibilityGuardLatched = true;
+				m_cudaCompatibilityGuardLatchedReason = cudaFallbackReason;
+				TraceRuntime(
+					"runtime.execution_provider.compatibility_guard.blocked",
+					std::string(),
+					"state=latched action=force_cpu reason=" +
+					m_snapshot.cudaExecutionProviderReason);
+			}
+			else if (TryAppendCudaExecutionProvider(
+				*m_sessionState->options,
+				cudaApiAvailable,
+				cudaFallbackReason)) {
+				usingCuda = true;
+				m_snapshot.cudaExecutionProviderAvailable = true;
+				m_snapshot.cudaExecutionProviderEnabled = true;
+				m_snapshot.cudaExecutionProviderReason = "active";
+				m_snapshot.effectiveExecutionProvider = "cuda";
 			}
 			else {
-				m_sessionState->options->SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+				m_snapshot.cudaExecutionProviderAvailable = cudaApiAvailable;
+				m_snapshot.cudaExecutionProviderEnabled = false;
+				m_snapshot.cudaExecutionProviderReason = cudaFallbackReason;
+				m_snapshot.effectiveExecutionProvider = "cpu";
 			}
+			TraceRuntime(
+				"runtime.execution_provider",
+				std::string(),
+				"provider=" + m_snapshot.effectiveExecutionProvider +
+				" cudaAvailable=" + (m_snapshot.cudaExecutionProviderAvailable ? std::string("true") : std::string("false")) +
+				" cudaEnabled=" + (m_snapshot.cudaExecutionProviderEnabled ? std::string("true") : std::string("false")) +
+				" reason=" + (m_snapshot.cudaExecutionProviderReason.empty() ? std::string("none") : m_snapshot.cudaExecutionProviderReason));
 
-			m_sessionState->encoder = std::make_unique<Ort::Session>(
-				*m_sessionState->env,
-				encoderPath.c_str(),
-				*m_sessionState->options);
-			m_sessionState->decoderInit = std::make_unique<Ort::Session>(
-				*m_sessionState->env,
-				decoderInitPath.c_str(),
-				*m_sessionState->options);
+			try {
+				m_sessionState->encoder = std::make_unique<Ort::Session>(
+					*m_sessionState->env,
+					encoderPath.c_str(),
+					*m_sessionState->options);
+				m_sessionState->decoderInit = std::make_unique<Ort::Session>(
+					*m_sessionState->env,
+					decoderInitPath.c_str(),
+					*m_sessionState->options);
+			}
+			catch (const std::exception& ex) {
+				if (!usingCuda) {
+					throw;
+				}
+
+				m_snapshot.cudaExecutionProviderEnabled = false;
+				m_snapshot.cudaExecutionProviderReason =
+					"cuda_session_init_failed: " + std::string(ex.what());
+				m_snapshot.effectiveExecutionProvider = "cpu";
+				TraceRuntime(
+					"runtime.execution_provider",
+					std::string(),
+					"provider=cpu cudaEnabled=false reason=" + m_snapshot.cudaExecutionProviderReason);
+
+				m_sessionState->options = std::make_unique<Ort::SessionOptions>();
+				ConfigureDefaultSessionOptions(*m_sessionState->options, m_snapshot);
+				m_sessionState->encoder = std::make_unique<Ort::Session>(
+					*m_sessionState->env,
+					encoderPath.c_str(),
+					*m_sessionState->options);
+				m_sessionState->decoderInit = std::make_unique<Ort::Session>(
+					*m_sessionState->env,
+					decoderInitPath.c_str(),
+					*m_sessionState->options);
+			}
 
 			if (std::filesystem::exists(decoderStepPath)) {
 				m_sessionState->decoderStep = std::make_unique<Ort::Session>(

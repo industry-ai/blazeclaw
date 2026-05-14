@@ -484,6 +484,7 @@ namespace blazeclaw::config {
 
 	struct SpeechRecognitionConfig {
 		bool enabled = false;
+		bool cudaEnabled = true;
 		std::wstring provider = L"onnx";
 		std::wstring rolloutStage = L"dev";
 		std::wstring storageRoot = L"models/chat/qwen3-asr-1.7b-onnx";

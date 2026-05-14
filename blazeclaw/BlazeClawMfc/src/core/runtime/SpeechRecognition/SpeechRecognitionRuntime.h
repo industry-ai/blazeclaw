@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
 namespace blazeclaw::core::speechrecognition {
@@ -43,6 +44,8 @@ namespace blazeclaw::core::speechrecognition {
 		SpeechRecognitionRuntimeSnapshot m_snapshot;
 		std::unique_ptr<SessionState> m_sessionState;
 		std::unordered_map<std::string, bool> m_cancelFlagsByRunId;
+		bool m_cudaCompatibilityGuardLatched = false;
+		std::string m_cudaCompatibilityGuardLatchedReason;
 	};
 
 } // namespace blazeclaw::core::speechrecognition
