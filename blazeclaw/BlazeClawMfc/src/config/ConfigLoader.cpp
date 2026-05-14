@@ -1061,6 +1061,11 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.model_variant=", 0) == 0) {
+				outConfig.speechRecognition.modelVariant = ToLowerTrim(trimmedLine.substr(21));
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.language=", 0) == 0) {
 				outConfig.speechRecognition.language = Trim(trimmedLine.substr(16));
 				continue;
@@ -1070,6 +1075,22 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(19), value) && value > 0) {
 					outConfig.speechRecognition.sampleRate = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.chunk_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(16), value) && value > 0) {
+					outConfig.speechRecognition.chunkMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.overlap_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(18), value)) {
+					outConfig.speechRecognition.overlapMs = value;
 				}
 				continue;
 			}
@@ -1776,10 +1797,24 @@ namespace blazeclaw::config {
 		if (outConfig.speechRecognition.provider.empty()) {
 			outConfig.speechRecognition.provider = L"onnx";
 		}
+		outConfig.speechRecognition.modelVariant = ToLowerTrim(outConfig.speechRecognition.modelVariant);
+		if (outConfig.speechRecognition.modelVariant != L"int4" &&
+			outConfig.speechRecognition.modelVariant != L"fp16" &&
+			outConfig.speechRecognition.modelVariant != L"fp32") {
+			outConfig.speechRecognition.modelVariant = L"auto";
+		}
 		outConfig.speechRecognition.executionMode =
 			ToLowerTrim(outConfig.speechRecognition.executionMode) == L"parallel"
 			? L"parallel"
 			: L"sequential";
+		const auto normalizedChunk = std::clamp<std::uint32_t>(
+			outConfig.speechRecognition.chunkMs,
+			320u,
+			1500u);
+		outConfig.speechRecognition.chunkMs = normalizedChunk;
+		outConfig.speechRecognition.overlapMs = (std::min)(
+			outConfig.speechRecognition.overlapMs,
+			normalizedChunk > 0 ? normalizedChunk - 1 : 0u);
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
 		if (outConfig.localModel.provider == L"llama.cpp") {

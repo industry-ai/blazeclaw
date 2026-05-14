@@ -29,6 +29,40 @@ namespace blazeclaw::core::speechrecognition {
 	namespace {
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
+		enum class DecoderInputKind {
+			InputIds,
+			AudioFeatures,
+			AudioOffset,
+			PositionIds,
+			UnknownInt64,
+			UnknownFloat,
+		};
+
+		struct DecoderInputBinding {
+			std::string name;
+			DecoderInputKind kind = DecoderInputKind::UnknownFloat;
+			std::vector<std::int64_t> shape;
+			ONNXTensorElementDataType elementType = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+			std::size_t bufferIndex = 0;
+		};
+
+		DecoderInputKind ClassifyDecoderInputKind(const std::string& inputName) {
+			if (inputName.find("input_ids") != std::string::npos) {
+				return DecoderInputKind::InputIds;
+			}
+			if (inputName.find("audio_features") != std::string::npos) {
+				return DecoderInputKind::AudioFeatures;
+			}
+			if (inputName.find("audio_offset") != std::string::npos) {
+				return DecoderInputKind::AudioOffset;
+			}
+			if (inputName.find("position_ids") != std::string::npos) {
+				return DecoderInputKind::PositionIds;
+			}
+
+			return DecoderInputKind::UnknownFloat;
+		}
+
 		std::vector<int> DetectLoadedModuleMajors(
 			const std::wstring& modulePattern,
 			int minMajor,
@@ -110,6 +144,7 @@ namespace blazeclaw::core::speechrecognition {
 		void ConfigureDefaultSessionOptions(
 			Ort::SessionOptions& options,
 			const SpeechRecognitionRuntimeSnapshot& snapshot) {
+			options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 			const bool useParallelMode = snapshot.executionMode == "parallel";
 			options.SetExecutionMode(
 				useParallelMode
@@ -652,6 +687,9 @@ namespace blazeclaw::core::speechrecognition {
 		std::unique_ptr<Ort::Session> encoder;
 		std::unique_ptr<Ort::Session> decoderInit;
 		std::unique_ptr<Ort::Session> decoderStep;
+		std::vector<DecoderInputBinding> decoderInitInputBindings;
+		std::vector<std::string> decoderInitOutputNames;
+		std::size_t decoderInitLikelyLogitsOutputIndex = (std::numeric_limits<std::size_t>::max)();
 #endif
 		std::unordered_map<std::int64_t, std::string> tokenById;
 		std::unordered_set<std::int64_t> specialTokenIds;
@@ -741,18 +779,72 @@ namespace blazeclaw::core::speechrecognition {
 			return false;
 		}
 
-		const bool preferInt4 =
-			std::filesystem::exists(rootPath / L"decoder_init.int4.onnx") &&
-			std::filesystem::exists(rootPath / L"encoder.int4.onnx");
-		const std::filesystem::path encoderPath = preferInt4
-			? (rootPath / L"encoder.int4.onnx")
-			: (rootPath / L"encoder.onnx");
-		const std::filesystem::path decoderInitPath = preferInt4
-			? (rootPath / L"decoder_init.int4.onnx")
-			: (rootPath / L"decoder_init.onnx");
-		const std::filesystem::path decoderStepPath = preferInt4
-			? (rootPath / L"decoder_step.int4.onnx")
-			: (rootPath / L"decoder_step.onnx");
+		struct VariantPaths {
+			std::string variant;
+			std::filesystem::path encoderPath;
+			std::filesystem::path decoderInitPath;
+			std::filesystem::path decoderStepPath;
+		};
+
+		auto buildVariantPaths = [&rootPath](const std::string& variant) -> VariantPaths {
+			if (variant == "int4") {
+				return VariantPaths{
+					.variant = variant,
+					.encoderPath = rootPath / L"encoder.int4.onnx",
+					.decoderInitPath = rootPath / L"decoder_init.int4.onnx",
+					.decoderStepPath = rootPath / L"decoder_step.int4.onnx",
+				};
+			}
+			if (variant == "fp16") {
+				return VariantPaths{
+					.variant = variant,
+					.encoderPath = rootPath / L"encoder.fp16.onnx",
+					.decoderInitPath = rootPath / L"decoder_init.fp16.onnx",
+					.decoderStepPath = rootPath / L"decoder_step.fp16.onnx",
+				};
+			}
+			return VariantPaths{
+				.variant = "fp32",
+				.encoderPath = rootPath / L"encoder.onnx",
+				.decoderInitPath = rootPath / L"decoder_init.onnx",
+				.decoderStepPath = rootPath / L"decoder_step.onnx",
+			};
+		};
+
+		const std::string preferredVariant = NormalizeProvider(m_config.speechRecognition.modelVariant);
+		std::vector<std::string> candidateVariants;
+		if (preferredVariant == "int4" || preferredVariant == "fp16" || preferredVariant == "fp32") {
+			candidateVariants.push_back(preferredVariant);
+		}
+		else {
+			candidateVariants = { "int4", "fp16", "fp32" };
+		}
+
+		std::optional<VariantPaths> selectedVariant;
+		for (const auto& variant : candidateVariants) {
+			auto candidate = buildVariantPaths(variant);
+			if (std::filesystem::exists(candidate.encoderPath) &&
+				std::filesystem::exists(candidate.decoderInitPath)) {
+				selectedVariant = std::move(candidate);
+				break;
+			}
+		}
+
+		if (!selectedVariant.has_value()) {
+			outResult.ok = false;
+			outResult.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::ModelNotFound,
+				.message = "requested speech model variant artifacts are missing",
+			};
+			m_snapshot.ready = false;
+			m_snapshot.status = "model_variant_missing";
+			m_snapshot.error = outResult.error;
+			return false;
+		}
+
+		const std::filesystem::path encoderPath = selectedVariant->encoderPath;
+		const std::filesystem::path decoderInitPath = selectedVariant->decoderInitPath;
+		const std::filesystem::path decoderStepPath = selectedVariant->decoderStepPath;
 		const std::filesystem::path tokenizerJsonPath = rootPath / L"tokenizer.json";
 		const std::filesystem::path fallbackVocabPath = rootPath / L"vocab.json";
 
@@ -770,7 +862,7 @@ namespace blazeclaw::core::speechrecognition {
 			return false;
 		}
 
-		m_snapshot.modelVariant = preferInt4 ? "int4" : "fp32";
+		m_snapshot.modelVariant = selectedVariant->variant;
 		m_snapshot.encoderModelPath = ToNarrow(encoderPath.wstring());
 		m_snapshot.decoderInitModelPath = ToNarrow(decoderInitPath.wstring());
 		m_snapshot.decoderStepModelPath = std::filesystem::exists(decoderStepPath)
@@ -906,6 +998,52 @@ namespace blazeclaw::core::speechrecognition {
 					"runtime.decoder_step.loaded_but_disabled",
 					std::string(),
 					"reason=requires_input_embeds_and_kv_cache_support before safe runtime use");
+			}
+
+			Ort::AllocatorWithDefaultOptions allocator;
+			const auto decoderInputCount = m_sessionState->decoderInit->GetInputCount();
+			m_sessionState->decoderInitInputBindings.clear();
+			m_sessionState->decoderInitInputBindings.reserve(decoderInputCount);
+			std::size_t unknownInt64Count = 0;
+			std::size_t unknownFloatCount = 0;
+			for (std::size_t i = 0; i < decoderInputCount; ++i) {
+				auto nameAlloc = m_sessionState->decoderInit->GetInputNameAllocated(i, allocator);
+				DecoderInputBinding binding;
+				binding.name = nameAlloc.get();
+				binding.kind = ClassifyDecoderInputKind(binding.name);
+				if (binding.kind == DecoderInputKind::UnknownFloat) {
+					auto tensorInfo = m_sessionState->decoderInit->GetInputTypeInfo(i)
+						.GetTensorTypeAndShapeInfo();
+					binding.shape = tensorInfo.GetShape();
+					for (auto& dim : binding.shape) {
+						if (dim <= 0) {
+							dim = 1;
+						}
+					}
+					binding.elementType = tensorInfo.GetElementType();
+					if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+						binding.kind = DecoderInputKind::UnknownInt64;
+						binding.bufferIndex = unknownInt64Count++;
+					}
+					else {
+						binding.kind = DecoderInputKind::UnknownFloat;
+						binding.bufferIndex = unknownFloatCount++;
+					}
+				}
+				m_sessionState->decoderInitInputBindings.push_back(std::move(binding));
+			}
+
+			const auto decoderOutputCount = m_sessionState->decoderInit->GetOutputCount();
+			m_sessionState->decoderInitOutputNames.clear();
+			m_sessionState->decoderInitOutputNames.reserve(decoderOutputCount);
+			m_sessionState->decoderInitLikelyLogitsOutputIndex = (std::numeric_limits<std::size_t>::max)();
+			for (std::size_t i = 0; i < decoderOutputCount; ++i) {
+				auto nameAlloc = m_sessionState->decoderInit->GetOutputNameAllocated(i, allocator);
+				m_sessionState->decoderInitOutputNames.push_back(nameAlloc.get());
+				if (m_sessionState->decoderInitLikelyLogitsOutputIndex == (std::numeric_limits<std::size_t>::max)() &&
+					m_sessionState->decoderInitOutputNames.back().find("logits") != std::string::npos) {
+					m_sessionState->decoderInitLikelyLogitsOutputIndex = i;
+				}
 			}
 
 			m_sessionState->tokenById.clear();
@@ -1211,7 +1349,11 @@ namespace blazeclaw::core::speechrecognition {
 			return output;
 		};
 
-		auto buildLogMel = [](const std::vector<float>& samples, std::uint32_t sampleRate) {
+		auto buildLogMel = [](
+			const std::vector<float>& samples,
+			std::uint32_t sampleRate,
+			std::size_t chunkMs,
+			std::size_t overlapMs) {
 			const std::size_t nFft = 400;
 			const std::size_t hop = 160;
 			const std::size_t nMels = 128;
@@ -1220,8 +1362,16 @@ namespace blazeclaw::core::speechrecognition {
 			if (samples.size() < nFft) {
 				return std::vector<float>{};
 			}
+			const std::size_t safeChunkMs = (std::clamp)(chunkMs, static_cast<std::size_t>(320), static_cast<std::size_t>(1500));
+			const std::size_t safeOverlapMs = (std::min)(overlapMs, safeChunkMs > 0 ? safeChunkMs - 1 : 0);
+			std::size_t effectiveMs = safeChunkMs;
+			if (safeOverlapMs > 0) {
+				effectiveMs += safeOverlapMs;
+			}
+			const std::size_t kTargetSamples = (std::max)(
+				nFft,
+				static_cast<std::size_t>((sampleRate * effectiveMs) / 1000));
 			std::vector<float> padded = samples;
-			constexpr std::size_t kTargetSamples = 480000;
 			if (padded.size() < kTargetSamples) {
 				padded.resize(kTargetSamples, 0.0f);
 			}
@@ -1393,7 +1543,11 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.lastInputResampled = false;
 		}
 
-		const auto logMel = buildLogMel(mono, kDefaultSampleRate);
+		const auto logMel = buildLogMel(
+			mono,
+			kDefaultSampleRate,
+			m_config.speechRecognition.chunkMs,
+			m_config.speechRecognition.overlapMs);
 		if (logMel.empty()) {
 			result.ok = false;
 			result.error = SpeechRecognitionError{
@@ -1449,6 +1603,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::size_t generatedTokenCount = 0;
 		try {
 			Ort::AllocatorWithDefaultOptions allocator;
+			auto memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 			auto encoderInputNameAlloc = m_sessionState->encoder->GetInputNameAllocated(0, allocator);
 			const char* encoderInputName = encoderInputNameAlloc.get();
 			auto encoderOutputNameAlloc = m_sessionState->encoder->GetOutputNameAllocated(0, allocator);
@@ -1471,11 +1626,12 @@ namespace blazeclaw::core::speechrecognition {
 			}
 
 			std::vector<float> encoderInputData;
-			encoderInputData.resize(logMel.size());
+			encoderInputData.reserve(logMel.size());
 			if (encoderDims[1] == static_cast<std::int64_t>(nMels)) {
-				encoderInputData = logMel;
+				encoderInputData.assign(logMel.begin(), logMel.end());
 			}
 			else {
+				encoderInputData.resize(logMel.size());
 				for (std::size_t t = 0; t < frames; ++t) {
 					for (std::size_t m = 0; m < nMels; ++m) {
 						encoderInputData[t * nMels + m] = logMel[m * frames + t];
@@ -1483,7 +1639,6 @@ namespace blazeclaw::core::speechrecognition {
 				}
 			}
 
-			auto memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 			Ort::Value encoderInputTensor = Ort::Value::CreateTensor<float>(
 				memInfo,
 				encoderInputData.data(),
@@ -1522,8 +1677,7 @@ namespace blazeclaw::core::speechrecognition {
 			if (encodedSequenceLength == 0) {
 				throw std::runtime_error("encoder output sequence length is invalid");
 			}
-			float* encodedPtr = encoderOutputs[0].GetTensorMutableData<float>();
-			std::vector<float> encodedFeatures(encodedPtr, encodedPtr + encodedCount);
+			const float* encodedPtr = encoderOutputs[0].GetTensorData<float>();
 
 			std::vector<std::int64_t> promptIds = {
 				kTokenImStart,
@@ -1538,6 +1692,7 @@ namespace blazeclaw::core::speechrecognition {
 			};
 			const std::size_t audioPadCount = encodedSequenceLength;
 			const std::size_t audioPadStartIndex = promptIds.size();
+			promptIds.reserve(promptIds.size() + audioPadCount + 8);
 			for (std::size_t i = 0; i < audioPadCount; ++i) {
 				promptIds.push_back(kTokenAudioPad);
 			}
@@ -1549,6 +1704,54 @@ namespace blazeclaw::core::speechrecognition {
 			promptIds.push_back(kTokenNewline);
 
 			std::vector<std::int64_t> generatedIds;
+			generatedIds.reserve(kMaxDecodeSteps);
+			std::vector<std::int64_t> ids;
+			ids.reserve(promptIds.size() + kMaxDecodeSteps);
+			std::vector<std::int64_t> positionIds;
+			positionIds.reserve(promptIds.size() + kMaxDecodeSteps);
+			std::array<std::int64_t, 2> inputIdsShape{ 1, 0 };
+			const std::array<std::int64_t, 1> audioOffsetShape{ 1 };
+			std::array<std::int64_t, 1> audioOffset{
+				static_cast<std::int64_t>(audioPadStartIndex),
+			};
+
+			std::vector<const char*> decoderInputNames;
+			decoderInputNames.reserve(m_sessionState->decoderInitInputBindings.size());
+			for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+				decoderInputNames.push_back(binding.name.c_str());
+			}
+
+			std::vector<const char*> decoderOutputNames;
+			decoderOutputNames.reserve(m_sessionState->decoderInitOutputNames.size());
+			for (const auto& outputName : m_sessionState->decoderInitOutputNames) {
+				decoderOutputNames.push_back(outputName.c_str());
+			}
+
+			std::vector<std::vector<std::int64_t>> fallbackInt64Buffers;
+			std::vector<std::vector<float>> fallbackFloatBuffers;
+			for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+				if (binding.kind == DecoderInputKind::UnknownInt64) {
+					if (fallbackInt64Buffers.size() <= binding.bufferIndex) {
+						fallbackInt64Buffers.resize(binding.bufferIndex + 1);
+					}
+					std::size_t count = 1;
+					for (const auto dim : binding.shape) {
+						count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
+					}
+					fallbackInt64Buffers[binding.bufferIndex].assign(count, 0);
+				}
+				else if (binding.kind == DecoderInputKind::UnknownFloat) {
+					if (fallbackFloatBuffers.size() <= binding.bufferIndex) {
+						fallbackFloatBuffers.resize(binding.bufferIndex + 1);
+					}
+					std::size_t count = 1;
+					for (const auto dim : binding.shape) {
+						count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
+					}
+					fallbackFloatBuffers[binding.bufferIndex].assign(count, 0.0f);
+				}
+			}
+
 			std::string decodeStopReason = "max_steps";
 			const auto decodeLoopStart = std::chrono::steady_clock::now();
 			for (std::size_t step = 0; step < kMaxDecodeSteps; ++step) {
@@ -1586,12 +1789,10 @@ namespace blazeclaw::core::speechrecognition {
 					break;
 				}
 
-				std::vector<std::int64_t> ids = promptIds;
+				ids.clear();
+				ids.insert(ids.end(), promptIds.begin(), promptIds.end());
 				ids.insert(ids.end(), generatedIds.begin(), generatedIds.end());
-				const std::vector<std::int64_t> inputIdsShape = {
-					1,
-					static_cast<std::int64_t>(ids.size()),
-				};
+				inputIdsShape[1] = static_cast<std::int64_t>(ids.size());
 				Ort::Value inputIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
 					memInfo,
 					ids.data(),
@@ -1599,7 +1800,7 @@ namespace blazeclaw::core::speechrecognition {
 					inputIdsShape.data(),
 					inputIdsShape.size());
 
-				std::vector<std::int64_t> positionIds(ids.size());
+				positionIds.resize(ids.size());
 				std::iota(
 					positionIds.begin(),
 					positionIds.end(),
@@ -1611,10 +1812,6 @@ namespace blazeclaw::core::speechrecognition {
 					inputIdsShape.data(),
 					inputIdsShape.size());
 
-				const std::vector<std::int64_t> audioOffsetShape = { 1 };
-				std::array<std::int64_t, 1> audioOffset{
-					static_cast<std::int64_t>(audioPadStartIndex),
-				};
 				Ort::Value audioOffsetTensor = Ort::Value::CreateTensor<std::int64_t>(
 					memInfo,
 					audioOffset.data(),
@@ -1624,89 +1821,53 @@ namespace blazeclaw::core::speechrecognition {
 
 				Ort::Value audioFeaturesTensor = Ort::Value::CreateTensor<float>(
 					memInfo,
-					encodedFeatures.data(),
-					encodedFeatures.size(),
+					const_cast<float*>(encodedPtr),
+					encodedCount,
 					encodedShape.data(),
 					encodedShape.size());
 
 				Ort::Session* activeDecoder = m_sessionState->decoderInit.get();
 				const std::string activeDecoderName = "decoder_init";
 
-				const auto decoderInputCount = activeDecoder->GetInputCount();
-				std::vector<std::string> decoderInputNamesOwned;
-				std::vector<const char*> decoderInputNames;
 				std::vector<Ort::Value> decoderInputs;
-				std::vector<std::vector<std::int64_t>> ownedInt64Buffers;
-				std::vector<std::vector<float>> ownedFloatBuffers;
-				decoderInputNamesOwned.reserve(decoderInputCount);
-				decoderInputNames.reserve(decoderInputCount);
-				decoderInputs.reserve(decoderInputCount);
+				decoderInputs.reserve(m_sessionState->decoderInitInputBindings.size());
 
-				for (std::size_t i = 0; i < decoderInputCount; ++i) {
-					auto nameAlloc = activeDecoder->GetInputNameAllocated(i, allocator);
-					const std::string inputName = nameAlloc.get();
-					decoderInputNamesOwned.push_back(inputName);
-					decoderInputNames.push_back(decoderInputNamesOwned.back().c_str());
-					if (inputName.find("input_ids") != std::string::npos) {
+				for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+					switch (binding.kind) {
+					case DecoderInputKind::InputIds:
 						decoderInputs.push_back(std::move(inputIdsTensor));
-					}
-					else if (inputName.find("audio_features") != std::string::npos) {
+						break;
+					case DecoderInputKind::AudioFeatures:
 						decoderInputs.push_back(std::move(audioFeaturesTensor));
-					}
-					else if (inputName.find("audio_offset") != std::string::npos) {
+						break;
+					case DecoderInputKind::AudioOffset:
 						decoderInputs.push_back(std::move(audioOffsetTensor));
-					}
-					else if (inputName.find("position_ids") != std::string::npos) {
+						break;
+					case DecoderInputKind::PositionIds:
 						decoderInputs.push_back(std::move(positionIdsTensor));
+						break;
+					case DecoderInputKind::UnknownInt64: {
+						auto& zeros = fallbackInt64Buffers[binding.bufferIndex];
+						decoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
+							memInfo,
+							zeros.data(),
+							zeros.size(),
+							binding.shape.data(),
+							binding.shape.size()));
+						break;
 					}
-					else {
-						auto shape = activeDecoder->GetInputTypeInfo(i)
-							.GetTensorTypeAndShapeInfo()
-							.GetShape();
-						for (auto& dim : shape) {
-							if (dim <= 0) {
-								dim = 1;
-							}
-						}
-						std::size_t count = 1;
-						for (const auto dim : shape) {
-							count *= static_cast<std::size_t>(dim);
-						}
-						auto elemType = activeDecoder->GetInputTypeInfo(i)
-							.GetTensorTypeAndShapeInfo()
-							.GetElementType();
-						if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
-							ownedInt64Buffers.push_back(std::vector<std::int64_t>(count, 0));
-							auto& zeros = ownedInt64Buffers.back();
-							decoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
-								memInfo,
-								zeros.data(),
-								zeros.size(),
-								shape.data(),
-								shape.size()));
-						}
-						else {
-							ownedFloatBuffers.push_back(std::vector<float>(count, 0.0f));
-							auto& zeros = ownedFloatBuffers.back();
-							decoderInputs.push_back(Ort::Value::CreateTensor<float>(
-								memInfo,
-								zeros.data(),
-								zeros.size(),
-								shape.data(),
-								shape.size()));
-						}
+					case DecoderInputKind::UnknownFloat:
+					default: {
+						auto& zeros = fallbackFloatBuffers[binding.bufferIndex];
+						decoderInputs.push_back(Ort::Value::CreateTensor<float>(
+							memInfo,
+							zeros.data(),
+							zeros.size(),
+							binding.shape.data(),
+							binding.shape.size()));
+						break;
 					}
-				}
-
-				const auto decoderOutputCount = activeDecoder->GetOutputCount();
-				std::vector<std::string> decoderOutputNamesOwned;
-				std::vector<const char*> decoderOutputNames;
-				decoderOutputNamesOwned.reserve(decoderOutputCount);
-				decoderOutputNames.reserve(decoderOutputCount);
-				for (std::size_t i = 0; i < decoderOutputCount; ++i) {
-					auto nameAlloc = activeDecoder->GetOutputNameAllocated(i, allocator);
-					decoderOutputNamesOwned.push_back(nameAlloc.get());
-					decoderOutputNames.push_back(decoderOutputNamesOwned.back().c_str());
+					}
 				}
 
 				auto decoderOutputs = activeDecoder->Run(
@@ -1721,7 +1882,20 @@ namespace blazeclaw::core::speechrecognition {
 				}
 
 				const Ort::Value* logitsTensor = nullptr;
+				const auto likelyLogitsIndex = m_sessionState->decoderInitLikelyLogitsOutputIndex;
+				if (likelyLogitsIndex < decoderOutputs.size() &&
+					decoderOutputs[likelyLogitsIndex].IsTensor()) {
+					auto likelyShape = decoderOutputs[likelyLogitsIndex]
+						.GetTensorTypeAndShapeInfo()
+						.GetShape();
+					if (likelyShape.size() >= 3) {
+						logitsTensor = &decoderOutputs[likelyLogitsIndex];
+					}
+				}
 				for (auto& out : decoderOutputs) {
+					if (logitsTensor != nullptr) {
+						break;
+					}
 					if (!out.IsTensor()) {
 						continue;
 					}

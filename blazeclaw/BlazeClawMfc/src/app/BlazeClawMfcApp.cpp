@@ -410,15 +410,18 @@ namespace {
 		const auto runtime = services.SpeechRecognition();
 		CString configLine;
 		configLine.Format(
-			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s language=%s sampleRate=%u threads=%u mode=%s",
+			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s modelVariant=%s language=%s sampleRate=%u chunkMs=%u overlapMs=%u threads=%u mode=%s",
 			config.speechRecognition.enabled ? L"true" : L"false",
 			config.speechRecognition.cudaEnabled ? L"true" : L"false",
 			config.speechRecognition.provider.c_str(),
 			config.speechRecognition.rolloutStage.c_str(),
 			config.speechRecognition.storageRoot.c_str(),
 			config.speechRecognition.modelPath.c_str(),
+			config.speechRecognition.modelVariant.c_str(),
 			config.speechRecognition.language.c_str(),
 			config.speechRecognition.sampleRate,
+			config.speechRecognition.chunkMs,
+			config.speechRecognition.overlapMs,
 			config.speechRecognition.threads,
 			config.speechRecognition.executionMode.c_str());
 		AppendMainFrameStatusLine(configLine);

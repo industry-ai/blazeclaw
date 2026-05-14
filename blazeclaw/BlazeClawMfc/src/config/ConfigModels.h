@@ -489,8 +489,11 @@ namespace blazeclaw::config {
 		std::wstring rolloutStage = L"dev";
 		std::wstring storageRoot = L"models/chat/qwen3-asr-1.7b-onnx";
 		std::wstring modelPath;
+		std::wstring modelVariant = L"auto"; // auto|int4|fp16|fp32
 		std::wstring language = L"und";
 		std::uint32_t sampleRate = 16000;
+		std::uint32_t chunkMs = 1000;
+		std::uint32_t overlapMs = 320;
 		std::uint32_t threads = 4;
 		std::wstring executionMode = L"sequential"; // "parallel" or "sequential"
 		bool verboseMetrics = false;
