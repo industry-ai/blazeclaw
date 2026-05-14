@@ -2979,11 +2979,11 @@ namespace blazeclaw::core {
 		RegisterGatewayOwnedRuntimeCleanup(
 			"speech_transcription_shutdown",
 			[this]() {
-				const auto preShutdownSnapshot = m_speechRecognitionRuntime.Snapshot();
+				const auto preCancelledCount = static_cast<std::int64_t>(m_speechRecognition.transcribeRequestsCancelled);
 				m_speechTranscriptionCoordinator.Shutdown(m_speechRecognitionRuntime);
 				m_speechRecognition = m_speechRecognitionRuntime.Snapshot();
 				const std::int64_t cancelledDelta = static_cast<std::int64_t>(m_speechRecognition.transcribeRequestsCancelled) -
-					static_cast<std::int64_t>(preShutdownSnapshot.transcribeRequestsCancelled);
+					preCancelledCount;
 				TRACE(
 					"[ServiceManager][speech.shutdown.summary] started=%u completed=%u failed=%u cancelled=%u cancelledDelta=%lld status=%S\n",
 					m_speechRecognition.transcribeRequestsStarted,

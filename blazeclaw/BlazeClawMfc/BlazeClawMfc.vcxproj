@@ -533,6 +533,9 @@
     <None Include="..\docs\readme.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
+    <None Include="VOICE_STREAM_TO_ASR_STEP11_ROOT_CAUSE_AND_FIX_PLAN.md" />
+    <None Include="VOICE_STREAM_TO_ASR_STEP12_ROOT_CAUSE_AND_FIX_PLAN.md" />
+    <None Include="VOICE_STREAM_TO_ASR_STEP13_PHASE_A_TO_E_IMPLEMENTATION.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP1_TRACE.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP2_CONTRACT.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP3_ASYNC_DISPATCH.md" />

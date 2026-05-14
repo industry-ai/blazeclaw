@@ -1936,6 +1936,83 @@
             return { ...state.speechSessionState };
         }
 
+        function sanitizeTranscriptText(text) {
+            let value = String(text || "").trim();
+            if (!value) {
+                return "";
+            }
+
+            value = value.replace(/<\|[^|]*\|>/g, " ");
+            value = value.replace(/\[assistant_response\]/gi, " ");
+            value = value.replace(/assistant_response/gi, " ");
+
+            const lower = value.toLowerCase();
+            const boundaries = ["\nuser\n", "\nassistant\n", "\r\nuser\r\n", "\r\nassistant\r\n"];
+            let cutIndex = -1;
+            for (const marker of boundaries) {
+                const idx = lower.indexOf(marker);
+                if (idx > 0 && (cutIndex < 0 || idx < cutIndex)) {
+                    cutIndex = idx;
+                }
+            }
+            if (cutIndex > 0) {
+                value = value.slice(0, cutIndex);
+            }
+
+            value = value.replace(/\s+/g, " ").trim();
+            return value;
+        }
+
+        function assessTranscriptQuality(text) {
+            const value = sanitizeTranscriptText(text);
+            if (!value) {
+                return { accepted: false, reason: "empty transcript", cleanedText: "" };
+            }
+
+            let longestRun = 1;
+            let currentRun = 1;
+            for (let i = 1; i < value.length; i += 1) {
+                if (value[i] === value[i - 1]) {
+                    currentRun += 1;
+                    if (currentRun > longestRun) {
+                        longestRun = currentRun;
+                    }
+                } else {
+                    currentRun = 1;
+                }
+            }
+
+            let cleaned = value;
+            if (longestRun >= 16) {
+                cleaned = cleaned.replace(/(.)\1{5,}/g, "$1$1$1");
+                cleaned = cleaned.replace(/\s+/g, " ").trim();
+            }
+
+            const mojibakeHintCount = (cleaned.match(/[ÂÃå°ðĿ]/g) || []).length;
+            if (cleaned.length >= 16 && mojibakeHintCount / cleaned.length > 0.35) {
+                return { accepted: false, reason: "mojibake transcript pattern detected", cleanedText: cleaned };
+            }
+
+            const hasLanguageLikeContent = /[A-Za-z0-9\u4e00-\u9fff]/.test(cleaned);
+            if (!hasLanguageLikeContent) {
+                return { accepted: false, reason: "transcript has no language content", cleanedText: cleaned };
+            }
+
+            const alphaCount = (cleaned.match(/[A-Za-z]/g) || []).length;
+            const upperCount = (cleaned.match(/[A-Z]/g) || []).length;
+            const cjkCount = (cleaned.match(/[\u4e00-\u9fff]/g) || []).length;
+            const asciiWord = cleaned.match(/^[A-Za-z!?.\s]{3,24}$/) !== null;
+            if (cjkCount === 0 &&
+                asciiWord &&
+                alphaCount >= 3 &&
+                upperCount / alphaCount > 0.8 &&
+                /\b(uster|user|assistant)\b/i.test(cleaned)) {
+                return { accepted: false, reason: "placeholder transcript pattern detected", cleanedText: cleaned };
+            }
+
+            return { accepted: true, reason: "", cleanedText: cleaned };
+        }
+
         async function transcribeSpeech(options) {
             const sendOptions = options && typeof options === "object"
                 ? options
@@ -1985,7 +2062,25 @@
                 state.speechSessionState = normalizeSpeechSessionPayload(payload);
                 const transcriptText = String(payload.text || payload.transcript || "").trim();
                 if (transcriptText) {
-                    await sendPayload(transcriptText, [], false, {
+                    const quality = assessTranscriptQuality(transcriptText);
+                    if (!quality.accepted) {
+                        state.speechSessionState = {
+                            ...state.speechSessionState,
+                            stage: "failed",
+                            errorCode: "transcript_rejected",
+                            errorMessage: `speech transcript blocked: ${quality.reason}`,
+                            errorClass: "status",
+                            text: "",
+                            segmentText: "",
+                            updatedAtMs: Date.now(),
+                        };
+                        addMessage(`speech transcript blocked: ${quality.reason}`, "error");
+                        updateComposerState();
+                        return;
+                    }
+
+                    const cleanedTranscriptText = String(quality.cleanedText || transcriptText).trim();
+                    await sendPayload(cleanedTranscriptText, [], false, {
                         detached: false,
                         requestOverride,
                         speechContext: {

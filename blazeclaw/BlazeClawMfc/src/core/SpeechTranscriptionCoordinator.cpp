@@ -165,7 +165,19 @@ namespace blazeclaw::core {
 	SpeechTranscriptionCoordinator::TranscribeResult SpeechTranscriptionCoordinator::Execute(
 		RuntimeInterface& runtime,
 		const ExecutionRequest& request) {
-		const auto accepted = Accept(request);
+		ExecutionAccepted accepted;
+		const std::string trackingRunId = BuildTrackingRunId(request);
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			const auto existing = m_executionByRunId.find(trackingRunId);
+			if (existing != m_executionByRunId.end() && !IsTerminal(existing->second.stage)) {
+				accepted.accepted = true;
+				accepted.executionState = existing->second;
+			}
+		}
+		if (!accepted.accepted) {
+			accepted = Accept(request);
+		}
 		if (!accepted.accepted) {
 			TranscribeResult rejected;
 			rejected.ok = false;

@@ -12,6 +12,7 @@
 #include <limits>
 #include <numeric>
 #include <sstream>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -28,7 +29,8 @@ namespace blazeclaw::core::speechrecognition {
 	namespace {
 
 		constexpr std::uint32_t kDefaultSampleRate = 16000;
-		constexpr std::size_t kMaxDecodeSteps = 512;
+		constexpr std::size_t kMaxDecodeSteps = 128;
+		constexpr std::uint32_t kMaxDecodeWallClockMs = 20000;
 		constexpr std::int64_t kTokenEndOfText = 151643;
 		constexpr std::int64_t kTokenImEnd = 151645;
 		constexpr std::int64_t kTokenImStart = 151644;
@@ -238,6 +240,115 @@ namespace blazeclaw::core::speechrecognition {
 			return filters;
 		}
 
+		std::unordered_map<char32_t, std::uint8_t> BuildByteLevelCharToByteMap() {
+			std::vector<int> bytes;
+			for (int b = static_cast<int>('!'); b <= static_cast<int>('~'); ++b) {
+				bytes.push_back(b);
+			}
+			for (int b = 0xA1; b <= 0xAC; ++b) {
+				bytes.push_back(b);
+			}
+			for (int b = 0xAE; b <= 0xFF; ++b) {
+				bytes.push_back(b);
+			}
+
+			std::vector<int> chars = bytes;
+			int n = 0;
+			for (int b = 0; b < 256; ++b) {
+				if (std::find(bytes.begin(), bytes.end(), b) != bytes.end()) {
+					continue;
+				}
+				bytes.push_back(b);
+				chars.push_back(256 + n);
+				++n;
+			}
+
+			std::unordered_map<char32_t, std::uint8_t> map;
+			for (std::size_t i = 0; i < bytes.size() && i < chars.size(); ++i) {
+				map[static_cast<char32_t>(chars[i])] = static_cast<std::uint8_t>(bytes[i]);
+			}
+			return map;
+		}
+
+		std::vector<char32_t> DecodeUtf8Codepoints(const std::string& value) {
+			std::vector<char32_t> codepoints;
+			for (std::size_t i = 0; i < value.size();) {
+				const unsigned char lead = static_cast<unsigned char>(value[i]);
+				if (lead < 0x80) {
+					codepoints.push_back(static_cast<char32_t>(lead));
+					++i;
+					continue;
+				}
+
+				std::size_t count = 0;
+				char32_t cp = 0;
+				if ((lead & 0xE0) == 0xC0) {
+					count = 2;
+					cp = lead & 0x1F;
+				}
+				else if ((lead & 0xF0) == 0xE0) {
+					count = 3;
+					cp = lead & 0x0F;
+				}
+				else if ((lead & 0xF8) == 0xF0) {
+					count = 4;
+					cp = lead & 0x07;
+				}
+				else {
+					codepoints.push_back(static_cast<char32_t>(lead));
+					++i;
+					continue;
+				}
+
+				if (i + count > value.size()) {
+					codepoints.push_back(static_cast<char32_t>(lead));
+					++i;
+					continue;
+				}
+
+				bool valid = true;
+				for (std::size_t j = 1; j < count; ++j) {
+					const unsigned char tail = static_cast<unsigned char>(value[i + j]);
+					if ((tail & 0xC0) != 0x80) {
+						valid = false;
+						break;
+					}
+					cp = (cp << 6) | static_cast<char32_t>(tail & 0x3F);
+				}
+				if (!valid) {
+					codepoints.push_back(static_cast<char32_t>(lead));
+					++i;
+					continue;
+				}
+
+				codepoints.push_back(cp);
+				i += count;
+			}
+			return codepoints;
+		}
+
+		std::string DecodeByteLevelToken(
+			const std::string& token,
+			const std::unordered_map<char32_t, std::uint8_t>& byteMap) {
+			if (token.empty()) {
+				return token;
+			}
+			std::string output;
+			const auto cps = DecodeUtf8Codepoints(token);
+			output.reserve(cps.size());
+			for (const auto cp : cps) {
+				const auto it = byteMap.find(cp);
+				if (it != byteMap.end()) {
+					output.push_back(static_cast<char>(it->second));
+					continue;
+				}
+				if (cp <= 0x7F) {
+					output.push_back(static_cast<char>(cp));
+				}
+			}
+			return output;
+		}
+
 	} // namespace
 
 	struct SpeechRecognitionRuntime::SessionState {
@@ -246,8 +357,12 @@ namespace blazeclaw::core::speechrecognition {
 		std::unique_ptr<Ort::SessionOptions> options;
 		std::unique_ptr<Ort::Session> encoder;
 		std::unique_ptr<Ort::Session> decoderInit;
+		std::unique_ptr<Ort::Session> decoderStep;
 #endif
 		std::unordered_map<std::int64_t, std::string> tokenById;
+		std::unordered_set<std::int64_t> specialTokenIds;
+		std::unordered_map<char32_t, std::uint8_t> byteLevelCharToByte;
+		std::string tokenizerMode = "vocab_fallback";
 		bool initialized = false;
 	};
 
@@ -337,15 +452,19 @@ namespace blazeclaw::core::speechrecognition {
 		const std::filesystem::path decoderInitPath = preferInt4
 			? (rootPath / L"decoder_init.int4.onnx")
 			: (rootPath / L"decoder_init.onnx");
-		const std::filesystem::path tokenizerPath = rootPath / L"vocab.json";
+		const std::filesystem::path decoderStepPath = preferInt4
+			? (rootPath / L"decoder_step.int4.onnx")
+			: (rootPath / L"decoder_step.onnx");
+		const std::filesystem::path tokenizerJsonPath = rootPath / L"tokenizer.json";
+		const std::filesystem::path fallbackVocabPath = rootPath / L"vocab.json";
 
 		if (!std::filesystem::exists(encoderPath) ||
 			!std::filesystem::exists(decoderInitPath) ||
-			!std::filesystem::exists(tokenizerPath)) {
+			(!std::filesystem::exists(tokenizerJsonPath) && !std::filesystem::exists(fallbackVocabPath))) {
 			outResult.ok = false;
 			outResult.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::ModelNotFound,
-				.message = "required ASR model artifacts are missing (encoder/decoder_init/vocab)",
+				.message = "required ASR model artifacts are missing (encoder/decoder_init/tokenizer)",
 			};
 			m_snapshot.ready = false;
 			m_snapshot.status = "model_artifact_missing";
@@ -356,8 +475,12 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.modelVariant = preferInt4 ? "int4" : "fp32";
 		m_snapshot.encoderModelPath = ToNarrow(encoderPath.wstring());
 		m_snapshot.decoderInitModelPath = ToNarrow(decoderInitPath.wstring());
-		m_snapshot.decoderStepModelPath.clear();
-		m_snapshot.tokenizerPath = ToNarrow(tokenizerPath.wstring());
+		m_snapshot.decoderStepModelPath = std::filesystem::exists(decoderStepPath)
+			? ToNarrow(decoderStepPath.wstring())
+			: std::string();
+		m_snapshot.tokenizerPath = std::filesystem::exists(tokenizerJsonPath)
+			? ToNarrow(tokenizerJsonPath.wstring())
+			: ToNarrow(fallbackVocabPath.wstring());
 
 #if !BLAZECLAW_HAS_ONNXRUNTIME
 		outResult.ok = false;
@@ -397,27 +520,94 @@ namespace blazeclaw::core::speechrecognition {
 				decoderInitPath.c_str(),
 				*m_sessionState->options);
 
-			std::ifstream tokenizerInput(tokenizerPath, std::ios::in | std::ios::binary);
-			if (!tokenizerInput.is_open()) {
-				throw std::runtime_error("failed to open tokenizer vocab.json");
+			if (std::filesystem::exists(decoderStepPath)) {
+				m_sessionState->decoderStep = std::make_unique<Ort::Session>(
+					*m_sessionState->env,
+					decoderStepPath.c_str(),
+					*m_sessionState->options);
 			}
-			std::stringstream tokenizerBuffer;
-			tokenizerBuffer << tokenizerInput.rdbuf();
-			const auto vocabJson = nlohmann::json::parse(tokenizerBuffer.str(), nullptr, true);
-			if (!vocabJson.is_object()) {
-				throw std::runtime_error("vocab.json is not a JSON object");
-			}
+
 			m_sessionState->tokenById.clear();
-			for (auto it = vocabJson.begin(); it != vocabJson.end(); ++it) {
-				if (!it.value().is_number_integer()) {
-					continue;
+			m_sessionState->specialTokenIds.clear();
+			m_sessionState->byteLevelCharToByte = BuildByteLevelCharToByteMap();
+			m_sessionState->tokenizerMode = "vocab_fallback";
+
+			bool tokenizerLoaded = false;
+			if (std::filesystem::exists(tokenizerJsonPath)) {
+				std::ifstream tokenizerInput(tokenizerJsonPath, std::ios::in | std::ios::binary);
+				if (tokenizerInput.is_open()) {
+					std::stringstream tokenizerBuffer;
+					tokenizerBuffer << tokenizerInput.rdbuf();
+					const auto tokenizerJson = nlohmann::json::parse(tokenizerBuffer.str(), nullptr, true);
+					if (tokenizerJson.is_object()) {
+						const auto modelIt = tokenizerJson.find("model");
+						if (modelIt != tokenizerJson.end() && modelIt->is_object()) {
+							const auto vocabIt = modelIt->find("vocab");
+							if (vocabIt != modelIt->end() && vocabIt->is_object()) {
+								for (auto it = vocabIt->begin(); it != vocabIt->end(); ++it) {
+									if (!it.value().is_number_integer()) {
+										continue;
+									}
+									m_sessionState->tokenById.insert_or_assign(
+										it.value().get<std::int64_t>(),
+										it.key());
+								}
+							}
+						}
+
+						const auto addedIt = tokenizerJson.find("added_tokens");
+						if (addedIt != tokenizerJson.end() && addedIt->is_array()) {
+							for (const auto& added : *addedIt) {
+								if (!added.is_object()) {
+									continue;
+								}
+								const auto idIt = added.find("id");
+								const auto contentIt = added.find("content");
+								if (idIt == added.end() || !idIt->is_number_integer() ||
+									contentIt == added.end() || !contentIt->is_string()) {
+									continue;
+								}
+								const auto tokenId = idIt->get<std::int64_t>();
+								m_sessionState->tokenById.insert_or_assign(tokenId, contentIt->get<std::string>());
+								const auto specialIt = added.find("special");
+								if (specialIt != added.end() && specialIt->is_boolean() && specialIt->get<bool>()) {
+									m_sessionState->specialTokenIds.insert(tokenId);
+								}
+							}
+						}
+					}
 				}
-				m_sessionState->tokenById.insert_or_assign(
-					it.value().get<std::int64_t>(),
-					it.key());
+				if (!m_sessionState->tokenById.empty()) {
+					tokenizerLoaded = true;
+					m_sessionState->tokenizerMode = "tokenizer_json";
+				}
 			}
+
+			if (!tokenizerLoaded && std::filesystem::exists(fallbackVocabPath)) {
+				std::ifstream vocabInput(fallbackVocabPath, std::ios::in | std::ios::binary);
+				if (vocabInput.is_open()) {
+					std::stringstream vocabBuffer;
+					vocabBuffer << vocabInput.rdbuf();
+					const auto vocabJson = nlohmann::json::parse(vocabBuffer.str(), nullptr, true);
+					if (!vocabJson.is_object()) {
+						throw std::runtime_error("vocab.json is not a JSON object");
+					}
+					for (auto it = vocabJson.begin(); it != vocabJson.end(); ++it) {
+						if (!it.value().is_number_integer()) {
+							continue;
+						}
+						m_sessionState->tokenById.insert_or_assign(
+							it.value().get<std::int64_t>(),
+							it.key());
+					}
+				}
+			}
+
+			m_sessionState->specialTokenIds.insert(kTokenEndOfText);
+			m_sessionState->specialTokenIds.insert(kTokenImStart);
+			m_sessionState->specialTokenIds.insert(kTokenImEnd);
 			if (m_sessionState->tokenById.empty()) {
-				throw std::runtime_error("vocab.json produced an empty token map");
+				throw std::runtime_error("tokenizer produced an empty token map");
 			}
 
 			m_sessionState->initialized = true;
@@ -682,35 +872,71 @@ namespace blazeclaw::core::speechrecognition {
 			return output;
 		};
 
-		auto decodeTokens = [](const std::vector<std::int64_t>& ids,
-			const std::unordered_map<std::int64_t, std::string>& tokenById) {
+		auto decodeTokens = [](
+			const std::vector<std::int64_t>& ids,
+			const std::unordered_map<std::int64_t, std::string>& tokenById,
+			const std::unordered_set<std::int64_t>& specialTokenIds,
+			const std::unordered_map<char32_t, std::uint8_t>& byteLevelMap,
+			std::string& stopReason) {
 			std::string text;
 			for (const auto id : ids) {
-				if (id == kTokenEndOfText || id == kTokenImEnd) {
+				if (specialTokenIds.find(id) != specialTokenIds.end()) {
+					if (id == kTokenEndOfText) {
+						stopReason = "eos";
+					}
+					else if (id == kTokenImStart || id == kTokenImEnd) {
+						stopReason = "special_token";
+					}
 					break;
 				}
 				const auto it = tokenById.find(id);
 				if (it == tokenById.end()) {
 					continue;
 				}
-				std::string token = it->second;
+				const std::string decoded = DecodeByteLevelToken(it->second, byteLevelMap);
+				const std::string token = decoded.empty() ? it->second : decoded;
 				if (token.rfind("<|", 0) == 0) {
 					continue;
 				}
-				std::size_t pos = 0;
-				while ((pos = token.find("▁", pos)) != std::string::npos) {
-					token.replace(pos, std::strlen("▁"), " ");
-					pos += 1;
-				}
 				text += token;
 			}
-			while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
-				text.erase(text.begin());
-			}
-			while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
-				text.pop_back();
-			}
-			return text;
+
+			auto sanitizeTranscript = [](std::string value) {
+				for (;;) {
+					const auto markerStart = value.find("<|");
+					if (markerStart == std::string::npos) {
+						break;
+					}
+					const auto markerEnd = value.find("|>", markerStart + 2);
+					if (markerEnd == std::string::npos) {
+						value.erase(markerStart);
+						break;
+					}
+					value.erase(markerStart, markerEnd - markerStart + 2);
+				}
+				const std::array<std::string, 5> scrubPhrases = {
+					"[assistant_response]",
+					"assistant_response",
+					"\nuser\n",
+					"\nassistant\n",
+					"\rim_start",
+				};
+				for (const auto& phrase : scrubPhrases) {
+					std::size_t offset = 0;
+					while ((offset = value.find(phrase, offset)) != std::string::npos) {
+						value.erase(offset, phrase.size());
+					}
+				}
+				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+					value.erase(value.begin());
+				}
+				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+					value.pop_back();
+				}
+				return value;
+			};
+
+			return sanitizeTranscript(text);
 		};
 
 		if (isCancelled()) {
@@ -897,6 +1123,7 @@ namespace blazeclaw::core::speechrecognition {
 			promptIds.push_back(kTokenImStart);
 
 			std::vector<std::int64_t> generatedIds;
+			std::string decodeStopReason = "max_steps";
 			for (std::size_t step = 0; step < kMaxDecodeSteps; ++step) {
 				if (isCancelled()) {
 					result.ok = false;
@@ -916,6 +1143,20 @@ namespace blazeclaw::core::speechrecognition {
 						request.runId,
 						"source=runtime_checkpoint stage=during_decode");
 					return result;
+				}
+				const auto decodeElapsedMs = static_cast<std::uint32_t>(
+					std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - inferenceStart)
+						.count());
+				if (decodeElapsedMs >= kMaxDecodeWallClockMs) {
+					decodeStopReason = "timeout";
+					TraceRuntime(
+						"transcribe.decode.timeout",
+						request.runId,
+						"elapsedMs=" + std::to_string(decodeElapsedMs) +
+						" maxMs=" + std::to_string(kMaxDecodeWallClockMs) +
+						" generatedTokens=" + std::to_string(generatedIds.size()));
+					break;
 				}
 
 				std::vector<std::int64_t> ids = promptIds;
@@ -947,7 +1188,17 @@ namespace blazeclaw::core::speechrecognition {
 					encodedShape.data(),
 					encodedShape.size());
 
-				const auto decoderInputCount = m_sessionState->decoderInit->GetInputCount();
+				const bool decoderStepCompatible =
+					m_sessionState->decoderStep &&
+					m_sessionState->decoderStep->GetInputCount() == m_sessionState->decoderInit->GetInputCount();
+				Ort::Session* activeDecoder = (step > 0 && decoderStepCompatible)
+					? m_sessionState->decoderStep.get()
+					: m_sessionState->decoderInit.get();
+				const std::string activeDecoderName = (step > 0 && decoderStepCompatible)
+					? "decoder_step"
+					: "decoder_init";
+
+				const auto decoderInputCount = activeDecoder->GetInputCount();
 				std::vector<std::string> decoderInputNamesOwned;
 				std::vector<const char*> decoderInputNames;
 				std::vector<Ort::Value> decoderInputs;
@@ -958,7 +1209,7 @@ namespace blazeclaw::core::speechrecognition {
 				decoderInputs.reserve(decoderInputCount);
 
 				for (std::size_t i = 0; i < decoderInputCount; ++i) {
-					auto nameAlloc = m_sessionState->decoderInit->GetInputNameAllocated(i, allocator);
+					auto nameAlloc = activeDecoder->GetInputNameAllocated(i, allocator);
 					const std::string inputName = nameAlloc.get();
 					decoderInputNamesOwned.push_back(inputName);
 					decoderInputNames.push_back(decoderInputNamesOwned.back().c_str());
@@ -972,7 +1223,7 @@ namespace blazeclaw::core::speechrecognition {
 						decoderInputs.push_back(std::move(audioOffsetTensor));
 					}
 					else {
-						auto shape = m_sessionState->decoderInit->GetInputTypeInfo(i)
+						auto shape = activeDecoder->GetInputTypeInfo(i)
 							.GetTensorTypeAndShapeInfo()
 							.GetShape();
 						for (auto& dim : shape) {
@@ -984,7 +1235,7 @@ namespace blazeclaw::core::speechrecognition {
 						for (const auto dim : shape) {
 							count *= static_cast<std::size_t>(dim);
 						}
-						auto elemType = m_sessionState->decoderInit->GetInputTypeInfo(i)
+						auto elemType = activeDecoder->GetInputTypeInfo(i)
 							.GetTensorTypeAndShapeInfo()
 							.GetElementType();
 						if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
@@ -1010,18 +1261,18 @@ namespace blazeclaw::core::speechrecognition {
 					}
 				}
 
-				const auto decoderOutputCount = m_sessionState->decoderInit->GetOutputCount();
+				const auto decoderOutputCount = activeDecoder->GetOutputCount();
 				std::vector<std::string> decoderOutputNamesOwned;
 				std::vector<const char*> decoderOutputNames;
 				decoderOutputNamesOwned.reserve(decoderOutputCount);
 				decoderOutputNames.reserve(decoderOutputCount);
 				for (std::size_t i = 0; i < decoderOutputCount; ++i) {
-					auto nameAlloc = m_sessionState->decoderInit->GetOutputNameAllocated(i, allocator);
+					auto nameAlloc = activeDecoder->GetOutputNameAllocated(i, allocator);
 					decoderOutputNamesOwned.push_back(nameAlloc.get());
 					decoderOutputNames.push_back(decoderOutputNamesOwned.back().c_str());
 				}
 
-				auto decoderOutputs = m_sessionState->decoderInit->Run(
+				auto decoderOutputs = activeDecoder->Run(
 					Ort::RunOptions{ nullptr },
 					decoderInputNames.data(),
 					decoderInputs.data(),
@@ -1029,7 +1280,7 @@ namespace blazeclaw::core::speechrecognition {
 					decoderOutputNames.data(),
 					decoderOutputNames.size());
 				if (decoderOutputs.empty()) {
-					throw std::runtime_error("decoder_init produced no outputs");
+					throw std::runtime_error(activeDecoderName + " produced no outputs");
 				}
 
 				const Ort::Value* logitsTensor = nullptr;
@@ -1072,7 +1323,13 @@ namespace blazeclaw::core::speechrecognition {
 				const std::int64_t nextToken =
 					static_cast<std::int64_t>(std::distance(logits + lastOffset, maxIt));
 
-				if (nextToken == kTokenEndOfText || nextToken == kTokenImEnd) {
+				if (m_sessionState->specialTokenIds.find(nextToken) != m_sessionState->specialTokenIds.end()) {
+					if (nextToken == kTokenEndOfText) {
+						decodeStopReason = "eos";
+					}
+					else {
+						decodeStopReason = "special_token";
+					}
 					break;
 				}
 				generatedIds.push_back(nextToken);
@@ -1085,10 +1342,18 @@ namespace blazeclaw::core::speechrecognition {
 			TraceRuntime(
 				"transcribe.inference.completed",
 				request.runId,
-				"latencyMs=" + std::to_string(m_snapshot.lastInferenceLatencyMs));
+				"latencyMs=" + std::to_string(m_snapshot.lastInferenceLatencyMs) +
+				" generatedTokens=" + std::to_string(generatedIds.size()) +
+				" stopReason=" + decodeStopReason +
+				" tokenizerMode=" + m_sessionState->tokenizerMode);
 
 			const auto decodeStart = std::chrono::steady_clock::now();
-			result.text = decodeTokens(generatedIds, m_sessionState->tokenById);
+			result.text = decodeTokens(
+				generatedIds,
+				m_sessionState->tokenById,
+				m_sessionState->specialTokenIds,
+				m_sessionState->byteLevelCharToByte,
+				decodeStopReason);
 			m_snapshot.lastDecodeLatencyMs = static_cast<std::uint32_t>(
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::steady_clock::now() - decodeStart)

@@ -2440,6 +2440,8 @@
                 state.speechTranscribeBtn.textContent = "Queued...";
             } else if (speechStage === "transcribing") {
                 state.speechTranscribeBtn.textContent = "Transcribing...";
+            } else if (speechStage === "failed" && String(speechSessionState && speechSessionState.errorCode || "").trim() === "transcript_rejected") {
+                state.speechTranscribeBtn.textContent = "Transcribe (retry)";
             } else {
                 state.speechTranscribeBtn.textContent = "Transcribe";
             }

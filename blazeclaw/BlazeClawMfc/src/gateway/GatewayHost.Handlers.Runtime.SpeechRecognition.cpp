@@ -522,78 +522,9 @@ namespace blazeclaw::gateway {
 							}));
 					}
 
-					protocol::ResponseFrame chatResponse{};
-					if (transcribe.ok && !transcribe.text.empty()) {
-						nlohmann::json forwardedParams = nlohmann::json::object();
-						forwardedParams["message"] = transcribe.text;
-						forwardedParams["bodyForCommands"] = transcribe.text;
-						forwardedParams["bodyForAgent"] = transcribe.text;
-						forwardedParams["speechSession"] = nlohmann::json::object({
-							{ "sessionId", transcribe.sessionState.sessionId },
-							{ "runId", transcribe.sessionState.runId },
-							{ "stage", normalizedStage },
-							{ "audioPath", transcribe.sessionState.audioPath },
-							{ "text", normalizedText },
-							{ "language", normalizedLanguage },
-							{ "latencyMs", normalizedLatency },
-							{ "cancelled", transcribe.sessionState.cancelled },
-						});
-						if (hasSegment) {
-							forwardedParams["speechSession"]["segment"] = nlohmann::json::object({
-								{ "text", transcribe.sessionState.segment->text },
-								{ "final", transcribe.sessionState.segment->final },
-								{ "sequence", transcribe.sessionState.segment->sequence },
-							});
-						}
-						forwardedParams["transcriptInjection"] = nlohmann::json::object({
-							{ "source", "voice" },
-							{ "ingestMethod", "speech.transcribe" },
-							{ "sessionId", effectiveSessionId },
-							{ "runId", effectiveRunId },
-							{ "requestCorrelationId", request.id },
-							{ "orchestrationSurface", "chat.send" },
-						});
-						forwardedParams["speechArtifact"] = nlohmann::json::object({
-							{ "type", "voice_transcript" },
-							{ "source", "speech.transcribe" },
-							{ "audioPath", transcribe.sessionState.audioPath },
-							{ "text", normalizedText },
-							{ "language", normalizedLanguage },
-							{ "latencyMs", normalizedLatency },
-							{ "stage", normalizedStage },
-							{ "hasSegment", hasSegment },
-						});
-						if (hasSegment) {
-							forwardedParams["speechArtifact"]["segment"] = nlohmann::json::object({
-								{ "text", transcribe.sessionState.segment->text },
-								{ "final", transcribe.sessionState.segment->final },
-								{ "sequence", transcribe.sessionState.segment->sequence },
-							});
-						}
-						if (!sessionId.empty()) {
-							forwardedParams["sessionId"] = sessionId;
-						}
-						if (!runId.empty()) {
-							forwardedParams["runId"] = runId;
-						}
-
-						chatResponse = host.RuntimeContext().dispatcher->Dispatch(
-							protocol::RequestFrame{
-								.id = request.id,
-								.method = "chat.send",
-								.paramsJson = forwardedParams.dump(),
-							});
-
-						EmitTelemetryEvent(
-							"gateway.speech.forwarding",
-							JsonObject({
-								{ "runId", JsonString(effectiveRunId) },
-								{ "sessionId", JsonString(effectiveSessionId) },
-								{ "targetMethod", JsonString("chat.send") },
-								{ "forwardedOk", JsonBool(chatResponse.ok) },
-								{ "hasSegment", JsonBool(hasSegment) },
-							}));
-					}
+					constexpr bool forwardedOk = false;
+					const std::string forwardedMethod;
+					const std::string forwardedPayload = "{}";
 
 					const std::string speechSessionJson =
 						transcribe.sessionState.segment.has_value()
@@ -679,9 +610,9 @@ namespace blazeclaw::gateway {
 										? "Transcription cancelled. Retry if needed."
 										: "Retry after checking microphone/audio input and runtime readiness.")) },
 							}) },
-							{ "forwardedOk", JsonBool(chatResponse.ok) },
-							{ "forwardedMethod", JsonString(transcribe.ok && !transcribe.text.empty() ? "chat.send" : "") },
-							{ "forwardedPayload", JsonString(chatResponse.payloadJson.value_or(std::string("{}"))) },
+							{ "forwardedOk", JsonBool(forwardedOk) },
+							{ "forwardedMethod", JsonString(forwardedMethod) },
+							{ "forwardedPayload", JsonString(forwardedPayload) },
 						}));
 				});
 		}
