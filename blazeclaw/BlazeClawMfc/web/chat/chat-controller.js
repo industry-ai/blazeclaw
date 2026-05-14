@@ -1945,6 +1945,9 @@
             value = value.replace(/<\|[^|]*\|>/g, " ");
             value = value.replace(/\[assistant_response\]/gi, " ");
             value = value.replace(/assistant_response/gi, " ");
+            value = value.replace(/\[user_message\]/gi, " ");
+            value = value.replace(/^language\s+[^\s<]+\s*<asr_text>\s*/gi, "");
+            value = value.replace(/<asr_text>/gi, " ");
 
             const lower = value.toLowerCase();
             const boundaries = ["\nuser\n", "\nassistant\n", "\r\nuser\r\n", "\r\nassistant\r\n"];
@@ -1988,6 +1991,26 @@
                 cleaned = cleaned.replace(/\s+/g, " ").trim();
             }
 
+            const compact = cleaned.replace(/\s+/g, "");
+            const compactUniqueChars = new Set(compact).size;
+            const punctuationCount = (compact.match(/[.,!?，。！？；;:、]/g) || []).length;
+            const cjkCount = (cleaned.match(/[\u4e00-\u9fff]/g) || []).length;
+            const shortCjkUtterance = cjkCount > 0 && compact.length <= 12 && compactUniqueChars >= 3;
+            if (shortCjkUtterance) {
+                return { accepted: true, reason: "", cleanedText: cleaned };
+            }
+            if (compact.length >= 4) {
+                if (compactUniqueChars === 1) {
+                    return { accepted: false, reason: "repetitive transcript pattern detected", cleanedText: cleaned };
+                }
+                if (compact.length <= 12 && compactUniqueChars <= 2 && longestRun >= 5 && cjkCount === 0) {
+                    return { accepted: false, reason: "repetitive transcript pattern detected", cleanedText: cleaned };
+                }
+                if (compact.length <= 8 && punctuationCount >= 3 && punctuationCount / compact.length >= 0.5 && compactUniqueChars <= 3 && cjkCount === 0) {
+                    return { accepted: false, reason: "punctuation-heavy transcript pattern detected", cleanedText: cleaned };
+                }
+            }
+
             const mojibakeHintCount = (cleaned.match(/[ÂÃå°ðĿ]/g) || []).length;
             if (cleaned.length >= 16 && mojibakeHintCount / cleaned.length > 0.35) {
                 return { accepted: false, reason: "mojibake transcript pattern detected", cleanedText: cleaned };
@@ -2000,7 +2023,6 @@
 
             const alphaCount = (cleaned.match(/[A-Za-z]/g) || []).length;
             const upperCount = (cleaned.match(/[A-Z]/g) || []).length;
-            const cjkCount = (cleaned.match(/[\u4e00-\u9fff]/g) || []).length;
             const asciiWord = cleaned.match(/^[A-Za-z!?.\s]{3,24}$/) !== null;
             if (cjkCount === 0 &&
                 asciiWord &&
@@ -2032,6 +2054,9 @@
                 runId: nextId(),
                 prompt: prompt || String(state.inputEl && state.inputEl.value || "").trim(),
             };
+            const transcriptionTimeoutMs = Number.isFinite(Number(sendOptions.timeoutMs)) && Number(sendOptions.timeoutMs) > 0
+                ? Number(sendOptions.timeoutMs)
+                : 90000;
             if (audioPath) {
                 transcriptRequest.audioPath = audioPath;
             }
@@ -2051,11 +2076,18 @@
             });
             updateComposerState();
 
+            let transcriptionTimeoutId = null;
             try {
-                const response = await requestWithOverride(
+                const transcriptionPromise = requestWithOverride(
                     "speech.transcribe",
                     transcriptRequest,
                     requestOverride);
+                const timeoutPromise = new Promise((_, reject) => {
+                    transcriptionTimeoutId = window.setTimeout(() => {
+                        reject(new Error(`speech transcribe timed out after ${transcriptionTimeoutMs} ms`));
+                    }, transcriptionTimeoutMs);
+                });
+                const response = await Promise.race([transcriptionPromise, timeoutPromise]);
                 const payload = response && response.payload && typeof response.payload === "object"
                     ? response.payload
                     : {};
@@ -2141,10 +2173,13 @@
                         return;
                     }
 
+                    const detail = String(state.speechSessionState.errorMessage || "").trim();
                     const guidance = state.speechSessionState.retryGuidance
                         ? ` (${state.speechSessionState.retryGuidance})`
                         : "";
-                    const msg = `speech transcribe ${sessionErrorCode}${guidance}`;
+                    const msg = detail
+                        ? `speech transcribe ${sessionErrorCode}: ${detail}${guidance}`
+                        : `speech transcribe ${sessionErrorCode}${guidance}`;
                     if (classified.behaviorClass === "status") {
                         state.speechSessionState.errorMessage = msg;
                     } else if (classified.behaviorClass === "toast") {
@@ -2155,25 +2190,32 @@
                 }
                 updateComposerState();
             } catch (error) {
-                const classified = classifySpeechError("transcribe_failed", "toast");
+                const errorMessage = String(error && error.message ? error.message : error || "speech transcribe failed");
+                const isTimeout = /timed out/i.test(errorMessage);
+                const classified = classifySpeechError(isTimeout ? "transcribe_timeout" : "transcribe_failed", "toast");
                 state.speechSessionState = {
                     stage: "failed",
                     text: "",
                     segmentText: "",
                     segmentFinal: true,
                     segmentSequence: 0,
-                    runId: "",
-                    sessionId: "",
-                    errorCode: "transcribe_failed",
-                    errorMessage: String(error || "speech transcribe failed"),
+                    runId: transcriptRequest.runId,
+                    sessionId: transcriptRequest.sessionId,
+                    audioPath,
+                    errorCode: isTimeout ? "transcribe_timeout" : "transcribe_failed",
+                    errorMessage,
                     errorClass: classified.behaviorClass,
-                    retryable: false,
+                    retryable: true,
                     retryStrategy: "immediate",
                     retryGuidance: "Retry after checking microphone/audio input and runtime readiness.",
                     updatedAtMs: Date.now(),
                 };
-                addMessage(`speech transcribe error: ${String(error)}`, "error");
+                addMessage(`speech transcribe error: ${errorMessage}`, "error");
                 updateComposerState();
+            } finally {
+                if (transcriptionTimeoutId !== null) {
+                    window.clearTimeout(transcriptionTimeoutId);
+                }
             }
         }
 

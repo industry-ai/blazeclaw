@@ -25,10 +25,9 @@ Updated `SpeechRecognitionRuntime.cpp` decode flow:
 
 ### 3) Decoder runtime path hardening (Phase C)
 Updated `SpeechRecognitionRuntime.cpp`:
-- Session state now loads `decoder_step(.int4).onnx` when available.
-- Decode loop selects:
-  - step 0 -> `decoder_init`
-  - step > 0 -> `decoder_step` when present, else fallback to `decoder_init`
+- Session state still detects and loads `decoder_step(.int4).onnx` when present for diagnostics.
+- Runtime decoding is now pinned to `decoder_init` for all steps as a safety rollback.
+- Added explicit trace telemetry when a step model is present but intentionally disabled pending real `input_embeds` + KV-cache integration.
 - Existing timeout/cancel checkpoints remain active.
 
 ### 4) Frontend transcript quality gate (Phase D)
@@ -45,6 +44,7 @@ Updated `BlazeClawMfc/web/chat/index.js`:
 
 ## Diagnostics and build status (Phase E)
 - File-level diagnostics passed for edited runtime/web files.
+- Runtime failure surfaces now include decoder strategy and generated-token context for `decoder_failed` / `inference_failed` investigation.
 - Solution build succeeded after implementation changes.
 
 ## Manual validation checklist
@@ -58,5 +58,6 @@ Updated `BlazeClawMfc/web/chat/index.js`:
 5. Close app during/after transcription and confirm clean exit.
 
 ## Known limitations / follow-up
-- Decoder-step integration is guarded and shape-agnostic; model-export-specific KV/cache wiring can still be improved for optimal transcription quality.
+- `decoder_step` remains intentionally disabled in live decoding until the runtime implements the model-export-specific `input_embeds` + KV-cache contract.
+- `decoder_init`-only decoding is a stabilization fallback and may still require prompt or logits-path tuning after more microphone samples.
 - Transcript quality thresholds may require tuning after several real microphone samples.

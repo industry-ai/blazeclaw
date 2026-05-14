@@ -30,14 +30,131 @@ namespace blazeclaw::core::speechrecognition {
 
 		constexpr std::uint32_t kDefaultSampleRate = 16000;
 		constexpr std::size_t kMaxDecodeSteps = 128;
-		constexpr std::uint32_t kMaxDecodeWallClockMs = 20000;
+		// Budget applies to the autoregressive decode loop only (encoder is excluded).
+		// decoder_init-only is slow; keep aligned with the WebView transcribe RPC budget.
+		constexpr std::uint32_t kMaxDecodeWallClockMs = 90000;
 		constexpr std::int64_t kTokenEndOfText = 151643;
 		constexpr std::int64_t kTokenImEnd = 151645;
 		constexpr std::int64_t kTokenImStart = 151644;
 		constexpr std::int64_t kTokenAudioStart = 151669;
 		constexpr std::int64_t kTokenAudioEnd = 151670;
 		constexpr std::int64_t kTokenAudioPad = 151676;
+		// ASR chat template matches `qwen3-asr-onnx` `src/prompt.py` `build_prompt_ids`
+		// (validated at export time). Do not substitute nearby vocab ids — wrong role
+		// tokens collapse decoding to garbage / repetition.
+		constexpr std::int64_t kTokenNewline = 198;
+		constexpr std::int64_t kPromptTextSystem = 9125;
+		constexpr std::int64_t kPromptTextUser = 882;
+		constexpr std::int64_t kPromptTextAssistant = 77091;
+		// Qwen3-ASR assistant output may emit this marker token; do not treat as EOS.
 		constexpr std::int64_t kTokenAsrText = 151704;
+
+		std::size_t FindSubstringCaseInsensitive(const std::string& haystack, const std::string& needle) {
+			if (needle.empty() || haystack.size() < needle.size()) {
+				return std::string::npos;
+			}
+			for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
+				bool match = true;
+				for (std::size_t j = 0; j < needle.size(); ++j) {
+					if (std::tolower(static_cast<unsigned char>(haystack[i + j])) !=
+						std::tolower(static_cast<unsigned char>(needle[j]))) {
+						match = false;
+						break;
+					}
+				}
+				if (match) {
+					return i;
+				}
+			}
+			return std::string::npos;
+		}
+
+		bool StartsWithLanguageKeywordIgnoreCase(const std::string& value) {
+			static const char kLit[] = "language";
+			constexpr std::size_t n = sizeof(kLit) - 1;
+			if (value.size() < n) {
+				return false;
+			}
+			for (std::size_t i = 0; i < n; ++i) {
+				if (std::tolower(static_cast<unsigned char>(value[i])) !=
+					static_cast<unsigned char>(kLit[i])) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		bool PrefixIsQwen3AsrLanguagePreamble(const std::string& prefix) {
+			std::size_t end = prefix.size();
+			while (end > 0 && std::isspace(static_cast<unsigned char>(prefix[end - 1]))) {
+				--end;
+			}
+			if (end == 0) {
+				return false;
+			}
+			const std::string p = prefix.substr(0, end);
+			if (!StartsWithLanguageKeywordIgnoreCase(p)) {
+				return false;
+			}
+			constexpr std::size_t kLanguageLen = sizeof("language") - 1;
+			std::size_t pos = kLanguageLen;
+			if (pos >= p.size() || !std::isspace(static_cast<unsigned char>(p[pos]))) {
+				return false;
+			}
+			while (pos < p.size() && std::isspace(static_cast<unsigned char>(p[pos]))) {
+				++pos;
+			}
+			if (pos >= p.size()) {
+				return false;
+			}
+			const std::size_t langNameStart = pos;
+			while (pos < p.size() && !std::isspace(static_cast<unsigned char>(p[pos]))) {
+				const unsigned char c = static_cast<unsigned char>(p[pos]);
+				if (c < 0x80u) {
+					++pos;
+					continue;
+				}
+				if ((c & 0xE0u) == 0xC0u) {
+					pos += (pos + 2 <= p.size()) ? 2 : 1;
+					continue;
+				}
+				if ((c & 0xF0u) == 0xE0u) {
+					pos += (pos + 3 <= p.size()) ? 3 : 1;
+					continue;
+				}
+				if ((c & 0xF8u) == 0xF0u) {
+					pos += (pos + 4 <= p.size()) ? 4 : 1;
+					continue;
+				}
+				++pos;
+			}
+			if (pos <= langNameStart || pos - langNameStart < 2) {
+				return false;
+			}
+			return pos == p.size();
+		}
+
+		void StripQwen3AsrTemplateNoise(std::string& value) {
+			for (;;) {
+				const std::size_t tagPos = FindSubstringCaseInsensitive(value, "<asr_text>");
+				if (tagPos == std::string::npos) {
+					break;
+				}
+				constexpr std::size_t kTagLen = 10;
+				if (PrefixIsQwen3AsrLanguagePreamble(value.substr(0, tagPos))) {
+					value.erase(0, tagPos + kTagLen);
+				}
+				else {
+					value.erase(tagPos, kTagLen);
+				}
+				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+					value.erase(value.begin());
+				}
+				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+					value.pop_back();
+				}
+			}
+		}
 
 		std::string ToNarrowLocal(const std::wstring& value) {
 			std::string output;
@@ -186,55 +303,66 @@ namespace blazeclaw::core::speechrecognition {
 			return 0.5f - 0.5f * std::cos(angle);
 		}
 
+		float HzToMelSlaney(const float hz) {
+			constexpr float kFSp = 200.0f / 3.0f;
+			constexpr float kMinLogHz = 1000.0f;
+			constexpr float kMinLogMel = kMinLogHz / kFSp;
+			constexpr float kLogStep = 0.06875177742094912f;
+			if (hz < kMinLogHz) {
+				return hz / kFSp;
+			}
+			return kMinLogMel + std::log(hz / kMinLogHz) / kLogStep;
+		}
+
+		float MelToHzSlaney(const float mel) {
+			constexpr float kFSp = 200.0f / 3.0f;
+			constexpr float kMinLogHz = 1000.0f;
+			constexpr float kMinLogMel = kMinLogHz / kFSp;
+			constexpr float kLogStep = 0.06875177742094912f;
+			if (mel < kMinLogMel) {
+				return mel * kFSp;
+			}
+			return kMinLogHz * std::exp(kLogStep * (mel - kMinLogMel));
+		}
+
 		std::vector<float> BuildMelFilterbank(
 			std::uint32_t sampleRate,
 			std::size_t nFft,
 			std::size_t nMels,
 			float fMin,
 			float fMax) {
-			auto hzToMel = [](float hz) {
-				return 2595.0f * std::log10(1.0f + hz / 700.0f);
-			};
-			auto melToHz = [](float mel) {
-				return 700.0f * (std::pow(10.0f, mel / 2595.0f) - 1.0f);
-			};
-
 			const std::size_t nFreqBins = (nFft / 2) + 1;
 			std::vector<float> filters(nMels * nFreqBins, 0.0f);
-			const float melMin = hzToMel(fMin);
-			const float melMax = hzToMel(fMax);
+			const float melMin = HzToMelSlaney(fMin);
+			const float melMax = HzToMelSlaney(fMax);
 			std::vector<float> melPoints(nMels + 2, 0.0f);
 			for (std::size_t i = 0; i < melPoints.size(); ++i) {
 				melPoints[i] = melMin + (melMax - melMin) * static_cast<float>(i) /
 					static_cast<float>(melPoints.size() - 1);
 			}
-			std::vector<std::size_t> bins(melPoints.size(), 0);
+			std::vector<float> hzPoints(melPoints.size(), 0.0f);
 			for (std::size_t i = 0; i < melPoints.size(); ++i) {
-				const float hz = melToHz(melPoints[i]);
-				const float scaled = (static_cast<float>(nFft + 1) * hz) /
-					static_cast<float>(sampleRate);
-				bins[i] = static_cast<std::size_t>(std::floor((std::max)(0.0f, scaled)));
-				if (bins[i] >= nFreqBins) {
-					bins[i] = nFreqBins - 1;
-				}
+				hzPoints[i] = MelToHzSlaney(melPoints[i]);
 			}
 
 			for (std::size_t m = 1; m <= nMels; ++m) {
-				const std::size_t left = bins[m - 1];
-				const std::size_t center = bins[m];
-				const std::size_t right = bins[m + 1];
-				if (center <= left || right <= center) {
+				const float leftHz = hzPoints[m - 1];
+				const float centerHz = hzPoints[m];
+				const float rightHz = hzPoints[m + 1];
+				if (centerHz <= leftHz || rightHz <= centerHz) {
 					continue;
 				}
-				for (std::size_t k = left; k < center; ++k) {
-					filters[(m - 1) * nFreqBins + k] =
-						(static_cast<float>(k - left)) /
-						static_cast<float>(center - left);
-				}
-				for (std::size_t k = center; k < right; ++k) {
-					filters[(m - 1) * nFreqBins + k] =
-						(static_cast<float>(right - k)) /
-						static_cast<float>(right - center);
+				const float enorm = 2.0f / (rightHz - leftHz);
+				for (std::size_t k = 0; k < nFreqBins; ++k) {
+					const float hz = static_cast<float>(sampleRate) * static_cast<float>(k) / static_cast<float>(nFft);
+					float weight = 0.0f;
+					if (hz >= leftHz && hz < centerHz) {
+						weight = (hz - leftHz) / (centerHz - leftHz);
+					}
+					else if (hz >= centerHz && hz <= rightHz) {
+						weight = (rightHz - hz) / (rightHz - centerHz);
+					}
+					filters[(m - 1) * nFreqBins + k] = weight * enorm;
 				}
 			}
 			return filters;
@@ -327,6 +455,31 @@ namespace blazeclaw::core::speechrecognition {
 			return codepoints;
 		}
 
+		void AppendUtf8Codepoint(char32_t cp, std::string& output) {
+			if (cp > 0x10FFFFu) {
+				return;
+			}
+			if (cp <= 0x7Fu) {
+				output.push_back(static_cast<char>(cp));
+				return;
+			}
+			if (cp <= 0x7FFu) {
+				output.push_back(static_cast<char>(0xC0u | ((cp >> 6) & 0x1Fu)));
+				output.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+				return;
+			}
+			if (cp <= 0xFFFFu) {
+				output.push_back(static_cast<char>(0xE0u | ((cp >> 12) & 0x0Fu)));
+				output.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+				output.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+				return;
+			}
+			output.push_back(static_cast<char>(0xF0u | ((cp >> 18) & 0x07u)));
+			output.push_back(static_cast<char>(0x80u | ((cp >> 12) & 0x3Fu)));
+			output.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+			output.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+		}
+
 		std::string DecodeByteLevelToken(
 			const std::string& token,
 			const std::unordered_map<char32_t, std::uint8_t>& byteMap) {
@@ -344,7 +497,10 @@ namespace blazeclaw::core::speechrecognition {
 				}
 				if (cp <= 0x7F) {
 					output.push_back(static_cast<char>(cp));
+					continue;
 				}
+				// Literal CJK (etc.) merged with byte-level prefix in one vocab piece.
+				AppendUtf8Codepoint(cp, output);
 			}
 			return output;
 		}
@@ -525,6 +681,10 @@ namespace blazeclaw::core::speechrecognition {
 					*m_sessionState->env,
 					decoderStepPath.c_str(),
 					*m_sessionState->options);
+				TraceRuntime(
+					"runtime.decoder_step.loaded_but_disabled",
+					std::string(),
+					"reason=requires_input_embeds_and_kv_cache_support before safe runtime use");
 			}
 
 			m_sessionState->tokenById.clear();
@@ -839,20 +999,29 @@ namespace blazeclaw::core::speechrecognition {
 			if (samples.size() < nFft) {
 				return std::vector<float>{};
 			}
-			const std::size_t frames = 1 + ((samples.size() - nFft) / hop);
+			std::vector<float> padded = samples;
+			constexpr std::size_t kTargetSamples = 480000;
+			if (padded.size() < kTargetSamples) {
+				padded.resize(kTargetSamples, 0.0f);
+			}
+			else if (padded.size() > kTargetSamples) {
+				padded.resize(kTargetSamples);
+			}
+			const std::size_t frames = 1 + ((padded.size() - nFft) / hop);
 			std::vector<float> output(nMels * frames, 0.0f);
 			std::vector<float> window(nFft, 0.0f);
 			for (std::size_t i = 0; i < nFft; ++i) {
 				window[i] = HannWindow(i, nFft);
 			}
 			std::vector<float> spectrum(nBins, 0.0f);
+			float globalMax = -std::numeric_limits<float>::infinity();
 			for (std::size_t frame = 0; frame < frames; ++frame) {
 				const std::size_t base = frame * hop;
 				for (std::size_t k = 0; k < nBins; ++k) {
 					double real = 0.0;
 					double imag = 0.0;
 					for (std::size_t n = 0; n < nFft; ++n) {
-						const double x = static_cast<double>(samples[base + n] * window[n]);
+						const double x = static_cast<double>(padded[base + n] * window[n]);
 						const double angle = (2.0 * 3.14159265358979323846 * static_cast<double>(k * n)) /
 							static_cast<double>(nFft);
 						real += x * std::cos(angle);
@@ -866,8 +1035,15 @@ namespace blazeclaw::core::speechrecognition {
 						melEnergy += static_cast<double>(melFilters[m * nBins + b]) *
 							static_cast<double>(spectrum[b]);
 					}
-					output[m * frames + frame] = static_cast<float>(std::log10((std::max)(1e-10, melEnergy)));
+					const float logValue = static_cast<float>(std::log10((std::max)(1e-10, melEnergy)));
+					output[m * frames + frame] = logValue;
+					globalMax = (std::max)(globalMax, logValue);
 				}
+			}
+			const float floorValue = globalMax - 8.0f;
+			for (auto& value : output) {
+				value = (std::max)(value, floorValue);
+				value = (value + 4.0f) / 4.0f;
 			}
 			return output;
 		};
@@ -880,6 +1056,9 @@ namespace blazeclaw::core::speechrecognition {
 			std::string& stopReason) {
 			std::string text;
 			for (const auto id : ids) {
+				if (id == kTokenAsrText) {
+					continue;
+				}
 				if (specialTokenIds.find(id) != specialTokenIds.end()) {
 					if (id == kTokenEndOfText) {
 						stopReason = "eos";
@@ -914,9 +1093,10 @@ namespace blazeclaw::core::speechrecognition {
 					}
 					value.erase(markerStart, markerEnd - markerStart + 2);
 				}
-				const std::array<std::string, 5> scrubPhrases = {
+				const std::array<std::string, 6> scrubPhrases = {
 					"[assistant_response]",
 					"assistant_response",
+					"[user_message]",
 					"\nuser\n",
 					"\nassistant\n",
 					"\rim_start",
@@ -927,6 +1107,7 @@ namespace blazeclaw::core::speechrecognition {
 						value.erase(offset, phrase.size());
 					}
 				}
+				StripQwen3AsrTemplateNoise(value);
 				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
 					value.erase(value.begin());
 				}
@@ -1041,6 +1222,10 @@ namespace blazeclaw::core::speechrecognition {
 		}
 
 		const auto inferenceStart = std::chrono::steady_clock::now();
+		const std::string decoderStrategy = m_sessionState->decoderStep
+			? "decoder_init_only(step_model_disabled_pending_input_embeds_and_kv_cache)"
+			: "decoder_init_only";
+		std::size_t generatedTokenCount = 0;
 		try {
 			Ort::AllocatorWithDefaultOptions allocator;
 			auto encoderInputNameAlloc = m_sessionState->encoder->GetInputNameAllocated(0, allocator);
@@ -1106,24 +1291,45 @@ namespace blazeclaw::core::speechrecognition {
 			if (encodedCount == 0) {
 				throw std::runtime_error("encoder output has zero elements");
 			}
+			std::size_t encodedSequenceLength = 0;
+			if (encodedShape.size() >= 2 && encodedShape[1] > 0) {
+				encodedSequenceLength = static_cast<std::size_t>(encodedShape[1]);
+			}
+			else if (encodedShape.size() == 3 && encodedShape[2] > 0) {
+				encodedSequenceLength = static_cast<std::size_t>(encodedShape[2]);
+			}
+			if (encodedSequenceLength == 0) {
+				throw std::runtime_error("encoder output sequence length is invalid");
+			}
 			float* encodedPtr = encoderOutputs[0].GetTensorMutableData<float>();
 			std::vector<float> encodedFeatures(encodedPtr, encodedPtr + encodedCount);
 
 			std::vector<std::int64_t> promptIds = {
 				kTokenImStart,
-				kTokenAsrText,
+				kPromptTextSystem,
+				kTokenNewline,
+				kTokenImEnd,
+				kTokenNewline,
+				kTokenImStart,
+				kPromptTextUser,
+				kTokenNewline,
 				kTokenAudioStart,
 			};
-			const std::size_t audioPadCount = (std::min<std::size_t>)(256, frames > 0 ? (frames / 8 + 1) : 1);
+			const std::size_t audioPadCount = encodedSequenceLength;
+			const std::size_t audioPadStartIndex = promptIds.size();
 			for (std::size_t i = 0; i < audioPadCount; ++i) {
 				promptIds.push_back(kTokenAudioPad);
 			}
 			promptIds.push_back(kTokenAudioEnd);
 			promptIds.push_back(kTokenImEnd);
+			promptIds.push_back(kTokenNewline);
 			promptIds.push_back(kTokenImStart);
+			promptIds.push_back(kPromptTextAssistant);
+			promptIds.push_back(kTokenNewline);
 
 			std::vector<std::int64_t> generatedIds;
 			std::string decodeStopReason = "max_steps";
+			const auto decodeLoopStart = std::chrono::steady_clock::now();
 			for (std::size_t step = 0; step < kMaxDecodeSteps; ++step) {
 				if (isCancelled()) {
 					result.ok = false;
@@ -1146,7 +1352,7 @@ namespace blazeclaw::core::speechrecognition {
 				}
 				const auto decodeElapsedMs = static_cast<std::uint32_t>(
 					std::chrono::duration_cast<std::chrono::milliseconds>(
-						std::chrono::steady_clock::now() - inferenceStart)
+						std::chrono::steady_clock::now() - decodeLoopStart)
 						.count());
 				if (decodeElapsedMs >= kMaxDecodeWallClockMs) {
 					decodeStopReason = "timeout";
@@ -1172,8 +1378,22 @@ namespace blazeclaw::core::speechrecognition {
 					inputIdsShape.data(),
 					inputIdsShape.size());
 
+				std::vector<std::int64_t> positionIds(ids.size());
+				std::iota(
+					positionIds.begin(),
+					positionIds.end(),
+					static_cast<std::int64_t>(0));
+				Ort::Value positionIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
+					memInfo,
+					positionIds.data(),
+					positionIds.size(),
+					inputIdsShape.data(),
+					inputIdsShape.size());
+
 				const std::vector<std::int64_t> audioOffsetShape = { 1 };
-				std::array<std::int64_t, 1> audioOffset{ 0 };
+				std::array<std::int64_t, 1> audioOffset{
+					static_cast<std::int64_t>(audioPadStartIndex),
+				};
 				Ort::Value audioOffsetTensor = Ort::Value::CreateTensor<std::int64_t>(
 					memInfo,
 					audioOffset.data(),
@@ -1188,15 +1408,8 @@ namespace blazeclaw::core::speechrecognition {
 					encodedShape.data(),
 					encodedShape.size());
 
-				const bool decoderStepCompatible =
-					m_sessionState->decoderStep &&
-					m_sessionState->decoderStep->GetInputCount() == m_sessionState->decoderInit->GetInputCount();
-				Ort::Session* activeDecoder = (step > 0 && decoderStepCompatible)
-					? m_sessionState->decoderStep.get()
-					: m_sessionState->decoderInit.get();
-				const std::string activeDecoderName = (step > 0 && decoderStepCompatible)
-					? "decoder_step"
-					: "decoder_init";
+				Ort::Session* activeDecoder = m_sessionState->decoderInit.get();
+				const std::string activeDecoderName = "decoder_init";
 
 				const auto decoderInputCount = activeDecoder->GetInputCount();
 				std::vector<std::string> decoderInputNamesOwned;
@@ -1221,6 +1434,9 @@ namespace blazeclaw::core::speechrecognition {
 					}
 					else if (inputName.find("audio_offset") != std::string::npos) {
 						decoderInputs.push_back(std::move(audioOffsetTensor));
+					}
+					else if (inputName.find("position_ids") != std::string::npos) {
+						decoderInputs.push_back(std::move(positionIdsTensor));
 					}
 					else {
 						auto shape = activeDecoder->GetInputTypeInfo(i)
@@ -1334,6 +1550,7 @@ namespace blazeclaw::core::speechrecognition {
 				}
 				generatedIds.push_back(nextToken);
 			}
+			generatedTokenCount = generatedIds.size();
 
 			m_snapshot.lastInferenceLatencyMs = static_cast<std::uint32_t>(
 				std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1343,9 +1560,14 @@ namespace blazeclaw::core::speechrecognition {
 				"transcribe.inference.completed",
 				request.runId,
 				"latencyMs=" + std::to_string(m_snapshot.lastInferenceLatencyMs) +
-				" generatedTokens=" + std::to_string(generatedIds.size()) +
+				" generatedTokens=" + std::to_string(generatedTokenCount) +
 				" stopReason=" + decodeStopReason +
-				" tokenizerMode=" + m_sessionState->tokenizerMode);
+				" tokenizerMode=" + m_sessionState->tokenizerMode +
+				" decoderStrategy=" + decoderStrategy +
+				" promptTokenCount=" + std::to_string(promptIds.size()) +
+				" audioPadStartIndex=" + std::to_string(audioPadStartIndex) +
+				" audioPadCount=" + std::to_string(audioPadCount) +
+				" encodedSequenceLength=" + std::to_string(encodedSequenceLength));
 
 			const auto decodeStart = std::chrono::steady_clock::now();
 			result.text = decodeTokens(
@@ -1361,7 +1583,10 @@ namespace blazeclaw::core::speechrecognition {
 			if (result.text.empty()) {
 				result.error = SpeechRecognitionError{
 					.code = SpeechRecognitionErrorCode::DecoderFailed,
-					.message = "decoder produced an empty transcript",
+					.message = "decoder produced an empty transcript (generatedTokens=" +
+						std::to_string(generatedTokenCount) +
+						", stopReason=" + decodeStopReason +
+						", decoderStrategy=" + decoderStrategy + ")",
 				};
 				result.ok = false;
 				result.sessionState.stage = SpeechSessionStage::Failed;
@@ -1399,10 +1624,18 @@ namespace blazeclaw::core::speechrecognition {
 			return result;
 		}
 		catch (const std::exception& ex) {
+			const std::string inferenceMessage = std::string(ex.what()) +
+				" (generatedTokens=" + std::to_string(generatedTokenCount) +
+				", decoderStrategy=" + decoderStrategy + ")";
+			TraceRuntime(
+				"transcribe.inference.failed",
+				request.runId,
+				"message=" + inferenceMessage);
+			TRACE("[SpeechRecognition][transcribe.inference.failed] runId=%S %S\n", request.runId.c_str(), inferenceMessage.c_str());
 			result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::InferenceFailed,
-				.message = ex.what(),
+				.message = "inference exception: " + inferenceMessage,
 			};
 			result.sessionState.stage = SpeechSessionStage::Failed;
 			result.sessionState.error = result.error;
