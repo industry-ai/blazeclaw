@@ -222,3 +222,79 @@ TEST_CASE("Cron next run respects retry pending timestamp", "[cron][timer]") {
 	REQUIRE(nextRun.has_value());
 	REQUIRE(nextRun.value() == pendingMs);
 }
+
+TEST_CASE("Cron timer triggers failure alert after threshold", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert" },
+			{ "name", "alert job" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "bad-target" } } },
+			{ "failureAlert", { { "after", 2 }, { "cooldownMs", 10'000 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(runs[0].value("failureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs);
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs);
+}
+
+TEST_CASE("Cron timer respects failureAlert false disable", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-disabled" },
+			{ "name", "alert disabled" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "bad-target" } } },
+			{ "failureAlert", false },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 3 }, { "lastFailureAlertAtMs", nowMs - 1000 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+}
+
+TEST_CASE("Wake validator rejects unsupported mode", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "wake-bad-mode",
+		.method = "wake",
+		.paramsJson = std::string("{\"mode\":\"later\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.mode") != std::string::npos);
+}
+
+TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "run-bad-mode",
+		.method = "cron.run",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"mode\":\"later\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.mode") != std::string::npos);
+}

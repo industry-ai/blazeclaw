@@ -306,7 +306,14 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 					return static_cast<wchar_t>(std::towlower(ch));
 				});
 			if (mode == L"on_demand" || mode == L"idle_timeout") {
-				speechRuntimeHotMode.assign(mode.begin(), mode.end());
+				speechRuntimeHotMode.clear();
+				speechRuntimeHotMode.reserve(mode.size());
+				for (const wchar_t ch : mode) {
+					speechRuntimeHotMode.push_back(
+						ch <= 0x7F
+						? static_cast<char>(ch)
+						: '?');
+				}
 			}
 		}
 		const bool speechStartupLoadEnabled =

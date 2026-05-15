@@ -201,9 +201,9 @@ namespace blazeclaw::gateway {
 			if (p != nullptr) {
 				*p = L'\0';
 			}
-			CString recordingsDir;
+			CStringW recordingsDir;
 			recordingsDir.Format(L"%s\\BlazeClawRecordings", exePath);
-			CreateDirectoryW(recordingsDir, nullptr);
+			CreateDirectoryW(recordingsDir.GetString(), nullptr);
 
 			SYSTEMTIME st;
 			GetLocalTime(&st);

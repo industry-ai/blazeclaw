@@ -110,6 +110,80 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		bool TryReadTopLevelStringField(
+			const std::string& json,
+			const std::string& fieldName,
+			std::string& valueOut) {
+			const std::string token = "\"" + fieldName + "\"";
+			std::size_t tokenPos = json.find(token);
+			if (tokenPos == std::string::npos) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			valuePos = SkipWhitespace(json, valuePos + 1);
+			if (valuePos >= json.size() || json[valuePos] != '"') {
+				return false;
+			}
+
+			std::string parsed;
+			if (!TryConsumeJsonString(json, valuePos, parsed)) {
+				return false;
+			}
+
+			valueOut = parsed;
+			return true;
+		}
+
+		bool ValidateCronEnumStringField(
+			const RequestFrame& request,
+			const ParsedObjectFieldKinds& fieldKinds,
+			const char* methodName,
+			const char* fieldName,
+			std::initializer_list<const char*> allowedValues,
+			SchemaValidationIssue& issue) {
+			if (fieldKinds.find(fieldName) == fieldKinds.end()) {
+				return true;
+			}
+			if (!request.paramsJson.has_value()) {
+				return true;
+			}
+
+			std::string value;
+			if (!TryReadTopLevelStringField(request.paramsJson.value(), fieldName, value)) {
+				return true;
+			}
+
+			for (const char* allowed : allowedValues) {
+				if (value == allowed) {
+					return true;
+				}
+			}
+
+			std::string expected;
+			bool first = true;
+			for (const char* allowed : allowedValues) {
+				if (!first) {
+					expected += ", ";
+				}
+				expected += "`";
+				expected += allowed;
+				expected += "`";
+				first = false;
+			}
+
+			SetIssue(
+				issue,
+				"schema_invalid_value",
+				"Method `" + std::string(methodName) + "` requires `params." + fieldName +
+				"` to be one of: " + expected + ".");
+			return false;
+		}
+
 		bool TryConsumeBalancedComposite(
 			const std::string& json,
 			std::size_t& position,
@@ -449,6 +523,12 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.list", "enabled", { "all", "enabled", "disabled" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.list", "sortBy", { "nextRunAtMs", "updatedAtMs", "name" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.list", "sortDir", { "asc", "desc" }, issue)) {
+				return false;
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName({ "limit", "offset", "enabled", "query", "sortBy", "sortDir" }, field)) {
 					continue;
@@ -588,6 +668,10 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.run", "mode", { "due", "force" }, issue)) {
+				return false;
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName({ "id", "jobId", "mode" }, field)) {
 					continue;
@@ -617,6 +701,12 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "scope", { "job", "all" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "status", { "all", "ok", "error", "skipped" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "sortDir", { "asc", "desc" }, issue)) {
+				return false;
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName({ "limit", "offset", "scope", "id", "jobId", "status", "query", "sortDir" }, field)) {
 					continue;
@@ -637,6 +727,10 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!RequireFieldKindIfPresent(fieldKinds, "mode", JsonFieldKind::String, issue, "wake", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "text", JsonFieldKind::String, issue, "wake", "a string")) {
+				return false;
+			}
+
+			if (!ValidateCronEnumStringField(request, fieldKinds, "wake", "mode", { "now", "next-heartbeat" }, issue)) {
 				return false;
 			}
 

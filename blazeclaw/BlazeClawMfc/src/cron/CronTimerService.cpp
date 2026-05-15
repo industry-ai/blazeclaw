@@ -17,6 +17,8 @@ namespace blazeclaw::cron {
 
 	namespace {
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
+		inline constexpr std::int64_t kDefaultFailureAlertAfter = 2;
+		inline constexpr std::int64_t kDefaultFailureAlertCooldownMs = 60 * 60'000;
 
 		bool StartsWithHttpScheme(const std::string& value) {
 			const std::string lowered = ToLowerCopy(TrimCopy(value));
@@ -62,13 +64,42 @@ namespace blazeclaw::cron {
 			return kDefaultRetryDelayMs;
 		}
 
+		std::int64_t ResolveFailureAlertAfter(const CronJson& job) {
+			if (!job.contains("failureAlert") || !job["failureAlert"].is_object()) {
+				return kDefaultFailureAlertAfter;
+			}
+			return (std::max)(
+				static_cast<std::int64_t>(1),
+				TryReadInt64Field(job["failureAlert"], "after")
+				.value_or(kDefaultFailureAlertAfter));
+		}
+
+		std::int64_t ResolveFailureAlertCooldownMs(const CronJson& job) {
+			if (!job.contains("failureAlert") || !job["failureAlert"].is_object()) {
+				return kDefaultFailureAlertCooldownMs;
+			}
+			return (std::max)(
+				static_cast<std::int64_t>(0),
+				TryReadInt64Field(job["failureAlert"], "cooldownMs")
+				.value_or(kDefaultFailureAlertCooldownMs));
+		}
+
 		struct RunOutcome {
 			std::string status = "ok";
 			std::string summary;
 			std::string error;
 			std::string deliveryStatus = "not-requested";
 			bool delivered = false;
+			std::string errorCategory;
 		};
+
+		bool IsTransientErrorCategory(const std::string& errorText) {
+			const std::string lowered = ToLowerCopy(errorText);
+			return lowered.find("timeout") != std::string::npos ||
+				lowered.find("network") != std::string::npos ||
+				lowered.find("429") != std::string::npos ||
+				lowered.find("rate") != std::string::npos;
+		}
 
 		CronJson& EnsureStateObject(CronJson& job) {
 			if (!job.contains("state") || !job["state"].is_object()) {
@@ -97,6 +128,7 @@ namespace blazeclaw::cron {
 			if (!job.contains("payload") || !job["payload"].is_object()) {
 				outcome.status = "error";
 				outcome.error = "invalid payload";
+				outcome.errorCategory = "invalid_payload";
 				outcome.summary = "Payload missing or invalid";
 				return outcome;
 			}
@@ -146,9 +178,16 @@ namespace blazeclaw::cron {
 						outcome.status = "error";
 						outcome.deliveryStatus = "not-delivered";
 						outcome.error = "invalid webhook delivery target";
+						outcome.errorCategory = "delivery_target_invalid";
 						outcome.summary = "Webhook delivery target is invalid";
 					}
 				}
+			}
+
+			if (outcome.status == "error" && outcome.errorCategory.empty()) {
+				outcome.errorCategory = IsTransientErrorCategory(outcome.error)
+					? "transient"
+					: "runtime";
 			}
 
 			if (outcome.status == "ok" && outcome.summary.empty()) {
@@ -400,6 +439,7 @@ namespace blazeclaw::cron {
 			state["lastStatus"] = outcome.status;
 			state["lastRunStatus"] = outcome.status;
 			state["lastError"] = outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error);
+			state["lastErrorCategory"] = outcome.errorCategory.empty() ? CronJson(nullptr) : CronJson(outcome.errorCategory);
 			state["lastDelivered"] = outcome.delivered;
 			state["lastDeliveryStatus"] = outcome.deliveryStatus;
 			state["lastDeliveryError"] =
@@ -417,7 +457,12 @@ namespace blazeclaw::cron {
 				TryReadInt64Field(retry, "maxAttempts").value_or(0));
 			const std::int64_t previousAttempt =
 				TryReadInt64Field(state, "retryAttempt").value_or(0);
+			const std::int64_t previousConsecutiveErrors =
+				TryReadInt64Field(state, "consecutiveErrors").value_or(0);
 			bool scheduledRetry = false;
+			bool failureAlertTriggered = false;
+			std::int64_t failureAlertAtMs = 0;
+			std::int64_t consecutiveErrors = 0;
 			std::int64_t retryAttempt = previousAttempt;
 			std::optional<std::int64_t> nextAfterRun;
 			if (outcome.status == "error" && previousAttempt < maxAttempts) {
@@ -435,6 +480,31 @@ namespace blazeclaw::cron {
 				state["retryPendingUntilMs"] = CronJson(nullptr);
 			}
 
+			if (outcome.status == "error") {
+				consecutiveErrors = previousConsecutiveErrors + 1;
+				state["consecutiveErrors"] = consecutiveErrors;
+
+				if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_boolean() && !(*it)["failureAlert"].get<bool>()) {
+					state["lastFailureAlertAtMs"] = CronJson(nullptr);
+				}
+				else {
+					const std::int64_t alertAfter = ResolveFailureAlertAfter(*it);
+					const std::int64_t cooldownMs = ResolveFailureAlertCooldownMs(*it);
+					const std::int64_t lastAlertAtMs =
+						TryReadInt64Field(state, "lastFailureAlertAtMs").value_or(0);
+					const bool cooldownOpen =
+						lastAlertAtMs <= 0 || (nowMs - lastAlertAtMs) >= cooldownMs;
+					if (consecutiveErrors >= alertAfter && cooldownOpen) {
+						failureAlertTriggered = true;
+						failureAlertAtMs = nowMs;
+						state["lastFailureAlertAtMs"] = nowMs;
+					}
+				}
+			}
+			else {
+				state["consecutiveErrors"] = 0;
+			}
+
 			if (!deleteAfterRun && !scheduledRetry) {
 				nextAfterRun = ComputeNextRunAtMs(*it, nowMs);
 				state["nextRunAtMs"] =
@@ -449,8 +519,12 @@ namespace blazeclaw::cron {
 				{ "status", outcome.status },
 				{ "summary", outcome.summary },
 				{ "error", outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error) },
+				{ "errorCategory", outcome.errorCategory.empty() ? CronJson(nullptr) : CronJson(outcome.errorCategory) },
 				{ "deliveryStatus", outcome.deliveryStatus },
 				{ "delivered", outcome.delivered },
+				{ "consecutiveErrors", consecutiveErrors },
+				{ "failureAlertTriggered", failureAlertTriggered },
+				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
 				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },

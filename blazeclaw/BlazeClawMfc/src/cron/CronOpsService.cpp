@@ -7,6 +7,29 @@
 #include <algorithm>
 
 namespace blazeclaw::cron {
+	namespace {
+		std::string ReadStringOrEmpty(const CronJson& value, const char* key) {
+			if (!value.contains(key) || value[key].is_null()) {
+				return {};
+			}
+			if (value[key].is_string()) {
+				return value[key].get<std::string>();
+			}
+			if (value[key].is_number_integer()) {
+				return std::to_string(value[key].get<std::int64_t>());
+			}
+			if (value[key].is_number_unsigned()) {
+				return std::to_string(value[key].get<std::uint64_t>());
+			}
+			if (value[key].is_number_float()) {
+				return std::to_string(value[key].get<double>());
+			}
+			if (value[key].is_boolean()) {
+				return value[key].get<bool>() ? "true" : "false";
+			}
+			return {};
+		}
+	}
 
 	CronOpsService::CronOpsService()
 		: m_store(
@@ -272,9 +295,9 @@ namespace blazeclaw::cron {
 		std::vector<CronJson> filtered;
 		filtered.reserve(m_store.Runs().size());
 		for (const auto& entry : m_store.Runs()) {
-			const std::string jobId = entry.value("jobId", std::string());
+			const std::string jobId = ReadStringOrEmpty(entry, "jobId");
 			const std::string status =
-				ToLowerCopy(entry.value("status", std::string()));
+				ToLowerCopy(ReadStringOrEmpty(entry, "status"));
 
 			if (scope == "job" && !requestedId.empty() && jobId != requestedId) {
 				continue;
@@ -285,9 +308,9 @@ namespace blazeclaw::cron {
 			if (!query.empty()) {
 				const std::string haystack = ToLowerCopy(
 					jobId + " " +
-					entry.value("status", std::string()) + " " +
-					entry.value("jobName", std::string()) + " " +
-					entry.value("error", std::string()));
+					ReadStringOrEmpty(entry, "status") + " " +
+					ReadStringOrEmpty(entry, "jobName") + " " +
+					ReadStringOrEmpty(entry, "error"));
 				if (haystack.find(query) == std::string::npos) {
 					continue;
 				}

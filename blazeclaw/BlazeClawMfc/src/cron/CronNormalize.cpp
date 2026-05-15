@@ -236,6 +236,12 @@ namespace blazeclaw::cron {
 		}
 
 		void NormalizeFailureAlertObject(CronJson& root) {
+			if (root.contains("failureAlert") &&
+				root["failureAlert"].is_boolean() &&
+				!root["failureAlert"].get<bool>()) {
+				return;
+			}
+
 			if (!root.contains("failureAlert") || !root["failureAlert"].is_object()) {
 				return;
 			}
@@ -346,6 +352,11 @@ namespace blazeclaw::cron {
 		if (params.contains("failureAlert") && params["failureAlert"].is_object()) {
 			normalized["failureAlert"] = params["failureAlert"];
 		}
+		else if (params.contains("failureAlert") &&
+			params["failureAlert"].is_boolean() &&
+			!params["failureAlert"].get<bool>()) {
+			normalized["failureAlert"] = false;
+		}
 
 		NormalizeDeliveryObject(normalized, "delivery");
 		NormalizeRetryObject(normalized);
@@ -388,6 +399,11 @@ namespace blazeclaw::cron {
 		if (patch.contains("failureAlert") && patch["failureAlert"].is_object()) {
 			job["failureAlert"] = patch["failureAlert"];
 			NormalizeFailureAlertObject(job);
+		}
+		else if (patch.contains("failureAlert") &&
+			patch["failureAlert"].is_boolean() &&
+			!patch["failureAlert"].get<bool>()) {
+			job["failureAlert"] = false;
 		}
 		if (patch.contains("sessionTarget") && patch["sessionTarget"].is_string()) {
 			job["sessionTarget"] = TrimCopy(patch["sessionTarget"].get<std::string>());

@@ -118,6 +118,13 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronModels.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronNormalize.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronStoreService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronTimerService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronOpsService.cpp" />
+    <ClCompile Include="NativeAudioChatStubs.cpp" />
+    <ClCompile Include="NativeMainFrameStub.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Tools.cpp" />
