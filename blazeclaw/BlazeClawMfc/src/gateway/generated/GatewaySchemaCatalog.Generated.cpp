@@ -4,7 +4,7 @@
 namespace blazeclaw::gateway::generated {
 namespace {
 
-constexpr std::array<SchemaMethodRule, 47> kSchemaMethodRules{{
+constexpr std::array<SchemaMethodRule, 55> kSchemaMethodRules{{
 		{ "gateway.ping", "none", "core.pong", "" },
 		{ "gateway.protocol.version", "none", "core.protocolVersion", "" },
 		{ "gateway.features.list", "none", "catalog.features", "" },
@@ -52,6 +52,14 @@ constexpr std::array<SchemaMethodRule, 47> kSchemaMethodRules{{
 		{ "gateway.tools.list", "objectOptional", "tools.list", "category" },
 		{ "gateway.transport.endpoint.exists", "objectOptional", "transport.endpoint.exists", "endpoint" },
 		{ "gateway.transport.endpoint.set", "objectOptional", "transport.endpoint.set", "endpoint" },
+		{ "cron.status", "objectOptional", "cron.status", "" },
+		{ "cron.list", "objectOptional", "cron.list", "" },
+		{ "cron.add", "objectOptional", "cron.job", "" },
+		{ "cron.update", "objectOptional", "cron.job", "" },
+		{ "cron.remove", "objectOptional", "cron.remove", "" },
+		{ "cron.run", "objectOptional", "cron.run", "" },
+		{ "cron.runs", "objectOptional", "cron.runs", "" },
+		{ "wake", "objectOptional", "cron.wake", "" },
 }};
 
 constexpr std::array<SchemaMethodPatternRule, 13> kSchemaMethodPatternRules{{
@@ -83,7 +91,7 @@ constexpr std::array<const char*, 8> kSchemaRequiredEvents{{
 
 } // namespace
 
-const std::array<SchemaMethodRule, 47>& GetSchemaMethodRules() noexcept {
+const std::array<SchemaMethodRule, 55>& GetSchemaMethodRules() noexcept {
     return kSchemaMethodRules;
 }
 

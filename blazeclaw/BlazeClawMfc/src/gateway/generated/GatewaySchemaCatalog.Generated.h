@@ -19,7 +19,7 @@ struct SchemaMethodPatternRule {
 
 inline constexpr int kGatewaySchemaCatalogVersion = 1;
 
-const std::array<SchemaMethodRule, 47>& GetSchemaMethodRules() noexcept;
+const std::array<SchemaMethodRule, 55>& GetSchemaMethodRules() noexcept;
 const std::array<SchemaMethodPatternRule, 13>& GetSchemaMethodPatternRules() noexcept;
 const std::array<const char*, 8>& GetSchemaRequiredEvents() noexcept;
 

@@ -420,6 +420,238 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateCronStatusParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.status", fieldKinds)) {
+				return false;
+			}
+			if (!fieldKinds.empty()) {
+				const std::string field = fieldKinds.begin()->first;
+				SetIssue(issue, "schema_invalid_params", "Method `cron.status` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronListParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.list", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "limit", JsonFieldKind::Number, issue, "cron.list", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "offset", JsonFieldKind::Number, issue, "cron.list", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "enabled", JsonFieldKind::String, issue, "cron.list", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "query", JsonFieldKind::String, issue, "cron.list", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sortBy", JsonFieldKind::String, issue, "cron.list", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sortDir", JsonFieldKind::String, issue, "cron.list", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "limit", "offset", "enabled", "query", "sortBy", "sortDir" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.list` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronAddParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.add", fieldKinds)) {
+				return false;
+			}
+
+			if (fieldKinds.find("name") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.name`.");
+				return false;
+			}
+			if (fieldKinds.find("schedule") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.schedule`.");
+				return false;
+			}
+			if (fieldKinds.find("payload") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.payload`.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "name", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "description", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "enabled", JsonFieldKind::Boolean, issue, "cron.add", "boolean") ||
+				!RequireFieldKindIfPresent(fieldKinds, "schedule", JsonFieldKind::Object, issue, "cron.add", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "payload", JsonFieldKind::Object, issue, "cron.add", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "wakeMode", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sessionTarget", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "deleteAfterRun", JsonFieldKind::Boolean, issue, "cron.add", "boolean") ||
+				!RequireFieldKindIfPresent(fieldKinds, "delivery", JsonFieldKind::Object, issue, "cron.add", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sessionKey", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "retry", JsonFieldKind::Object, issue, "cron.add", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "failureAlert", JsonFieldKind::Object, issue, "cron.add", "an object")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName(
+					{ "name", "description", "enabled", "schedule", "payload", "wakeMode", "sessionTarget", "deleteAfterRun", "delivery", "agentId", "sessionKey", "retry", "failureAlert" },
+					field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.add` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronUpdateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.update", fieldKinds)) {
+				return false;
+			}
+
+			if (fieldKinds.find("patch") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.update` requires `params.patch`.");
+				return false;
+			}
+			if (fieldKinds.find("id") == fieldKinds.end() && fieldKinds.find("jobId") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.update` requires `params.id` or `params.jobId`.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.update", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.update", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "patch", JsonFieldKind::Object, issue, "cron.update", "an object")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "id", "jobId", "patch" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.update` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRemoveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.remove", fieldKinds)) {
+				return false;
+			}
+
+			if (fieldKinds.find("id") == fieldKinds.end() && fieldKinds.find("jobId") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.remove` requires `params.id` or `params.jobId`.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.remove", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.remove", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "id", "jobId" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.remove` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.run", fieldKinds)) {
+				return false;
+			}
+
+			if (fieldKinds.find("id") == fieldKinds.end() && fieldKinds.find("jobId") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `cron.run` requires `params.id` or `params.jobId`.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.run", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.run", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "mode", JsonFieldKind::String, issue, "cron.run", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "id", "jobId", "mode" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.run` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunsParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "cron.runs", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "limit", JsonFieldKind::Number, issue, "cron.runs", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "offset", JsonFieldKind::Number, issue, "cron.runs", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "scope", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "status", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "query", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sortDir", JsonFieldKind::String, issue, "cron.runs", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "limit", "offset", "scope", "id", "jobId", "status", "query", "sortDir" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `cron.runs` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateWakeParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "wake", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "mode", JsonFieldKind::String, issue, "wake", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "text", JsonFieldKind::String, issue, "wake", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "mode", "text" }, field)) {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `wake` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateChannelsRouteResolveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			if (!request.paramsJson.has_value()) {
 				return true;
@@ -2996,6 +3228,14 @@ namespace blazeclaw::gateway::protocol {
 
 		static const std::unordered_map<std::string, RequestValidator> directValidators = {
 			{ "gateway.ping", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidatePingParams(r, i); } },
+			{ "cron.status", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronStatusParams(r, i); } },
+			{ "cron.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronListParams(r, i); } },
+			{ "cron.add", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronAddParams(r, i); } },
+			{ "cron.update", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronUpdateParams(r, i); } },
+			{ "cron.remove", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronRemoveParams(r, i); } },
+			{ "cron.run", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronRunParams(r, i); } },
+			{ "cron.runs", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateCronRunsParams(r, i); } },
+			{ "wake", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateWakeParams(r, i); } },
 			{ "chat.send", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatSendParams(r, i); } },
 			{ "chat.abort", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatAbortParams(r, i); } },
 			{ "chat.inject", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatInjectParams(r, i); } },

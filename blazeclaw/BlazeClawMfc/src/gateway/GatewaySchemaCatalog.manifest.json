@@ -380,6 +380,46 @@
       "requestPolicy": { "type": "objectOptional" },
       "responseShape": "transport.endpoint.set",
       "stringIdField": "endpoint"
+    },
+    {
+      "name": "cron.status",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.status"
+    },
+    {
+      "name": "cron.list",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.list"
+    },
+    {
+      "name": "cron.add",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.job"
+    },
+    {
+      "name": "cron.update",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.job"
+    },
+    {
+      "name": "cron.remove",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.remove"
+    },
+    {
+      "name": "cron.run",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.run"
+    },
+    {
+      "name": "cron.runs",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.runs"
+    },
+    {
+      "name": "wake",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "cron.wake"
     }
   ],
   "methodPatterns": [

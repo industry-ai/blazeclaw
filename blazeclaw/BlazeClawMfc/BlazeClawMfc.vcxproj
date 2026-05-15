@@ -165,6 +165,11 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
+    <ClInclude Include="src\cron\CronModels.h" />
+    <ClInclude Include="src\cron\CronNormalize.h" />
+    <ClInclude Include="src\cron\CronOpsService.h" />
+    <ClInclude Include="src\cron\CronStoreService.h" />
+    <ClInclude Include="src\cron\CronTimerService.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
@@ -366,6 +371,11 @@
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
+    <ClCompile Include="src\cron\CronModels.cpp" />
+    <ClCompile Include="src\cron\CronNormalize.cpp" />
+    <ClCompile Include="src\cron\CronOpsService.cpp" />
+    <ClCompile Include="src\cron\CronStoreService.cpp" />
+    <ClCompile Include="src\cron\CronTimerService.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
@@ -523,6 +533,7 @@
     <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <!-- Tests moved to a separate test project BlazeClawMfc.Tests.vcxproj -->
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
+    <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
   </ItemGroup>
