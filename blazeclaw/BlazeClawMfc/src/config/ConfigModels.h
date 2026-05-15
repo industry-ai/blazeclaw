@@ -494,6 +494,11 @@ namespace blazeclaw::config {
 		std::uint32_t runtimeHotIdleTimeoutMs = 300000;
 		bool runtimeHotWarmupEnabled = true;
 		std::uint32_t runtimeHotWarmupRuns = 1;
+		bool hotwordsEnabled = true;
+		std::vector<std::wstring> hotwords = { L"火龙虾" };
+		std::uint32_t hotwordsMaxCount = 8;
+		std::wstring hotwordsApplyStage = L"decoder_init"; // decoder_init|decoder_init_and_step
+		bool hotwordsDebugDumpPrompt = false;
 		std::wstring language = L"und";
 		std::vector<std::wstring> allowedLanguages = { L"en", L"zh" };
 		bool enforceAllowedLanguages = false;

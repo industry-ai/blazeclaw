@@ -7,6 +7,7 @@
 #include <cwctype>
 #include <fstream>
 #include <functional>
+#include <unordered_set>
 #include <vector>
 
 #if defined(_WIN32)
@@ -52,6 +53,63 @@ namespace blazeclaw::config {
 			}
 
 			return values;
+		}
+
+		std::wstring TrimMatchingQuotes(const std::wstring& raw) {
+			const std::wstring trimmed = Trim(raw);
+			if (trimmed.size() >= 2) {
+				const wchar_t first = trimmed.front();
+				const wchar_t last = trimmed.back();
+				if ((first == L'"' && last == L'"') ||
+					(first == L'\'' && last == L'\'')) {
+					return trimmed.substr(1, trimmed.size() - 2);
+				}
+			}
+
+			return trimmed;
+		}
+
+		std::vector<std::wstring> ParseSpeechHotwordsValue(const std::wstring& raw) {
+			const std::wstring trimmed = Trim(raw);
+			if (trimmed.empty()) {
+				return {};
+			}
+
+			std::wstring body = trimmed;
+			if (body.size() >= 2 && body.front() == L'[' && body.back() == L']') {
+				body = body.substr(1, body.size() - 2);
+			}
+
+			auto values = SplitCsvValues(body);
+			for (auto& value : values) {
+				value = TrimMatchingQuotes(value);
+			}
+
+			values.erase(
+				std::remove_if(
+					values.begin(),
+					values.end(),
+					[](const std::wstring& value) { return value.empty(); }),
+				values.end());
+			return values;
+		}
+
+		void NormalizeSpeechHotwordsInPlace(std::vector<std::wstring>& hotwords) {
+			std::vector<std::wstring> normalized;
+			normalized.reserve(hotwords.size());
+			std::unordered_set<std::wstring> seen;
+			for (auto& hotword : hotwords) {
+				hotword = Trim(hotword);
+				if (hotword.empty()) {
+					continue;
+				}
+
+				if (seen.insert(hotword).second) {
+					normalized.push_back(hotword);
+				}
+			}
+
+			hotwords = std::move(normalized);
 		}
 
 		std::optional<std::vector<std::wstring>> ParseOptionalSkillFilter(
@@ -1092,6 +1150,34 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.hotwords_enabled=", 0) == 0) {
+				outConfig.speechRecognition.hotwordsEnabled = ParseBool(trimmedLine.substr(23), true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.hotwords=", 0) == 0) {
+				outConfig.speechRecognition.hotwords = ParseSpeechHotwordsValue(trimmedLine.substr(15));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.hotwords_max_count=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(25), value)) {
+					outConfig.speechRecognition.hotwordsMaxCount = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.hotwords_apply_stage=", 0) == 0) {
+				outConfig.speechRecognition.hotwordsApplyStage = ToLowerTrim(trimmedLine.substr(27));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.hotwords_debug_dump_prompt=", 0) == 0) {
+				outConfig.speechRecognition.hotwordsDebugDumpPrompt = ParseBool(trimmedLine.substr(33), false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.language=", 0) == 0) {
 				outConfig.speechRecognition.language = Trim(trimmedLine.substr(16));
 				continue;
@@ -1858,6 +1944,21 @@ namespace blazeclaw::config {
 		}
 		outConfig.speechRecognition.runtimeHotWarmupRuns =
 			(std::min)(outConfig.speechRecognition.runtimeHotWarmupRuns, 8u);
+		NormalizeSpeechHotwordsInPlace(outConfig.speechRecognition.hotwords);
+		if (outConfig.speechRecognition.hotwordsMaxCount == 0) {
+			outConfig.speechRecognition.hotwordsMaxCount = 8;
+		}
+		outConfig.speechRecognition.hotwordsMaxCount =
+			(std::min)(outConfig.speechRecognition.hotwordsMaxCount, 32u);
+		if (outConfig.speechRecognition.hotwordsApplyStage != L"decoder_init" &&
+			outConfig.speechRecognition.hotwordsApplyStage != L"decoder_init_and_step") {
+			outConfig.speechRecognition.hotwordsApplyStage = L"decoder_init";
+		}
+		if (outConfig.speechRecognition.hotwords.size() >
+			outConfig.speechRecognition.hotwordsMaxCount) {
+			outConfig.speechRecognition.hotwords.resize(
+				outConfig.speechRecognition.hotwordsMaxCount);
+		}
 		outConfig.speechRecognition.executionMode =
 			ToLowerTrim(outConfig.speechRecognition.executionMode) == L"parallel"
 			? L"parallel"

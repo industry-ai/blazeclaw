@@ -120,6 +120,15 @@ namespace blazeclaw::gateway {
 								{ "warmupRuns", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotWarmupRuns)) },
 								{ "idleTimeoutMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotIdleTimeoutMs)) },
 							}) },
+							{ "hotwords", JsonObject({
+								{ "enabled", JsonBool(sttRuntimeStatus.hotwordsEnabled) },
+								{ "count", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.hotwordsCount)) },
+								{ "maxCount", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.hotwordsMaxCount)) },
+								{ "applyStage", JsonString(sttRuntimeStatus.hotwordsApplyStage) },
+								{ "debugDumpPrompt", JsonBool(sttRuntimeStatus.hotwordsDebugDumpPrompt) },
+								{ "lastPromptBuildStatus", JsonString(sttRuntimeStatus.lastPromptBuildStatus) },
+								{ "lastPromptBuildError", JsonString(sttRuntimeStatus.lastPromptBuildError) },
+							}) },
 							}) },
 							{ "transcript", JsonObject({
 								{ "supportsSegments", JsonBool(incrementalSegmentSupported) },

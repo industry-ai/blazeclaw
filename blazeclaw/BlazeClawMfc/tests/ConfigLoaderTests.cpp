@@ -41,6 +41,38 @@ TEST_CASE("ConfigLoader parses embedded.orchestrationPath values", "[config][emb
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader parses and normalizes speech hotwords policy", "[config][speech][hotwords]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_speech_hotwords_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "speech-hotwords.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.hotwords_enabled=true\n";
+		out << L"speech.hotwords=[\"火龙虾\", \"火龙虾\", \" 云深科技 \"]\n";
+		out << L"speech.hotwords_max_count=2\n";
+		out << L"speech.hotwords_apply_stage=decoder_init_and_step\n";
+		out << L"speech.hotwords_debug_dump_prompt=true\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.speechRecognition.hotwordsEnabled);
+	REQUIRE(config.speechRecognition.hotwordsMaxCount == 2);
+	REQUIRE(config.speechRecognition.hotwordsApplyStage == L"decoder_init_and_step");
+	REQUIRE(config.speechRecognition.hotwordsDebugDumpPrompt);
+	REQUIRE(config.speechRecognition.hotwords.size() == 2);
+	REQUIRE(config.speechRecognition.hotwords[0] == L"火龙虾");
+	REQUIRE(config.speechRecognition.hotwords[1] == L"云深科技");
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader normalizes and validates skills entry config keys", "[config][skills][entries][normalize]") {
 	blazeclaw::config::ConfigLoader loader;
 

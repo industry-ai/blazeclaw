@@ -354,6 +354,13 @@ namespace blazeclaw::core {
 			status.runtimeHotWarmupEnabled = snapshot.runtimeHotWarmupEnabled;
 			status.runtimeHotWarmupRuns = snapshot.runtimeHotWarmupRuns;
 			status.runtimeHotIdleTimeoutMs = snapshot.runtimeHotIdleTimeoutMs;
+			status.hotwordsEnabled = snapshot.hotwordsEnabled;
+			status.hotwordsCount = snapshot.hotwordsCount;
+			status.hotwordsMaxCount = snapshot.hotwordsMaxCount;
+			status.hotwordsApplyStage = snapshot.hotwordsApplyStage;
+			status.hotwordsDebugDumpPrompt = snapshot.hotwordsDebugDumpPrompt;
+			status.lastPromptBuildStatus = snapshot.lastPromptBuildStatus;
+			status.lastPromptBuildError = snapshot.lastPromptBuildError;
 			status.effectiveExecutionProvider = snapshot.effectiveExecutionProvider;
 			return status;
 			});

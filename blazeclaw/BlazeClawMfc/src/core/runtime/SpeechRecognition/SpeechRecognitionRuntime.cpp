@@ -800,6 +800,106 @@ namespace blazeclaw::core::speechrecognition {
 			return output;
 		}
 
+		std::size_t Utf8LeadingByteLength(const unsigned char leadByte) {
+			if ((leadByte & 0x80u) == 0u) {
+				return 1;
+			}
+			if ((leadByte & 0xE0u) == 0xC0u) {
+				return 2;
+			}
+			if ((leadByte & 0xF0u) == 0xE0u) {
+				return 3;
+			}
+			if ((leadByte & 0xF8u) == 0xF0u) {
+				return 4;
+			}
+			return 1;
+		}
+
+		std::vector<std::string> BuildConfiguredHotwordsUtf8(
+			const blazeclaw::config::SpeechRecognitionConfig& config) {
+			std::vector<std::string> hotwords;
+			if (!config.hotwordsEnabled) {
+				return hotwords;
+			}
+
+			hotwords.reserve(config.hotwords.size());
+			for (const auto& hotword : config.hotwords) {
+				const auto utf8 = ToNarrowLocal(hotword);
+				if (!utf8.empty()) {
+					hotwords.push_back(utf8);
+				}
+			}
+
+			return hotwords;
+		}
+
+		std::string BuildPromptInjectionText(
+			const std::string& requestPrompt,
+			const std::vector<std::string>& hotwords) {
+			std::string promptText;
+			if (!requestPrompt.empty()) {
+				promptText = requestPrompt;
+			}
+
+			if (!hotwords.empty()) {
+				std::string hotwordLine = "hotwords: ";
+				for (std::size_t i = 0; i < hotwords.size(); ++i) {
+					if (i > 0) {
+						hotwordLine += " ";
+					}
+					hotwordLine += hotwords[i];
+				}
+				if (!promptText.empty()) {
+					promptText += "\n";
+				}
+				promptText += hotwordLine;
+			}
+
+			return promptText;
+		}
+
+		bool TryEncodePromptTextToTokenIds(
+			const std::string& text,
+			const std::unordered_map<std::string, std::int64_t>& idByDecodedToken,
+			const std::size_t maxDecodedTokenBytes,
+			std::vector<std::int64_t>& outTokenIds) {
+			outTokenIds.clear();
+			if (text.empty() || idByDecodedToken.empty() || maxDecodedTokenBytes == 0) {
+				return false;
+			}
+
+			outTokenIds.reserve(text.size());
+			for (std::size_t cursor = 0; cursor < text.size();) {
+				const std::size_t remaining = text.size() - cursor;
+				const std::size_t candidateMax = (std::min)(remaining, maxDecodedTokenBytes);
+
+				bool matched = false;
+				for (std::size_t length = candidateMax; length > 0; --length) {
+					const std::string piece = text.substr(cursor, length);
+					const auto it = idByDecodedToken.find(piece);
+					if (it == idByDecodedToken.end()) {
+						continue;
+					}
+
+					outTokenIds.push_back(it->second);
+					cursor += length;
+					matched = true;
+					break;
+				}
+
+				if (matched) {
+					continue;
+				}
+
+				const auto step = Utf8LeadingByteLength(
+					static_cast<unsigned char>(text[cursor]));
+				cursor += (std::min)(step, remaining);
+			}
+
+			return !outTokenIds.empty();
+		}
+
 	} // namespace
 
 	struct SpeechRecognitionRuntime::SessionState {
@@ -814,6 +914,8 @@ namespace blazeclaw::core::speechrecognition {
 		std::size_t decoderInitLikelyLogitsOutputIndex = (std::numeric_limits<std::size_t>::max)();
 #endif
 		std::unordered_map<std::int64_t, std::string> tokenById;
+		std::unordered_map<std::string, std::int64_t> tokenIdByDecodedText;
+		std::size_t maxDecodedTokenBytes = 0;
 		std::unordered_set<std::int64_t> specialTokenIds;
 		std::unordered_map<char32_t, std::uint8_t> byteLevelCharToByte;
 		std::string tokenizerMode = "vocab_fallback";
@@ -855,6 +957,18 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.cudaExecutionProviderReason.clear();
 		m_snapshot.effectiveExecutionProvider = "cpu";
 		m_snapshot.verboseMetrics = m_config.speechRecognition.verboseMetrics;
+		m_snapshot.hotwordsEnabled = m_config.speechRecognition.hotwordsEnabled;
+		m_snapshot.hotwordsCount = static_cast<std::uint32_t>(
+			m_config.speechRecognition.hotwordsEnabled
+			? m_config.speechRecognition.hotwords.size()
+			: 0);
+		m_snapshot.hotwordsMaxCount = m_config.speechRecognition.hotwordsMaxCount;
+		m_snapshot.hotwordsApplyStage = ToNarrow(
+			m_config.speechRecognition.hotwordsApplyStage);
+		m_snapshot.hotwordsDebugDumpPrompt =
+			m_config.speechRecognition.hotwordsDebugDumpPrompt;
+		m_snapshot.lastPromptBuildStatus = "not_built";
+		m_snapshot.lastPromptBuildError.clear();
 		ApplyRuntimeHotPolicyToSnapshotLocked();
 		m_snapshot.status = "configured";
 	}
@@ -1282,6 +1396,8 @@ namespace blazeclaw::core::speechrecognition {
 			}
 
 			m_sessionState->tokenById.clear();
+			m_sessionState->tokenIdByDecodedText.clear();
+			m_sessionState->maxDecodedTokenBytes = 0;
 			m_sessionState->specialTokenIds.clear();
 			m_sessionState->byteLevelCharToByte = BuildByteLevelCharToByteMap();
 			m_sessionState->tokenizerMode = "vocab_fallback";
@@ -1362,6 +1478,29 @@ namespace blazeclaw::core::speechrecognition {
 			m_sessionState->specialTokenIds.insert(kTokenImEnd);
 			if (m_sessionState->tokenById.empty()) {
 				throw std::runtime_error("tokenizer produced an empty token map");
+			}
+			for (const auto& [tokenId, tokenText] : m_sessionState->tokenById) {
+				if (m_sessionState->specialTokenIds.find(tokenId) !=
+					m_sessionState->specialTokenIds.end()) {
+					continue;
+				}
+
+				const std::string decoded = DecodeByteLevelToken(
+					tokenText,
+					m_sessionState->byteLevelCharToByte);
+				if (!decoded.empty()) {
+					m_sessionState->tokenIdByDecodedText.emplace(decoded, tokenId);
+					m_sessionState->maxDecodedTokenBytes = (std::max)(
+						m_sessionState->maxDecodedTokenBytes,
+						decoded.size());
+				}
+
+				if (!tokenText.empty()) {
+					m_sessionState->tokenIdByDecodedText.emplace(tokenText, tokenId);
+					m_sessionState->maxDecodedTokenBytes = (std::max)(
+						m_sessionState->maxDecodedTokenBytes,
+						tokenText.size());
+				}
 			}
 
 			m_sessionState->initialized = true;
@@ -2008,6 +2147,43 @@ namespace blazeclaw::core::speechrecognition {
 				}
 				const float* encodedPtr = encoderOutputs[0].GetTensorData<float>();
 
+				const auto configuredHotwords =
+					BuildConfiguredHotwordsUtf8(m_config.speechRecognition);
+				const std::string promptInjectionText = BuildPromptInjectionText(
+					request.prompt,
+					configuredHotwords);
+				std::vector<std::int64_t> promptInjectionIds;
+				if (!promptInjectionText.empty()) {
+					if (TryEncodePromptTextToTokenIds(
+						promptInjectionText,
+						m_sessionState->tokenIdByDecodedText,
+						m_sessionState->maxDecodedTokenBytes,
+						promptInjectionIds)) {
+						m_snapshot.lastPromptBuildStatus =
+							m_config.speechRecognition.hotwordsApplyStage == L"decoder_init_and_step"
+							? "applied_decoder_init_and_step"
+							: "applied_decoder_init";
+						m_snapshot.lastPromptBuildError.clear();
+					}
+					else {
+						m_snapshot.lastPromptBuildStatus = "tokenization_unmatched";
+						m_snapshot.lastPromptBuildError =
+							"prompt injection text did not match tokenizer vocab pieces";
+					}
+				}
+				else {
+					m_snapshot.lastPromptBuildStatus = "skipped_no_prompt";
+					m_snapshot.lastPromptBuildError.clear();
+				}
+				if (m_snapshot.hotwordsDebugDumpPrompt) {
+					TraceRuntime(
+						"runtime.hotwords.prompt",
+						request.runId,
+						"status=" + m_snapshot.lastPromptBuildStatus +
+						" chars=" + std::to_string(promptInjectionText.size()) +
+						" hotwords=" + std::to_string(configuredHotwords.size()));
+				}
+
 				std::vector<std::int64_t> promptIds = {
 					kTokenImStart,
 					kPromptTextSystem,
@@ -2017,8 +2193,15 @@ namespace blazeclaw::core::speechrecognition {
 					kTokenImStart,
 					kPromptTextUser,
 					kTokenNewline,
-					kTokenAudioStart,
 				};
+				if (!promptInjectionIds.empty()) {
+					promptIds.insert(
+						promptIds.end(),
+						promptInjectionIds.begin(),
+						promptInjectionIds.end());
+					promptIds.push_back(kTokenNewline);
+				}
+				promptIds.push_back(kTokenAudioStart);
 				const std::size_t audioPadCount = encodedSequenceLength;
 				const std::size_t audioPadStartIndex = promptIds.size();
 				promptIds.reserve(promptIds.size() + audioPadCount + 8);
