@@ -470,6 +470,23 @@ namespace blazeclaw::core::speechrecognition {
 			return mode == "parallel" ? "parallel" : "sequential";
 		}
 
+		std::string NormalizeRuntimeHotMode(const std::wstring& value) {
+			std::string mode = ToNarrowLocal(value);
+			std::transform(
+				mode.begin(),
+				mode.end(),
+				mode.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			if (mode == "on_demand" ||
+				mode == "idle_timeout") {
+				return mode;
+			}
+
+			return "always_online";
+		}
+
 		std::string NormalizeLanguageCode(const std::string& raw) {
 			std::string normalized;
 			normalized.reserve(raw.size());
@@ -819,6 +836,8 @@ namespace blazeclaw::core::speechrecognition {
 
 	void SpeechRecognitionRuntime::ResetSnapshotLocked() {
 		m_sessionState = std::make_unique<SessionState>();
+		m_lastRuntimeActivity = std::chrono::steady_clock::time_point{};
+		m_runtimeWarmupCompleted = false;
 		{
 			std::lock_guard<std::mutex> cancelLock(m_cancelMutex);
 			m_cancelFlagsByRunId.clear();
@@ -836,10 +855,117 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.cudaExecutionProviderReason.clear();
 		m_snapshot.effectiveExecutionProvider = "cpu";
 		m_snapshot.verboseMetrics = m_config.speechRecognition.verboseMetrics;
+		ApplyRuntimeHotPolicyToSnapshotLocked();
 		m_snapshot.status = "configured";
 	}
 
+	void SpeechRecognitionRuntime::ApplyRuntimeHotPolicyToSnapshotLocked() {
+		m_snapshot.runtimeHotMode =
+			NormalizeRuntimeHotMode(m_config.speechRecognition.runtimeHotMode);
+		m_snapshot.runtimeHotWarmupEnabled =
+			m_config.speechRecognition.runtimeHotWarmupEnabled;
+		m_snapshot.runtimeHotWarmupRuns =
+		m_config.speechRecognition.runtimeHotWarmupRuns;
+		m_snapshot.runtimeHotIdleTimeoutMs =
+			m_config.speechRecognition.runtimeHotIdleTimeoutMs;
+		SetLifecycleStateLocked("cold");
+	}
+
+	void SpeechRecognitionRuntime::SetLifecycleStateLocked(const char* state) {
+		if (state == nullptr) {
+			return;
+		}
+		if (m_snapshot.runtimeHotLifecycleState == state) {
+			return;
+		}
+
+		m_snapshot.runtimeHotLifecycleState = state;
+		TraceRuntime(
+			"runtime.hot.lifecycle",
+			std::string(),
+			"mode=" + m_snapshot.runtimeHotMode + " state=" +
+			m_snapshot.runtimeHotLifecycleState);
+	}
+
+	void SpeechRecognitionRuntime::TouchRuntimeActivityLocked() {
+		m_lastRuntimeActivity = std::chrono::steady_clock::now();
+	}
+
+	void SpeechRecognitionRuntime::UnloadSessionLocked(const char* reason) {
+		m_sessionState = std::make_unique<SessionState>();
+		m_snapshot.ready = false;
+		m_snapshot.error = std::nullopt;
+		m_snapshot.status = "idle_unloaded";
+		m_runtimeWarmupCompleted = false;
+		SetLifecycleStateLocked("unloaded");
+		TraceRuntime(
+			"runtime.hot.unload",
+			std::string(),
+			"mode=" + m_snapshot.runtimeHotMode + " reason=" +
+			(std::string(reason == nullptr ? "none" : reason)));
+	}
+
+	void SpeechRecognitionRuntime::MaybeUnloadForIdleLocked() {
+		if (m_snapshot.runtimeHotMode != "idle_timeout") {
+			return;
+		}
+		if (!m_sessionState || !m_sessionState->initialized) {
+			return;
+		}
+		if (m_lastRuntimeActivity == std::chrono::steady_clock::time_point{}) {
+			return;
+		}
+
+		const auto now = std::chrono::steady_clock::now();
+		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+			now - m_lastRuntimeActivity).count();
+		if (elapsed < static_cast<std::int64_t>(m_snapshot.runtimeHotIdleTimeoutMs)) {
+			return;
+		}
+
+		SetLifecycleStateLocked("cooling");
+		UnloadSessionLocked("idle_timeout_elapsed");
+	}
+
+	void SpeechRecognitionRuntime::RunWarmupLocked() {
+		if (!m_snapshot.runtimeHotWarmupEnabled ||
+			m_snapshot.runtimeHotWarmupRuns == 0 ||
+			m_runtimeWarmupCompleted ||
+			!m_sessionState ||
+			!m_sessionState->initialized) {
+			return;
+		}
+
+		try {
+			for (std::uint32_t run = 0; run < m_snapshot.runtimeHotWarmupRuns; ++run) {
+#if BLAZECLAW_HAS_ONNXRUNTIME
+				if (m_sessionState->encoder) {
+					(void)m_sessionState->encoder->GetInputCount();
+				}
+				if (m_sessionState->decoderInit) {
+					(void)m_sessionState->decoderInit->GetInputCount();
+				}
+#endif
+			}
+			m_runtimeWarmupCompleted = true;
+			TouchRuntimeActivityLocked();
+			TraceRuntime(
+				"runtime.hot.warmup.completed",
+				std::string(),
+				"runs=" + std::to_string(m_snapshot.runtimeHotWarmupRuns));
+		}
+		catch (const std::exception& ex) {
+			m_snapshot.status = "warmup_failed";
+			TraceRuntime(
+				"runtime.hot.warmup.failed",
+				std::string(),
+				"message=" + std::string(ex.what()));
+		}
+	}
+
 	bool SpeechRecognitionRuntime::EnsureLoadedLocked(SpeechTranscribeResult& outResult) {
+		MaybeUnloadForIdleLocked();
+
 		if (!m_sessionState) {
 			m_sessionState = std::make_unique<SessionState>();
 		}
@@ -989,8 +1115,12 @@ namespace blazeclaw::core::speechrecognition {
 		return false;
 #else
 		if (m_sessionState->initialized) {
+			SetLifecycleStateLocked("hot");
+			TouchRuntimeActivityLocked();
 			return true;
 		}
+
+		SetLifecycleStateLocked("loading");
 
 		try {
 			m_sessionState->env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "blazeclaw-speech");
@@ -1238,6 +1368,9 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.ready = true;
 			m_snapshot.status = "ready";
 			m_snapshot.error = std::nullopt;
+			SetLifecycleStateLocked("hot");
+			TouchRuntimeActivityLocked();
+			RunWarmupLocked();
 			return true;
 		}
 		catch (const std::exception& ex) {

@@ -2,6 +2,7 @@
 
 #include "ISpeechRecognitionRuntime.h"
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -28,7 +29,17 @@ namespace blazeclaw::core::speechrecognition {
 	private:
 		struct SessionState;
 
+		static constexpr const char* kRuntimeHotModeAlwaysOnline = "always_online";
+		static constexpr const char* kRuntimeHotModeOnDemand = "on_demand";
+		static constexpr const char* kRuntimeHotModeIdleTimeout = "idle_timeout";
+
 		[[nodiscard]] bool EnsureLoadedLocked(SpeechTranscribeResult& outResult);
+		void ApplyRuntimeHotPolicyToSnapshotLocked();
+		void SetLifecycleStateLocked(const char* state);
+		void TouchRuntimeActivityLocked();
+		void MaybeUnloadForIdleLocked();
+		void UnloadSessionLocked(const char* reason);
+		void RunWarmupLocked();
 
 		void ResetSnapshotLocked();
 
@@ -44,6 +55,8 @@ namespace blazeclaw::core::speechrecognition {
 		SpeechRecognitionRuntimeSnapshot m_snapshot;
 		std::unique_ptr<SessionState> m_sessionState;
 		std::unordered_map<std::string, bool> m_cancelFlagsByRunId;
+		std::chrono::steady_clock::time_point m_lastRuntimeActivity{};
+		bool m_runtimeWarmupCompleted = false;
 		bool m_cudaCompatibilityGuardLatched = false;
 		std::string m_cudaCompatibilityGuardLatchedReason;
 	};

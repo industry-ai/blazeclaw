@@ -89,8 +89,11 @@ namespace blazeclaw::gateway {
 				"speech.capabilities.get",
 				[&host](const protocol::RequestFrame& request) {
 					const bool runtimeConnected = host.IsRunning();
+					const auto sttRuntimeStatus = host.GetSpeechRecognitionRuntimeStatus();
 					const bool sttSupported = true;
-					const bool sttReady = runtimeConnected;
+					const bool sttReady = runtimeConnected &&
+						sttRuntimeStatus.enabled &&
+						(sttRuntimeStatus.ready || sttRuntimeStatus.runtimeHotMode == "on_demand");
 					const bool incrementalSegmentSupported = true;
 					const auto ttsStatus = host.GetSpeechStatus();
 					const bool ttsSupported = ttsStatus.supported;
@@ -107,6 +110,16 @@ namespace blazeclaw::gateway {
 								{ "audioMimeType", JsonString("audio/wav") },
 								{ "audioContainer", JsonString("wav") },
 								{ "streamingSupported", JsonBool(false) },
+							{ "status", JsonString(sttRuntimeStatus.status) },
+							{ "provider", JsonString(sttRuntimeStatus.provider) },
+							{ "effectiveExecutionProvider", JsonString(sttRuntimeStatus.effectiveExecutionProvider) },
+							{ "runtimeHot", JsonObject({
+								{ "mode", JsonString(sttRuntimeStatus.runtimeHotMode) },
+								{ "lifecycleState", JsonString(sttRuntimeStatus.runtimeHotLifecycleState) },
+								{ "warmupEnabled", JsonBool(sttRuntimeStatus.runtimeHotWarmupEnabled) },
+								{ "warmupRuns", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotWarmupRuns)) },
+								{ "idleTimeoutMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotIdleTimeoutMs)) },
+							}) },
 							}) },
 							{ "transcript", JsonObject({
 								{ "supportsSegments", JsonBool(incrementalSegmentSupported) },

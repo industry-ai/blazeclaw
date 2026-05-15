@@ -1066,6 +1066,32 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.runtime_hot_mode=", 0) == 0) {
+				outConfig.speechRecognition.runtimeHotMode = ToLowerTrim(trimmedLine.substr(24));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.runtime_hot_idle_timeout_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(35), value)) {
+					outConfig.speechRecognition.runtimeHotIdleTimeoutMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.runtime_hot_warmup_enabled=", 0) == 0) {
+				outConfig.speechRecognition.runtimeHotWarmupEnabled = ParseBool(trimmedLine.substr(34), true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.runtime_hot_warmup_runs=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(31), value)) {
+					outConfig.speechRecognition.runtimeHotWarmupRuns = value;
+				}
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.language=", 0) == 0) {
 				outConfig.speechRecognition.language = Trim(trimmedLine.substr(16));
 				continue;
@@ -1820,6 +1846,18 @@ namespace blazeclaw::config {
 			outConfig.speechRecognition.modelVariant != L"fp32") {
 			outConfig.speechRecognition.modelVariant = L"auto";
 		}
+		outConfig.speechRecognition.runtimeHotMode =
+			ToLowerTrim(outConfig.speechRecognition.runtimeHotMode);
+		if (outConfig.speechRecognition.runtimeHotMode != L"always_online" &&
+			outConfig.speechRecognition.runtimeHotMode != L"on_demand" &&
+			outConfig.speechRecognition.runtimeHotMode != L"idle_timeout") {
+			outConfig.speechRecognition.runtimeHotMode = L"always_online";
+		}
+		if (outConfig.speechRecognition.runtimeHotIdleTimeoutMs == 0) {
+			outConfig.speechRecognition.runtimeHotIdleTimeoutMs = 300000;
+		}
+		outConfig.speechRecognition.runtimeHotWarmupRuns =
+			(std::min)(outConfig.speechRecognition.runtimeHotWarmupRuns, 8u);
 		outConfig.speechRecognition.executionMode =
 			ToLowerTrim(outConfig.speechRecognition.executionMode) == L"parallel"
 			? L"parallel"

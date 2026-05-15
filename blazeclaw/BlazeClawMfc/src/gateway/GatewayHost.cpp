@@ -1520,6 +1520,31 @@ namespace blazeclaw::gateway {
 		return m_speechStatusCallback();
 	}
 
+	void GatewayHost::SetSpeechRecognitionRuntimeStatusCallback(
+		SpeechRecognitionRuntimeStatusCallback callback) {
+		m_speechRecognitionRuntimeStatusCallback = std::move(callback);
+	}
+
+	GatewayHost::SpeechRecognitionRuntimeStatus GatewayHost::GetSpeechRecognitionRuntimeStatus() const {
+		if (!m_speechRecognitionRuntimeStatusCallback) {
+			return SpeechRecognitionRuntimeStatus{
+				.enabled = false,
+				.ready = false,
+				.status = "unavailable",
+				.provider = "onnx",
+				.modelPath = {},
+				.runtimeHotMode = "always_online",
+				.runtimeHotLifecycleState = "cold",
+				.runtimeHotWarmupEnabled = false,
+				.runtimeHotWarmupRuns = 0,
+				.runtimeHotIdleTimeoutMs = 0,
+				.effectiveExecutionProvider = "cpu",
+			};
+		}
+
+		return m_speechRecognitionRuntimeStatusCallback();
+	}
+
 	void GatewayHost::SetParityLifecycleExportCallback(
 		ParityLifecycleExportCallback callback) {
 		m_parityLifecycleExport = std::move(callback);

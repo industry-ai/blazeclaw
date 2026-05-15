@@ -295,10 +295,31 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		}
 		manager.m_localModelRuntimeSnapshot = manager.m_localModelRuntime->Snapshot();
 		AppendStartupTrace("ServiceManager.Start.localmodel.afterLoad");
-		const bool speechRecognitionLoaded = manager.m_speechRecognitionRuntime.LoadModel();
+		std::string speechRuntimeHotMode = "always_online";
+		{
+			std::wstring mode = manager.m_activeConfig.speechRecognition.runtimeHotMode;
+			std::transform(
+				mode.begin(),
+				mode.end(),
+				mode.begin(),
+				[](wchar_t ch) {
+					return static_cast<wchar_t>(std::towlower(ch));
+				});
+			if (mode == L"on_demand" || mode == L"idle_timeout") {
+				speechRuntimeHotMode.assign(mode.begin(), mode.end());
+			}
+		}
+		const bool speechStartupLoadEnabled =
+			speechRuntimeHotMode != "on_demand";
+		const bool speechRecognitionLoaded = speechStartupLoadEnabled
+			? manager.m_speechRecognitionRuntime.LoadModel()
+			: true;
 		manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
 		if (!speechRecognitionLoaded && manager.m_speechRecognition.status.empty()) {
 			manager.m_speechRecognition.status = "load_failed";
+		}
+		if (speechStartupLoadEnabled == false) {
+			manager.m_speechRecognition.status = "startup_load_deferred";
 		}
 		AppendStartupTrace("ServiceManager.Start.speech.afterLoad");
 		if (!localModelLoaded && manager.m_localModelRuntimeSnapshot.status.empty()) {

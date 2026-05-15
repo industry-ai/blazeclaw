@@ -289,6 +289,20 @@ namespace blazeclaw::gateway {
 			std::string errorMessage;
 		};
 
+		struct SpeechRecognitionRuntimeStatus {
+			bool enabled = false;
+			bool ready = false;
+			std::string status;
+			std::string provider;
+			std::string modelPath;
+			std::string runtimeHotMode;
+			std::string runtimeHotLifecycleState;
+			bool runtimeHotWarmupEnabled = false;
+			std::uint32_t runtimeHotWarmupRuns = 0;
+			std::uint32_t runtimeHotIdleTimeoutMs = 0;
+			std::string effectiveExecutionProvider;
+		};
+
 		struct EmbeddingsGenerateRequest {
 			std::string text;
 			std::optional<bool> normalize;
@@ -445,6 +459,8 @@ namespace blazeclaw::gateway {
 			std::function<SpeechStopResult(const SpeechStopRequest&)>;
 		using SpeechStatusCallback =
 			std::function<SpeechStatusResult()>;
+		using SpeechRecognitionRuntimeStatusCallback =
+			std::function<SpeechRecognitionRuntimeStatus()>;
 		using ParityLifecycleExportCallback = std::function<std::string()>;
 
 		[[nodiscard]] static std::vector<std::string>
@@ -513,6 +529,8 @@ namespace blazeclaw::gateway {
 			const SpeechStopRequest& request) const;
 		void SetSpeechStatusCallback(SpeechStatusCallback callback);
 		[[nodiscard]] SpeechStatusResult GetSpeechStatus() const;
+		void SetSpeechRecognitionRuntimeStatusCallback(SpeechRecognitionRuntimeStatusCallback callback);
+		[[nodiscard]] SpeechRecognitionRuntimeStatus GetSpeechRecognitionRuntimeStatus() const;
 
 		struct NativeRecordingResult {
 			bool ok = false;
@@ -823,6 +841,7 @@ namespace blazeclaw::gateway {
 		SpeechSpeakCallback m_speechSpeakCallback;
 		SpeechStopCallback m_speechStopCallback;
 		SpeechStatusCallback m_speechStatusCallback;
+		SpeechRecognitionRuntimeStatusCallback m_speechRecognitionRuntimeStatusCallback;
 		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };

@@ -339,6 +339,25 @@ namespace blazeclaw::core {
 			return status;
 			});
 
+		manager.m_gatewayHost.SetSpeechRecognitionRuntimeStatusCallback([&manager]() {
+			const auto snapshot = manager.m_speechRecognitionRuntime.Snapshot();
+			manager.m_speechRecognition = snapshot;
+
+			blazeclaw::gateway::GatewayHost::SpeechRecognitionRuntimeStatus status;
+			status.enabled = snapshot.enabled;
+			status.ready = snapshot.ready;
+			status.status = snapshot.status;
+			status.provider = snapshot.provider;
+			status.modelPath = snapshot.modelPath;
+			status.runtimeHotMode = snapshot.runtimeHotMode;
+			status.runtimeHotLifecycleState = snapshot.runtimeHotLifecycleState;
+			status.runtimeHotWarmupEnabled = snapshot.runtimeHotWarmupEnabled;
+			status.runtimeHotWarmupRuns = snapshot.runtimeHotWarmupRuns;
+			status.runtimeHotIdleTimeoutMs = snapshot.runtimeHotIdleTimeoutMs;
+			status.effectiveExecutionProvider = snapshot.effectiveExecutionProvider;
+			return status;
+			});
+
 		manager.m_gatewayHost.SetSpeechSpeakCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechSpeakRequest& request) {
 			manager.m_textToSpeech.speakRequestsStarted += 1;

@@ -490,6 +490,10 @@ namespace blazeclaw::config {
 		std::wstring storageRoot = L"models/chat/qwen3-asr-1.7b-onnx";
 		std::wstring modelPath;
 		std::wstring modelVariant = L"auto"; // auto|int4|fp16|fp32
+		std::wstring runtimeHotMode = L"always_online"; // always_online|on_demand|idle_timeout
+		std::uint32_t runtimeHotIdleTimeoutMs = 300000;
+		bool runtimeHotWarmupEnabled = true;
+		std::uint32_t runtimeHotWarmupRuns = 1;
 		std::wstring language = L"und";
 		std::vector<std::wstring> allowedLanguages = { L"en", L"zh" };
 		bool enforceAllowedLanguages = false;
