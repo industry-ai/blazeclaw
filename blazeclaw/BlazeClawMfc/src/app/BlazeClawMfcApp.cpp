@@ -48,6 +48,25 @@ namespace {
 		return output;
 	}
 
+	std::wstring JoinValues(const std::vector<std::wstring>& values) {
+		if (values.empty()) {
+			return L"none";
+		}
+
+		std::wstring output;
+		for (const auto& value : values) {
+			if (value.empty()) {
+				continue;
+			}
+			if (!output.empty()) {
+				output += L",";
+			}
+			output += value;
+		}
+
+		return output.empty() ? L"none" : output;
+	}
+
 	std::wstring Trim(const std::wstring& value) {
 		const auto first = std::find_if_not(
 			value.begin(),
@@ -410,7 +429,7 @@ namespace {
 		const auto runtime = services.SpeechRecognition();
 		CString configLine;
 		configLine.Format(
-			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s modelVariant=%s language=%s sampleRate=%u chunkMs=%u overlapMs=%u threads=%u mode=%s",
+			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s modelVariant=%s language=%s allowedLanguages=%s enforceAllowedLanguages=%s sampleRate=%u chunkMs=%u overlapMs=%u threads=%u mode=%s",
 			config.speechRecognition.enabled ? L"true" : L"false",
 			config.speechRecognition.cudaEnabled ? L"true" : L"false",
 			config.speechRecognition.provider.c_str(),
@@ -419,6 +438,8 @@ namespace {
 			config.speechRecognition.modelPath.c_str(),
 			config.speechRecognition.modelVariant.c_str(),
 			config.speechRecognition.language.c_str(),
+			JoinValues(config.speechRecognition.allowedLanguages).c_str(),
+			config.speechRecognition.enforceAllowedLanguages ? L"true" : L"false",
 			config.speechRecognition.sampleRate,
 			config.speechRecognition.chunkMs,
 			config.speechRecognition.overlapMs,

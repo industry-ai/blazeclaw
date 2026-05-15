@@ -383,6 +383,24 @@ namespace blazeclaw::core::speechrecognition {
 			return mode == "parallel" ? "parallel" : "sequential";
 		}
 
+		std::string NormalizeLanguageCode(const std::string& raw) {
+			std::string normalized;
+			normalized.reserve(raw.size());
+			for (const unsigned char ch : raw) {
+				if (std::isalpha(ch) != 0) {
+					normalized.push_back(static_cast<char>(std::tolower(ch)));
+					continue;
+				}
+				if (ch == '-' || ch == '_') {
+					break;
+				}
+			}
+			if (normalized == "cn") {
+				return "zh";
+			}
+			return normalized;
+		}
+
 		std::filesystem::path ResolveConfiguredPath(
 			const std::wstring& configuredPath,
 			const std::wstring& storageRoot) {
@@ -1210,6 +1228,59 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.status = "audio_missing";
 			m_snapshot.error = result.error;
 			return result;
+		}
+
+		const std::string requestedLanguage = request.language.empty()
+			? ToNarrow(m_config.speechRecognition.language)
+			: request.language;
+		const std::string normalizedRequestedLanguage = NormalizeLanguageCode(requestedLanguage);
+		if (m_config.speechRecognition.enforceAllowedLanguages) {
+			std::unordered_set<std::string> allowed;
+			allowed.reserve(m_config.speechRecognition.allowedLanguages.size());
+			for (const auto& entry : m_config.speechRecognition.allowedLanguages) {
+				const std::string normalized = NormalizeLanguageCode(ToNarrow(entry));
+				if (!normalized.empty()) {
+					allowed.insert(normalized);
+				}
+			}
+
+			if (allowed.empty()) {
+				result.ok = false;
+				result.error = SpeechRecognitionError{
+					.code = SpeechRecognitionErrorCode::InvalidInput,
+					.message = "speech.enforce_allowed_languages=true but speech.allowed_languages is empty",
+				};
+				result.sessionState.stage = SpeechSessionStage::Failed;
+				result.sessionState.error = result.error;
+				++m_snapshot.transcribeRequestsFailed;
+				m_snapshot.status = "language_policy_invalid";
+				m_snapshot.error = result.error;
+				TraceRuntime(
+					"transcribe.language_policy.blocked",
+					request.runId,
+					"reason=empty_allowed_languages requested=" + requestedLanguage);
+				return result;
+			}
+
+			if (normalizedRequestedLanguage.empty() ||
+				allowed.find(normalizedRequestedLanguage) == allowed.end()) {
+				result.ok = false;
+				result.error = SpeechRecognitionError{
+					.code = SpeechRecognitionErrorCode::InvalidInput,
+					.message = "requested language is not allowed by speech.allowed_languages",
+				};
+				result.sessionState.stage = SpeechSessionStage::Failed;
+				result.sessionState.error = result.error;
+				++m_snapshot.transcribeRequestsFailed;
+				m_snapshot.status = "language_not_allowed";
+				m_snapshot.error = result.error;
+				TraceRuntime(
+					"transcribe.language_policy.blocked",
+					request.runId,
+					"requested=" + requestedLanguage +
+					" normalized=" + normalizedRequestedLanguage);
+				return result;
+			}
 		}
 
 #if !BLAZECLAW_HAS_ONNXRUNTIME

@@ -44,6 +44,29 @@ function Is-ProvidedNumber([double]$value) {
 	return -not [double]::IsNaN($value)
 }
 
+function Try-GetConfigValue {
+	param(
+		[string[]]$Lines,
+		[string]$Key
+	)
+
+	$prefix = "$Key="
+	foreach ($line in $Lines) {
+		$trimmed = $line.Trim()
+		if ($trimmed.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+			return $trimmed.Substring($prefix.Length)
+		}
+	}
+
+	return $null
+}
+
+$configLines = Get-Content -LiteralPath $resolvedConfigPath
+$allowedLanguages = Try-GetConfigValue -Lines $configLines -Key "speech.allowed_languages"
+$enforceAllowedLanguages = Try-GetConfigValue -Lines $configLines -Key "speech.enforce_allowed_languages"
+if ([string]::IsNullOrWhiteSpace($allowedLanguages)) { $allowedLanguages = "en,zh" }
+if ([string]::IsNullOrWhiteSpace($enforceAllowedLanguages)) { $enforceAllowedLanguages = "false" }
+
 $policyOutput = & powershell -ExecutionPolicy Bypass -File $policyScript 2>&1
 $policyExitCode = $LASTEXITCODE
 
@@ -74,6 +97,8 @@ $report += "- MaxLatencyDeltaPercent: $MaxLatencyDeltaPercent"
 $report += "- ObservedLatencyDeltaPercent: $(if ($latencyProvided) { $ObservedLatencyDeltaPercent } else { 'not_provided' })"
 $report += "- MaxQualityRegressionPercent: $MaxQualityRegressionPercent"
 $report += "- ObservedQualityRegressionPercent: $(if ($qualityProvided) { $ObservedQualityRegressionPercent } else { 'not_provided' })"
+$report += "- speech.allowed_languages: $allowedLanguages"
+$report += "- speech.enforce_allowed_languages: $enforceAllowedLanguages"
 $report += ""
 $report += "## Gate Evaluation"
 $report += "- no fail-fast crashes (proxy: matrix preflight): $(Get-GateStatus -Condition $gateNoFailFastCrashes -PassLabel 'pass' -FailLabel 'fail')"

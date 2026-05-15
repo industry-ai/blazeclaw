@@ -1071,6 +1071,23 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.allowed_languages=", 0) == 0) {
+				const auto parsed = SplitCsvValues(trimmedLine.substr(25));
+				outConfig.speechRecognition.allowedLanguages.clear();
+				for (const auto& item : parsed) {
+					const auto normalized = ToLowerTrim(item);
+					if (!normalized.empty()) {
+						outConfig.speechRecognition.allowedLanguages.push_back(normalized);
+					}
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.enforce_allowed_languages=", 0) == 0) {
+				outConfig.speechRecognition.enforceAllowedLanguages = ParseBool(trimmedLine.substr(33), false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.sample_rate=", 0) == 0) {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(19), value) && value > 0) {
@@ -1807,6 +1824,23 @@ namespace blazeclaw::config {
 			ToLowerTrim(outConfig.speechRecognition.executionMode) == L"parallel"
 			? L"parallel"
 			: L"sequential";
+		for (auto& item : outConfig.speechRecognition.allowedLanguages) {
+			item = ToLowerTrim(item);
+		}
+		outConfig.speechRecognition.allowedLanguages.erase(
+			std::remove_if(
+				outConfig.speechRecognition.allowedLanguages.begin(),
+				outConfig.speechRecognition.allowedLanguages.end(),
+				[](const std::wstring& value) { return value.empty(); }),
+			outConfig.speechRecognition.allowedLanguages.end());
+		std::sort(
+			outConfig.speechRecognition.allowedLanguages.begin(),
+			outConfig.speechRecognition.allowedLanguages.end());
+		outConfig.speechRecognition.allowedLanguages.erase(
+			std::unique(
+				outConfig.speechRecognition.allowedLanguages.begin(),
+				outConfig.speechRecognition.allowedLanguages.end()),
+			outConfig.speechRecognition.allowedLanguages.end());
 		const auto normalizedChunk = std::clamp<std::uint32_t>(
 			outConfig.speechRecognition.chunkMs,
 			320u,

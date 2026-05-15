@@ -35,11 +35,15 @@ $currentChunk = Try-GetConfigValue -Lines $configLines -Key "speech.chunk_ms"
 $currentOverlap = Try-GetConfigValue -Lines $configLines -Key "speech.overlap_ms"
 $currentVariant = Try-GetConfigValue -Lines $configLines -Key "speech.model_variant"
 $currentCudaEnabled = Try-GetConfigValue -Lines $configLines -Key "speech.cuda.enabled"
+$currentAllowedLanguages = Try-GetConfigValue -Lines $configLines -Key "speech.allowed_languages"
+$currentEnforceAllowedLanguages = Try-GetConfigValue -Lines $configLines -Key "speech.enforce_allowed_languages"
 
 if ([string]::IsNullOrWhiteSpace($currentChunk)) { $currentChunk = "1000" }
 if ([string]::IsNullOrWhiteSpace($currentOverlap)) { $currentOverlap = "320" }
 if ([string]::IsNullOrWhiteSpace($currentVariant)) { $currentVariant = "auto" }
 if ([string]::IsNullOrWhiteSpace($currentCudaEnabled)) { $currentCudaEnabled = "true" }
+if ([string]::IsNullOrWhiteSpace($currentAllowedLanguages)) { $currentAllowedLanguages = "en,zh" }
+if ([string]::IsNullOrWhiteSpace($currentEnforceAllowedLanguages)) { $currentEnforceAllowedLanguages = "false" }
 
 $rows = New-Object 'System.Collections.Generic.List[object]'
 foreach ($chunk in $ChunkCandidatesMs) {
@@ -82,6 +86,8 @@ $report += "- speech.chunk_ms: $currentChunk"
 $report += "- speech.overlap_ms: $currentOverlap"
 $report += "- speech.model_variant: $currentVariant"
 $report += "- speech.cuda.enabled: $currentCudaEnabled"
+$report += "- speech.allowed_languages: $currentAllowedLanguages"
+$report += "- speech.enforce_allowed_languages: $currentEnforceAllowedLanguages"
 $report += ""
 $report += "## Candidate Audio Window Matrix"
 $report += '```text'

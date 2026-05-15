@@ -491,6 +491,8 @@ namespace blazeclaw::config {
 		std::wstring modelPath;
 		std::wstring modelVariant = L"auto"; // auto|int4|fp16|fp32
 		std::wstring language = L"und";
+		std::vector<std::wstring> allowedLanguages = { L"en", L"zh" };
+		bool enforceAllowedLanguages = false;
 		std::uint32_t sampleRate = 16000;
 		std::uint32_t chunkMs = 1000;
 		std::uint32_t overlapMs = 320;
