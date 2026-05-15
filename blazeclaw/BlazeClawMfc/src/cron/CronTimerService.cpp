@@ -4,6 +4,8 @@
 
 #include <chrono>
 #include <cmath>
+#include <sstream>
+#include <vector>
 
 namespace {
 	constexpr std::int64_t kMinuteMs = 60'000;
@@ -14,6 +16,60 @@ namespace {
 namespace blazeclaw::cron {
 
 	namespace {
+		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
+
+		bool StartsWithHttpScheme(const std::string& value) {
+			const std::string lowered = ToLowerCopy(TrimCopy(value));
+			return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
+		}
+
+		std::int64_t ResolveRetryDelayMs(const CronJson& retry, const std::int64_t attemptIndex) {
+			auto parseDelay = [](const CronJson& value) -> std::optional<std::int64_t> {
+				if (value.is_number_integer()) {
+					return value.get<std::int64_t>();
+				}
+				if (value.is_number_unsigned()) {
+					return static_cast<std::int64_t>(value.get<std::uint64_t>());
+				}
+				if (value.is_number_float()) {
+					return static_cast<std::int64_t>(value.get<double>());
+				}
+				if (value.is_string()) {
+					try {
+						return std::stoll(TrimCopy(value.get<std::string>()));
+					}
+					catch (...) {
+						return std::nullopt;
+					}
+				}
+				return std::nullopt;
+			};
+
+			if (retry.contains("backoffMs") && retry["backoffMs"].is_array()) {
+				const auto& backoff = retry["backoffMs"];
+				if (!backoff.empty()) {
+					const std::size_t index = static_cast<std::size_t>((std::max)(
+						static_cast<std::int64_t>(0),
+						attemptIndex - 1));
+					const std::size_t bounded = (std::min)(index, backoff.size() - 1);
+					const auto delay = parseDelay(backoff[bounded]);
+					if (delay.has_value() && delay.value() >= 0) {
+						return delay.value();
+					}
+				}
+			}
+
+			return kDefaultRetryDelayMs;
+		}
+
+		struct RunOutcome {
+			std::string status = "ok";
+			std::string summary;
+			std::string error;
+			std::string deliveryStatus = "not-requested";
+			bool delivered = false;
+		};
+
 		CronJson& EnsureStateObject(CronJson& job) {
 			if (!job.contains("state") || !job["state"].is_object()) {
 				job["state"] = CronJson::object();
@@ -21,11 +77,85 @@ namespace blazeclaw::cron {
 			return job["state"];
 		}
 
+		std::optional<std::int64_t> ReadRetryPendingUntilMs(const CronJson& job) {
+			if (!job.contains("state") || !job["state"].is_object()) {
+				return std::nullopt;
+			}
+			return TryReadInt64Field(job["state"], "retryPendingUntilMs");
+		}
+
 		std::optional<std::int64_t> ReadNextRunAtMs(const CronJson& job) {
 			if (!job.contains("state") || !job["state"].is_object()) {
 				return std::nullopt;
 			}
 			return TryReadInt64Field(job["state"], "nextRunAtMs");
+		}
+
+		RunOutcome EvaluateRunOutcome(const CronJson& job) {
+			RunOutcome outcome;
+
+			if (!job.contains("payload") || !job["payload"].is_object()) {
+				outcome.status = "error";
+				outcome.error = "invalid payload";
+				outcome.summary = "Payload missing or invalid";
+				return outcome;
+			}
+
+			const CronJson& payload = job["payload"];
+			const std::string payloadKind =
+				ToLowerCopy(TrimCopy(payload.value("kind", std::string())));
+			if (payloadKind == "systemevent") {
+				const std::string text =
+					TrimCopy(payload.value("text", std::string()));
+				if (text.empty()) {
+					outcome.status = "skipped";
+					outcome.summary = "Skipped: empty systemEvent text";
+					return outcome;
+				}
+			}
+			if (payloadKind == "agentturn") {
+				const std::string message =
+					TrimCopy(payload.value("message", std::string()));
+				if (message.empty()) {
+					outcome.status = "skipped";
+					outcome.summary = "Skipped: empty agentTurn message";
+					return outcome;
+				}
+			}
+
+			if (job.contains("delivery") && job["delivery"].is_object()) {
+				const CronJson& delivery = job["delivery"];
+				const std::string mode = ToLowerCopy(
+					TrimCopy(delivery.value("mode", std::string("announce"))));
+				if (mode == "none") {
+					outcome.deliveryStatus = "not-requested";
+					outcome.delivered = false;
+				}
+				else if (mode == "announce") {
+					outcome.deliveryStatus = "delivered";
+					outcome.delivered = true;
+				}
+				else if (mode == "webhook") {
+					const std::string to =
+						TrimCopy(delivery.value("to", std::string()));
+					if (StartsWithHttpScheme(to)) {
+						outcome.deliveryStatus = "delivered";
+						outcome.delivered = true;
+					}
+					else {
+						outcome.status = "error";
+						outcome.deliveryStatus = "not-delivered";
+						outcome.error = "invalid webhook delivery target";
+						outcome.summary = "Webhook delivery target is invalid";
+					}
+				}
+			}
+
+			if (outcome.status == "ok" && outcome.summary.empty()) {
+				outcome.summary = "Run completed";
+			}
+
+			return outcome;
 		}
 
 		std::optional<std::pair<int, int>> ParseCronMinuteHour(
@@ -171,6 +301,11 @@ namespace blazeclaw::cron {
 			return std::nullopt;
 		}
 
+		const auto retryPendingUntilMs = ReadRetryPendingUntilMs(job);
+		if (retryPendingUntilMs.has_value() && retryPendingUntilMs.value() > nowMs) {
+			return retryPendingUntilMs.value();
+		}
+
 		const CronJson& schedule = job["schedule"];
 		const std::string kind =
 			ToLowerCopy(TrimCopy(schedule.value("kind", std::string())));
@@ -259,17 +394,48 @@ namespace blazeclaw::cron {
 			}
 
 			CronJson& state = EnsureStateObject(*it);
+			const RunOutcome outcome = EvaluateRunOutcome(*it);
 			state["runningAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
-			state["lastStatus"] = "ok";
-			state["lastRunStatus"] = "ok";
+			state["lastStatus"] = outcome.status;
+			state["lastRunStatus"] = outcome.status;
+			state["lastError"] = outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error);
+			state["lastDelivered"] = outcome.delivered;
+			state["lastDeliveryStatus"] = outcome.deliveryStatus;
+			state["lastDeliveryError"] =
+				outcome.deliveryStatus == "not-delivered"
+				? CronJson(outcome.error)
+				: CronJson(nullptr);
 			state["lastDurationMs"] = 0;
 			state["runningAtMs"] = nullptr;
 
 			const bool deleteAfterRun = (*it).value("deleteAfterRun", false);
 			const std::string jobName = (*it).value("name", std::string());
+			const CronJson retry = (*it).value("retry", CronJson::object());
+			const std::int64_t maxAttempts = (std::max)(
+				static_cast<std::int64_t>(0),
+				TryReadInt64Field(retry, "maxAttempts").value_or(0));
+			const std::int64_t previousAttempt =
+				TryReadInt64Field(state, "retryAttempt").value_or(0);
+			bool scheduledRetry = false;
+			std::int64_t retryAttempt = previousAttempt;
 			std::optional<std::int64_t> nextAfterRun;
-			if (!deleteAfterRun) {
+			if (outcome.status == "error" && previousAttempt < maxAttempts) {
+				retryAttempt = previousAttempt + 1;
+				const std::int64_t delayMs = ResolveRetryDelayMs(retry, retryAttempt);
+				const std::int64_t retryAtMs = nowMs + (std::max)(static_cast<std::int64_t>(0), delayMs);
+				state["retryAttempt"] = retryAttempt;
+				state["retryPendingUntilMs"] = retryAtMs;
+				state["nextRunAtMs"] = retryAtMs;
+				nextAfterRun = retryAtMs;
+				scheduledRetry = true;
+			}
+			else {
+				state["retryAttempt"] = 0;
+				state["retryPendingUntilMs"] = CronJson(nullptr);
+			}
+
+			if (!deleteAfterRun && !scheduledRetry) {
 				nextAfterRun = ComputeNextRunAtMs(*it, nowMs);
 				state["nextRunAtMs"] =
 					nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr);
@@ -280,8 +446,14 @@ namespace blazeclaw::cron {
 				{ "ts", nowMs },
 				{ "jobId", id },
 				{ "action", "finished" },
-				{ "status", "ok" },
-				{ "deliveryStatus", "not-requested" },
+				{ "status", outcome.status },
+				{ "summary", outcome.summary },
+				{ "error", outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error) },
+				{ "deliveryStatus", outcome.deliveryStatus },
+				{ "delivered", outcome.delivered },
+				{ "retryAttempt", retryAttempt },
+				{ "retryScheduled", scheduledRetry },
+				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
 				{ "runAtMs", nowMs },
 				{ "nextRunAtMs", deleteAfterRun ? CronJson(nullptr) : (nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr)) },
@@ -290,7 +462,7 @@ namespace blazeclaw::cron {
 			});
 			++executed;
 
-			if (deleteAfterRun) {
+			if (deleteAfterRun && !scheduledRetry) {
 				it = jobs.erase(it);
 				continue;
 			}

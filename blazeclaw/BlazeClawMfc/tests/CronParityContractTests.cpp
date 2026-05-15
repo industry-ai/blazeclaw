@@ -125,6 +125,34 @@ TEST_CASE("Cron store loads legacy array shape and rewrites envelope", "[cron][s
 	std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("Cron store loads envelope with legacy values shape", "[cron][store]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-envelope-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "{\"version\":0,\"kind\":\"jobs\",\"values\":[{\"id\":\"job-envelope\",\"name\":\"legacy\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hi\"}}]}";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "{\"version\":0,\"kind\":\"runs\",\"values\":[]}";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().is_array());
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-envelope");
+
+	std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000; // stable fixture timestamp
@@ -147,4 +175,50 @@ TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer
 		expected += dayMs;
 	}
 	REQUIRE(nextRun.value() == expected);
+}
+
+TEST_CASE("Cron timer schedules retry and records delivery failure", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-webhook" },
+			{ "name", "webhook job" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+			{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed =
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("retryScheduled", false));
+	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
+	REQUIRE(runs[0].value("retryScheduledAtMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+	REQUIRE(jobs[0]["state"].value("retryPendingUntilMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+}
+
+TEST_CASE("Cron next run respects retry pending timestamp", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	const std::int64_t pendingMs = nowMs + 30'000;
+
+	CronJson job = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "state", { { "retryPendingUntilMs", pendingMs } } }
+	};
+
+	const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+	REQUIRE(nextRun.has_value());
+	REQUIRE(nextRun.value() == pendingMs);
 }

@@ -26,6 +26,9 @@ namespace blazeclaw::cron {
 		CronStoreService m_store;
 		CronTimerService m_timer;
 		std::uint64_t m_idCounter = 0;
+		bool m_startupCatchupDone = false;
+		std::int64_t m_lastSyncAtMs = 0;
+		std::size_t m_maxCatchupRunsPerSync = 64;
 
 		static std::size_t ClampLimit(
 			const CronJson& value,
@@ -35,6 +38,7 @@ namespace blazeclaw::cron {
 
 		CronJson* FindJobByIdLocked(const std::string& id);
 		void EnsureLoadedLocked();
+		void RunStartupCatchupLocked();
 		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
 	};
 

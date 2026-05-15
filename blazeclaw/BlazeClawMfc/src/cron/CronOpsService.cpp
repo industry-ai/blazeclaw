@@ -18,6 +18,7 @@ namespace blazeclaw::cron {
 		(void)params;
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 		const std::int64_t nowMs = UtcNowMs();
 		SyncDueRunsLocked(nowMs, false);
 		const std::int64_t nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
@@ -32,6 +33,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::List(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 		SyncDueRunsLocked(UtcNowMs(), false);
 
 		const std::size_t requestedLimit =
@@ -114,6 +116,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::Add(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 		const std::int64_t nowMs = UtcNowMs();
 
 		CronJson job = CronNormalize::NormalizeAddInput(params);
@@ -137,6 +140,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::Update(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -169,6 +173,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::Remove(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -199,6 +204,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::Run(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
 			throw std::invalid_argument("missing `id` or `jobId`");
@@ -233,7 +239,7 @@ namespace blazeclaw::cron {
 			nextRunAtMs.value() > nowMs) {
 			(*job)["state"]["nextRunAtMs"] = nowMs;
 		}
-		SyncDueRunsLocked(nowMs, true);
+		SyncDueRunsLocked(nowMs, false);
 
 		return {
 			{ "runId", BuildCronRunId(nowMs) },
@@ -247,6 +253,7 @@ namespace blazeclaw::cron {
 	CronJson CronOpsService::Runs(const CronJson& params) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 
 		const std::size_t requestedLimit =
 			ClampLimit(params.value("limit", 20), 1, 200, 20);
@@ -329,9 +336,10 @@ namespace blazeclaw::cron {
 
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
+		RunStartupCatchupLocked();
 		const std::int64_t nowMs = UtcNowMs();
 		if (mode == kWakeModeNow) {
-			SyncDueRunsLocked(nowMs, true);
+			SyncDueRunsLocked(nowMs, false);
 		}
 		else {
 			SyncDueRunsLocked(nowMs, false);
@@ -373,19 +381,43 @@ namespace blazeclaw::cron {
 		}
 	}
 
+	void CronOpsService::RunStartupCatchupLocked() {
+		if (m_startupCatchupDone) {
+			return;
+		}
+
+		m_startupCatchupDone = true;
+		SyncDueRunsLocked(UtcNowMs(), false);
+	}
+
 	void CronOpsService::SyncDueRunsLocked(
 		const std::int64_t nowMs,
 		const bool forceRunDue) {
 		bool changed = m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
-		const std::size_t executed =
-			m_timer.PumpDueRuns(m_store.Jobs(), m_store.Runs(), nowMs, forceRunDue);
-		if (executed > 0) {
+		std::size_t executedTotal = 0;
+		std::size_t loops = 0;
+
+		while (loops < m_maxCatchupRunsPerSync) {
+			const std::size_t executed =
+				m_timer.PumpDueRuns(m_store.Jobs(), m_store.Runs(), nowMs, forceRunDue);
+			if (executed == 0) {
+				break;
+			}
+
+			executedTotal += executed;
 			changed = true;
+			m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
+			++loops;
+		}
+
+		if (executedTotal > 0) {
 			m_store.SaveRuns();
 		}
 		if (changed) {
 			m_store.SaveJobs();
 		}
+
+		m_lastSyncAtMs = nowMs;
 	}
 
 	CronOpsService& GetCronOpsService() {
