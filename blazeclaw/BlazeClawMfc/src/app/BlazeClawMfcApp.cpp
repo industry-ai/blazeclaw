@@ -356,6 +356,8 @@ namespace {
 	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
 		const auto absoluteConfigPath =
 			std::filesystem::absolute(std::filesystem::path(kConfigPath));
+		const auto repoRootConfigPath =
+			std::filesystem::current_path() / L"blazeclaw.conf";
 
 		wchar_t modulePath[MAX_PATH]{};
 		const DWORD moduleLength = GetModuleFileNameW(
@@ -382,6 +384,20 @@ namespace {
 			L"[Chat] startup.config.path - %s",
 			absoluteConfigPath.c_str());
 		AppendMainFrameStatusLine(configPathLine);
+
+		std::error_code configCompareEc;
+		const bool sameConfigPath = std::filesystem::equivalent(
+			absoluteConfigPath,
+			repoRootConfigPath,
+			configCompareEc);
+		if (!sameConfigPath) {
+			CString configMismatchLine;
+			configMismatchLine.Format(
+				L"[Chat] startup.config.path.warning - runtimeConfig=%s differsFromCwdDefault=%s (tooling should target runtime config path)",
+				absoluteConfigPath.c_str(),
+				repoRootConfigPath.c_str());
+			AppendMainFrameStatusLine(configMismatchLine);
+		}
 
 		CString modeLine;
 		modeLine.Format(

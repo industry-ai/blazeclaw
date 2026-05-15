@@ -329,6 +329,93 @@ namespace blazeclaw::core::speechrecognition {
 			}
 		}
 
+		void StripQwen3LanguagePreambleLeak(std::string& value) {
+			if (value.empty()) {
+				return;
+			}
+
+			std::size_t start = 0;
+			while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+				++start;
+			}
+			if (start > 0) {
+				value.erase(0, start);
+			}
+
+			auto startsWithIgnoreCase = [](const std::string& text, const std::string& prefix) {
+				if (text.size() < prefix.size()) {
+					return false;
+				}
+				for (std::size_t i = 0; i < prefix.size(); ++i) {
+					if (std::tolower(static_cast<unsigned char>(text[i])) !=
+						std::tolower(static_cast<unsigned char>(prefix[i]))) {
+						return false;
+					}
+				}
+				return true;
+			};
+
+			if (!startsWithIgnoreCase(value, "language")) {
+				return;
+			}
+
+			std::size_t pos = sizeof("language") - 1;
+			while (pos < value.size() && std::isspace(static_cast<unsigned char>(value[pos]))) {
+				++pos;
+			}
+			if (pos < value.size() && (value[pos] == ':' || value[pos] == '=')) {
+				++pos;
+			}
+			while (pos < value.size() && std::isspace(static_cast<unsigned char>(value[pos]))) {
+				++pos;
+			}
+
+			const std::array<std::string, 8> knownLanguageNames = {
+				"chinese",
+				"english",
+				"mandarin",
+				"zh",
+				"en",
+				"中文",
+				"汉语",
+				"英语",
+			};
+
+			for (const auto& languageName : knownLanguageNames) {
+				if (value.size() - pos < languageName.size()) {
+					continue;
+				}
+				bool match = true;
+				for (std::size_t i = 0; i < languageName.size(); ++i) {
+					if (std::tolower(static_cast<unsigned char>(value[pos + i])) !=
+						std::tolower(static_cast<unsigned char>(languageName[i]))) {
+						match = false;
+						break;
+					}
+				}
+				if (!match) {
+					continue;
+				}
+
+				std::size_t contentPos = pos + languageName.size();
+				while (contentPos < value.size() &&
+					(std::isspace(static_cast<unsigned char>(value[contentPos])) ||
+						value[contentPos] == ':' ||
+						value[contentPos] == '-' ||
+						value[contentPos] == ',' ||
+						value[contentPos] == '。')) {
+					++contentPos;
+				}
+				if (contentPos < value.size()) {
+					value.erase(0, contentPos);
+				}
+				else {
+					value.clear();
+				}
+				break;
+			}
+		}
+
 		std::string ToNarrowLocal(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
@@ -1433,21 +1520,12 @@ namespace blazeclaw::core::speechrecognition {
 			if (samples.size() < nFft) {
 				return std::vector<float>{};
 			}
-			const std::size_t safeChunkMs = (std::clamp)(chunkMs, static_cast<std::size_t>(320), static_cast<std::size_t>(1500));
-			const std::size_t safeOverlapMs = (std::min)(overlapMs, safeChunkMs > 0 ? safeChunkMs - 1 : 0);
-			std::size_t effectiveMs = safeChunkMs;
-			if (safeOverlapMs > 0) {
-				effectiveMs += safeOverlapMs;
-			}
-			const std::size_t kTargetSamples = (std::max)(
-				nFft,
-				static_cast<std::size_t>((sampleRate * effectiveMs) / 1000));
+			(void)chunkMs;
+			(void)overlapMs;
+			const std::size_t kTargetSamples = nFft;
 			std::vector<float> padded = samples;
 			if (padded.size() < kTargetSamples) {
 				padded.resize(kTargetSamples, 0.0f);
-			}
-			else if (padded.size() > kTargetSamples) {
-				padded.resize(kTargetSamples);
 			}
 			const std::size_t frames = 1 + ((padded.size() - nFft) / hop);
 			std::vector<float> output(nMels * frames, 0.0f);
@@ -1550,6 +1628,7 @@ namespace blazeclaw::core::speechrecognition {
 					}
 				}
 				StripQwen3AsrTemplateNoise(value);
+				StripQwen3LanguagePreambleLeak(value);
 				while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
 					value.erase(value.begin());
 				}
@@ -1671,352 +1750,437 @@ namespace blazeclaw::core::speechrecognition {
 		const std::string decoderStrategy = m_sessionState->decoderStep
 			? "decoder_init_only(step_model_disabled_pending_input_embeds_and_kv_cache)"
 			: "decoder_init_only";
+		const std::size_t safeChunkMs = (std::clamp)(
+			static_cast<std::size_t>(m_config.speechRecognition.chunkMs),
+			static_cast<std::size_t>(320),
+			static_cast<std::size_t>(1500));
+		const std::size_t safeOverlapMs = (std::min)(
+			static_cast<std::size_t>(m_config.speechRecognition.overlapMs),
+			safeChunkMs > 0 ? safeChunkMs - 1 : 0);
+		const std::size_t chunkSamples = (std::max)(
+			static_cast<std::size_t>(400),
+			(static_cast<std::size_t>(kDefaultSampleRate) * safeChunkMs) / 1000);
+		const std::size_t overlapSamples = (std::min)(
+			(static_cast<std::size_t>(kDefaultSampleRate) * safeOverlapMs) / 1000,
+			chunkSamples > 0 ? chunkSamples - 1 : 0);
+		const std::size_t stepSamples =
+			chunkSamples > overlapSamples ? (chunkSamples - overlapSamples) : chunkSamples;
+		const bool useChunkedInference = stepSamples > 0 && mono.size() > chunkSamples;
 		std::size_t generatedTokenCount = 0;
 		try {
-			Ort::AllocatorWithDefaultOptions allocator;
-			auto memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-			auto encoderInputNameAlloc = m_sessionState->encoder->GetInputNameAllocated(0, allocator);
-			const char* encoderInputName = encoderInputNameAlloc.get();
-			auto encoderOutputNameAlloc = m_sessionState->encoder->GetOutputNameAllocated(0, allocator);
-			const char* encoderOutputName = encoderOutputNameAlloc.get();
-
-			auto encoderInputShape = m_sessionState->encoder->GetInputTypeInfo(0)
-				.GetTensorTypeAndShapeInfo()
-				.GetShape();
-			std::vector<std::int64_t> encoderDims;
-			if (encoderInputShape.size() == 3) {
-				if (encoderInputShape[1] == 128 || encoderInputShape[1] < 0) {
-					encoderDims = { 1, static_cast<std::int64_t>(nMels), static_cast<std::int64_t>(frames) };
+			auto stitchChunkTranscript = [](
+				std::string& merged,
+				const std::string& nextChunkText) {
+				if (nextChunkText.empty()) {
+					return;
 				}
-				else {
-					encoderDims = { 1, static_cast<std::int64_t>(frames), static_cast<std::int64_t>(nMels) };
+				if (merged.empty()) {
+					merged = nextChunkText;
+					return;
 				}
-			}
-			else {
-				encoderDims = { 1, static_cast<std::int64_t>(nMels), static_cast<std::int64_t>(frames) };
-			}
-
-			std::vector<float> encoderInputData;
-			encoderInputData.reserve(logMel.size());
-			if (encoderDims[1] == static_cast<std::int64_t>(nMels)) {
-				encoderInputData.assign(logMel.begin(), logMel.end());
-			}
-			else {
-				encoderInputData.resize(logMel.size());
-				for (std::size_t t = 0; t < frames; ++t) {
-					for (std::size_t m = 0; m < nMels; ++m) {
-						encoderInputData[t * nMels + m] = logMel[m * frames + t];
+				const std::size_t maxOverlap = (std::min)(merged.size(), nextChunkText.size());
+				std::size_t overlap = 0;
+				for (std::size_t len = maxOverlap; len > 0; --len) {
+					if (merged.compare(merged.size() - len, len, nextChunkText, 0, len) == 0) {
+						overlap = len;
+						break;
 					}
 				}
-			}
-
-			Ort::Value encoderInputTensor = Ort::Value::CreateTensor<float>(
-				memInfo,
-				encoderInputData.data(),
-				encoderInputData.size(),
-				encoderDims.data(),
-				encoderDims.size());
-			std::array<const char*, 1> encoderInputNames{ encoderInputName };
-			std::array<const char*, 1> encoderOutputNames{ encoderOutputName };
-			auto encoderOutputs = m_sessionState->encoder->Run(
-				Ort::RunOptions{ nullptr },
-				encoderInputNames.data(),
-				&encoderInputTensor,
-				1,
-				encoderOutputNames.data(),
-				1);
-			if (encoderOutputs.empty() || !encoderOutputs[0].IsTensor()) {
-				throw std::runtime_error("encoder output is empty or invalid");
-			}
-
-			auto encodedInfo = encoderOutputs[0].GetTensorTypeAndShapeInfo();
-			auto encodedShape = encodedInfo.GetShape();
-			if (encodedShape.empty()) {
-				throw std::runtime_error("encoder output shape is empty");
-			}
-			const auto encodedCount = encodedInfo.GetElementCount();
-			if (encodedCount == 0) {
-				throw std::runtime_error("encoder output has zero elements");
-			}
-			std::size_t encodedSequenceLength = 0;
-			if (encodedShape.size() >= 2 && encodedShape[1] > 0) {
-				encodedSequenceLength = static_cast<std::size_t>(encodedShape[1]);
-			}
-			else if (encodedShape.size() == 3 && encodedShape[2] > 0) {
-				encodedSequenceLength = static_cast<std::size_t>(encodedShape[2]);
-			}
-			if (encodedSequenceLength == 0) {
-				throw std::runtime_error("encoder output sequence length is invalid");
-			}
-			const float* encodedPtr = encoderOutputs[0].GetTensorData<float>();
-
-			std::vector<std::int64_t> promptIds = {
-				kTokenImStart,
-				kPromptTextSystem,
-				kTokenNewline,
-				kTokenImEnd,
-				kTokenNewline,
-				kTokenImStart,
-				kPromptTextUser,
-				kTokenNewline,
-				kTokenAudioStart,
-			};
-			const std::size_t audioPadCount = encodedSequenceLength;
-			const std::size_t audioPadStartIndex = promptIds.size();
-			promptIds.reserve(promptIds.size() + audioPadCount + 8);
-			for (std::size_t i = 0; i < audioPadCount; ++i) {
-				promptIds.push_back(kTokenAudioPad);
-			}
-			promptIds.push_back(kTokenAudioEnd);
-			promptIds.push_back(kTokenImEnd);
-			promptIds.push_back(kTokenNewline);
-			promptIds.push_back(kTokenImStart);
-			promptIds.push_back(kPromptTextAssistant);
-			promptIds.push_back(kTokenNewline);
-
-			std::vector<std::int64_t> generatedIds;
-			generatedIds.reserve(kMaxDecodeSteps);
-			std::vector<std::int64_t> ids;
-			ids.reserve(promptIds.size() + kMaxDecodeSteps);
-			std::vector<std::int64_t> positionIds;
-			positionIds.reserve(promptIds.size() + kMaxDecodeSteps);
-			std::array<std::int64_t, 2> inputIdsShape{ 1, 0 };
-			const std::array<std::int64_t, 1> audioOffsetShape{ 1 };
-			std::array<std::int64_t, 1> audioOffset{
-				static_cast<std::int64_t>(audioPadStartIndex),
+				if (overlap == 0 && !merged.empty() && !std::isspace(static_cast<unsigned char>(merged.back()))) {
+					merged += " ";
+				}
+				merged += nextChunkText.substr(overlap);
 			};
 
-			std::vector<const char*> decoderInputNames;
-			decoderInputNames.reserve(m_sessionState->decoderInitInputBindings.size());
-			for (const auto& binding : m_sessionState->decoderInitInputBindings) {
-				decoderInputNames.push_back(binding.name.c_str());
-			}
-
-			std::vector<const char*> decoderOutputNames;
-			decoderOutputNames.reserve(m_sessionState->decoderInitOutputNames.size());
-			for (const auto& outputName : m_sessionState->decoderInitOutputNames) {
-				decoderOutputNames.push_back(outputName.c_str());
-			}
-
-			std::vector<std::vector<std::int64_t>> fallbackInt64Buffers;
-			std::vector<std::vector<float>> fallbackFloatBuffers;
-			for (const auto& binding : m_sessionState->decoderInitInputBindings) {
-				if (binding.kind == DecoderInputKind::UnknownInt64) {
-					if (fallbackInt64Buffers.size() <= binding.bufferIndex) {
-						fallbackInt64Buffers.resize(binding.bufferIndex + 1);
-					}
-					std::size_t count = 1;
-					for (const auto dim : binding.shape) {
-						count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
-					}
-					fallbackInt64Buffers[binding.bufferIndex].assign(count, 0);
-				}
-				else if (binding.kind == DecoderInputKind::UnknownFloat) {
-					if (fallbackFloatBuffers.size() <= binding.bufferIndex) {
-						fallbackFloatBuffers.resize(binding.bufferIndex + 1);
-					}
-					std::size_t count = 1;
-					for (const auto dim : binding.shape) {
-						count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
-					}
-					fallbackFloatBuffers[binding.bufferIndex].assign(count, 0.0f);
-				}
-			}
-
-			std::string decodeStopReason = "max_steps";
-			const auto decodeLoopStart = std::chrono::steady_clock::now();
-			for (std::size_t step = 0; step < kMaxDecodeSteps; ++step) {
-				if (isCancelled()) {
-					result.ok = false;
-					result.cancelled = true;
-					result.error = SpeechRecognitionError{
-						.code = SpeechRecognitionErrorCode::Cancelled,
-						.message = "speech transcription cancelled during decode",
-					};
-					result.sessionState.stage = SpeechSessionStage::Failed;
-					result.sessionState.cancelled = true;
-					result.sessionState.error = result.error;
-					++m_snapshot.transcribeRequestsCancelled;
-					m_snapshot.status = "cancelled";
-					m_snapshot.error = result.error;
-					TraceRuntime(
-						"transcribe.cancelled",
-						request.runId,
-						"source=runtime_checkpoint stage=during_decode");
-					return result;
-				}
-				const auto decodeElapsedMs = static_cast<std::uint32_t>(
-					std::chrono::duration_cast<std::chrono::milliseconds>(
-						std::chrono::steady_clock::now() - decodeLoopStart)
-						.count());
-				if (decodeElapsedMs >= kMaxDecodeWallClockMs) {
-					decodeStopReason = "timeout";
-					TraceRuntime(
-						"transcribe.decode.timeout",
-						request.runId,
-						"elapsedMs=" + std::to_string(decodeElapsedMs) +
-						" maxMs=" + std::to_string(kMaxDecodeWallClockMs) +
-						" generatedTokens=" + std::to_string(generatedIds.size()));
-					break;
+			auto decodeSingleLogMel = [&](const std::vector<float>& currentLogMel, const std::string& segmentTag) {
+				const std::size_t currentFrames = currentLogMel.size() / nMels;
+				if (currentFrames == 0) {
+					throw std::runtime_error("feature frames are empty for decode segment");
 				}
 
-				ids.clear();
-				ids.insert(ids.end(), promptIds.begin(), promptIds.end());
-				ids.insert(ids.end(), generatedIds.begin(), generatedIds.end());
-				inputIdsShape[1] = static_cast<std::int64_t>(ids.size());
-				Ort::Value inputIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
-					memInfo,
-					ids.data(),
-					ids.size(),
-					inputIdsShape.data(),
-					inputIdsShape.size());
+				Ort::AllocatorWithDefaultOptions allocator;
+				auto memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+				auto encoderInputNameAlloc = m_sessionState->encoder->GetInputNameAllocated(0, allocator);
+				const char* encoderInputName = encoderInputNameAlloc.get();
+				auto encoderOutputNameAlloc = m_sessionState->encoder->GetOutputNameAllocated(0, allocator);
+				const char* encoderOutputName = encoderOutputNameAlloc.get();
 
-				positionIds.resize(ids.size());
-				std::iota(
-					positionIds.begin(),
-					positionIds.end(),
-					static_cast<std::int64_t>(0));
-				Ort::Value positionIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
-					memInfo,
-					positionIds.data(),
-					positionIds.size(),
-					inputIdsShape.data(),
-					inputIdsShape.size());
-
-				Ort::Value audioOffsetTensor = Ort::Value::CreateTensor<std::int64_t>(
-					memInfo,
-					audioOffset.data(),
-					audioOffset.size(),
-					audioOffsetShape.data(),
-					audioOffsetShape.size());
-
-				Ort::Value audioFeaturesTensor = Ort::Value::CreateTensor<float>(
-					memInfo,
-					const_cast<float*>(encodedPtr),
-					encodedCount,
-					encodedShape.data(),
-					encodedShape.size());
-
-				Ort::Session* activeDecoder = m_sessionState->decoderInit.get();
-				const std::string activeDecoderName = "decoder_init";
-
-				std::vector<Ort::Value> decoderInputs;
-				decoderInputs.reserve(m_sessionState->decoderInitInputBindings.size());
-
-				for (const auto& binding : m_sessionState->decoderInitInputBindings) {
-					switch (binding.kind) {
-					case DecoderInputKind::InputIds:
-						decoderInputs.push_back(std::move(inputIdsTensor));
-						break;
-					case DecoderInputKind::AudioFeatures:
-						decoderInputs.push_back(std::move(audioFeaturesTensor));
-						break;
-					case DecoderInputKind::AudioOffset:
-						decoderInputs.push_back(std::move(audioOffsetTensor));
-						break;
-					case DecoderInputKind::PositionIds:
-						decoderInputs.push_back(std::move(positionIdsTensor));
-						break;
-					case DecoderInputKind::UnknownInt64: {
-						auto& zeros = fallbackInt64Buffers[binding.bufferIndex];
-						decoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
-							memInfo,
-							zeros.data(),
-							zeros.size(),
-							binding.shape.data(),
-							binding.shape.size()));
-						break;
-					}
-					case DecoderInputKind::UnknownFloat:
-					default: {
-						auto& zeros = fallbackFloatBuffers[binding.bufferIndex];
-						decoderInputs.push_back(Ort::Value::CreateTensor<float>(
-							memInfo,
-							zeros.data(),
-							zeros.size(),
-							binding.shape.data(),
-							binding.shape.size()));
-						break;
-					}
-					}
-				}
-
-				auto decoderOutputs = activeDecoder->Run(
-					Ort::RunOptions{ nullptr },
-					decoderInputNames.data(),
-					decoderInputs.data(),
-					decoderInputs.size(),
-					decoderOutputNames.data(),
-					decoderOutputNames.size());
-				if (decoderOutputs.empty()) {
-					throw std::runtime_error(activeDecoderName + " produced no outputs");
-				}
-
-				const Ort::Value* logitsTensor = nullptr;
-				const auto likelyLogitsIndex = m_sessionState->decoderInitLikelyLogitsOutputIndex;
-				if (likelyLogitsIndex < decoderOutputs.size() &&
-					decoderOutputs[likelyLogitsIndex].IsTensor()) {
-					auto likelyShape = decoderOutputs[likelyLogitsIndex]
-						.GetTensorTypeAndShapeInfo()
-						.GetShape();
-					if (likelyShape.size() >= 3) {
-						logitsTensor = &decoderOutputs[likelyLogitsIndex];
-					}
-				}
-				for (auto& out : decoderOutputs) {
-					if (logitsTensor != nullptr) {
-						break;
-					}
-					if (!out.IsTensor()) {
-						continue;
-					}
-					auto info = out.GetTensorTypeAndShapeInfo();
-					auto shape = info.GetShape();
-					if (shape.size() >= 3) {
-						logitsTensor = &out;
-						break;
-					}
-				}
-				if (logitsTensor == nullptr) {
-					throw std::runtime_error("failed to locate logits tensor in decoder outputs");
-				}
-
-				auto logitsInfo = logitsTensor->GetTensorTypeAndShapeInfo();
-				auto logitsShape = logitsInfo.GetShape();
-				if (logitsShape.size() < 3) {
-					throw std::runtime_error("logits tensor shape is invalid");
-				}
-				const std::size_t vocab = static_cast<std::size_t>(logitsShape.back() <= 0 ? 0 : logitsShape.back());
-				if (vocab == 0) {
-					throw std::runtime_error("logits vocab dimension is zero");
-				}
-
-				const std::size_t total = logitsInfo.GetElementCount();
-				if (total < vocab) {
-					throw std::runtime_error("logits tensor element count is smaller than vocab");
-				}
-				auto elemType = logitsInfo.GetElementType();
-				if (elemType != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-					throw std::runtime_error("decoder logits tensor type is not float32");
-				}
-				const std::size_t lastOffset = total - vocab;
-				const float* logits = logitsTensor->GetTensorData<float>();
-				auto maxIt = std::max_element(logits + lastOffset, logits + lastOffset + vocab);
-				const std::int64_t nextToken =
-					static_cast<std::int64_t>(std::distance(logits + lastOffset, maxIt));
-
-				if (m_sessionState->specialTokenIds.find(nextToken) != m_sessionState->specialTokenIds.end()) {
-					if (nextToken == kTokenEndOfText) {
-						decodeStopReason = "eos";
+				auto encoderInputShape = m_sessionState->encoder->GetInputTypeInfo(0)
+					.GetTensorTypeAndShapeInfo()
+					.GetShape();
+				std::vector<std::int64_t> encoderDims;
+				if (encoderInputShape.size() == 3) {
+					if (encoderInputShape[1] == 128 || encoderInputShape[1] < 0) {
+						encoderDims = { 1, static_cast<std::int64_t>(nMels), static_cast<std::int64_t>(currentFrames) };
 					}
 					else {
-						decodeStopReason = "special_token";
+						encoderDims = { 1, static_cast<std::int64_t>(currentFrames), static_cast<std::int64_t>(nMels) };
 					}
-					break;
 				}
-				generatedIds.push_back(nextToken);
+				else {
+					encoderDims = { 1, static_cast<std::int64_t>(nMels), static_cast<std::int64_t>(currentFrames) };
+				}
+
+				std::vector<float> encoderInputData;
+				encoderInputData.reserve(currentLogMel.size());
+				if (encoderDims[1] == static_cast<std::int64_t>(nMels)) {
+					encoderInputData.assign(currentLogMel.begin(), currentLogMel.end());
+				}
+				else {
+					encoderInputData.resize(currentLogMel.size());
+					for (std::size_t t = 0; t < currentFrames; ++t) {
+						for (std::size_t m = 0; m < nMels; ++m) {
+							encoderInputData[t * nMels + m] = currentLogMel[m * currentFrames + t];
+						}
+					}
+				}
+
+				Ort::Value encoderInputTensor = Ort::Value::CreateTensor<float>(
+					memInfo,
+					encoderInputData.data(),
+					encoderInputData.size(),
+					encoderDims.data(),
+					encoderDims.size());
+				std::array<const char*, 1> encoderInputNames{ encoderInputName };
+				std::array<const char*, 1> encoderOutputNames{ encoderOutputName };
+				auto encoderOutputs = m_sessionState->encoder->Run(
+					Ort::RunOptions{ nullptr },
+					encoderInputNames.data(),
+					&encoderInputTensor,
+					1,
+					encoderOutputNames.data(),
+					1);
+				if (encoderOutputs.empty() || !encoderOutputs[0].IsTensor()) {
+					throw std::runtime_error("encoder output is empty or invalid");
+				}
+
+				auto encodedInfo = encoderOutputs[0].GetTensorTypeAndShapeInfo();
+				auto encodedShape = encodedInfo.GetShape();
+				if (encodedShape.empty()) {
+					throw std::runtime_error("encoder output shape is empty");
+				}
+				const auto encodedCount = encodedInfo.GetElementCount();
+				if (encodedCount == 0) {
+					throw std::runtime_error("encoder output has zero elements");
+				}
+				std::size_t encodedSequenceLength = 0;
+				if (encodedShape.size() >= 2 && encodedShape[1] > 0) {
+					encodedSequenceLength = static_cast<std::size_t>(encodedShape[1]);
+				}
+				else if (encodedShape.size() == 3 && encodedShape[2] > 0) {
+					encodedSequenceLength = static_cast<std::size_t>(encodedShape[2]);
+				}
+				if (encodedSequenceLength == 0) {
+					throw std::runtime_error("encoder output sequence length is invalid");
+				}
+				const float* encodedPtr = encoderOutputs[0].GetTensorData<float>();
+
+				std::vector<std::int64_t> promptIds = {
+					kTokenImStart,
+					kPromptTextSystem,
+					kTokenNewline,
+					kTokenImEnd,
+					kTokenNewline,
+					kTokenImStart,
+					kPromptTextUser,
+					kTokenNewline,
+					kTokenAudioStart,
+				};
+				const std::size_t audioPadCount = encodedSequenceLength;
+				const std::size_t audioPadStartIndex = promptIds.size();
+				promptIds.reserve(promptIds.size() + audioPadCount + 8);
+				for (std::size_t i = 0; i < audioPadCount; ++i) {
+					promptIds.push_back(kTokenAudioPad);
+				}
+				promptIds.push_back(kTokenAudioEnd);
+				promptIds.push_back(kTokenImEnd);
+				promptIds.push_back(kTokenNewline);
+				promptIds.push_back(kTokenImStart);
+				promptIds.push_back(kPromptTextAssistant);
+				promptIds.push_back(kTokenNewline);
+
+				std::vector<std::int64_t> generatedIds;
+				generatedIds.reserve(kMaxDecodeSteps);
+				std::vector<std::int64_t> ids;
+				ids.reserve(promptIds.size() + kMaxDecodeSteps);
+				std::vector<std::int64_t> positionIds;
+				positionIds.reserve(promptIds.size() + kMaxDecodeSteps);
+				std::array<std::int64_t, 2> inputIdsShape{ 1, 0 };
+				const std::array<std::int64_t, 1> audioOffsetShape{ 1 };
+				std::array<std::int64_t, 1> audioOffset{
+					static_cast<std::int64_t>(audioPadStartIndex),
+				};
+
+				std::vector<const char*> decoderInputNames;
+				decoderInputNames.reserve(m_sessionState->decoderInitInputBindings.size());
+				for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+					decoderInputNames.push_back(binding.name.c_str());
+				}
+
+				std::vector<const char*> decoderOutputNames;
+				decoderOutputNames.reserve(m_sessionState->decoderInitOutputNames.size());
+				for (const auto& outputName : m_sessionState->decoderInitOutputNames) {
+					decoderOutputNames.push_back(outputName.c_str());
+				}
+
+				std::vector<std::vector<std::int64_t>> fallbackInt64Buffers;
+				std::vector<std::vector<float>> fallbackFloatBuffers;
+				for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+					if (binding.kind == DecoderInputKind::UnknownInt64) {
+						if (fallbackInt64Buffers.size() <= binding.bufferIndex) {
+							fallbackInt64Buffers.resize(binding.bufferIndex + 1);
+						}
+						std::size_t count = 1;
+						for (const auto dim : binding.shape) {
+							count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
+						}
+						fallbackInt64Buffers[binding.bufferIndex].assign(count, 0);
+					}
+					else if (binding.kind == DecoderInputKind::UnknownFloat) {
+						if (fallbackFloatBuffers.size() <= binding.bufferIndex) {
+							fallbackFloatBuffers.resize(binding.bufferIndex + 1);
+						}
+						std::size_t count = 1;
+						for (const auto dim : binding.shape) {
+							count *= static_cast<std::size_t>(dim <= 0 ? 1 : dim);
+						}
+						fallbackFloatBuffers[binding.bufferIndex].assign(count, 0.0f);
+					}
+				}
+
+				std::string decodeStopReason = "max_steps";
+				const auto decodeLoopStart = std::chrono::steady_clock::now();
+				for (std::size_t step = 0; step < kMaxDecodeSteps; ++step) {
+					if (isCancelled()) {
+						throw std::runtime_error("cancelled_during_decode");
+					}
+					const auto decodeElapsedMs = static_cast<std::uint32_t>(
+						std::chrono::duration_cast<std::chrono::milliseconds>(
+							std::chrono::steady_clock::now() - decodeLoopStart)
+							.count());
+					if (decodeElapsedMs >= kMaxDecodeWallClockMs) {
+						decodeStopReason = "timeout";
+						break;
+					}
+
+					ids.clear();
+					ids.insert(ids.end(), promptIds.begin(), promptIds.end());
+					ids.insert(ids.end(), generatedIds.begin(), generatedIds.end());
+					inputIdsShape[1] = static_cast<std::int64_t>(ids.size());
+					Ort::Value inputIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
+						memInfo,
+						ids.data(),
+						ids.size(),
+						inputIdsShape.data(),
+						inputIdsShape.size());
+
+					positionIds.resize(ids.size());
+					std::iota(
+						positionIds.begin(),
+						positionIds.end(),
+						static_cast<std::int64_t>(0));
+					Ort::Value positionIdsTensor = Ort::Value::CreateTensor<std::int64_t>(
+						memInfo,
+						positionIds.data(),
+						positionIds.size(),
+						inputIdsShape.data(),
+						inputIdsShape.size());
+
+					Ort::Value audioOffsetTensor = Ort::Value::CreateTensor<std::int64_t>(
+						memInfo,
+						audioOffset.data(),
+						audioOffset.size(),
+						audioOffsetShape.data(),
+						audioOffsetShape.size());
+
+					Ort::Value audioFeaturesTensor = Ort::Value::CreateTensor<float>(
+						memInfo,
+						const_cast<float*>(encodedPtr),
+						encodedCount,
+						encodedShape.data(),
+						encodedShape.size());
+
+					std::vector<Ort::Value> decoderInputs;
+					decoderInputs.reserve(m_sessionState->decoderInitInputBindings.size());
+					for (const auto& binding : m_sessionState->decoderInitInputBindings) {
+						switch (binding.kind) {
+						case DecoderInputKind::InputIds:
+							decoderInputs.push_back(std::move(inputIdsTensor));
+							break;
+						case DecoderInputKind::AudioFeatures:
+							decoderInputs.push_back(std::move(audioFeaturesTensor));
+							break;
+						case DecoderInputKind::AudioOffset:
+							decoderInputs.push_back(std::move(audioOffsetTensor));
+							break;
+						case DecoderInputKind::PositionIds:
+							decoderInputs.push_back(std::move(positionIdsTensor));
+							break;
+						case DecoderInputKind::UnknownInt64: {
+							auto& zeros = fallbackInt64Buffers[binding.bufferIndex];
+							decoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
+								memInfo,
+								zeros.data(),
+								zeros.size(),
+								binding.shape.data(),
+								binding.shape.size()));
+							break;
+						}
+						case DecoderInputKind::UnknownFloat:
+						default: {
+							auto& zeros = fallbackFloatBuffers[binding.bufferIndex];
+							decoderInputs.push_back(Ort::Value::CreateTensor<float>(
+								memInfo,
+								zeros.data(),
+								zeros.size(),
+								binding.shape.data(),
+								binding.shape.size()));
+							break;
+						}
+						}
+					}
+
+					auto decoderOutputs = m_sessionState->decoderInit->Run(
+						Ort::RunOptions{ nullptr },
+						decoderInputNames.data(),
+						decoderInputs.data(),
+						decoderInputs.size(),
+						decoderOutputNames.data(),
+						decoderOutputNames.size());
+					if (decoderOutputs.empty()) {
+						throw std::runtime_error("decoder_init produced no outputs");
+					}
+
+					const Ort::Value* logitsTensor = nullptr;
+					const auto likelyLogitsIndex = m_sessionState->decoderInitLikelyLogitsOutputIndex;
+					if (likelyLogitsIndex < decoderOutputs.size() && decoderOutputs[likelyLogitsIndex].IsTensor()) {
+						auto likelyShape = decoderOutputs[likelyLogitsIndex].GetTensorTypeAndShapeInfo().GetShape();
+						if (likelyShape.size() >= 3) {
+							logitsTensor = &decoderOutputs[likelyLogitsIndex];
+						}
+					}
+					for (auto& out : decoderOutputs) {
+						if (logitsTensor != nullptr) {
+							break;
+						}
+						if (!out.IsTensor()) {
+							continue;
+						}
+						auto info = out.GetTensorTypeAndShapeInfo();
+						auto shape = info.GetShape();
+						if (shape.size() >= 3) {
+							logitsTensor = &out;
+							break;
+						}
+					}
+					if (logitsTensor == nullptr) {
+						throw std::runtime_error("failed to locate logits tensor in decoder outputs");
+					}
+
+					auto logitsInfo = logitsTensor->GetTensorTypeAndShapeInfo();
+					auto logitsShape = logitsInfo.GetShape();
+					if (logitsShape.size() < 3) {
+						throw std::runtime_error("logits tensor shape is invalid");
+					}
+					const std::size_t vocab = static_cast<std::size_t>(logitsShape.back() <= 0 ? 0 : logitsShape.back());
+					if (vocab == 0) {
+						throw std::runtime_error("logits vocab dimension is zero");
+					}
+
+					const std::size_t total = logitsInfo.GetElementCount();
+					if (total < vocab) {
+						throw std::runtime_error("logits tensor element count is smaller than vocab");
+					}
+					if (logitsInfo.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+						throw std::runtime_error("decoder logits tensor type is not float32");
+					}
+					const std::size_t lastOffset = total - vocab;
+					const float* logits = logitsTensor->GetTensorData<float>();
+					auto maxIt = std::max_element(logits + lastOffset, logits + lastOffset + vocab);
+					const std::int64_t nextToken =
+						static_cast<std::int64_t>(std::distance(logits + lastOffset, maxIt));
+
+					if (m_sessionState->specialTokenIds.find(nextToken) != m_sessionState->specialTokenIds.end()) {
+						if (nextToken == kTokenEndOfText) {
+							decodeStopReason = "eos";
+						}
+						else {
+							decodeStopReason = "special_token";
+						}
+						break;
+					}
+					generatedIds.push_back(nextToken);
+				}
+
+				generatedTokenCount += generatedIds.size();
+				const auto decodeStart = std::chrono::steady_clock::now();
+				std::string segmentText = decodeTokens(
+					generatedIds,
+					m_sessionState->tokenById,
+					m_sessionState->specialTokenIds,
+					m_sessionState->byteLevelCharToByte,
+					decodeStopReason);
+				m_snapshot.lastDecodeLatencyMs = static_cast<std::uint32_t>(
+					std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - decodeStart)
+						.count());
+				TraceRuntime(
+					"transcribe.segment.completed",
+					request.runId,
+					"segment=" + segmentTag +
+					" frames=" + std::to_string(currentFrames) +
+					" generatedTokens=" + std::to_string(generatedIds.size()) +
+					" stopReason=" + decodeStopReason +
+					" audioPadCount=" + std::to_string(audioPadCount));
+				return segmentText;
+			};
+
+			if (useChunkedInference) {
+				std::size_t segmentIndex = 0;
+				for (std::size_t start = 0; start < mono.size(); start += stepSamples) {
+					if (isCancelled()) {
+						result.ok = false;
+						result.cancelled = true;
+						result.error = SpeechRecognitionError{
+							.code = SpeechRecognitionErrorCode::Cancelled,
+							.message = "speech transcription cancelled during chunked inference",
+						};
+						result.sessionState.stage = SpeechSessionStage::Failed;
+						result.sessionState.cancelled = true;
+						result.sessionState.error = result.error;
+						++m_snapshot.transcribeRequestsCancelled;
+						m_snapshot.status = "cancelled";
+						m_snapshot.error = result.error;
+						return result;
+					}
+
+					const std::size_t end = (std::min)(mono.size(), start + chunkSamples);
+					if (end <= start) {
+						break;
+					}
+					std::vector<float> chunkSamplesVec(mono.begin() + start, mono.begin() + end);
+					const auto chunkLogMel = buildLogMel(
+						chunkSamplesVec,
+						kDefaultSampleRate,
+						m_config.speechRecognition.chunkMs,
+						m_config.speechRecognition.overlapMs);
+					if (chunkLogMel.empty()) {
+						continue;
+					}
+
+					++segmentIndex;
+					const auto segmentText = decodeSingleLogMel(
+						chunkLogMel,
+						std::to_string(segmentIndex));
+					stitchChunkTranscript(result.text, segmentText);
+					if (end >= mono.size()) {
+						break;
+					}
+				}
 			}
-			generatedTokenCount = generatedIds.size();
+			else {
+				result.text = decodeSingleLogMel(logMel, "1");
+			}
 
 			m_snapshot.lastInferenceLatencyMs = static_cast<std::uint32_t>(
 				std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2027,31 +2191,17 @@ namespace blazeclaw::core::speechrecognition {
 				request.runId,
 				"latencyMs=" + std::to_string(m_snapshot.lastInferenceLatencyMs) +
 				" generatedTokens=" + std::to_string(generatedTokenCount) +
-				" stopReason=" + decodeStopReason +
 				" tokenizerMode=" + m_sessionState->tokenizerMode +
 				" decoderStrategy=" + decoderStrategy +
-				" promptTokenCount=" + std::to_string(promptIds.size()) +
-				" audioPadStartIndex=" + std::to_string(audioPadStartIndex) +
-				" audioPadCount=" + std::to_string(audioPadCount) +
-				" encodedSequenceLength=" + std::to_string(encodedSequenceLength));
+				" chunked=" + std::string(useChunkedInference ? "true" : "false") +
+				" chunkSamples=" + std::to_string(chunkSamples) +
+				" overlapSamples=" + std::to_string(overlapSamples));
 
-			const auto decodeStart = std::chrono::steady_clock::now();
-			result.text = decodeTokens(
-				generatedIds,
-				m_sessionState->tokenById,
-				m_sessionState->specialTokenIds,
-				m_sessionState->byteLevelCharToByte,
-				decodeStopReason);
-			m_snapshot.lastDecodeLatencyMs = static_cast<std::uint32_t>(
-				std::chrono::duration_cast<std::chrono::milliseconds>(
-					std::chrono::steady_clock::now() - decodeStart)
-					.count());
 			if (result.text.empty()) {
 				result.error = SpeechRecognitionError{
 					.code = SpeechRecognitionErrorCode::DecoderFailed,
 					.message = "decoder produced an empty transcript (generatedTokens=" +
 						std::to_string(generatedTokenCount) +
-						", stopReason=" + decodeStopReason +
 						", decoderStrategy=" + decoderStrategy + ")",
 				};
 				result.ok = false;

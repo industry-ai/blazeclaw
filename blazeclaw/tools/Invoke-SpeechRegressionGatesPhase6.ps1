@@ -1,5 +1,5 @@
 param(
-	[string]$ConfigPath = ".\blazeclaw.conf",
+	[string]$ConfigPath = ".\BlazeClawMfc\blazeclaw.conf",
 	[string]$OutputPath = ".\docs\ASR_PHASE6_REGRESSION_GATES.md",
 	[double]$MaxLatencyDeltaPercent = 15.0,
 	[double]$ObservedLatencyDeltaPercent = [double]::NaN,

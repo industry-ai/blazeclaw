@@ -1,5 +1,5 @@
 param(
-	[string]$ConfigPath = ".\blazeclaw.conf",
+	[string]$ConfigPath = ".\BlazeClawMfc\blazeclaw.conf",
 	[string]$OutputPath = ".\docs\ASR_PHASE5_AUDIO_PIPELINE_TUNING.md",
 	[int[]]$ChunkCandidatesMs = @(320, 640, 1000, 1500),
 	[int[]]$OverlapCandidatesMs = @(160, 320)
@@ -82,6 +82,7 @@ $report += "Generated: $timestamp"
 $report += "Repository: $repoRoot"
 $report += ""
 $report += "## Current Runtime Config Snapshot"
+$report += "- RuntimeConfigPath: $resolvedConfigPath"
 $report += "- speech.chunk_ms: $currentChunk"
 $report += "- speech.overlap_ms: $currentOverlap"
 $report += "- speech.model_variant: $currentVariant"
