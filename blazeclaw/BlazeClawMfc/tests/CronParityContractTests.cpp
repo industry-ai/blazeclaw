@@ -233,12 +233,12 @@ TEST_CASE("Cron timer announce failure destination falls back to primary target 
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationTarget", std::string()) == "invalid-url");
 }
 
-TEST_CASE("Cron runs validator accepts manual lifecycle statuses array values", "[cron][schema]") {
+TEST_CASE("Cron runs validator accepts manual lifecycle statuses array values within max cardinality", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-manual-lifecycle-statuses",
 		.method = "cron.runs",
 		.paramsJson = std::string(
-			"{\"scope\":\"all\",\"statuses\":[\"queued\",\"running\",\"failed\",\"timed_out\",\"aborted\"],\"limit\":20}")
+			"{\"scope\":\"all\",\"statuses\":[\"queued\",\"running\",\"failed\"],\"limit\":20}")
 	};
 
 	SchemaValidationIssue issue{};
@@ -577,6 +577,32 @@ TEST_CASE("Cron runs validator rejects unsupported deliveryStatuses entry", "[cr
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("params.deliveryStatuses") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator rejects id with path separator", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-id-path-separator",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"scope\":\"job\",\"id\":\"job/a\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator rejects jobId with path separator", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-jobid-path-separator",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"scope\":\"job\",\"jobId\":\"job\\\\a\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.jobId") != std::string::npos);
 }
 
 TEST_CASE("Cron list validator accepts includeDisabled", "[cron][schema]") {

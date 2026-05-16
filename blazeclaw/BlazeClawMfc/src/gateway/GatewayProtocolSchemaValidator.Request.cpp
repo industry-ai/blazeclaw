@@ -1584,6 +1584,39 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				auto validateRunJobIdField = [&](const char* fieldName) {
+					std::string value;
+					if (!TryReadTopLevelStringField(request.paramsJson.value(), fieldName, value)) {
+						return true;
+					}
+
+					const std::string trimmed = Trim(value);
+					if (trimmed.empty()) {
+						SetIssue(
+							issue,
+							"schema_invalid_value",
+							"Method `cron.runs` requires `params." + std::string(fieldName) +
+							"` to be a non-empty string.");
+						return false;
+					}
+
+					if (trimmed.find('/') != std::string::npos ||
+						trimmed.find('\\') != std::string::npos) {
+						SetIssue(
+							issue,
+							"schema_invalid_value",
+							"Method `cron.runs` requires `params." + std::string(fieldName) +
+							"` to not contain path separators.");
+						return false;
+					}
+
+					return true;
+				};
+
+				if (!validateRunJobIdField("id") || !validateRunJobIdField("jobId")) {
+					return false;
+				}
+
 				std::string scope;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "scope", scope) && scope == "job") {
 					std::string id;
