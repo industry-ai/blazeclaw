@@ -272,6 +272,38 @@ TEST_CASE("Cron normalize defaults wake/session target", "[cron][normalize]") {
 	REQUIRE(normalized.value("enabled", false));
 }
 
+TEST_CASE("Cron normalize resolves sessionTarget current using sessionKey context", "[cron][normalize]") {
+	const CronJson params = {
+		{ "name", "nightly" },
+		{ "sessionTarget", "current" },
+		{ "sessionKey", "agent:main:work" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "run" } } }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.value("sessionTarget", std::string()) == "session:agent:main:work");
+}
+
+TEST_CASE("Cron patch resolves sessionTarget current using persisted sessionKey context", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-1" },
+		{ "name", "nightly" },
+		{ "sessionKey", "agent:main:persisted" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "ping" } } },
+		{ "state", CronJson::object() }
+	};
+
+	const CronJson patch = {
+		{ "sessionTarget", "current" }
+	};
+
+	CronNormalize::ApplyPatch(job, patch);
+	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:persisted");
+}
+
 TEST_CASE("Cron add validator enforces required fields", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "1",

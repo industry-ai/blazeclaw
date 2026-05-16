@@ -294,6 +294,10 @@ namespace blazeclaw::cron {
 			std::string status = "ok";
 			std::string summary;
 			std::string error;
+			std::string sessionId;
+			std::string sessionKey;
+			std::string model;
+			std::string provider;
 			std::string deliveryStatus = "not-requested";
 			std::string deliveryMode;
 			std::string deliveryTarget;
@@ -403,6 +407,14 @@ namespace blazeclaw::cron {
 
 		RunOutcome EvaluateRunOutcome(const CronJson& job) {
 			RunOutcome outcome;
+			const std::string sessionTarget =
+				ToLowerCopy(TrimCopy(job.value("sessionTarget", std::string("main"))));
+			const bool isolatedLikeTarget =
+				sessionTarget == "isolated" ||
+				sessionTarget == "current" ||
+				sessionTarget.rfind("session:", 0) == 0;
+			outcome.sessionId = sessionTarget;
+			outcome.sessionKey = TrimCopy(job.value("sessionKey", std::string()));
 
 			if (!job.contains("payload") || !job["payload"].is_object()) {
 				outcome.status = "error";
@@ -416,6 +428,26 @@ namespace blazeclaw::cron {
 			const CronJson& payload = job["payload"];
 			const std::string payloadKind =
 				ToLowerCopy(TrimCopy(payload.value("kind", std::string())));
+			if (payload.contains("model") && payload["model"].is_string()) {
+				outcome.model = TrimCopy(payload["model"].get<std::string>());
+			}
+			if (payload.contains("provider") && payload["provider"].is_string()) {
+				outcome.provider = TrimCopy(payload["provider"].get<std::string>());
+			}
+
+			if (sessionTarget == "main" && payloadKind != "systemevent") {
+				outcome.status = "skipped";
+				outcome.summary =
+					"Skipped: main session target requires systemEvent payload";
+				return outcome;
+			}
+			if (isolatedLikeTarget && payloadKind != "agentturn") {
+				outcome.status = "skipped";
+				outcome.summary =
+					"Skipped: isolated/session target requires agentTurn payload";
+				return outcome;
+			}
+
 			if (payloadKind == "systemevent") {
 				const std::string text =
 					TrimCopy(payload.value("text", std::string()));
@@ -423,6 +455,10 @@ namespace blazeclaw::cron {
 					outcome.status = "skipped";
 					outcome.summary = "Skipped: empty systemEvent text";
 					return outcome;
+				}
+
+				if (outcome.sessionId.empty()) {
+					outcome.sessionId = "isolated";
 				}
 			}
 			if (payloadKind == "agentturn") {
@@ -948,6 +984,12 @@ namespace blazeclaw::cron {
 				? CronJson(nullptr)
 				: CronJson(outcome.failureDestinationError);
 			state["lastDurationMs"] = 0;
+			state["lastModel"] = outcome.model.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.model);
+			state["lastProvider"] = outcome.provider.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.provider);
 			state["runningAtMs"] = nullptr;
 
 			const bool deleteAfterRun = (*it).value("deleteAfterRun", false);
@@ -957,6 +999,10 @@ namespace blazeclaw::cron {
 				(*it).contains("sessionTarget") && (*it)["sessionTarget"].is_string()
 				? TrimCopy((*it)["sessionTarget"].get<std::string>())
 				: std::string();
+			const std::string effectiveSessionKey =
+				outcome.sessionKey.empty() ? jobSessionKey : outcome.sessionKey;
+			const std::string effectiveSessionId =
+				outcome.sessionId.empty() ? jobSessionId : outcome.sessionId;
 			const std::string runId = BuildCronRunId(nowMs);
 			const CronJson retry = (*it).value("retry", CronJson::object());
 			const std::int64_t maxAttempts = (std::max)(
@@ -1142,6 +1188,11 @@ namespace blazeclaw::cron {
 			state["endedAtMs"] = nowMs;
 			state["lastRunTimedOut"] = outcome.timedOut;
 			state["lastRunAborted"] = false;
+			state["lastTaskLedgerRuntime"] = "cron";
+			state["lastTaskLedgerPhase"] = "terminal";
+			state["lastTaskLedgerStatus"] = outcome.status;
+			state["lastTaskLedgerDisposition"] = "scheduled";
+			state["lastTaskLedgerTerminal"] = true;
 
 			runs.push_back({
 				{ "ts", nowMs },
@@ -1215,13 +1266,21 @@ namespace blazeclaw::cron {
 				{ "durationMs", 0 },
 				{ "timedOut", outcome.timedOut },
 				{ "aborted", false },
+				{ "taskLedgerRuntime", "cron" },
+				{ "taskLedgerPhase", "terminal" },
+				{ "taskLedgerStatus", outcome.status },
+				{ "taskLedgerDisposition", "scheduled" },
+				{ "taskLedgerTerminal", true },
 				{ "startedAtMs", nowMs },
 				{ "endedAtMs", nowMs },
 				{ "scheduledForMs", nextRunAtMs.value() },
 				{ "runAtMs", nowMs },
 				{ "nextRunAtMs", deleteAfterRun ? CronJson(nullptr) : (nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr)) },
-				{ "sessionKey", jobSessionKey.empty() ? CronJson(nullptr) : CronJson(jobSessionKey) },
-				{ "sessionId", jobSessionId.empty() ? CronJson(nullptr) : CronJson(jobSessionId) },
+				{ "sessionKey", effectiveSessionKey.empty() ? CronJson(nullptr) : CronJson(effectiveSessionKey) },
+				{ "sessionId", effectiveSessionId.empty() ? CronJson(nullptr) : CronJson(effectiveSessionId) },
+				{ "model", outcome.model.empty() ? CronJson(nullptr) : CronJson(outcome.model) },
+				{ "provider", outcome.provider.empty() ? CronJson(nullptr) : CronJson(outcome.provider) },
+				{ "usage", CronJson(nullptr) },
 				{ "jobName", jobName },
 				{ "runId", runId }
 			});

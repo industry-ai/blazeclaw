@@ -344,6 +344,13 @@ namespace blazeclaw::cron {
 				return lowered;
 			}
 			if (lowered == "current") {
+				if (params.contains("sessionKey") && params["sessionKey"].is_string()) {
+					const std::string sessionKey =
+						TrimCopy(params["sessionKey"].get<std::string>());
+					if (!sessionKey.empty()) {
+						return "session:" + sessionKey;
+					}
+				}
 				return "isolated";
 			}
 			if (lowered.rfind("session:", 0) == 0) {
@@ -478,7 +485,22 @@ namespace blazeclaw::cron {
 				job["sessionTarget"] = sessionTarget;
 			}
 			else if (sessionTarget == "current") {
-				job["sessionTarget"] = "isolated";
+				std::string resolvedSessionKey;
+				if (patch.contains("sessionKey") && patch["sessionKey"].is_string()) {
+					resolvedSessionKey = TrimCopy(patch["sessionKey"].get<std::string>());
+				}
+				if (resolvedSessionKey.empty() &&
+					job.contains("sessionKey") &&
+					job["sessionKey"].is_string()) {
+					resolvedSessionKey = TrimCopy(job["sessionKey"].get<std::string>());
+				}
+
+				if (!resolvedSessionKey.empty()) {
+					job["sessionTarget"] = "session:" + resolvedSessionKey;
+				}
+				else {
+					job["sessionTarget"] = "isolated";
+				}
 			}
 			else if (sessionTarget.rfind("session:", 0) == 0) {
 				job["sessionTarget"] = sessionTargetRaw;
