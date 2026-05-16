@@ -20,6 +20,44 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron timer announce failure destination falls back to primary target when to is omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-fallback-primary-to" },
+			{ "name", "failure destination announce fallback primary to" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-url" },
+					{ "failureDestination",
+						{
+							{ "mode", "announce" },
+							{ "channel", "alerts" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "invalid-url");
+	REQUIRE(runs[0].value("failureDestinationChannel", std::string()) == "alerts");
+	REQUIRE(runs[0].value("failureDestinationAttempted", false));
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationTarget", std::string()) == "invalid-url");
+}
+
 TEST_CASE("Cron runs validator accepts manual lifecycle statuses array values", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-manual-lifecycle-statuses",

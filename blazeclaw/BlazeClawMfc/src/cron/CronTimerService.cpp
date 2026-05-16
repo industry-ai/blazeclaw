@@ -541,9 +541,19 @@ namespace blazeclaw::cron {
 					const std::string primaryAccountId =
 						TrimCopy(delivery.value("accountId", std::string()));
 
-					const std::string failureTo =
-						TrimCopy(failureDestination.value("to", std::string()));
-					outcome.failureDestinationTarget = failureTo;
+					const bool failureHasExplicitTo =
+						failureDestination.contains("to") &&
+						failureDestination["to"].is_string();
+					const std::string failureTo = failureHasExplicitTo
+						? TrimCopy(failureDestination["to"].get<std::string>())
+						: std::string();
+					const std::string resolvedFailureTo =
+						(failureMode == "announce" &&
+							!failureHasExplicitTo &&
+							!primaryTo.empty())
+						? primaryTo
+						: failureTo;
+					outcome.failureDestinationTarget = resolvedFailureTo;
 					const std::string failureChannel =
 						TrimCopy(failureDestination.value("channel", std::string("last")));
 					const std::string failureAccountId =
@@ -554,9 +564,9 @@ namespace blazeclaw::cron {
 					const bool sameTarget =
 						((failureMode == "webhook" &&
 						  primaryMode == "webhook" &&
-						  failureTo == primaryTo) ||
+						  resolvedFailureTo == primaryTo) ||
 						 (failureMode == primaryMode &&
-						  failureTo == primaryTo &&
+						  resolvedFailureTo == primaryTo &&
 						  failureChannel == primaryChannel &&
 						  failureAccountId == primaryAccountId));
 					if (sameTarget) {
@@ -577,9 +587,9 @@ namespace blazeclaw::cron {
 								outcome,
 								failureDestinationHttpStatus.value());
 						}
-						else if (failureTransportDispatch && StartsWithHttpScheme(failureTo)) {
+						else if (failureTransportDispatch && StartsWithHttpScheme(resolvedFailureTo)) {
 							const WebhookDispatchResult dispatch =
-								DispatchWebhookPostWinHttp(failureTo);
+								DispatchWebhookPostWinHttp(resolvedFailureTo);
 							outcome.failureDestinationAttempted = dispatch.attempted;
 							if (dispatch.httpStatus.has_value()) {
 								ApplyWebhookHttpStatusToFailureDestination(
@@ -593,7 +603,7 @@ namespace blazeclaw::cron {
 									: dispatch.error;
 							}
 						}
-						else if (StartsWithHttpScheme(failureTo)) {
+						else if (StartsWithHttpScheme(resolvedFailureTo)) {
 							outcome.failureDestinationStatus = "delivered";
 						}
 						else {
@@ -604,8 +614,7 @@ namespace blazeclaw::cron {
 					}
 					else {
 						outcome.failureDestinationAttempted = true;
-						if (failureDestination.contains("to") &&
-							failureDestination["to"].is_string() &&
+						if (failureHasExplicitTo &&
 							failureTo.empty()) {
 							outcome.failureDestinationStatus = "not-delivered";
 							outcome.failureDestinationError =
