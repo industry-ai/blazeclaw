@@ -100,6 +100,8 @@ namespace blazeclaw::cron {
 			bool retryable = false;
 			std::string failureDestinationStatus = "not-requested";
 			std::string failureDestinationTarget;
+			std::string failureDestinationChannel;
+			std::string failureDestinationAccountId;
 			bool failureDestinationAttempted = false;
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
@@ -287,6 +289,8 @@ namespace blazeclaw::cron {
 						TrimCopy(failureDestination.value("channel", std::string("last")));
 					const std::string failureAccountId =
 						TrimCopy(failureDestination.value("accountId", std::string()));
+					outcome.failureDestinationChannel = failureChannel;
+					outcome.failureDestinationAccountId = failureAccountId;
 
 					const bool sameTarget =
 						((failureMode == "webhook" &&
@@ -605,6 +609,12 @@ namespace blazeclaw::cron {
 			state["lastFailureDestinationTarget"] = outcome.failureDestinationTarget.empty()
 				? CronJson(nullptr)
 				: CronJson(outcome.failureDestinationTarget);
+			state["lastFailureDestinationChannel"] = outcome.failureDestinationChannel.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.failureDestinationChannel);
+			state["lastFailureDestinationAccountId"] = outcome.failureDestinationAccountId.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.failureDestinationAccountId);
 			state["lastFailureDestinationAttempted"] = outcome.failureDestinationAttempted;
 			state["lastFailureDestinationError"] =
 				outcome.failureDestinationError.empty()
@@ -767,6 +777,12 @@ namespace blazeclaw::cron {
 				{ "failureDestinationTarget", outcome.failureDestinationTarget.empty()
 					? CronJson(nullptr)
 					: CronJson(outcome.failureDestinationTarget) },
+				{ "failureDestinationChannel", outcome.failureDestinationChannel.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureDestinationChannel) },
+				{ "failureDestinationAccountId", outcome.failureDestinationAccountId.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureDestinationAccountId) },
 				{ "failureDestinationAttempted", outcome.failureDestinationAttempted },
 				{ "failureDestinationMode", outcome.failureDestinationMode.empty()
 					? CronJson(nullptr)

@@ -650,7 +650,13 @@ TEST_CASE("Cron timer records failure destination metadata on delivery error", "
 				{
 					{ "mode", "webhook" },
 					{ "to", "invalid-url" },
-					{ "failureDestination", { { "mode", "webhook" }, { "to", "invalid-destination" } } }
+					{ "failureDestination",
+						{
+							{ "mode", "webhook" },
+							{ "to", "invalid-destination" },
+							{ "channel", "alerts" },
+							{ "accountId", "acc-failure" }
+						} }
 				} },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
 		}
@@ -662,9 +668,13 @@ TEST_CASE("Cron timer records failure destination metadata on delivery error", "
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "invalid-destination");
+	REQUIRE(runs[0].value("failureDestinationChannel", std::string()) == "alerts");
+	REQUIRE(runs[0].value("failureDestinationAccountId", std::string()) == "acc-failure");
 	REQUIRE(runs[0].value("failureDestinationAttempted", false));
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "invalid failure destination webhook target");
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationStatus", std::string()) == "not-delivered");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationChannel", std::string()) == "alerts");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationAccountId", std::string()) == "acc-failure");
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationAttempted", false));
 }
 
