@@ -358,7 +358,9 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 			continue;
 		}
 		if (entry.value("lifecycleState", std::string()) == "queued" &&
-			entry.value("status", std::string()) == "queued") {
+			entry.value("status", std::string()) == "queued" &&
+			entry.value("taskLedgerDisposition", std::string()) == "queued" &&
+			entry.value("taskLedgerTerminal", true) == false) {
 			foundQueuedLifecycleEntry = true;
 			break;
 		}
@@ -408,7 +410,9 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		}
 		if (entry.value("lifecycleState", std::string()) == "terminal" &&
 			entry.value("status", std::string()) == "skipped" &&
-			entry.value("reason", std::string()) == "not_due") {
+			entry.value("reason", std::string()) == "not_due" &&
+			entry.value("taskLedgerDisposition", std::string()) == "not_due" &&
+			entry.value("taskLedgerTerminal", false) == true) {
 			foundDueTerminalEntry = true;
 			break;
 		}

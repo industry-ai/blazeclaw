@@ -43,6 +43,12 @@ namespace blazeclaw::cron {
 				entry["error"] = CronJson(nullptr);
 			}
 
+			entry["taskLedgerRuntime"] = "cron";
+			entry["taskLedgerPhase"] = action == "started"
+				? CronJson("active")
+				: CronJson("terminal");
+			entry["taskLedgerStatus"] = status;
+
 			return entry;
 		}
 
@@ -337,6 +343,8 @@ namespace blazeclaw::cron {
 				alreadyRunningAtMs,
 				std::nullopt,
 				alreadyRunningAtMs));
+			m_store.Runs().back()["taskLedgerDisposition"] = "already_running";
+			m_store.Runs().back()["taskLedgerTerminal"] = true;
 			m_store.SaveRuns();
 
 			return {
@@ -376,6 +384,8 @@ namespace blazeclaw::cron {
 				nowMs,
 				std::nullopt,
 				nowMs));
+			m_store.Runs().back()["taskLedgerDisposition"] = "not_due";
+			m_store.Runs().back()["taskLedgerTerminal"] = true;
 			m_store.SaveRuns();
 
 			return {
@@ -411,6 +421,8 @@ namespace blazeclaw::cron {
 			nowMs,
 			std::nullopt,
 			std::nullopt));
+		m_store.Runs().back()["taskLedgerDisposition"] = "queued";
+		m_store.Runs().back()["taskLedgerTerminal"] = false;
 		m_store.SaveRuns();
 
 		m_backgroundCv.notify_all();
@@ -460,6 +472,13 @@ namespace blazeclaw::cron {
 		const std::string statusFilter =
 			ToLowerCopy(TrimCopy(params.value("status", std::string("all"))));
 		if (statusFilter == "ok" || statusFilter == "error" || statusFilter == "skipped") {
+			statusFilters.insert(statusFilter);
+		}
+		if (statusFilter == "queued" ||
+			statusFilter == "running" ||
+			statusFilter == "failed" ||
+			statusFilter == "timed_out" ||
+			statusFilter == "aborted") {
 			statusFilters.insert(statusFilter);
 		}
 
@@ -723,6 +742,8 @@ namespace blazeclaw::cron {
 					request.queuedAtMs,
 					std::nullopt,
 					nowMs));
+				m_store.Runs().back()["taskLedgerDisposition"] = "unknown_job";
+				m_store.Runs().back()["taskLedgerTerminal"] = true;
 				runsChanged = true;
 				continue;
 			}
@@ -743,6 +764,8 @@ namespace blazeclaw::cron {
 					request.queuedAtMs,
 					std::nullopt,
 					nowMs));
+				m_store.Runs().back()["taskLedgerDisposition"] = "already_running";
+				m_store.Runs().back()["taskLedgerTerminal"] = true;
 				runsChanged = true;
 				continue;
 			}
@@ -763,6 +786,8 @@ namespace blazeclaw::cron {
 					request.queuedAtMs,
 					std::nullopt,
 					nowMs));
+				m_store.Runs().back()["taskLedgerDisposition"] = "not_due";
+				m_store.Runs().back()["taskLedgerTerminal"] = true;
 				runsChanged = true;
 				continue;
 			}
@@ -780,6 +805,8 @@ namespace blazeclaw::cron {
 				request.queuedAtMs,
 				nowMs,
 				std::nullopt));
+			m_store.Runs().back()["taskLedgerDisposition"] = "started";
+			m_store.Runs().back()["taskLedgerTerminal"] = false;
 			runsChanged = true;
 
 			const std::size_t runsBeforeDispatch = m_store.Runs().size();
@@ -829,6 +856,8 @@ namespace blazeclaw::cron {
 					finishedRun->contains("error")
 					? (*finishedRun)["error"]
 					: CronJson(nullptr);
+				terminal["taskLedgerDisposition"] = "dispatched";
+				terminal["taskLedgerTerminal"] = true;
 				m_store.Runs().push_back(terminal);
 			}
 			else {
@@ -845,6 +874,8 @@ namespace blazeclaw::cron {
 					request.queuedAtMs,
 					nowMs,
 					nowMs));
+				m_store.Runs().back()["taskLedgerDisposition"] = "missing_terminal_run";
+				m_store.Runs().back()["taskLedgerTerminal"] = true;
 			}
 			runsChanged = true;
 		}
