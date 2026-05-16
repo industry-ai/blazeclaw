@@ -376,6 +376,42 @@ TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][ti
 	REQUIRE(jobs[0]["state"]["retryPendingUntilMs"].is_null());
 }
 
+TEST_CASE("Cron timer schedules retry for transient webhook delivery failure", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-webhook-transient" },
+			{ "name", "webhook transient" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://example.test/hook" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed =
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "network");
+	REQUIRE(runs[0].value("retryScheduled", false));
+	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
+	REQUIRE(jobs[0]["state"].value("retryPendingUntilMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+	REQUIRE(jobs[0]["state"].value("nextRunAtMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+}
+
 TEST_CASE("Cron next run respects retry pending timestamp", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -454,6 +490,19 @@ TEST_CASE("Wake validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
 }
+
+TEST_CASE("Cron run validator accepts id and mode force", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "run-valid-force",
+		.method = "cron.run",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"mode\":\"force\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
 
 TEST_CASE("Cron update validator rejects empty id", "[cron][schema]") {
 	const RequestFrame request{

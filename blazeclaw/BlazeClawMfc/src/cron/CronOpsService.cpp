@@ -247,6 +247,21 @@ namespace blazeclaw::cron {
 		if (job == nullptr) {
 			throw std::invalid_argument("unknown cron job id");
 		}
+		if ((*job).contains("state") &&
+			(*job)["state"].is_object() &&
+			TryReadInt64Field((*job)["state"], "runningAtMs").has_value()) {
+			const std::int64_t alreadyRunningAtMs = UtcNowMs();
+			const std::string requestedMode =
+				ToLowerCopy(TrimCopy(params.value("mode", std::string("force"))));
+			return {
+				{ "runId", BuildCronRunId(alreadyRunningAtMs) },
+				{ "started", false },
+				{ "reason", "already_running" },
+				{ "cronId", id },
+				{ "mode", requestedMode },
+				{ "queuedAtMs", alreadyRunningAtMs }
+			};
+		}
 
 		const std::string mode =
 			ToLowerCopy(TrimCopy(params.value("mode", std::string("force"))));

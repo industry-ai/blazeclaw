@@ -196,6 +196,10 @@ namespace blazeclaw::cron {
 
 			if (job.contains("delivery") && job["delivery"].is_object()) {
 				const CronJson& delivery = job["delivery"];
+				const bool simulateTransientFailure =
+					delivery.contains("simulateTransientFailure") &&
+					delivery["simulateTransientFailure"].is_boolean() &&
+					delivery["simulateTransientFailure"].get<bool>();
 				const std::string mode = ToLowerCopy(
 					TrimCopy(delivery.value("mode", std::string("announce"))));
 				outcome.deliveryMode = mode;
@@ -227,7 +231,15 @@ namespace blazeclaw::cron {
 					outcome.deliveryAttempted = true;
 					const std::string to =
 						TrimCopy(delivery.value("to", std::string()));
-					if (StartsWithHttpScheme(to)) {
+					if (simulateTransientFailure) {
+						outcome.status = "error";
+						outcome.deliveryStatus = "not-delivered";
+						outcome.error = "webhook delivery transient failure";
+						outcome.errorCategory = "network";
+						outcome.summary = "Webhook delivery transient failure";
+						outcome.retryable = true;
+					}
+					else if (StartsWithHttpScheme(to)) {
 						outcome.deliveryStatus = "delivered";
 						outcome.delivered = true;
 					}
