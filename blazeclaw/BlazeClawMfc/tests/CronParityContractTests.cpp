@@ -528,6 +528,9 @@ TEST_CASE("Cron timer run entry includes deliveryError for failed delivery", "[c
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
 	REQUIRE(runs[0].value("deliveryError", std::string()) == "invalid webhook delivery target");
+	REQUIRE(runs[0].value("deliveryMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "invalid-url");
+	REQUIRE(runs[0].value("deliveryAttempted", false));
 }
 
 TEST_CASE("Cron timer records failureAlert suppression reason when disabled", "[cron][timer]") {
@@ -581,8 +584,11 @@ TEST_CASE("Cron timer records failure destination metadata on delivery error", "
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "invalid-destination");
+	REQUIRE(runs[0].value("failureDestinationAttempted", false));
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "invalid failure destination webhook target");
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationStatus", std::string()) == "not-delivered");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationAttempted", false));
 }
 
 TEST_CASE("Cron timer suppresses failure destination when same as primary target", "[cron][timer]") {
@@ -663,7 +669,35 @@ TEST_CASE("Cron timer suppresses invalid failureAlert webhook target", "[cron][t
 	REQUIRE(runs[0].value("failureAlertSuppressed", false));
 	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "invalid_webhook_target");
 	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "bad-target");
 	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "bad-target");
+}
+
+TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-timeout" },
+			{ "name", "timeout job" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "ping" }, { "timeoutSeconds", 1 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("timedOut", false));
+	REQUIRE(runs[0].value("aborted", true) == false);
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "timeout");
+	REQUIRE(jobs[0]["state"].value("lastRunTimedOut", false));
+	REQUIRE(jobs[0]["state"].value("lastRunAborted", true) == false);
 }
 
 TEST_CASE("Cron timer run ids are unique for same tick", "[cron][timer]") {

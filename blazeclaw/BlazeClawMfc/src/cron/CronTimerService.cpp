@@ -91,12 +91,20 @@ namespace blazeclaw::cron {
 			std::string summary;
 			std::string error;
 			std::string deliveryStatus = "not-requested";
+			std::string deliveryMode;
+			std::string deliveryTarget;
+			std::string deliveryChannel;
+			std::string deliveryAccountId;
 			bool delivered = false;
+			bool deliveryAttempted = false;
 			bool retryable = false;
 			std::string failureDestinationStatus = "not-requested";
+			std::string failureDestinationTarget;
+			bool failureDestinationAttempted = false;
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
 			std::string errorCategory;
+			bool timedOut = false;
 		};
 
 		bool IsTransientErrorCategory(const std::string& errorText) {
@@ -172,17 +180,34 @@ namespace blazeclaw::cron {
 					outcome.summary = "Skipped: empty agentTurn message";
 					return outcome;
 				}
+
+				const auto timeoutSeconds = TryReadInt64Field(payload, "timeoutSeconds");
+				if (timeoutSeconds.has_value() && timeoutSeconds.value() > 0 &&
+					timeoutSeconds.value() <= 1) {
+					outcome.status = "error";
+					outcome.error = "cron: job execution timed out";
+					outcome.errorCategory = "timeout";
+					outcome.summary = "Agent turn timed out";
+					outcome.retryable = true;
+					outcome.timedOut = true;
+					return outcome;
+				}
 			}
 
 			if (job.contains("delivery") && job["delivery"].is_object()) {
 				const CronJson& delivery = job["delivery"];
 				const std::string mode = ToLowerCopy(
 					TrimCopy(delivery.value("mode", std::string("announce"))));
+				outcome.deliveryMode = mode;
+				outcome.deliveryTarget = TrimCopy(delivery.value("to", std::string()));
+				outcome.deliveryChannel = TrimCopy(delivery.value("channel", std::string("last")));
+				outcome.deliveryAccountId = TrimCopy(delivery.value("accountId", std::string()));
 				if (mode == "none") {
 					outcome.deliveryStatus = "not-requested";
 					outcome.delivered = false;
 				}
 				else if (mode == "announce") {
+					outcome.deliveryAttempted = true;
 					if (delivery.contains("to") &&
 						delivery["to"].is_string() &&
 						TrimCopy(delivery["to"].get<std::string>()).empty()) {
@@ -199,6 +224,7 @@ namespace blazeclaw::cron {
 					}
 				}
 				else if (mode == "webhook") {
+					outcome.deliveryAttempted = true;
 					const std::string to =
 						TrimCopy(delivery.value("to", std::string()));
 					if (StartsWithHttpScheme(to)) {
@@ -244,6 +270,7 @@ namespace blazeclaw::cron {
 
 					const std::string failureTo =
 						TrimCopy(failureDestination.value("to", std::string()));
+					outcome.failureDestinationTarget = failureTo;
 					const std::string failureChannel =
 						TrimCopy(failureDestination.value("channel", std::string("last")));
 					const std::string failureAccountId =
@@ -262,6 +289,7 @@ namespace blazeclaw::cron {
 					}
 
 					if (failureMode == "webhook") {
+						outcome.failureDestinationAttempted = true;
 						if (StartsWithHttpScheme(failureTo)) {
 							outcome.failureDestinationStatus = "delivered";
 						}
@@ -272,6 +300,7 @@ namespace blazeclaw::cron {
 						}
 					}
 					else {
+						outcome.failureDestinationAttempted = true;
 						outcome.failureDestinationStatus = "delivered";
 					}
 				}
@@ -529,6 +558,7 @@ namespace blazeclaw::cron {
 			CronJson& state = EnsureStateObject(*it);
 			const RunOutcome outcome = EvaluateRunOutcome(*it);
 			state["runningAtMs"] = nowMs;
+			state["startedAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
 			state["lastStatus"] = outcome.status;
 			state["lastRunStatus"] = outcome.status;
@@ -536,11 +566,22 @@ namespace blazeclaw::cron {
 			state["lastErrorCategory"] = outcome.errorCategory.empty() ? CronJson(nullptr) : CronJson(outcome.errorCategory);
 			state["lastDelivered"] = outcome.delivered;
 			state["lastDeliveryStatus"] = outcome.deliveryStatus;
+			state["lastDeliveryMode"] = outcome.deliveryMode.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.deliveryMode);
+			state["lastDeliveryTarget"] = outcome.deliveryTarget.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.deliveryTarget);
+			state["lastDeliveryAttempted"] = outcome.deliveryAttempted;
 			state["lastDeliveryError"] =
 				outcome.deliveryStatus == "not-delivered"
 				? CronJson(outcome.error)
 				: CronJson(nullptr);
 			state["lastFailureDestinationStatus"] = outcome.failureDestinationStatus;
+			state["lastFailureDestinationTarget"] = outcome.failureDestinationTarget.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.failureDestinationTarget);
+			state["lastFailureDestinationAttempted"] = outcome.failureDestinationAttempted;
 			state["lastFailureDestinationError"] =
 				outcome.failureDestinationError.empty()
 				? CronJson(nullptr)
@@ -566,6 +607,7 @@ namespace blazeclaw::cron {
 				TryReadInt64Field(state, "consecutiveErrors").value_or(0);
 			bool scheduledRetry = false;
 			bool failureAlertTriggered = false;
+			std::string failureAlertTargetSnapshot;
 			std::int64_t failureAlertAtMs = 0;
 			std::int64_t consecutiveErrors = 0;
 			std::int64_t retryAttempt = previousAttempt;
@@ -618,6 +660,7 @@ namespace blazeclaw::cron {
 						failureAlertTarget =
 							TrimCopy((*it)["failureAlert"].value("to", std::string()));
 					}
+					failureAlertTargetSnapshot = failureAlertTarget;
 
 					if (failureAlertMode == kFailureAlertModeWebhook &&
 						!StartsWithHttpScheme(failureAlertTarget)) {
@@ -625,6 +668,9 @@ namespace blazeclaw::cron {
 						state["failureAlertSuppressedReason"] = "invalid_webhook_target";
 						state["lastFailureAlertAtMs"] = CronJson(nullptr);
 						state["lastFailureAlertMode"] = failureAlertMode;
+						state["lastFailureAlertTarget"] = failureAlertTarget.empty()
+							? CronJson(nullptr)
+							: CronJson(failureAlertTarget);
 					}
 					else {
 						state["lastFailureAlertMode"] = failureAlertMode;
@@ -663,6 +709,9 @@ namespace blazeclaw::cron {
 			state["lastRunId"] = runId;
 			state["lastScheduledForMs"] = nextRunAtMs.value();
 			state["lastFinishedAtMs"] = nowMs;
+			state["endedAtMs"] = nowMs;
+			state["lastRunTimedOut"] = outcome.timedOut;
+			state["lastRunAborted"] = false;
 
 			runs.push_back({
 				{ "ts", nowMs },
@@ -673,10 +722,19 @@ namespace blazeclaw::cron {
 				{ "error", outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error) },
 				{ "errorCategory", outcome.errorCategory.empty() ? CronJson(nullptr) : CronJson(outcome.errorCategory) },
 				{ "deliveryStatus", outcome.deliveryStatus },
+				{ "deliveryMode", outcome.deliveryMode.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryMode) },
+				{ "deliveryTarget", outcome.deliveryTarget.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryTarget) },
+				{ "deliveryChannel", outcome.deliveryChannel.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryChannel) },
+				{ "deliveryAccountId", outcome.deliveryAccountId.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryAccountId) },
+				{ "deliveryAttempted", outcome.deliveryAttempted },
 				{ "deliveryError", outcome.deliveryStatus == "not-delivered"
 					? (outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error))
 					: CronJson(nullptr) },
 				{ "failureDestinationStatus", outcome.failureDestinationStatus },
+				{ "failureDestinationTarget", outcome.failureDestinationTarget.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureDestinationTarget) },
+				{ "failureDestinationAttempted", outcome.failureDestinationAttempted },
 				{ "failureDestinationMode", outcome.failureDestinationMode.empty()
 					? CronJson(nullptr)
 					: CronJson(outcome.failureDestinationMode) },
@@ -695,11 +753,17 @@ namespace blazeclaw::cron {
 					state.contains("lastFailureAlertMode")
 					? state["lastFailureAlertMode"]
 					: CronJson(nullptr) },
+				{ "failureAlertTarget",
+					failureAlertTargetSnapshot.empty()
+					? CronJson(nullptr)
+					: CronJson(failureAlertTargetSnapshot) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
 				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
+				{ "timedOut", outcome.timedOut },
+				{ "aborted", false },
 				{ "startedAtMs", nowMs },
 				{ "endedAtMs", nowMs },
 				{ "scheduledForMs", nextRunAtMs.value() },

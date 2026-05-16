@@ -3267,6 +3267,53 @@
             return delivery;
         }
 
+        function recoverCronFlatJobShape(input) {
+            const source = input && typeof input === "object"
+                ? input
+                : {};
+            const recovered = {};
+            let hasRecoverable = false;
+            const recoverableKeys = {
+                name: true,
+                schedule: true,
+                sessionTarget: true,
+                wakeMode: true,
+                payload: true,
+                delivery: true,
+                enabled: true,
+                description: true,
+                deleteAfterRun: true,
+                agentId: true,
+                sessionKey: true,
+                failureAlert: true,
+                message: true,
+                text: true,
+                model: true,
+                fallbacks: true,
+                toolsAllow: true,
+                thinking: true,
+                timeoutSeconds: true,
+                lightContext: true,
+                allowUnsafeExternalContent: true,
+            };
+
+            Object.keys(source).forEach(function (key) {
+                if (!recoverableKeys[key]) {
+                    return;
+                }
+                if (source[key] === undefined) {
+                    return;
+                }
+
+                recovered[key] = source[key];
+                hasRecoverable = true;
+            });
+
+            return hasRecoverable
+                ? recovered
+                : null;
+        }
+
         function buildCronFailureAlert(form) {
             const mode = String(form && form.failureAlertMode || "inherit").trim();
             if (mode === "disabled") {
@@ -3479,11 +3526,11 @@
                 if (state.agentCronEditingJobId) {
                     await request("cron.update", {
                         id: state.agentCronEditingJobId,
-                        patch: payload,
+                        patch: recoverCronFlatJobShape(payload) || payload,
                     });
                     state.agentCronEditingJobId = null;
                 } else {
-                    await request("cron.add", payload);
+                    await request("cron.add", recoverCronFlatJobShape(payload) || payload);
                     resetCronFormToDefaults();
                 }
 
@@ -6746,6 +6793,8 @@
             const addCall = harness.takeNextCall("cron.add");
             assertRegression(addCall.params && addCall.params.name === "Nightly",
                 "cron add should forward normalized job payload name");
+            assertRegression(addCall.params && addCall.params.delivery && addCall.params.delivery.mode === "none",
+                "cron add should include explicit delivery mode payload");
             addCall.deferred.resolve({
                 payload: {
                     added: true,
