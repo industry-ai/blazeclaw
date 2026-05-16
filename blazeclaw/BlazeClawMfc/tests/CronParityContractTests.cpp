@@ -399,6 +399,45 @@ TEST_CASE("Wake validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
 }
 
+TEST_CASE("Cron update validator rejects empty id", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "update-empty-id",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"\",\"patch\":{\"enabled\":false}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+}
+
+TEST_CASE("Cron remove validator rejects empty jobId", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "remove-empty-jobid",
+		.method = "cron.remove",
+		.paramsJson = std::string("{\"jobId\":\"\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.jobId") != std::string::npos);
+}
+
+TEST_CASE("Cron run validator rejects empty id", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "run-empty-id",
+		.method = "cron.run",
+		.paramsJson = std::string("{\"id\":\"\",\"mode\":\"force\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+}
+
 TEST_CASE("Cron runs validator accepts statuses and delivery filters", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-filters",
@@ -516,6 +555,59 @@ TEST_CASE("Cron timer suppresses failure destination when same as primary target
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
+}
+
+TEST_CASE("Cron timer suppresses failure alert for best-effort delivery", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-best-effort-alert" },
+			{ "name", "best effort alert suppression" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" }, { "bestEffort", true } } },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "best_effort_delivery");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+}
+
+TEST_CASE("Cron timer suppresses invalid failureAlert webhook target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-invalid-failure-alert-target" },
+			{ "name", "invalid failureAlert target" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "webhook" }, { "to", "bad-target" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "invalid_webhook_target");
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
 }
 
 TEST_CASE("Cron timer run ids are unique for same tick", "[cron][timer]") {

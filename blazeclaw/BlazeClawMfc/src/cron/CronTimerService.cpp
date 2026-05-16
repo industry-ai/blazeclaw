@@ -128,6 +128,18 @@ namespace blazeclaw::cron {
 			return TryReadInt64Field(job["state"], "nextRunAtMs");
 		}
 
+		bool IsBestEffortDelivery(const CronJson& job) {
+			if (!job.contains("delivery") || !job["delivery"].is_object()) {
+				return false;
+			}
+			if (!job["delivery"].contains("bestEffort") ||
+				!job["delivery"]["bestEffort"].is_boolean()) {
+				return false;
+			}
+
+			return job["delivery"]["bestEffort"].get<bool>();
+		}
+
 		RunOutcome EvaluateRunOutcome(const CronJson& job) {
 			RunOutcome outcome;
 
@@ -579,16 +591,23 @@ namespace blazeclaw::cron {
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
 				state["lastFailureAlertMode"] = nullptr;
+				const bool bestEffortDelivery = IsBestEffortDelivery(*it);
 
 				if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_boolean() && !(*it)["failureAlert"].get<bool>()) {
 					state["lastFailureAlertAtMs"] = CronJson(nullptr);
 					state["failureAlertSuppressed"] = true;
 					state["failureAlertSuppressedReason"] = "disabled";
 				}
+				else if (bestEffortDelivery) {
+					state["lastFailureAlertAtMs"] = CronJson(nullptr);
+					state["failureAlertSuppressed"] = true;
+					state["failureAlertSuppressedReason"] = "best_effort_delivery";
+				}
 				else {
 					const std::int64_t alertAfter = ResolveFailureAlertAfter(*it);
 					const std::int64_t cooldownMs = ResolveFailureAlertCooldownMs(*it);
 					std::string failureAlertMode = kFailureAlertModeAnnounce;
+					std::string failureAlertTarget;
 					if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
 						failureAlertMode = ToLowerCopy(
 							TrimCopy((*it)["failureAlert"].value("mode", std::string(kFailureAlertModeAnnounce))));
@@ -596,24 +615,36 @@ namespace blazeclaw::cron {
 							failureAlertMode != kFailureAlertModeWebhook) {
 							failureAlertMode = kFailureAlertModeAnnounce;
 						}
+						failureAlertTarget =
+							TrimCopy((*it)["failureAlert"].value("to", std::string()));
 					}
-					state["lastFailureAlertMode"] = failureAlertMode;
-					const std::int64_t lastAlertAtMs =
-						TryReadInt64Field(state, "lastFailureAlertAtMs").value_or(0);
-					const bool cooldownOpen =
-						lastAlertAtMs <= 0 || (nowMs - lastAlertAtMs) >= cooldownMs;
-					if (consecutiveErrors >= alertAfter && cooldownOpen) {
-						failureAlertTriggered = true;
-						failureAlertAtMs = nowMs;
-						state["lastFailureAlertAtMs"] = nowMs;
-					}
-					else if (consecutiveErrors < alertAfter) {
+
+					if (failureAlertMode == kFailureAlertModeWebhook &&
+						!StartsWithHttpScheme(failureAlertTarget)) {
 						state["failureAlertSuppressed"] = true;
-						state["failureAlertSuppressedReason"] = "threshold_not_met";
+						state["failureAlertSuppressedReason"] = "invalid_webhook_target";
+						state["lastFailureAlertAtMs"] = CronJson(nullptr);
+						state["lastFailureAlertMode"] = failureAlertMode;
 					}
-					else if (!cooldownOpen) {
-						state["failureAlertSuppressed"] = true;
-						state["failureAlertSuppressedReason"] = "cooldown_active";
+					else {
+						state["lastFailureAlertMode"] = failureAlertMode;
+						const std::int64_t lastAlertAtMs =
+							TryReadInt64Field(state, "lastFailureAlertAtMs").value_or(0);
+						const bool cooldownOpen =
+							lastAlertAtMs <= 0 || (nowMs - lastAlertAtMs) >= cooldownMs;
+						if (consecutiveErrors >= alertAfter && cooldownOpen) {
+							failureAlertTriggered = true;
+							failureAlertAtMs = nowMs;
+							state["lastFailureAlertAtMs"] = nowMs;
+						}
+						else if (consecutiveErrors < alertAfter) {
+							state["failureAlertSuppressed"] = true;
+							state["failureAlertSuppressedReason"] = "threshold_not_met";
+						}
+						else if (!cooldownOpen) {
+							state["failureAlertSuppressed"] = true;
+							state["failureAlertSuppressedReason"] = "cooldown_active";
+						}
 					}
 				}
 			}

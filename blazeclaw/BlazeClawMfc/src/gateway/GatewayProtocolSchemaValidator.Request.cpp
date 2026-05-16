@@ -714,6 +714,20 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (request.paramsJson.has_value()) {
+				std::string id;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.update` requires `params.id` to be a non-empty string.");
+					return false;
+				}
+
+				std::string jobId;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.update` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName({ "id", "jobId", "patch" }, field)) {
 					continue;
@@ -740,6 +754,20 @@ namespace blazeclaw::gateway::protocol {
 			if (!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.remove", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.remove", "a string")) {
 				return false;
+			}
+
+			if (request.paramsJson.has_value()) {
+				std::string id;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.remove` requires `params.id` to be a non-empty string.");
+					return false;
+				}
+
+				std::string jobId;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.remove` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
@@ -773,6 +801,20 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.run", "mode", { "due", "force" }, issue)) {
 				return false;
+			}
+
+			if (request.paramsJson.has_value()) {
+				std::string id;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.run` requires `params.id` to be a non-empty string.");
+					return false;
+				}
+
+				std::string jobId;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
+					SetIssue(issue, "schema_invalid_value", "Method `cron.run` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
