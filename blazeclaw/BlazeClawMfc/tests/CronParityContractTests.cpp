@@ -17,6 +17,7 @@ namespace {
 	using blazeclaw::cron::CronTimerService;
 	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
 	using blazeclaw::gateway::protocol::RequestFrame;
+	using blazeclaw::gateway::protocol::ResponseFrame;
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
@@ -46,6 +47,75 @@ TEST_CASE("Cron runs validator rejects deliveryStatuses array above max cardinal
 	REQUIRE(issue.code == "schema_invalid_params");
 	REQUIRE(issue.message.find("params.deliveryStatuses") != std::string::npos);
 	REQUIRE(issue.message.find("at most 4") != std::string::npos);
+}
+
+TEST_CASE("Cron status response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-status-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"enabled\":true,\"storePath\":\"state/cron.jobs.json\",\"jobs\":2,\"nextWakeAtMs\":null}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.status", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-status-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"enabled\":true,\"storePath\":\"state/cron.jobs.json\",\"jobs\":2,\"nextWakeAtMs\":\"soon\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.status", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron list response validator enforces pagination shape", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-list-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"jobs\":[],\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.list", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-list-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"jobs\":[],\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":\"false\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.list", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator enforces entries contract", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-runs-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[],\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":{},\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
 }
 
 TEST_CASE("Cron timer suppresses announce failure destination when target equals primary announce target", "[cron][timer]") {

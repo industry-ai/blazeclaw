@@ -510,6 +510,79 @@ namespace blazeclaw::gateway::protocol {
 
 				return true;
 			} },
+			{ "cron.status", [&]() {
+				if (!IsFieldBoolean(payload, "enabled") ||
+					!IsFieldValueType(payload, "storePath", '"') ||
+					!IsFieldNumber(payload, "jobs")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.status` requires `enabled` boolean, `storePath` string, and `jobs` number fields.");
+					return false;
+				}
+
+				if (!HasFieldToken(payload, "nextWakeAtMs") ||
+					(!IsFieldNumber(payload, "nextWakeAtMs") &&
+						!IsFieldNull(payload, "nextWakeAtMs"))) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.status` requires `nextWakeAtMs` to be number or null.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "cron.list", [&]() {
+				if (!IsFieldValueType(payload, "jobs", '[') ||
+					!IsFieldNumber(payload, "total") ||
+					!IsFieldNumber(payload, "limit") ||
+					!IsFieldNumber(payload, "offset") ||
+					!IsFieldBoolean(payload, "hasMore")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.list` requires `jobs` array, `total`/`limit`/`offset` numbers, and `hasMore` boolean fields.");
+					return false;
+				}
+
+				if (!HasFieldToken(payload, "nextOffset") ||
+					(!IsFieldNumber(payload, "nextOffset") &&
+						!IsFieldNull(payload, "nextOffset"))) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.list` requires `nextOffset` to be number or null.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "cron.runs", [&]() {
+				if (!IsFieldValueType(payload, "entries", '[') ||
+					!IsFieldNumber(payload, "total") ||
+					!IsFieldNumber(payload, "limit") ||
+					!IsFieldNumber(payload, "offset") ||
+					!IsFieldBoolean(payload, "hasMore")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.runs` requires `entries` array, `total`/`limit`/`offset` numbers, and `hasMore` boolean fields.");
+					return false;
+				}
+
+				if (!HasFieldToken(payload, "nextOffset") ||
+					(!IsFieldNumber(payload, "nextOffset") &&
+						!IsFieldNull(payload, "nextOffset"))) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.runs` requires `nextOffset` to be number or null.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.embeddings.generate", [&]() {
 				if (!IsFieldValueType(payload, "vector", '[') ||
 					!IsFieldNumber(payload, "dimension") ||
