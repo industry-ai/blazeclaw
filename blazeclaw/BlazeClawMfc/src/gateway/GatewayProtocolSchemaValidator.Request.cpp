@@ -1603,7 +1603,8 @@ namespace blazeclaw::gateway::protocol {
 			if (request.paramsJson.has_value()) {
 				const std::string& json = request.paramsJson.value();
 				auto validateCronRunsArrayValues = [&](const char* fieldName,
-					std::initializer_list<const char*> allowedValues) {
+					std::initializer_list<const char*> allowedValues,
+					std::size_t maxItems) {
 					const auto it = fieldKinds.find(fieldName);
 					if (it == fieldKinds.end()) {
 						return true;
@@ -1628,6 +1629,7 @@ namespace blazeclaw::gateway::protocol {
 
 					std::size_t cursor = valuePos + 1;
 					bool hasValue = false;
+					std::size_t valueCount = 0;
 					while (true) {
 						cursor = SkipWhitespace(json, cursor);
 						if (cursor >= json.size()) {
@@ -1638,6 +1640,15 @@ namespace blazeclaw::gateway::protocol {
 						}
 
 						hasValue = true;
+						++valueCount;
+						if (valueCount > maxItems) {
+							SetIssue(
+								issue,
+								"schema_invalid_params",
+								"Method `cron.runs` requires `params." + std::string(fieldName) +
+								"` to contain at most " + std::to_string(maxItems) + " values.");
+							return false;
+						}
 						if (json[cursor] != '"') {
 							SetIssue(
 								issue,
@@ -1696,10 +1707,12 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!validateCronRunsArrayValues(
 				"statuses",
-				{ "ok", "error", "skipped", "queued", "running", "failed", "timed_out", "aborted" }) ||
+				{ "ok", "error", "skipped", "queued", "running", "failed", "timed_out", "aborted" },
+				3) ||
 					!validateCronRunsArrayValues(
 						"deliveryStatuses",
-						{ "not-requested", "delivered", "not-delivered", "suppressed" })) {
+						{ "not-requested", "delivered", "not-delivered", "suppressed" },
+						4)) {
 					return false;
 				}
 			}

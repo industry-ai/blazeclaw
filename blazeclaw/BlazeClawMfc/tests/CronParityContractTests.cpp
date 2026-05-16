@@ -20,6 +20,34 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron runs validator rejects statuses array above max cardinality", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-statuses-too-many",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"statuses\":[\"ok\",\"error\",\"skipped\",\"queued\"]}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.statuses") != std::string::npos);
+	REQUIRE(issue.message.find("at most 3") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator rejects deliveryStatuses array above max cardinality", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-delivery-statuses-too-many",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"deliveryStatuses\":[\"not-requested\",\"delivered\",\"not-delivered\",\"suppressed\",\"delivered\"]}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.deliveryStatuses") != std::string::npos);
+	REQUIRE(issue.message.find("at most 4") != std::string::npos);
+}
+
 TEST_CASE("Cron timer suppresses announce failure destination when target equals primary announce target", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
