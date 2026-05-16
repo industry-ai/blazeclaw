@@ -3,6 +3,7 @@
 #include "CronModels.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 
@@ -84,7 +85,9 @@ namespace blazeclaw::cron {
 	}
 
 	std::string BuildCronRunId(const std::int64_t nowMs) {
-		return std::string("cron-run-") + std::to_string(nowMs);
+		static std::atomic<std::uint64_t> sequence{ 1 };
+		const std::uint64_t current = sequence.fetch_add(1, std::memory_order_relaxed);
+		return std::string("cron-run-") + std::to_string(nowMs) + "-" + std::to_string(current);
 	}
 
 } // namespace blazeclaw::cron

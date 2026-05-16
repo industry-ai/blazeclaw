@@ -92,6 +92,9 @@ namespace blazeclaw::cron {
 			std::string error;
 			std::string deliveryStatus = "not-requested";
 			bool delivered = false;
+			std::string failureDestinationStatus = "not-requested";
+			std::string failureDestinationError;
+			std::string failureDestinationMode;
 			std::string errorCategory;
 		};
 
@@ -201,6 +204,34 @@ namespace blazeclaw::cron {
 					outcome.error = "unsupported delivery mode";
 					outcome.errorCategory = "delivery_mode_invalid";
 					outcome.summary = "Delivery mode is invalid";
+				}
+
+				if (outcome.status == "error" &&
+					delivery.contains("failureDestination") &&
+					delivery["failureDestination"].is_object()) {
+					const CronJson& failureDestination = delivery["failureDestination"];
+					std::string failureMode = ToLowerCopy(
+						TrimCopy(failureDestination.value("mode", std::string("announce"))));
+					if (failureMode != "announce" && failureMode != "webhook") {
+						failureMode = "announce";
+					}
+					outcome.failureDestinationMode = failureMode;
+
+					if (failureMode == "webhook") {
+						const std::string destination =
+							TrimCopy(failureDestination.value("to", std::string()));
+						if (StartsWithHttpScheme(destination)) {
+							outcome.failureDestinationStatus = "delivered";
+						}
+						else {
+							outcome.failureDestinationStatus = "not-delivered";
+							outcome.failureDestinationError =
+								"invalid failure destination webhook target";
+						}
+					}
+					else {
+						outcome.failureDestinationStatus = "delivered";
+					}
 				}
 			}
 
@@ -466,11 +497,22 @@ namespace blazeclaw::cron {
 				outcome.deliveryStatus == "not-delivered"
 				? CronJson(outcome.error)
 				: CronJson(nullptr);
+			state["lastFailureDestinationStatus"] = outcome.failureDestinationStatus;
+			state["lastFailureDestinationError"] =
+				outcome.failureDestinationError.empty()
+				? CronJson(nullptr)
+				: CronJson(outcome.failureDestinationError);
 			state["lastDurationMs"] = 0;
 			state["runningAtMs"] = nullptr;
 
 			const bool deleteAfterRun = (*it).value("deleteAfterRun", false);
 			const std::string jobName = (*it).value("name", std::string());
+			const std::string jobSessionKey = TrimCopy((*it).value("sessionKey", std::string()));
+			const std::string jobSessionId =
+				(*it).contains("sessionTarget") && (*it)["sessionTarget"].is_string()
+				? TrimCopy((*it)["sessionTarget"].get<std::string>())
+				: std::string();
+			const std::string runId = BuildCronRunId(nowMs);
 			const CronJson retry = (*it).value("retry", CronJson::object());
 			const std::int64_t maxAttempts = (std::max)(
 				static_cast<std::int64_t>(0),
@@ -556,6 +598,9 @@ namespace blazeclaw::cron {
 					nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr);
 				(*it)["updatedAtMs"] = nowMs;
 			}
+			state["lastRunId"] = runId;
+			state["lastScheduledForMs"] = nextRunAtMs.value();
+			state["lastFinishedAtMs"] = nowMs;
 
 			runs.push_back({
 				{ "ts", nowMs },
@@ -569,6 +614,13 @@ namespace blazeclaw::cron {
 				{ "deliveryError", outcome.deliveryStatus == "not-delivered"
 					? (outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error))
 					: CronJson(nullptr) },
+				{ "failureDestinationStatus", outcome.failureDestinationStatus },
+				{ "failureDestinationMode", outcome.failureDestinationMode.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureDestinationMode) },
+				{ "failureDestinationError", outcome.failureDestinationError.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureDestinationError) },
 				{ "delivered", outcome.delivered },
 				{ "consecutiveErrors", consecutiveErrors },
 				{ "failureAlertTriggered", failureAlertTriggered },
@@ -586,10 +638,15 @@ namespace blazeclaw::cron {
 				{ "retryScheduled", scheduledRetry },
 				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
+				{ "startedAtMs", nowMs },
+				{ "endedAtMs", nowMs },
+				{ "scheduledForMs", nextRunAtMs.value() },
 				{ "runAtMs", nowMs },
 				{ "nextRunAtMs", deleteAfterRun ? CronJson(nullptr) : (nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr)) },
+				{ "sessionKey", jobSessionKey.empty() ? CronJson(nullptr) : CronJson(jobSessionKey) },
+				{ "sessionId", jobSessionId.empty() ? CronJson(nullptr) : CronJson(jobSessionId) },
 				{ "jobName", jobName },
-				{ "runId", BuildCronRunId(nowMs) }
+				{ "runId", runId }
 			});
 			++executed;
 

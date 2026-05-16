@@ -724,6 +724,108 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (request.paramsJson.has_value()) {
+				const std::string& json = request.paramsJson.value();
+				auto validateCronRunsArrayValues = [&](const char* fieldName,
+					std::initializer_list<const char*> allowedValues) {
+					const auto it = fieldKinds.find(fieldName);
+					if (it == fieldKinds.end()) {
+						return true;
+					}
+					if (it->second != JsonFieldKind::Array) {
+						return true;
+					}
+
+					std::size_t tokenPos = 0;
+					if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+						return true;
+					}
+
+					std::size_t valuePos = json.find(':', tokenPos);
+					if (valuePos == std::string::npos) {
+						return true;
+					}
+					valuePos = SkipWhitespace(json, valuePos + 1);
+					if (valuePos >= json.size() || json[valuePos] != '[') {
+						return true;
+					}
+
+					std::size_t cursor = valuePos + 1;
+					bool hasValue = false;
+					while (true) {
+						cursor = SkipWhitespace(json, cursor);
+						if (cursor >= json.size()) {
+							break;
+						}
+						if (json[cursor] == ']') {
+							break;
+						}
+
+						hasValue = true;
+						if (json[cursor] != '"') {
+							SetIssue(
+								issue,
+								"schema_invalid_params",
+								"Method `cron.runs` requires `params." + std::string(fieldName) +
+								"` to contain only string values.");
+							return false;
+						}
+
+						std::string item;
+						if (!TryConsumeJsonString(json, cursor, item)) {
+							SetIssue(
+								issue,
+								"schema_invalid_params",
+								"Method `cron.runs` has invalid `params." + std::string(fieldName) + "` JSON shape.");
+							return false;
+						}
+
+						bool allowed = false;
+						for (const char* candidate : allowedValues) {
+							if (item == candidate) {
+								allowed = true;
+								break;
+							}
+						}
+						if (!allowed) {
+							SetIssue(
+								issue,
+								"schema_invalid_value",
+								"Method `cron.runs` has unsupported `params." +
+								std::string(fieldName) + "` value `" + item + "`.");
+							return false;
+						}
+
+						cursor = SkipWhitespace(json, cursor);
+						if (cursor < json.size() && json[cursor] == ',') {
+							++cursor;
+							continue;
+						}
+						if (cursor < json.size() && json[cursor] == ']') {
+							break;
+						}
+					}
+
+					if (!hasValue) {
+						SetIssue(
+							issue,
+							"schema_invalid_params",
+							"Method `cron.runs` requires `params." + std::string(fieldName) +
+							"` to contain at least one value.");
+						return false;
+					}
+
+					return true;
+				};
+
+				if (!validateCronRunsArrayValues("statuses", { "ok", "error", "skipped" }) ||
+					!validateCronRunsArrayValues(
+						"deliveryStatuses",
+						{ "not-requested", "delivered", "not-delivered", "suppressed" })) {
+					return false;
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName({ "limit", "offset", "scope", "id", "jobId", "statuses", "status", "deliveryStatuses", "deliveryStatus", "query", "sortDir" }, field)) {
 					continue;
