@@ -7,6 +7,10 @@
 #include <sstream>
 #include <vector>
 
+#include <winhttp.h>
+
+#pragma comment(lib, "Winhttp.lib")
+
 namespace {
 	constexpr std::int64_t kMinuteMs = 60'000;
 	constexpr std::int64_t kHourMs = 60 * kMinuteMs;
@@ -25,6 +29,186 @@ namespace blazeclaw::cron {
 		bool StartsWithHttpScheme(const std::string& value) {
 			const std::string lowered = ToLowerCopy(TrimCopy(value));
 			return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
+		}
+
+		bool IsTransportDispatchEnabled(const CronJson& node) {
+			return node.contains("transportDispatch") &&
+				node["transportDispatch"].is_boolean() &&
+				node["transportDispatch"].get<bool>();
+		}
+
+		std::wstring Utf8ToWide(const std::string& value) {
+			if (value.empty()) {
+				return std::wstring();
+			}
+
+			const int required = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				-1,
+				nullptr,
+				0);
+			if (required <= 0) {
+				return std::wstring();
+			}
+
+			std::wstring converted(static_cast<std::size_t>(required), L'\0');
+			const int convertedCount = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				-1,
+				converted.data(),
+				required);
+			if (convertedCount <= 0) {
+				return std::wstring();
+			}
+
+			if (!converted.empty() && converted.back() == L'\0') {
+				converted.pop_back();
+			}
+
+			return converted;
+		}
+
+		struct WebhookDispatchResult {
+			bool attempted = false;
+			std::optional<std::int64_t> httpStatus;
+			std::string error;
+		};
+
+		WebhookDispatchResult DispatchWebhookPostWinHttp(
+			const std::string& url,
+			const std::int64_t timeoutMs = 5000) {
+			WebhookDispatchResult result;
+
+			const std::wstring urlW = Utf8ToWide(url);
+			if (urlW.empty()) {
+				result.error = "invalid webhook URL encoding";
+				return result;
+			}
+
+			URL_COMPONENTS components{};
+			components.dwStructSize = sizeof(components);
+			components.dwSchemeLength = static_cast<DWORD>(-1);
+			components.dwHostNameLength = static_cast<DWORD>(-1);
+			components.dwUrlPathLength = static_cast<DWORD>(-1);
+			components.dwExtraInfoLength = static_cast<DWORD>(-1);
+
+			if (!WinHttpCrackUrl(urlW.c_str(), 0, 0, &components)) {
+				result.error = "failed to parse webhook URL";
+				return result;
+			}
+
+			const bool secure = components.nScheme == INTERNET_SCHEME_HTTPS;
+			if (!secure && components.nScheme != INTERNET_SCHEME_HTTP) {
+				result.error = "unsupported webhook URL scheme";
+				return result;
+			}
+
+			const std::wstring host(
+				components.lpszHostName,
+				components.dwHostNameLength);
+			std::wstring path(
+				components.lpszUrlPath,
+				components.dwUrlPathLength > 0
+				? components.dwUrlPathLength
+				: 1);
+			if (path.empty()) {
+				path = L"/";
+			}
+			if (components.dwExtraInfoLength > 0 && components.lpszExtraInfo != nullptr) {
+				path.append(components.lpszExtraInfo, components.dwExtraInfoLength);
+			}
+
+			const DWORD timeoutMsDword = static_cast<DWORD>((std::max)(
+				static_cast<std::int64_t>(1),
+				timeoutMs));
+
+			HINTERNET session = WinHttpOpen(
+				L"BlazeClawCron/1.0",
+				WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+				WINHTTP_NO_PROXY_NAME,
+				WINHTTP_NO_PROXY_BYPASS,
+				0);
+			if (!session) {
+				result.error = "WinHttpOpen failed";
+				return result;
+			}
+
+			HINTERNET connection = WinHttpConnect(session, host.c_str(), components.nPort, 0);
+			if (!connection) {
+				WinHttpCloseHandle(session);
+				result.error = "WinHttpConnect failed";
+				return result;
+			}
+
+			HINTERNET request = WinHttpOpenRequest(
+				connection,
+				L"POST",
+				path.c_str(),
+				nullptr,
+				WINHTTP_NO_REFERER,
+				WINHTTP_DEFAULT_ACCEPT_TYPES,
+				secure ? WINHTTP_FLAG_SECURE : 0);
+			if (!request) {
+				WinHttpCloseHandle(connection);
+				WinHttpCloseHandle(session);
+				result.error = "WinHttpOpenRequest failed";
+				return result;
+			}
+
+			WinHttpSetTimeouts(
+				request,
+				static_cast<int>(timeoutMsDword),
+				static_cast<int>(timeoutMsDword),
+				static_cast<int>(timeoutMsDword),
+				static_cast<int>(timeoutMsDword));
+
+			result.attempted = true;
+			if (!WinHttpSendRequest(
+				request,
+				WINHTTP_NO_ADDITIONAL_HEADERS,
+				0,
+				WINHTTP_NO_REQUEST_DATA,
+				0,
+				0,
+				0)) {
+				result.error = "WinHttpSendRequest failed";
+				WinHttpCloseHandle(request);
+				WinHttpCloseHandle(connection);
+				WinHttpCloseHandle(session);
+				return result;
+			}
+
+			if (!WinHttpReceiveResponse(request, nullptr)) {
+				result.error = "WinHttpReceiveResponse failed";
+				WinHttpCloseHandle(request);
+				WinHttpCloseHandle(connection);
+				WinHttpCloseHandle(session);
+				return result;
+			}
+
+			DWORD statusCode = 0;
+			DWORD statusCodeSize = sizeof(statusCode);
+			if (!WinHttpQueryHeaders(
+				request,
+				WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+				WINHTTP_HEADER_NAME_BY_INDEX,
+				&statusCode,
+				&statusCodeSize,
+				WINHTTP_NO_HEADER_INDEX)) {
+				result.error = "WinHttpQueryHeaders failed";
+			}
+			else {
+				result.httpStatus = static_cast<std::int64_t>(statusCode);
+			}
+
+			WinHttpCloseHandle(request);
+			WinHttpCloseHandle(connection);
+			WinHttpCloseHandle(session);
+			return result;
 		}
 
 		std::int64_t ResolveRetryDelayMs(const CronJson& retry, const std::int64_t attemptIndex) {
@@ -110,6 +294,51 @@ namespace blazeclaw::cron {
 			std::string errorCategory;
 			bool timedOut = false;
 		};
+
+		void ApplyWebhookHttpStatusToPrimaryOutcome(
+			RunOutcome& outcome,
+			const std::int64_t statusCode) {
+			outcome.deliveryHttpStatus = statusCode;
+			if (statusCode >= 200 && statusCode < 300) {
+				outcome.deliveryStatus = "delivered";
+				outcome.delivered = true;
+				return;
+			}
+
+			outcome.status = "error";
+			outcome.deliveryStatus = "not-delivered";
+			outcome.error =
+				"webhook delivery returned HTTP " + std::to_string(statusCode);
+			if (statusCode == 429) {
+				outcome.errorCategory = "rate_limit";
+				outcome.summary = "Webhook delivery rate limited";
+				outcome.retryable = true;
+			}
+			else if (statusCode >= 500) {
+				outcome.errorCategory = "network";
+				outcome.summary = "Webhook delivery server error";
+				outcome.retryable = true;
+			}
+			else {
+				outcome.errorCategory = "delivery_http_error";
+				outcome.summary = "Webhook delivery rejected";
+				outcome.retryable = false;
+			}
+		}
+
+		void ApplyWebhookHttpStatusToFailureDestination(
+			RunOutcome& outcome,
+			const std::int64_t statusCode) {
+			outcome.failureDestinationHttpStatus = statusCode;
+			if (statusCode >= 200 && statusCode < 300) {
+				outcome.failureDestinationStatus = "delivered";
+				return;
+			}
+
+			outcome.failureDestinationStatus = "not-delivered";
+			outcome.failureDestinationError =
+				"failure destination webhook returned HTTP " + std::to_string(statusCode);
+		}
 
 		bool IsTransientErrorCategory(const std::string& errorText) {
 			const std::string lowered = ToLowerCopy(errorText);
@@ -235,6 +464,7 @@ namespace blazeclaw::cron {
 					outcome.deliveryAttempted = true;
 					const std::string to =
 						TrimCopy(delivery.value("to", std::string()));
+					const bool transportDispatch = IsTransportDispatchEnabled(delivery);
 					const auto simulatedHttpStatus =
 						TryReadInt64Field(delivery, "simulateHttpStatus");
 					if (simulateTransientFailure) {
@@ -246,32 +476,28 @@ namespace blazeclaw::cron {
 						outcome.retryable = true;
 					}
 					else if (simulatedHttpStatus.has_value()) {
-						const std::int64_t statusCode = simulatedHttpStatus.value();
-						outcome.deliveryHttpStatus = statusCode;
-						if (statusCode >= 200 && statusCode < 300) {
-							outcome.deliveryStatus = "delivered";
-							outcome.delivered = true;
+						ApplyWebhookHttpStatusToPrimaryOutcome(
+							outcome,
+							simulatedHttpStatus.value());
+					}
+					else if (transportDispatch && StartsWithHttpScheme(to)) {
+						const WebhookDispatchResult dispatch =
+							DispatchWebhookPostWinHttp(to);
+						outcome.deliveryAttempted = dispatch.attempted;
+						if (dispatch.httpStatus.has_value()) {
+							ApplyWebhookHttpStatusToPrimaryOutcome(
+								outcome,
+								dispatch.httpStatus.value());
 						}
 						else {
 							outcome.status = "error";
 							outcome.deliveryStatus = "not-delivered";
-							outcome.error =
-								"webhook delivery returned HTTP " + std::to_string(statusCode);
-							if (statusCode == 429) {
-								outcome.errorCategory = "rate_limit";
-								outcome.summary = "Webhook delivery rate limited";
-								outcome.retryable = true;
-							}
-							else if (statusCode >= 500) {
-								outcome.errorCategory = "network";
-								outcome.summary = "Webhook delivery server error";
-								outcome.retryable = true;
-							}
-							else {
-								outcome.errorCategory = "delivery_http_error";
-								outcome.summary = "Webhook delivery rejected";
-								outcome.retryable = false;
-							}
+							outcome.error = dispatch.error.empty()
+								? std::string("webhook delivery transport dispatch failed")
+								: dispatch.error;
+							outcome.errorCategory = "network";
+							outcome.summary = "Webhook delivery transport dispatch failed";
+							outcome.retryable = true;
 						}
 					}
 					else if (StartsWithHttpScheme(to)) {
@@ -342,20 +568,29 @@ namespace blazeclaw::cron {
 
 					if (failureMode == "webhook") {
 						outcome.failureDestinationAttempted = true;
+						const bool failureTransportDispatch =
+							IsTransportDispatchEnabled(failureDestination);
 						const auto failureDestinationHttpStatus =
 							TryReadInt64Field(failureDestination, "simulateHttpStatus");
 						if (failureDestinationHttpStatus.has_value()) {
-							const std::int64_t statusCode =
-								failureDestinationHttpStatus.value();
-							outcome.failureDestinationHttpStatus = statusCode;
-							if (statusCode >= 200 && statusCode < 300) {
-								outcome.failureDestinationStatus = "delivered";
+							ApplyWebhookHttpStatusToFailureDestination(
+								outcome,
+								failureDestinationHttpStatus.value());
+						}
+						else if (failureTransportDispatch && StartsWithHttpScheme(failureTo)) {
+							const WebhookDispatchResult dispatch =
+								DispatchWebhookPostWinHttp(failureTo);
+							outcome.failureDestinationAttempted = dispatch.attempted;
+							if (dispatch.httpStatus.has_value()) {
+								ApplyWebhookHttpStatusToFailureDestination(
+									outcome,
+									dispatch.httpStatus.value());
 							}
 							else {
 								outcome.failureDestinationStatus = "not-delivered";
-								outcome.failureDestinationError =
-									"failure destination webhook returned HTTP " +
-									std::to_string(statusCode);
+								outcome.failureDestinationError = dispatch.error.empty()
+									? std::string("failure destination webhook transport dispatch failed")
+									: dispatch.error;
 							}
 						}
 						else if (StartsWithHttpScheme(failureTo)) {

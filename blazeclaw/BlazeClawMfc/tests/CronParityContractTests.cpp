@@ -1040,6 +1040,73 @@ TEST_CASE("Cron timer records failure destination webhook HTTP status", "[cron][
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationHttpStatus", static_cast<std::int64_t>(0)) == 502);
 }
 
+TEST_CASE("Cron timer transport dispatch classifies webhook transport failures", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	SECTION("Primary webhook transport dispatch failure is retryable network error") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-webhook-transport-dispatch-fail" },
+				{ "name", "webhook transport dispatch fail" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery",
+					{
+						{ "mode", "webhook" },
+						{ "to", "http:///" },
+						{ "transportDispatch", true }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+		REQUIRE(runs[0].value("errorCategory", std::string()) == "network");
+		REQUIRE(runs[0].value("deliveryAttempted", true) == false);
+		REQUIRE(runs[0].value("summary", std::string()) == "Webhook delivery transport dispatch failed");
+	}
+
+	SECTION("Failure destination webhook transport dispatch failure is recorded") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-failure-destination-transport-dispatch-fail" },
+				{ "name", "failure destination transport dispatch fail" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery",
+					{
+						{ "mode", "webhook" },
+						{ "to", "invalid-url" },
+						{ "failureDestination",
+							{
+								{ "mode", "webhook" },
+								{ "to", "http:///" },
+								{ "transportDispatch", true }
+							} }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
+		REQUIRE(
+			runs[0].value("failureDestinationError", std::string()) ==
+			"failed to parse webhook URL");
+		REQUIRE(runs[0].value("failureDestinationAttempted", true) == false);
+	}
+}
+
 TEST_CASE("Cron timer marks announce failure destination empty target as not-delivered", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
