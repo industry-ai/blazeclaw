@@ -4,13 +4,16 @@
 #include "CronStoreService.h"
 #include "CronTimerService.h"
 
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 
 namespace blazeclaw::cron {
 
 	class CronOpsService {
 	public:
 		CronOpsService();
+		~CronOpsService();
 
 		CronJson Status(const CronJson& params);
 		CronJson List(const CronJson& params);
@@ -21,8 +24,16 @@ namespace blazeclaw::cron {
 		CronJson Runs(const CronJson& params);
 		CronJson Wake(const CronJson& params);
 
+		void StartBackgroundScheduler();
+		void StopBackgroundScheduler();
+
 	private:
 		std::mutex m_mutex;
+		std::mutex m_backgroundMutex;
+		std::condition_variable m_backgroundCv;
+		std::thread m_backgroundThread;
+		bool m_backgroundStopRequested = false;
+		bool m_backgroundStarted = false;
 		CronStoreService m_store;
 		CronTimerService m_timer;
 		std::uint64_t m_idCounter = 0;
@@ -39,6 +50,7 @@ namespace blazeclaw::cron {
 		CronJson* FindJobByIdLocked(const std::string& id);
 		void EnsureLoadedLocked();
 		void RunStartupCatchupLocked();
+		void BackgroundSchedulerLoop();
 		void RefreshSchedulesOnlyLocked(std::int64_t nowMs);
 		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
 	};

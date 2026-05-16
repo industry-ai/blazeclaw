@@ -335,6 +335,67 @@ TEST_CASE("Wake validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
 }
 
+TEST_CASE("Cron runs validator accepts statuses and delivery filters", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-filters",
+		.method = "cron.runs",
+		.paramsJson = std::string(
+			"{\"scope\":\"all\",\"statuses\":[\"ok\",\"error\"],\"deliveryStatuses\":[\"delivered\",\"not-delivered\"],\"deliveryStatus\":\"delivered\",\"limit\":20}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron timer run entry includes deliveryError for failed delivery", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-delivery-error" },
+			{ "name", "delivery failure" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("deliveryError", std::string()) == "invalid webhook delivery target");
+}
+
+TEST_CASE("Cron timer records failureAlert suppression reason when disabled", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-disabled-meta" },
+			{ "name", "alert disabled" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "bad-target" } } },
+			{ "failureAlert", false },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 3 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "disabled");
+}
+
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-bad-mode",

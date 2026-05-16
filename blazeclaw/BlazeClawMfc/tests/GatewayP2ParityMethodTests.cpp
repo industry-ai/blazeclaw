@@ -2,6 +2,8 @@
 
 #include "gateway/GatewayHost.h"
 
+#include <nlohmann/json.hpp>
+
 using blazeclaw::gateway::GatewayHost;
 using blazeclaw::gateway::protocol::RequestFrame;
 
@@ -275,11 +277,15 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		host,
 		"p2-cron-add",
 		"cron.add",
-		std::string("{\"name\":\"Nightly sync\",\"enabled\":true}"));
+		std::string("{\"name\":\"Nightly sync\",\"enabled\":true,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"sync\"}}"));
 	REQUIRE(cronAdd.ok);
 	REQUIRE(cronAdd.payloadJson.has_value());
-	REQUIRE(cronAdd.payloadJson.value().find("\"added\":true") != std::string::npos);
-	REQUIRE(cronAdd.payloadJson.value().find("\"cronId\":\"cron-") != std::string::npos);
+	const nlohmann::json cronAdded = nlohmann::json::parse(cronAdd.payloadJson.value());
+	REQUIRE(cronAdded.is_object());
+	REQUIRE(cronAdded.contains("id"));
+	REQUIRE(cronAdded["id"].is_string());
+	const std::string cronId = cronAdded["id"].get<std::string>();
+	REQUIRE_FALSE(cronId.empty());
 
 	const auto cronUpdateInvalid = Route(
 		host,
@@ -294,11 +300,13 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		host,
 		"p2-cron-update",
 		"cron.update",
-		std::string("{\"id\":\"cron-demo-hourly\",\"patch\":{\"enabled\":false}}"));
+		std::string("{\"id\":\"") + cronId + "\",\"patch\":{\"enabled\":false}}");
 	REQUIRE(cronUpdate.ok);
 	REQUIRE(cronUpdate.payloadJson.has_value());
-	REQUIRE(cronUpdate.payloadJson.value().find("\"updated\":true") != std::string::npos);
-	REQUIRE(cronUpdate.payloadJson.value().find("\"cronId\":\"cron-demo-hourly\"") != std::string::npos);
+	const nlohmann::json cronUpdated = nlohmann::json::parse(cronUpdate.payloadJson.value());
+	REQUIRE(cronUpdated.is_object());
+	REQUIRE(cronUpdated.value("id", std::string()) == cronId);
+	REQUIRE_FALSE(cronUpdated.value("enabled", true));
 
 	const auto cronRunInvalid = Route(
 		host,
@@ -313,11 +321,11 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		host,
 		"p2-cron-run",
 		"cron.run",
-		std::string("{\"id\":\"cron-demo-hourly\",\"mode\":\"due\"}"));
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
 	REQUIRE(cronRun.ok);
 	REQUIRE(cronRun.payloadJson.has_value());
 	REQUIRE(cronRun.payloadJson.value().find("\"started\":true") != std::string::npos);
-	REQUIRE(cronRun.payloadJson.value().find("\"mode\":\"due\"") != std::string::npos);
+	REQUIRE(cronRun.payloadJson.value().find("\"mode\":\"force\"") != std::string::npos);
 
 	const auto cronRemoveInvalid = Route(
 		host,
@@ -332,9 +340,9 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		host,
 		"p2-cron-remove",
 		"cron.remove",
-		std::string("{\"id\":\"cron-demo-hourly\"}"));
+		std::string("{\"id\":\"") + cronId + "\"}");
 	REQUIRE(cronRemove.ok);
 	REQUIRE(cronRemove.payloadJson.has_value());
 	REQUIRE(cronRemove.payloadJson.value().find("\"removed\":true") != std::string::npos);
-	REQUIRE(cronRemove.payloadJson.value().find("\"cronId\":\"cron-demo-hourly\"") != std::string::npos);
+	REQUIRE(cronRemove.payloadJson.value().find("\"ok\":true") != std::string::npos);
 }

@@ -708,7 +708,10 @@ namespace blazeclaw::gateway::protocol {
 				!RequireFieldKindIfPresent(fieldKinds, "scope", JsonFieldKind::String, issue, "cron.runs", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "id", JsonFieldKind::String, issue, "cron.runs", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "jobId", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "statuses", JsonFieldKind::Array, issue, "cron.runs", "an array") ||
 				!RequireFieldKindIfPresent(fieldKinds, "status", JsonFieldKind::String, issue, "cron.runs", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "deliveryStatuses", JsonFieldKind::Array, issue, "cron.runs", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "deliveryStatus", JsonFieldKind::String, issue, "cron.runs", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "query", JsonFieldKind::String, issue, "cron.runs", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "sortDir", JsonFieldKind::String, issue, "cron.runs", "a string")) {
 				return false;
@@ -716,12 +719,13 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "scope", { "job", "all" }, issue) ||
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "status", { "all", "ok", "error", "skipped" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "deliveryStatus", { "not-requested", "delivered", "not-delivered", "suppressed" }, issue) ||
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "sortDir", { "asc", "desc" }, issue)) {
 				return false;
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (ContainsFieldName({ "limit", "offset", "scope", "id", "jobId", "status", "query", "sortDir" }, field)) {
+				if (ContainsFieldName({ "limit", "offset", "scope", "id", "jobId", "statuses", "status", "deliveryStatuses", "deliveryStatus", "query", "sortDir" }, field)) {
 					continue;
 				}
 

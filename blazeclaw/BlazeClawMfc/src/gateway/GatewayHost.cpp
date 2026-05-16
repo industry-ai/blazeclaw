@@ -24,6 +24,7 @@
 #include "GatewayMethodSurfaceAudit.h"
 #include "GatewayHttpAuthService.h"
 #include "Telemetry.h"
+#include "cron/CronOpsService.h"
 #include "../app/MainFrame.h"
 #include "../app/BlazeClawMfcApp.h"
 #include "../app/ChatView.h"
@@ -651,6 +652,8 @@ namespace blazeclaw::gateway {
 			},
 			python::PythonRuntimeDispatcher::CreateExecutor());
 
+		cron::GetCronOpsService().StartBackgroundScheduler();
+
 		return true;
 	}
 
@@ -912,6 +915,7 @@ namespace blazeclaw::gateway {
 	}
 
 	void GatewayHost::Stop() {
+		cron::GetCronOpsService().StopBackgroundScheduler();
 		m_transport.Stop();
 		// Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);

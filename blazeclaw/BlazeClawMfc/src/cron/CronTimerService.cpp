@@ -19,6 +19,8 @@ namespace blazeclaw::cron {
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
 		inline constexpr std::int64_t kDefaultFailureAlertAfter = 2;
 		inline constexpr std::int64_t kDefaultFailureAlertCooldownMs = 60 * 60'000;
+			inline constexpr const char* kFailureAlertModeAnnounce = "announce";
+			inline constexpr const char* kFailureAlertModeWebhook = "webhook";
 
 		bool StartsWithHttpScheme(const std::string& value) {
 			const std::string lowered = ToLowerCopy(TrimCopy(value));
@@ -164,8 +166,19 @@ namespace blazeclaw::cron {
 					outcome.delivered = false;
 				}
 				else if (mode == "announce") {
+					if (delivery.contains("to") &&
+						delivery["to"].is_string() &&
+						TrimCopy(delivery["to"].get<std::string>()).empty()) {
+						outcome.status = "error";
+						outcome.deliveryStatus = "not-delivered";
+						outcome.error = "announce delivery target is empty";
+						outcome.errorCategory = "delivery_target_invalid";
+						outcome.summary = "Announce delivery target is invalid";
+					}
+					else {
 					outcome.deliveryStatus = "delivered";
 					outcome.delivered = true;
+					}
 				}
 				else if (mode == "webhook") {
 					const std::string to =
@@ -181,6 +194,13 @@ namespace blazeclaw::cron {
 						outcome.errorCategory = "delivery_target_invalid";
 						outcome.summary = "Webhook delivery target is invalid";
 					}
+				}
+				else {
+					outcome.status = "error";
+					outcome.deliveryStatus = "not-delivered";
+					outcome.error = "unsupported delivery mode";
+					outcome.errorCategory = "delivery_mode_invalid";
+					outcome.summary = "Delivery mode is invalid";
 				}
 			}
 
@@ -483,13 +503,28 @@ namespace blazeclaw::cron {
 			if (outcome.status == "error") {
 				consecutiveErrors = previousConsecutiveErrors + 1;
 				state["consecutiveErrors"] = consecutiveErrors;
+				state["failureAlertSuppressed"] = false;
+				state["failureAlertSuppressedReason"] = nullptr;
+				state["lastFailureAlertMode"] = nullptr;
 
 				if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_boolean() && !(*it)["failureAlert"].get<bool>()) {
 					state["lastFailureAlertAtMs"] = CronJson(nullptr);
+					state["failureAlertSuppressed"] = true;
+					state["failureAlertSuppressedReason"] = "disabled";
 				}
 				else {
 					const std::int64_t alertAfter = ResolveFailureAlertAfter(*it);
 					const std::int64_t cooldownMs = ResolveFailureAlertCooldownMs(*it);
+					std::string failureAlertMode = kFailureAlertModeAnnounce;
+					if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
+						failureAlertMode = ToLowerCopy(
+							TrimCopy((*it)["failureAlert"].value("mode", std::string(kFailureAlertModeAnnounce))));
+						if (failureAlertMode != kFailureAlertModeAnnounce &&
+							failureAlertMode != kFailureAlertModeWebhook) {
+							failureAlertMode = kFailureAlertModeAnnounce;
+						}
+					}
+					state["lastFailureAlertMode"] = failureAlertMode;
 					const std::int64_t lastAlertAtMs =
 						TryReadInt64Field(state, "lastFailureAlertAtMs").value_or(0);
 					const bool cooldownOpen =
@@ -499,10 +534,20 @@ namespace blazeclaw::cron {
 						failureAlertAtMs = nowMs;
 						state["lastFailureAlertAtMs"] = nowMs;
 					}
+					else if (consecutiveErrors < alertAfter) {
+						state["failureAlertSuppressed"] = true;
+						state["failureAlertSuppressedReason"] = "threshold_not_met";
+					}
+					else if (!cooldownOpen) {
+						state["failureAlertSuppressed"] = true;
+						state["failureAlertSuppressedReason"] = "cooldown_active";
+					}
 				}
 			}
 			else {
 				state["consecutiveErrors"] = 0;
+				state["failureAlertSuppressed"] = false;
+				state["failureAlertSuppressedReason"] = nullptr;
 			}
 
 			if (!deleteAfterRun && !scheduledRetry) {
@@ -521,9 +566,21 @@ namespace blazeclaw::cron {
 				{ "error", outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error) },
 				{ "errorCategory", outcome.errorCategory.empty() ? CronJson(nullptr) : CronJson(outcome.errorCategory) },
 				{ "deliveryStatus", outcome.deliveryStatus },
+				{ "deliveryError", outcome.deliveryStatus == "not-delivered"
+					? (outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error))
+					: CronJson(nullptr) },
 				{ "delivered", outcome.delivered },
 				{ "consecutiveErrors", consecutiveErrors },
 				{ "failureAlertTriggered", failureAlertTriggered },
+				{ "failureAlertSuppressed", state.value("failureAlertSuppressed", false) },
+				{ "failureAlertSuppressedReason",
+					state.contains("failureAlertSuppressedReason")
+					? state["failureAlertSuppressedReason"]
+					: CronJson(nullptr) },
+				{ "failureAlertMode",
+					state.contains("lastFailureAlertMode")
+					? state["lastFailureAlertMode"]
+					: CronJson(nullptr) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },

@@ -5,6 +5,7 @@
 #include "../gateway/GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace blazeclaw::cron {
 	namespace {
@@ -35,6 +36,10 @@ namespace blazeclaw::cron {
 		: m_store(
 			gateway::ResolveGatewayStateFilePath("cron.jobs.json"),
 			gateway::ResolveGatewayStateFilePath("cron.runs.json")) {
+	}
+
+	CronOpsService::~CronOpsService() {
+		StopBackgroundScheduler();
 	}
 
 	CronJson CronOpsService::Status(const CronJson& params) {
@@ -291,8 +296,53 @@ namespace blazeclaw::cron {
 		const std::string scope =
 			ToLowerCopy(TrimCopy(params.value("scope", std::string("all"))));
 		const std::string requestedId = CronNormalize::ResolveCronId(params);
+
+		std::unordered_set<std::string> statusFilters;
+		if (params.contains("statuses") && params["statuses"].is_array()) {
+			for (const auto& item : params["statuses"]) {
+				if (!item.is_string()) {
+					continue;
+				}
+
+				const std::string value = ToLowerCopy(TrimCopy(item.get<std::string>()));
+				if (value == "ok" || value == "error" || value == "skipped") {
+					statusFilters.insert(value);
+				}
+			}
+		}
+
 		const std::string statusFilter =
 			ToLowerCopy(TrimCopy(params.value("status", std::string("all"))));
+		if (statusFilter == "ok" || statusFilter == "error" || statusFilter == "skipped") {
+			statusFilters.insert(statusFilter);
+		}
+
+		std::unordered_set<std::string> deliveryStatusFilters;
+		if (params.contains("deliveryStatuses") && params["deliveryStatuses"].is_array()) {
+			for (const auto& item : params["deliveryStatuses"]) {
+				if (!item.is_string()) {
+					continue;
+				}
+
+				const std::string value = ToLowerCopy(TrimCopy(item.get<std::string>()));
+				if (value == "not-requested" ||
+					value == "delivered" ||
+					value == "not-delivered" ||
+					value == "suppressed") {
+					deliveryStatusFilters.insert(value);
+				}
+			}
+		}
+
+		const std::string deliveryStatusFilter =
+			ToLowerCopy(TrimCopy(params.value("deliveryStatus", std::string())));
+		if (deliveryStatusFilter == "not-requested" ||
+			deliveryStatusFilter == "delivered" ||
+			deliveryStatusFilter == "not-delivered" ||
+			deliveryStatusFilter == "suppressed") {
+			deliveryStatusFilters.insert(deliveryStatusFilter);
+		}
+
 		const std::string query =
 			ToLowerCopy(TrimCopy(params.value("query", std::string())));
 		const std::string sortDir =
@@ -304,17 +354,24 @@ namespace blazeclaw::cron {
 			const std::string jobId = ReadStringOrEmpty(entry, "jobId");
 			const std::string status =
 				ToLowerCopy(ReadStringOrEmpty(entry, "status"));
+			const std::string deliveryStatus =
+				ToLowerCopy(ReadStringOrEmpty(entry, "deliveryStatus"));
 
 			if (scope == "job" && !requestedId.empty() && jobId != requestedId) {
 				continue;
 			}
-			if (statusFilter != "" && statusFilter != "all" && status != statusFilter) {
+			if (!statusFilters.empty() && statusFilters.find(status) == statusFilters.end()) {
+				continue;
+			}
+			if (!deliveryStatusFilters.empty() &&
+				deliveryStatusFilters.find(deliveryStatus) == deliveryStatusFilters.end()) {
 				continue;
 			}
 			if (!query.empty()) {
 				const std::string haystack = ToLowerCopy(
 					jobId + " " +
 					ReadStringOrEmpty(entry, "status") + " " +
+					ReadStringOrEmpty(entry, "deliveryStatus") + " " +
 					ReadStringOrEmpty(entry, "jobName") + " " +
 					ReadStringOrEmpty(entry, "error"));
 				if (haystack.find(query) == std::string::npos) {
@@ -382,6 +439,37 @@ namespace blazeclaw::cron {
 		};
 	}
 
+	void CronOpsService::StartBackgroundScheduler() {
+		std::lock_guard<std::mutex> lock(m_backgroundMutex);
+		if (m_backgroundStarted) {
+			return;
+		}
+
+		m_backgroundStopRequested = false;
+		m_backgroundThread = std::thread([this]() {
+			BackgroundSchedulerLoop();
+			});
+		m_backgroundStarted = true;
+	}
+
+	void CronOpsService::StopBackgroundScheduler() {
+		{
+			std::lock_guard<std::mutex> lock(m_backgroundMutex);
+			if (!m_backgroundStarted) {
+				return;
+			}
+			m_backgroundStopRequested = true;
+		}
+
+		m_backgroundCv.notify_all();
+		if (m_backgroundThread.joinable()) {
+			m_backgroundThread.join();
+		}
+
+		std::lock_guard<std::mutex> lock(m_backgroundMutex);
+		m_backgroundStarted = false;
+	}
+
 	std::size_t CronOpsService::ClampLimit(
 		const CronJson& value,
 		const std::size_t min,
@@ -417,6 +505,46 @@ namespace blazeclaw::cron {
 
 		m_startupCatchupDone = true;
 		SyncDueRunsLocked(UtcNowMs(), false);
+	}
+
+	void CronOpsService::BackgroundSchedulerLoop() {
+		while (true) {
+			{
+				std::unique_lock<std::mutex> lock(m_backgroundMutex);
+				if (m_backgroundStopRequested) {
+					break;
+				}
+			}
+
+			std::int64_t nowMs = UtcNowMs();
+			std::int64_t nextWakeAtMs = 0;
+
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				EnsureLoadedLocked();
+				RunStartupCatchupLocked();
+				SyncDueRunsLocked(nowMs, false);
+				nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
+			}
+
+			nowMs = UtcNowMs();
+			std::int64_t waitMs = 60'000;
+			if (nextWakeAtMs > 0) {
+				waitMs = (std::max)(static_cast<std::int64_t>(1000), nextWakeAtMs - nowMs);
+				waitMs = (std::min)(waitMs, static_cast<std::int64_t>(60'000));
+			}
+
+			std::unique_lock<std::mutex> lock(m_backgroundMutex);
+			m_backgroundCv.wait_for(
+				lock,
+				std::chrono::milliseconds(waitMs),
+				[this]() {
+					return m_backgroundStopRequested;
+				});
+			if (m_backgroundStopRequested) {
+				break;
+			}
+		}
 	}
 
 	void CronOpsService::RefreshSchedulesOnlyLocked(const std::int64_t nowMs) {
