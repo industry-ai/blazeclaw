@@ -97,12 +97,14 @@ namespace blazeclaw::cron {
 			std::string deliveryAccountId;
 			bool delivered = false;
 			bool deliveryAttempted = false;
+			std::int64_t deliveryHttpStatus = 0;
 			bool retryable = false;
 			std::string failureDestinationStatus = "not-requested";
 			std::string failureDestinationTarget;
 			std::string failureDestinationChannel;
 			std::string failureDestinationAccountId;
 			bool failureDestinationAttempted = false;
+			std::int64_t failureDestinationHttpStatus = 0;
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
 			std::string errorCategory;
@@ -233,6 +235,8 @@ namespace blazeclaw::cron {
 					outcome.deliveryAttempted = true;
 					const std::string to =
 						TrimCopy(delivery.value("to", std::string()));
+					const auto simulatedHttpStatus =
+						TryReadInt64Field(delivery, "simulateHttpStatus");
 					if (simulateTransientFailure) {
 						outcome.status = "error";
 						outcome.deliveryStatus = "not-delivered";
@@ -240,6 +244,35 @@ namespace blazeclaw::cron {
 						outcome.errorCategory = "network";
 						outcome.summary = "Webhook delivery transient failure";
 						outcome.retryable = true;
+					}
+					else if (simulatedHttpStatus.has_value()) {
+						const std::int64_t statusCode = simulatedHttpStatus.value();
+						outcome.deliveryHttpStatus = statusCode;
+						if (statusCode >= 200 && statusCode < 300) {
+							outcome.deliveryStatus = "delivered";
+							outcome.delivered = true;
+						}
+						else {
+							outcome.status = "error";
+							outcome.deliveryStatus = "not-delivered";
+							outcome.error =
+								"webhook delivery returned HTTP " + std::to_string(statusCode);
+							if (statusCode == 429) {
+								outcome.errorCategory = "rate_limit";
+								outcome.summary = "Webhook delivery rate limited";
+								outcome.retryable = true;
+							}
+							else if (statusCode >= 500) {
+								outcome.errorCategory = "network";
+								outcome.summary = "Webhook delivery server error";
+								outcome.retryable = true;
+							}
+							else {
+								outcome.errorCategory = "delivery_http_error";
+								outcome.summary = "Webhook delivery rejected";
+								outcome.retryable = false;
+							}
+						}
 					}
 					else if (StartsWithHttpScheme(to)) {
 						outcome.deliveryStatus = "delivered";
@@ -309,7 +342,23 @@ namespace blazeclaw::cron {
 
 					if (failureMode == "webhook") {
 						outcome.failureDestinationAttempted = true;
-						if (StartsWithHttpScheme(failureTo)) {
+						const auto failureDestinationHttpStatus =
+							TryReadInt64Field(failureDestination, "simulateHttpStatus");
+						if (failureDestinationHttpStatus.has_value()) {
+							const std::int64_t statusCode =
+								failureDestinationHttpStatus.value();
+							outcome.failureDestinationHttpStatus = statusCode;
+							if (statusCode >= 200 && statusCode < 300) {
+								outcome.failureDestinationStatus = "delivered";
+							}
+							else {
+								outcome.failureDestinationStatus = "not-delivered";
+								outcome.failureDestinationError =
+									"failure destination webhook returned HTTP " +
+									std::to_string(statusCode);
+							}
+						}
+						else if (StartsWithHttpScheme(failureTo)) {
 							outcome.failureDestinationStatus = "delivered";
 						}
 						else {
@@ -601,6 +650,9 @@ namespace blazeclaw::cron {
 				? CronJson(nullptr)
 				: CronJson(outcome.deliveryTarget);
 			state["lastDeliveryAttempted"] = outcome.deliveryAttempted;
+			state["lastDeliveryHttpStatus"] = outcome.deliveryHttpStatus > 0
+				? CronJson(outcome.deliveryHttpStatus)
+				: CronJson(nullptr);
 			state["lastDeliveryError"] =
 				outcome.deliveryStatus == "not-delivered"
 				? CronJson(outcome.error)
@@ -616,6 +668,10 @@ namespace blazeclaw::cron {
 				? CronJson(nullptr)
 				: CronJson(outcome.failureDestinationAccountId);
 			state["lastFailureDestinationAttempted"] = outcome.failureDestinationAttempted;
+			state["lastFailureDestinationHttpStatus"] =
+				outcome.failureDestinationHttpStatus > 0
+				? CronJson(outcome.failureDestinationHttpStatus)
+				: CronJson(nullptr);
 			state["lastFailureDestinationError"] =
 				outcome.failureDestinationError.empty()
 				? CronJson(nullptr)
@@ -704,6 +760,9 @@ namespace blazeclaw::cron {
 						failureAlertTarget = deliveryTargetFallback;
 					}
 					failureAlertTargetSnapshot = failureAlertTarget;
+					state["lastFailureAlertTarget"] = failureAlertTarget.empty()
+						? CronJson(nullptr)
+						: CronJson(failureAlertTarget);
 
 					if (failureAlertMode == kFailureAlertModeWebhook &&
 						!StartsWithHttpScheme(failureAlertTarget)) {
@@ -770,6 +829,9 @@ namespace blazeclaw::cron {
 				{ "deliveryChannel", outcome.deliveryChannel.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryChannel) },
 				{ "deliveryAccountId", outcome.deliveryAccountId.empty() ? CronJson(nullptr) : CronJson(outcome.deliveryAccountId) },
 				{ "deliveryAttempted", outcome.deliveryAttempted },
+				{ "deliveryHttpStatus", outcome.deliveryHttpStatus > 0
+					? CronJson(outcome.deliveryHttpStatus)
+					: CronJson(nullptr) },
 				{ "deliveryError", outcome.deliveryStatus == "not-delivered"
 					? (outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error))
 					: CronJson(nullptr) },
@@ -784,6 +846,10 @@ namespace blazeclaw::cron {
 					? CronJson(nullptr)
 					: CronJson(outcome.failureDestinationAccountId) },
 				{ "failureDestinationAttempted", outcome.failureDestinationAttempted },
+				{ "failureDestinationHttpStatus",
+					outcome.failureDestinationHttpStatus > 0
+					? CronJson(outcome.failureDestinationHttpStatus)
+					: CronJson(nullptr) },
 				{ "failureDestinationMode", outcome.failureDestinationMode.empty()
 					? CronJson(nullptr)
 					: CronJson(outcome.failureDestinationMode) },
