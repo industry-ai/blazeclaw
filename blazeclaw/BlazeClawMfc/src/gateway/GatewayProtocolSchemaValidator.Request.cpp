@@ -2,6 +2,7 @@
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewaySchemaCatalog.Generated.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <functional>
 #include <string_view>
@@ -28,6 +29,23 @@ namespace blazeclaw::gateway::protocol {
 		bool IsJsonObjectShape(const std::string& value) {
 			const std::string trimmed = Trim(value);
 			return trimmed.size() >= 2 && trimmed.front() == '{' && trimmed.back() == '}';
+		}
+
+		bool IsHttpUrl(const std::string& value) {
+			const std::string trimmed = Trim(value);
+			if (trimmed.size() < 8) {
+				return false;
+			}
+
+			std::string lowered = trimmed;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
 		}
 
 		void SetIssue(SchemaValidationIssue& issue, const std::string& code, const std::string& message) {
@@ -597,6 +615,13 @@ namespace blazeclaw::gateway::protocol {
 												"Method `cron.add` requires `params.delivery.to` to be a non-empty string when `params.delivery.mode` is `webhook`.");
 											return false;
 										}
+										if (!IsHttpUrl(toValue)) {
+											SetIssue(
+												issue,
+												"schema_invalid_value",
+												"Method `cron.add` requires `params.delivery.to` to start with `http://` or `https://` when `params.delivery.mode` is `webhook`.");
+											return false;
+										}
 									}
 								}
 							}
@@ -693,6 +718,13 @@ namespace blazeclaw::gateway::protocol {
 																issue,
 																"schema_invalid_value",
 																"Method `cron.add` requires `params.delivery.failureDestination.to` to be a non-empty string when `params.delivery.failureDestination.mode` is `webhook`.");
+															return false;
+														}
+														if (!IsHttpUrl(failureDestinationTo)) {
+															SetIssue(
+																issue,
+																"schema_invalid_value",
+																"Method `cron.add` requires `params.delivery.failureDestination.to` to start with `http://` or `https://` when `params.delivery.failureDestination.mode` is `webhook`.");
 															return false;
 														}
 													}

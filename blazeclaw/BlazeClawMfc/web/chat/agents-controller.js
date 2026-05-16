@@ -3259,7 +3259,12 @@
                 mode: mode === "webhook" ? "webhook" : "announce",
             };
 
-            const to = String(form && form.deliveryTo || "").trim();
+            let to = String(form && form.deliveryTo || "").trim();
+            if (delivery.mode === "webhook") {
+                to = to.replace(/^https?:\/\//i, function (prefix) {
+                    return prefix.toLowerCase();
+                });
+            }
             if (to) {
                 delivery.to = to;
             }

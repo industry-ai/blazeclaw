@@ -85,6 +85,20 @@ TEST_CASE("Cron add validator rejects delivery webhook without target", "[cron][
 	REQUIRE(issue.message.find("params.delivery.to") != std::string::npos);
 }
 
+TEST_CASE("Cron add validator rejects webhook delivery target without http scheme", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3d-http",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"delivery\":{\"mode\":\"webhook\",\"to\":\"example.test/hook\"}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.delivery.to") != std::string::npos);
+}
+
 TEST_CASE("Cron add validator rejects invalid failureDestination mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "3e",
@@ -97,6 +111,20 @@ TEST_CASE("Cron add validator rejects invalid failureDestination mode", "[cron][
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("params.delivery.failureDestination.mode") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects webhook failureDestination target without http scheme", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3e-http",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"delivery\":{\"mode\":\"announce\",\"failureDestination\":{\"mode\":\"webhook\",\"to\":\"example.test/failure\"}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.delivery.failureDestination.to") != std::string::npos);
 }
 
 TEST_CASE("Cron runs validator rejects scope job without id", "[cron][schema]") {
