@@ -324,7 +324,8 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
 	REQUIRE(cronRun.ok);
 	REQUIRE(cronRun.payloadJson.has_value());
-	REQUIRE(cronRun.payloadJson.value().find("\"started\":true") != std::string::npos);
+	REQUIRE(cronRun.payloadJson.value().find("\"enqueued\":true") != std::string::npos);
+	REQUIRE(cronRun.payloadJson.value().find("\"reason\":\"queued\"") != std::string::npos);
 	REQUIRE(cronRun.payloadJson.value().find("\"mode\":\"force\"") != std::string::npos);
 
 	const auto cronRemoveInvalid = Route(

@@ -225,6 +225,14 @@ namespace blazeclaw::cron {
 
 		const bool removed = m_store.Jobs().size() != before;
 		if (removed) {
+			m_manualRunQueue.erase(
+				std::remove_if(
+					m_manualRunQueue.begin(),
+					m_manualRunQueue.end(),
+					[id](const ManualRunRequest& request) {
+						return request.jobId == id;
+					}),
+				m_manualRunQueue.end());
 			m_store.SaveJobs();
 		}
 
@@ -238,6 +246,8 @@ namespace blazeclaw::cron {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 		RunStartupCatchupLocked();
+		const std::int64_t nowMs = UtcNowMs();
+		ProcessManualRunQueueLocked(nowMs);
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
 			throw std::invalid_argument("missing `id` or `jobId`");
@@ -250,11 +260,13 @@ namespace blazeclaw::cron {
 		if ((*job).contains("state") &&
 			(*job)["state"].is_object() &&
 			TryReadInt64Field((*job)["state"], "runningAtMs").has_value()) {
-			const std::int64_t alreadyRunningAtMs = UtcNowMs();
+			const std::int64_t alreadyRunningAtMs = nowMs;
 			const std::string requestedMode =
 				ToLowerCopy(TrimCopy(params.value("mode", std::string("force"))));
 			return {
+				{ "ok", true },
 				{ "runId", BuildCronRunId(alreadyRunningAtMs) },
+				{ "enqueued", false },
 				{ "started", false },
 				{ "reason", "already_running" },
 				{ "cronId", id },
@@ -268,12 +280,13 @@ namespace blazeclaw::cron {
 		if (mode != "force" && mode != "due") {
 			throw std::invalid_argument("`mode` must be `due` or `force`");
 		}
-		const std::int64_t nowMs = UtcNowMs();
 		const auto nextRunAtMs = TryReadInt64Field((*job)["state"], "nextRunAtMs");
 		if (mode == "due" &&
 			(!nextRunAtMs.has_value() || nextRunAtMs.value() > nowMs)) {
 			return {
+				{ "ok", true },
 				{ "runId", BuildCronRunId(nowMs) },
+				{ "enqueued", false },
 				{ "started", false },
 				{ "reason", "not_due" },
 				{ "cronId", id },
@@ -282,19 +295,26 @@ namespace blazeclaw::cron {
 			};
 		}
 
-		if (mode == "force" ||
-			!nextRunAtMs.has_value() ||
-			nextRunAtMs.value() > nowMs) {
-			(*job)["state"]["nextRunAtMs"] = nowMs;
-		}
-		SyncDueRunsLocked(nowMs, false);
+		ManualRunRequest request{};
+		request.jobId = id;
+		request.mode = mode;
+		request.queuedAtMs = nowMs;
+		request.runId =
+			"manual:" + id + ":" + std::to_string(nowMs) + ":" + std::to_string(++m_manualRunCounter);
+		m_manualRunQueue.push_back(request);
+
+		m_backgroundCv.notify_all();
 
 		return {
-			{ "runId", BuildCronRunId(nowMs) },
-			{ "started", true },
+			{ "ok", true },
+			{ "runId", request.runId },
+			{ "enqueued", true },
+			{ "started", false },
+			{ "reason", "queued" },
 			{ "cronId", id },
 			{ "mode", mode == "due" ? "due" : "force" },
-			{ "queuedAtMs", nowMs }
+			{ "queuedAtMs", nowMs },
+			{ "queueDepth", m_manualRunQueue.size() }
 		};
 	}
 
@@ -538,6 +558,7 @@ namespace blazeclaw::cron {
 				std::lock_guard<std::mutex> lock(m_mutex);
 				EnsureLoadedLocked();
 				RunStartupCatchupLocked();
+				ProcessManualRunQueueLocked(nowMs);
 				SyncDueRunsLocked(nowMs, false);
 				nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
 			}
@@ -559,6 +580,43 @@ namespace blazeclaw::cron {
 			if (m_backgroundStopRequested) {
 				break;
 			}
+		}
+	}
+
+	void CronOpsService::ProcessManualRunQueueLocked(const std::int64_t nowMs) {
+		if (m_manualRunQueue.empty()) {
+			return;
+		}
+
+		bool jobsChanged = false;
+		while (!m_manualRunQueue.empty()) {
+			const ManualRunRequest request = m_manualRunQueue.front();
+			m_manualRunQueue.pop_front();
+
+			CronJson* job = FindJobByIdLocked(request.jobId);
+			if (job == nullptr) {
+				continue;
+			}
+
+			if ((*job).contains("state") &&
+				(*job)["state"].is_object() &&
+				TryReadInt64Field((*job)["state"], "runningAtMs").has_value()) {
+				continue;
+			}
+
+			const auto nextRunAtMs = TryReadInt64Field((*job)["state"], "nextRunAtMs");
+			if (request.mode == "due" &&
+				(!nextRunAtMs.has_value() || nextRunAtMs.value() > nowMs)) {
+				continue;
+			}
+
+			(*job)["state"]["nextRunAtMs"] = nowMs;
+			jobsChanged = true;
+			SyncDueRunsLocked(nowMs, true);
+		}
+
+		if (jobsChanged) {
+			m_store.SaveJobs();
 		}
 	}
 

@@ -5,6 +5,7 @@
 #include "CronTimerService.h"
 
 #include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <thread>
 
@@ -41,6 +42,16 @@ namespace blazeclaw::cron {
 		std::int64_t m_lastSyncAtMs = 0;
 		std::size_t m_maxCatchupRunsPerSync = 64;
 
+		struct ManualRunRequest {
+			std::string jobId;
+			std::string mode;
+			std::string runId;
+			std::int64_t queuedAtMs = 0;
+		};
+
+		std::deque<ManualRunRequest> m_manualRunQueue;
+		std::uint64_t m_manualRunCounter = 0;
+
 		static std::size_t ClampLimit(
 			const CronJson& value,
 			std::size_t min,
@@ -51,6 +62,7 @@ namespace blazeclaw::cron {
 		void EnsureLoadedLocked();
 		void RunStartupCatchupLocked();
 		void BackgroundSchedulerLoop();
+		void ProcessManualRunQueueLocked(std::int64_t nowMs);
 		void RefreshSchedulesOnlyLocked(std::int64_t nowMs);
 		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
 	};
