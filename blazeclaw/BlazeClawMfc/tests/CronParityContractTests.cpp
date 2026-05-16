@@ -63,7 +63,155 @@ TEST_CASE("Cron update validator accepts id and patch", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "3",
 		.method = "cron.update",
-		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"enabled\":false}}")
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"enabled\":false,\"failureAlert\":{\"after\":2,\"cooldownMs\":0,\"mode\":\"announce\"}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron update validator rejects patch failureAlert non-object non-boolean", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3u-fa-type",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"failureAlert\":\"bad\"}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_type");
+	REQUIRE(issue.message.find("params.patch.failureAlert") != std::string::npos);
+}
+
+TEST_CASE("Cron update validator rejects patch failureAlert after non-integer", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3u-fa-after-float",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"failureAlert\":{\"after\":1.5}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.patch.failureAlert.after") != std::string::npos);
+}
+
+TEST_CASE("Cron update validator rejects patch failureAlert cooldownMs negative", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3u-fa-cooldown-negative",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"failureAlert\":{\"cooldownMs\":-1}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.patch.failureAlert.cooldownMs") != std::string::npos);
+}
+
+TEST_CASE("Cron update validator rejects patch failureAlert invalid mode", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3u-fa-mode-invalid",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"failureAlert\":{\"mode\":\"none\"}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.patch.failureAlert.mode") != std::string::npos);
+}
+
+TEST_CASE("Cron update validator rejects patch failureAlert unknown nested field", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3u-fa-extra",
+		.method = "cron.update",
+		.paramsJson = std::string("{\"id\":\"cron-1\",\"patch\":{\"failureAlert\":{\"after\":2,\"extra\":true}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.patch.failureAlert.extra") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects non-object non-boolean failureAlert", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-type",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":\"yes\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_type");
+	REQUIRE(issue.message.find("params.failureAlert") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects failureAlert after with non-integer value", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-after-float",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":{\"after\":1.5}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.failureAlert.after") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects failureAlert cooldownMs below zero", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-cooldown-negative",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":{\"cooldownMs\":-1}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.failureAlert.cooldownMs") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects unsupported failureAlert mode", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-mode-invalid",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":{\"mode\":\"none\"}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.failureAlert.mode") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects unknown nested failureAlert field", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-extra-field",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":{\"after\":2,\"extra\":true}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.failureAlert.extra") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator accepts structured failureAlert object", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c-structured",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":{\"after\":2,\"cooldownMs\":1000,\"mode\":\"announce\",\"channel\":\"last\",\"to\":\"target\",\"accountId\":\"acc-1\"}}")
 	};
 
 	SchemaValidationIssue issue{};

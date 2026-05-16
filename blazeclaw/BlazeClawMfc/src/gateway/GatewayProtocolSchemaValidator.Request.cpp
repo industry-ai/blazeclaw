@@ -902,6 +902,130 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (request.paramsJson.has_value() &&
+				failureAlertIt != fieldKinds.end() &&
+				failureAlertIt->second == JsonFieldKind::Object) {
+				const std::string& json = request.paramsJson.value();
+				std::size_t failureAlertTokenPos = 0;
+				if (ContainsFieldToken(json, "failureAlert", failureAlertTokenPos)) {
+					std::size_t failureAlertValuePos = json.find(':', failureAlertTokenPos);
+					if (failureAlertValuePos != std::string::npos) {
+						failureAlertValuePos = SkipWhitespace(json, failureAlertValuePos + 1);
+						if (failureAlertValuePos < json.size() && json[failureAlertValuePos] == '{') {
+							std::size_t failureAlertCursor = failureAlertValuePos;
+							if (!TryConsumeBalancedComposite(json, failureAlertCursor, '{', '}')) {
+								SetIssue(
+									issue,
+									"schema_invalid_params",
+									"Method `cron.add` has invalid `params.failureAlert` JSON shape.");
+								return false;
+							}
+
+							const std::string failureAlertJson =
+								json.substr(failureAlertValuePos, failureAlertCursor - failureAlertValuePos);
+							ParsedObjectFieldKinds failureAlertKinds;
+							if (!TryParseTopLevelObjectFieldKinds(failureAlertJson, failureAlertKinds)) {
+								SetIssue(
+									issue,
+									"schema_invalid_params",
+									"Method `cron.add` has invalid `params.failureAlert` object shape.");
+								return false;
+							}
+
+							auto requireFailureAlertFieldKind = [&](const char* fieldName,
+								JsonFieldKind expected,
+								const char* typeLabel) {
+								const auto it = failureAlertKinds.find(fieldName);
+								if (it == failureAlertKinds.end()) {
+									return true;
+								}
+								if (it->second == expected) {
+									return true;
+								}
+
+								SetIssue(
+									issue,
+									"schema_invalid_type",
+									"Method `cron.add` expects `params.failureAlert." +
+									std::string(fieldName) + "` to be " + typeLabel + ".");
+								return false;
+							};
+
+							if (!requireFailureAlertFieldKind("after", JsonFieldKind::Number, "numeric") ||
+								!requireFailureAlertFieldKind("cooldownMs", JsonFieldKind::Number, "numeric") ||
+								!requireFailureAlertFieldKind("mode", JsonFieldKind::String, "a string") ||
+								!requireFailureAlertFieldKind("channel", JsonFieldKind::String, "a string") ||
+								!requireFailureAlertFieldKind("to", JsonFieldKind::String, "a string") ||
+								!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string")) {
+								return false;
+							}
+
+							auto validateIntegralRange = [&](const char* fieldName, double minValue) {
+								double value = 0.0;
+								if (!TryReadTopLevelNumberField(failureAlertJson, fieldName, value)) {
+									return true;
+								}
+
+								if (std::floor(value) != value) {
+									SetIssue(
+										issue,
+										"schema_invalid_value",
+										"Method `cron.add` requires `params.failureAlert." +
+										std::string(fieldName) + "` to be an integer.");
+									return false;
+								}
+
+								if (value < minValue) {
+									SetIssue(
+										issue,
+										"schema_invalid_value",
+										"Method `cron.add` requires `params.failureAlert." +
+										std::string(fieldName) + "` to be greater than or equal to " +
+										std::to_string(static_cast<int>(minValue)) + ".");
+									return false;
+								}
+
+								return true;
+							};
+
+							if (!validateIntegralRange("after", 1.0) ||
+								!validateIntegralRange("cooldownMs", 0.0)) {
+								return false;
+							}
+
+							if (failureAlertKinds.find("mode") != failureAlertKinds.end()) {
+								std::string mode;
+								if (TryReadTopLevelStringField(failureAlertJson, "mode", mode)) {
+									const std::string normalizedMode = Trim(mode);
+									if (normalizedMode != "announce" && normalizedMode != "webhook") {
+										SetIssue(
+											issue,
+											"schema_invalid_value",
+											"Method `cron.add` requires `params.failureAlert.mode` to be one of: `announce`, `webhook`.");
+										return false;
+									}
+								}
+							}
+
+							for (const auto& [field, _] : failureAlertKinds) {
+								if (ContainsFieldName(
+									{ "after", "channel", "to", "cooldownMs", "mode", "accountId" },
+									field)) {
+									continue;
+								}
+
+								SetIssue(
+									issue,
+									"schema_invalid_params",
+									"Method `cron.add` does not allow `params.failureAlert." +
+									field + "`.");
+								return false;
+							}
+						}
+					}
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName(
 					{ "name", "description", "enabled", "schedule", "payload", "wakeMode", "sessionTarget", "deleteAfterRun", "delivery", "agentId", "sessionKey", "retry", "failureAlert" },
@@ -948,6 +1072,143 @@ namespace blazeclaw::gateway::protocol {
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.update` requires `params.jobId` to be a non-empty string.");
 					return false;
+				}
+
+				std::size_t patchTokenPos = 0;
+				if (ContainsFieldToken(request.paramsJson.value(), "patch", patchTokenPos)) {
+					std::size_t patchValuePos = request.paramsJson.value().find(':', patchTokenPos);
+					if (patchValuePos != std::string::npos) {
+						patchValuePos = SkipWhitespace(request.paramsJson.value(), patchValuePos + 1);
+						if (patchValuePos < request.paramsJson.value().size() &&
+							request.paramsJson.value()[patchValuePos] == '{') {
+							std::size_t patchCursor = patchValuePos;
+							if (!TryConsumeBalancedComposite(request.paramsJson.value(), patchCursor, '{', '}')) {
+								SetIssue(issue, "schema_invalid_params", "Method `cron.update` has invalid `params.patch` JSON shape.");
+								return false;
+							}
+
+							const std::string patchJson =
+								request.paramsJson.value().substr(patchValuePos, patchCursor - patchValuePos);
+							ParsedObjectFieldKinds patchKinds;
+							if (!TryParseTopLevelObjectFieldKinds(patchJson, patchKinds)) {
+								SetIssue(issue, "schema_invalid_params", "Method `cron.update` has invalid `params.patch` object shape.");
+								return false;
+							}
+
+							const auto patchFailureAlertIt = patchKinds.find("failureAlert");
+							if (patchFailureAlertIt != patchKinds.end() &&
+								patchFailureAlertIt->second != JsonFieldKind::Object &&
+								patchFailureAlertIt->second != JsonFieldKind::Boolean) {
+								SetIssue(
+									issue,
+									"schema_invalid_type",
+									"Method `cron.update` expects `params.patch.failureAlert` to be an object or boolean.");
+								return false;
+							}
+
+							if (patchFailureAlertIt != patchKinds.end() &&
+								patchFailureAlertIt->second == JsonFieldKind::Object) {
+								std::size_t failureAlertTokenPos = 0;
+								if (ContainsFieldToken(patchJson, "failureAlert", failureAlertTokenPos)) {
+									std::size_t failureAlertValuePos = patchJson.find(':', failureAlertTokenPos);
+									if (failureAlertValuePos != std::string::npos) {
+										failureAlertValuePos = SkipWhitespace(patchJson, failureAlertValuePos + 1);
+										if (failureAlertValuePos < patchJson.size() && patchJson[failureAlertValuePos] == '{') {
+											std::size_t failureAlertCursor = failureAlertValuePos;
+											if (!TryConsumeBalancedComposite(patchJson, failureAlertCursor, '{', '}')) {
+												SetIssue(issue, "schema_invalid_params", "Method `cron.update` has invalid `params.patch.failureAlert` JSON shape.");
+												return false;
+											}
+
+											const std::string failureAlertJson =
+												patchJson.substr(failureAlertValuePos, failureAlertCursor - failureAlertValuePos);
+											ParsedObjectFieldKinds failureAlertKinds;
+											if (!TryParseTopLevelObjectFieldKinds(failureAlertJson, failureAlertKinds)) {
+												SetIssue(issue, "schema_invalid_params", "Method `cron.update` has invalid `params.patch.failureAlert` object shape.");
+												return false;
+											}
+
+											auto requireFailureAlertFieldKind = [&](const char* fieldName, JsonFieldKind expected, const char* typeLabel) {
+												const auto it = failureAlertKinds.find(fieldName);
+												if (it == failureAlertKinds.end()) {
+													return true;
+												}
+												if (it->second == expected) {
+													return true;
+												}
+												SetIssue(
+													issue,
+													"schema_invalid_type",
+													"Method `cron.update` expects `params.patch.failureAlert." + std::string(fieldName) + "` to be " + typeLabel + ".");
+												return false;
+											};
+
+											if (!requireFailureAlertFieldKind("after", JsonFieldKind::Number, "numeric") ||
+												!requireFailureAlertFieldKind("cooldownMs", JsonFieldKind::Number, "numeric") ||
+												!requireFailureAlertFieldKind("mode", JsonFieldKind::String, "a string") ||
+												!requireFailureAlertFieldKind("channel", JsonFieldKind::String, "a string") ||
+												!requireFailureAlertFieldKind("to", JsonFieldKind::String, "a string") ||
+												!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string")) {
+												return false;
+											}
+
+											auto validateIntegralRange = [&](const char* fieldName, double minValue) {
+												double value = 0.0;
+												if (!TryReadTopLevelNumberField(failureAlertJson, fieldName, value)) {
+													return true;
+												}
+												if (std::floor(value) != value) {
+													SetIssue(
+														issue,
+														"schema_invalid_value",
+														"Method `cron.update` requires `params.patch.failureAlert." + std::string(fieldName) + "` to be an integer.");
+													return false;
+												}
+												if (value < minValue) {
+													SetIssue(
+														issue,
+														"schema_invalid_value",
+														"Method `cron.update` requires `params.patch.failureAlert." + std::string(fieldName) + "` to be greater than or equal to " + std::to_string(static_cast<int>(minValue)) + ".");
+													return false;
+												}
+												return true;
+											};
+
+											if (!validateIntegralRange("after", 1.0) ||
+												!validateIntegralRange("cooldownMs", 0.0)) {
+												return false;
+											}
+
+											if (failureAlertKinds.find("mode") != failureAlertKinds.end()) {
+												std::string mode;
+												if (TryReadTopLevelStringField(failureAlertJson, "mode", mode)) {
+													const std::string normalizedMode = Trim(mode);
+													if (normalizedMode != "announce" && normalizedMode != "webhook") {
+														SetIssue(
+															issue,
+															"schema_invalid_value",
+															"Method `cron.update` requires `params.patch.failureAlert.mode` to be one of: `announce`, `webhook`.");
+														return false;
+													}
+												}
+											}
+
+											for (const auto& [field, _] : failureAlertKinds) {
+												if (ContainsFieldName({ "after", "channel", "to", "cooldownMs", "mode", "accountId" }, field)) {
+													continue;
+												}
+												SetIssue(
+													issue,
+													"schema_invalid_params",
+													"Method `cron.update` does not allow `params.patch.failureAlert." + field + "`.");
+												return false;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 
