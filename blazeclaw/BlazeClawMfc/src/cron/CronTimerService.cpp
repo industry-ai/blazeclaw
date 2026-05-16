@@ -1042,6 +1042,7 @@ namespace blazeclaw::cron {
 			}
 			else {
 				state["consecutiveErrors"] = 0;
+				state["lastFailureAlertAtMs"] = CronJson(nullptr);
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
 			}

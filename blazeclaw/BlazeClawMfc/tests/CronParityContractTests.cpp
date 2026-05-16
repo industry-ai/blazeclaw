@@ -20,6 +20,57 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron timer clears lastFailureAlertAtMs on successful run", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-clear-success" },
+			{ "name", "alert clear success" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "announce" }, { "to", "team" } } },
+			{ "failureAlert", { { "after", 2 }, { "cooldownMs", 10'000 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 2 }, { "lastFailureAlertAtMs", nowMs - 1000 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(jobs[0]["state"].value("consecutiveErrors", 1) == 0);
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+}
+
+TEST_CASE("Cron timer clears lastFailureAlertAtMs on skipped run", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-clear-skipped" },
+			{ "name", "alert clear skipped" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "" } } },
+			{ "failureAlert", { { "after", 2 }, { "cooldownMs", 10'000 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 2 }, { "lastFailureAlertAtMs", nowMs - 1000 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "skipped");
+	REQUIRE(jobs[0]["state"].value("consecutiveErrors", 1) == 0);
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+}
+
 TEST_CASE("Cron timer announce failure destination falls back to primary target when to is omitted", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
