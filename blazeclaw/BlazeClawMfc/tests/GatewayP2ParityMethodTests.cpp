@@ -327,6 +327,93 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 	REQUIRE(cronRun.payloadJson.value().find("\"enqueued\":true") != std::string::npos);
 	REQUIRE(cronRun.payloadJson.value().find("\"reason\":\"queued\"") != std::string::npos);
 	REQUIRE(cronRun.payloadJson.value().find("\"mode\":\"force\"") != std::string::npos);
+	const nlohmann::json queuedRunEnvelope = nlohmann::json::parse(cronRun.payloadJson.value());
+	REQUIRE(queuedRunEnvelope.is_object());
+	REQUIRE(queuedRunEnvelope.contains("runId"));
+	REQUIRE(queuedRunEnvelope["runId"].is_string());
+	const std::string queuedRunId = queuedRunEnvelope["runId"].get<std::string>();
+	REQUIRE_FALSE(queuedRunId.empty());
+
+	const auto cronRunsAfterQueue = Route(
+		host,
+		"p2-cron-runs-after-queue",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId + "\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRunsAfterQueue.ok);
+	REQUIRE(cronRunsAfterQueue.payloadJson.has_value());
+	const nlohmann::json queuedRunsPayload = nlohmann::json::parse(cronRunsAfterQueue.payloadJson.value());
+	REQUIRE(queuedRunsPayload.is_object());
+	REQUIRE(queuedRunsPayload.contains("entries"));
+	REQUIRE(queuedRunsPayload["entries"].is_array());
+
+	bool foundQueuedLifecycleEntry = false;
+	for (const auto& entry : queuedRunsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (!entry.contains("runId") || !entry["runId"].is_string()) {
+			continue;
+		}
+		if (entry["runId"].get<std::string>() != queuedRunId) {
+			continue;
+		}
+		if (entry.value("lifecycleState", std::string()) == "queued" &&
+			entry.value("status", std::string()) == "queued") {
+			foundQueuedLifecycleEntry = true;
+			break;
+		}
+	}
+	REQUIRE(foundQueuedLifecycleEntry);
+
+	const auto cronRunDue = Route(
+		host,
+		"p2-cron-run-due",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"due\"}");
+	REQUIRE(cronRunDue.ok);
+	REQUIRE(cronRunDue.payloadJson.has_value());
+	const nlohmann::json dueRunEnvelope = nlohmann::json::parse(cronRunDue.payloadJson.value());
+	REQUIRE(dueRunEnvelope.is_object());
+	REQUIRE(dueRunEnvelope.value("enqueued", true) == false);
+	REQUIRE(dueRunEnvelope.value("started", true) == false);
+	REQUIRE(dueRunEnvelope.value("reason", std::string()) == "not_due");
+	REQUIRE(dueRunEnvelope.value("runState", std::string()) == "terminal");
+	REQUIRE(dueRunEnvelope.contains("runId"));
+	REQUIRE(dueRunEnvelope["runId"].is_string());
+	const std::string dueRunId = dueRunEnvelope["runId"].get<std::string>();
+	REQUIRE_FALSE(dueRunId.empty());
+
+	const auto cronRunsAfterDue = Route(
+		host,
+		"p2-cron-runs-after-due",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId + "\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRunsAfterDue.ok);
+	REQUIRE(cronRunsAfterDue.payloadJson.has_value());
+	const nlohmann::json dueRunsPayload = nlohmann::json::parse(cronRunsAfterDue.payloadJson.value());
+	REQUIRE(dueRunsPayload.is_object());
+	REQUIRE(dueRunsPayload.contains("entries"));
+	REQUIRE(dueRunsPayload["entries"].is_array());
+
+	bool foundDueTerminalEntry = false;
+	for (const auto& entry : dueRunsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (!entry.contains("runId") || !entry["runId"].is_string()) {
+			continue;
+		}
+		if (entry["runId"].get<std::string>() != dueRunId) {
+			continue;
+		}
+		if (entry.value("lifecycleState", std::string()) == "terminal" &&
+			entry.value("status", std::string()) == "skipped" &&
+			entry.value("reason", std::string()) == "not_due") {
+			foundDueTerminalEntry = true;
+			break;
+		}
+	}
+	REQUIRE(foundDueTerminalEntry);
 
 	const auto cronRemoveInvalid = Route(
 		host,

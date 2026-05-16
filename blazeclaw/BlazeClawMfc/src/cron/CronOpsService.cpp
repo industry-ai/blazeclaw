@@ -9,6 +9,43 @@
 
 namespace blazeclaw::cron {
 	namespace {
+		CronJson BuildManualLifecycleEntry(
+			const std::string& runId,
+			const std::string& jobId,
+			const std::string& mode,
+			const std::string& action,
+			const std::string& status,
+			const std::string& lifecycleState,
+			const std::string& reason,
+			const std::string& summary,
+			const std::int64_t ts,
+			const std::int64_t queuedAtMs,
+			const std::optional<std::int64_t>& startedAtMs,
+			const std::optional<std::int64_t>& endedAtMs) {
+			CronJson entry = {
+				{ "ts", ts },
+				{ "jobId", jobId },
+				{ "runId", runId },
+				{ "manual", true },
+				{ "mode", mode },
+				{ "action", action },
+				{ "status", status },
+				{ "lifecycleState", lifecycleState },
+				{ "summary", summary },
+				{ "reason", reason },
+				{ "queuedAtMs", queuedAtMs },
+				{ "startedAtMs", startedAtMs.has_value() ? CronJson(startedAtMs.value()) : CronJson(nullptr) },
+				{ "endedAtMs", endedAtMs.has_value() ? CronJson(endedAtMs.value()) : CronJson(nullptr) }
+			};
+
+			if (status == "queued" || status == "running") {
+				entry["deliveryStatus"] = "not-requested";
+				entry["error"] = CronJson(nullptr);
+			}
+
+			return entry;
+		}
+
 		std::string ReadStringOrEmpty(const CronJson& value, const char* key) {
 			if (!value.contains(key) || value[key].is_null()) {
 				return {};
@@ -29,6 +66,27 @@ namespace blazeclaw::cron {
 				return value[key].get<bool>() ? "true" : "false";
 			}
 			return {};
+		}
+
+		std::string MapTerminalStatus(const CronJson& finishedRun) {
+			if (finishedRun.value("timedOut", false)) {
+				return "timed_out";
+			}
+
+			if (finishedRun.value("aborted", false)) {
+				return "aborted";
+			}
+
+			const std::string sourceStatus =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "status"));
+			if (sourceStatus == "ok") {
+				return "ok";
+			}
+			if (sourceStatus == "error") {
+				return "failed";
+			}
+
+			return "skipped";
 		}
 	}
 
@@ -263,15 +321,34 @@ namespace blazeclaw::cron {
 			const std::int64_t alreadyRunningAtMs = nowMs;
 			const std::string requestedMode =
 				ToLowerCopy(TrimCopy(params.value("mode", std::string("force"))));
+			const std::string runId =
+				"manual:" + id + ":" + std::to_string(alreadyRunningAtMs) + ":" + std::to_string(++m_manualRunCounter);
+
+			m_store.Runs().push_back(BuildManualLifecycleEntry(
+				runId,
+				id,
+				requestedMode,
+				"finished",
+				"skipped",
+				"terminal",
+				"already_running",
+				"manual run skipped because cron job is already running",
+				alreadyRunningAtMs,
+				alreadyRunningAtMs,
+				std::nullopt,
+				alreadyRunningAtMs));
+			m_store.SaveRuns();
+
 			return {
 				{ "ok", true },
-				{ "runId", BuildCronRunId(alreadyRunningAtMs) },
+				{ "runId", runId },
 				{ "enqueued", false },
 				{ "started", false },
 				{ "reason", "already_running" },
 				{ "cronId", id },
 				{ "mode", requestedMode },
-				{ "queuedAtMs", alreadyRunningAtMs }
+				{ "queuedAtMs", alreadyRunningAtMs },
+				{ "runState", "terminal" }
 			};
 		}
 
@@ -283,15 +360,34 @@ namespace blazeclaw::cron {
 		const auto nextRunAtMs = TryReadInt64Field((*job)["state"], "nextRunAtMs");
 		if (mode == "due" &&
 			(!nextRunAtMs.has_value() || nextRunAtMs.value() > nowMs)) {
+			const std::string runId =
+				"manual:" + id + ":" + std::to_string(nowMs) + ":" + std::to_string(++m_manualRunCounter);
+
+			m_store.Runs().push_back(BuildManualLifecycleEntry(
+				runId,
+				id,
+				"due",
+				"finished",
+				"skipped",
+				"terminal",
+				"not_due",
+				"manual run skipped because cron job is not due",
+				nowMs,
+				nowMs,
+				std::nullopt,
+				nowMs));
+			m_store.SaveRuns();
+
 			return {
 				{ "ok", true },
-				{ "runId", BuildCronRunId(nowMs) },
+				{ "runId", runId },
 				{ "enqueued", false },
 				{ "started", false },
 				{ "reason", "not_due" },
 				{ "cronId", id },
 				{ "mode", "due" },
-				{ "queuedAtMs", nowMs }
+				{ "queuedAtMs", nowMs },
+				{ "runState", "terminal" }
 			};
 		}
 
@@ -302,6 +398,20 @@ namespace blazeclaw::cron {
 		request.runId =
 			"manual:" + id + ":" + std::to_string(nowMs) + ":" + std::to_string(++m_manualRunCounter);
 		m_manualRunQueue.push_back(request);
+		m_store.Runs().push_back(BuildManualLifecycleEntry(
+			request.runId,
+			id,
+			mode == "due" ? "due" : "force",
+			"queued",
+			"queued",
+			"queued",
+			"queued",
+			"manual run queued for scheduler dispatch",
+			nowMs,
+			nowMs,
+			std::nullopt,
+			std::nullopt));
+		m_store.SaveRuns();
 
 		m_backgroundCv.notify_all();
 
@@ -314,7 +424,8 @@ namespace blazeclaw::cron {
 			{ "cronId", id },
 			{ "mode", mode == "due" ? "due" : "force" },
 			{ "queuedAtMs", nowMs },
-			{ "queueDepth", m_manualRunQueue.size() }
+			{ "queueDepth", m_manualRunQueue.size() },
+			{ "runState", "queued" }
 		};
 	}
 
@@ -589,34 +700,160 @@ namespace blazeclaw::cron {
 		}
 
 		bool jobsChanged = false;
+		bool runsChanged = false;
 		while (!m_manualRunQueue.empty()) {
 			const ManualRunRequest request = m_manualRunQueue.front();
 			m_manualRunQueue.pop_front();
 
+			const std::string normalizedMode =
+				request.mode == "due" ? "due" : "force";
+
 			CronJson* job = FindJobByIdLocked(request.jobId);
 			if (job == nullptr) {
+				m_store.Runs().push_back(BuildManualLifecycleEntry(
+					request.runId,
+					request.jobId,
+					normalizedMode,
+					"finished",
+					"skipped",
+					"terminal",
+					"unknown_job",
+					"manual run dropped because cron job no longer exists",
+					nowMs,
+					request.queuedAtMs,
+					std::nullopt,
+					nowMs));
+				runsChanged = true;
 				continue;
 			}
 
 			if ((*job).contains("state") &&
 				(*job)["state"].is_object() &&
 				TryReadInt64Field((*job)["state"], "runningAtMs").has_value()) {
+				m_store.Runs().push_back(BuildManualLifecycleEntry(
+					request.runId,
+					request.jobId,
+					normalizedMode,
+					"finished",
+					"skipped",
+					"terminal",
+					"already_running",
+					"manual run skipped because cron job is already running",
+					nowMs,
+					request.queuedAtMs,
+					std::nullopt,
+					nowMs));
+				runsChanged = true;
 				continue;
 			}
 
 			const auto nextRunAtMs = TryReadInt64Field((*job)["state"], "nextRunAtMs");
 			if (request.mode == "due" &&
 				(!nextRunAtMs.has_value() || nextRunAtMs.value() > nowMs)) {
+				m_store.Runs().push_back(BuildManualLifecycleEntry(
+					request.runId,
+					request.jobId,
+					normalizedMode,
+					"finished",
+					"skipped",
+					"terminal",
+					"not_due",
+					"manual run skipped because cron job is not due",
+					nowMs,
+					request.queuedAtMs,
+					std::nullopt,
+					nowMs));
+				runsChanged = true;
 				continue;
 			}
+
+			m_store.Runs().push_back(BuildManualLifecycleEntry(
+				request.runId,
+				request.jobId,
+				normalizedMode,
+				"started",
+				"running",
+				"active",
+				"started",
+				"manual run dequeued and dispatched",
+				nowMs,
+				request.queuedAtMs,
+				nowMs,
+				std::nullopt));
+			runsChanged = true;
+
+			const std::size_t runsBeforeDispatch = m_store.Runs().size();
 
 			(*job)["state"]["nextRunAtMs"] = nowMs;
 			jobsChanged = true;
 			SyncDueRunsLocked(nowMs, true);
+
+			const CronJson* finishedRun = nullptr;
+			for (std::size_t index = m_store.Runs().size(); index > runsBeforeDispatch; --index) {
+				const CronJson& candidate = m_store.Runs()[index - 1];
+				if (ReadStringOrEmpty(candidate, "jobId") != request.jobId) {
+					continue;
+				}
+				if (ToLowerCopy(ReadStringOrEmpty(candidate, "action")) == "finished") {
+					finishedRun = &candidate;
+					break;
+				}
+			}
+
+			if (finishedRun != nullptr) {
+				const std::string mappedStatus = MapTerminalStatus(*finishedRun);
+				CronJson terminal = BuildManualLifecycleEntry(
+					request.runId,
+					request.jobId,
+					normalizedMode,
+					"finished",
+					mappedStatus,
+					"terminal",
+					"dispatched",
+					"manual run completed after dispatch",
+					nowMs,
+					request.queuedAtMs,
+					nowMs,
+					nowMs);
+				terminal["sourceRunId"] =
+					finishedRun->contains("runId") ? (*finishedRun)["runId"] : CronJson(nullptr);
+				terminal["sourceStatus"] =
+					finishedRun->contains("status") ? (*finishedRun)["status"] : CronJson(nullptr);
+				terminal["timedOut"] = finishedRun->value("timedOut", false);
+				terminal["aborted"] = finishedRun->value("aborted", false);
+				terminal["deliveryStatus"] =
+					finishedRun->contains("deliveryStatus")
+					? (*finishedRun)["deliveryStatus"]
+					: CronJson("not-requested");
+				terminal["error"] =
+					finishedRun->contains("error")
+					? (*finishedRun)["error"]
+					: CronJson(nullptr);
+				m_store.Runs().push_back(terminal);
+			}
+			else {
+				m_store.Runs().push_back(BuildManualLifecycleEntry(
+					request.runId,
+					request.jobId,
+					normalizedMode,
+					"finished",
+					"failed",
+					"terminal",
+					"missing_terminal_run",
+					"manual run dispatch completed without observable terminal run record",
+					nowMs,
+					request.queuedAtMs,
+					nowMs,
+					nowMs));
+			}
+			runsChanged = true;
 		}
 
 		if (jobsChanged) {
 			m_store.SaveJobs();
+		}
+		if (runsChanged) {
+			m_store.SaveRuns();
 		}
 	}
 
