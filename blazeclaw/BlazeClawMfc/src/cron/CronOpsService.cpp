@@ -500,6 +500,7 @@ namespace blazeclaw::cron {
 				if (value == "not-requested" ||
 					value == "delivered" ||
 					value == "not-delivered" ||
+					value == "unknown" ||
 					value == "suppressed") {
 					deliveryStatusFilters.insert(value);
 				}
@@ -511,6 +512,7 @@ namespace blazeclaw::cron {
 		if (deliveryStatusFilter == "not-requested" ||
 			deliveryStatusFilter == "delivered" ||
 			deliveryStatusFilter == "not-delivered" ||
+			deliveryStatusFilter == "unknown" ||
 			deliveryStatusFilter == "suppressed") {
 			deliveryStatusFilters.insert(deliveryStatusFilter);
 		}

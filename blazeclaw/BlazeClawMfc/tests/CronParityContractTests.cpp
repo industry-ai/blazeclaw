@@ -566,7 +566,7 @@ TEST_CASE("Cron runs validator rejects empty statuses array", "[cron][schema]") 
 	REQUIRE(issue.message.find("params.statuses") != std::string::npos);
 }
 
-TEST_CASE("Cron runs validator rejects unsupported deliveryStatuses entry", "[cron][schema]") {
+TEST_CASE("Cron runs validator accepts unknown deliveryStatuses entry", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-bad-delivery-statuses",
 		.method = "cron.runs",
@@ -574,9 +574,20 @@ TEST_CASE("Cron runs validator rejects unsupported deliveryStatuses entry", "[cr
 	};
 
 	SchemaValidationIssue issue{};
-	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
-	REQUIRE(issue.code == "schema_invalid_value");
-	REQUIRE(issue.message.find("params.deliveryStatuses") != std::string::npos);
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron runs validator accepts unknown deliveryStatus scalar", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-unknown-delivery-status",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"deliveryStatus\":\"unknown\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
 }
 
 TEST_CASE("Cron runs validator rejects id with path separator", "[cron][schema]") {
