@@ -404,6 +404,33 @@ TEST_CASE("Cron patch resolves sessionTarget current using persisted sessionKey 
 	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:persisted");
 }
 
+TEST_CASE("Cron normalize loaded job resolves sessionTarget current using persisted sessionKey", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-loaded-1" },
+		{ "name", "loaded" },
+		{ "sessionTarget", "current" },
+		{ "sessionKey", "agent:main:loaded" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "run" } } }
+	};
+
+	CronNormalize::NormalizeLoadedJob(job);
+	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:loaded");
+}
+
+TEST_CASE("Cron normalize loaded job resolves unknown sessionTarget by payload kind", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-loaded-2" },
+		{ "name", "loaded" },
+		{ "sessionTarget", "unexpected-target" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "run" } } }
+	};
+
+	CronNormalize::NormalizeLoadedJob(job);
+	REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
+}
+
 TEST_CASE("Cron add validator enforces required fields", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "1",

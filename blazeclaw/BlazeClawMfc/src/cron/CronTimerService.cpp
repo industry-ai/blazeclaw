@@ -409,12 +409,20 @@ namespace blazeclaw::cron {
 			RunOutcome outcome;
 			const std::string sessionTarget =
 				ToLowerCopy(TrimCopy(job.value("sessionTarget", std::string("main"))));
+			const std::string sessionKey = TrimCopy(job.value("sessionKey", std::string()));
 			const bool isolatedLikeTarget =
 				sessionTarget == "isolated" ||
 				sessionTarget == "current" ||
 				sessionTarget.rfind("session:", 0) == 0;
-			outcome.sessionId = sessionTarget;
-			outcome.sessionKey = TrimCopy(job.value("sessionKey", std::string()));
+			if (sessionTarget == "current") {
+				outcome.sessionId = sessionKey.empty()
+					? std::string("isolated")
+					: (std::string("session:") + sessionKey);
+			}
+			else {
+				outcome.sessionId = sessionTarget;
+			}
+			outcome.sessionKey = sessionKey;
 
 			if (!job.contains("payload") || !job["payload"].is_object()) {
 				outcome.status = "error";

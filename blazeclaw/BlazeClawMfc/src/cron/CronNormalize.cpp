@@ -563,9 +563,7 @@ namespace blazeclaw::cron {
 		else {
 			job["wakeMode"] = NormalizeWakeMode(job["wakeMode"].get<std::string>());
 		}
-		if (!job.contains("sessionTarget") || !job["sessionTarget"].is_string()) {
-			job["sessionTarget"] = "main";
-		}
+		job["sessionTarget"] = ResolveSessionTarget(job);
 		if (!job.contains("deleteAfterRun") || !job["deleteAfterRun"].is_boolean()) {
 			job["deleteAfterRun"] = false;
 		}
