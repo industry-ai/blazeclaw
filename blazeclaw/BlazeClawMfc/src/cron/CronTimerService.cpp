@@ -298,6 +298,10 @@ namespace blazeclaw::cron {
 			std::string sessionKey;
 			std::string model;
 			std::string provider;
+			std::int64_t usagePromptTokens = 0;
+			std::int64_t usageCompletionTokens = 0;
+			std::int64_t usageTotalTokens = 0;
+			bool usageAvailable = false;
 			std::string deliveryStatus = "not-requested";
 			std::string deliveryMode;
 			std::string deliveryTarget;
@@ -407,22 +411,9 @@ namespace blazeclaw::cron {
 
 		RunOutcome EvaluateRunOutcome(const CronJson& job) {
 			RunOutcome outcome;
-			const std::string sessionTarget =
-				ToLowerCopy(TrimCopy(job.value("sessionTarget", std::string("main"))));
-			const std::string sessionKey = TrimCopy(job.value("sessionKey", std::string()));
-			const bool isolatedLikeTarget =
-				sessionTarget == "isolated" ||
-				sessionTarget == "current" ||
-				sessionTarget.rfind("session:", 0) == 0;
-			if (sessionTarget == "current") {
-				outcome.sessionId = sessionKey.empty()
-					? std::string("isolated")
-					: (std::string("session:") + sessionKey);
-			}
-			else {
-				outcome.sessionId = sessionTarget;
-			}
-			outcome.sessionKey = sessionKey;
+			const std::string sessionTargetRaw =
+				TrimCopy(job.value("sessionTarget", std::string("main")));
+			const std::string sessionTarget = ToLowerCopy(sessionTargetRaw);
 
 			if (!job.contains("payload") || !job["payload"].is_object()) {
 				outcome.status = "error";
@@ -436,11 +427,63 @@ namespace blazeclaw::cron {
 			const CronJson& payload = job["payload"];
 			const std::string payloadKind =
 				ToLowerCopy(TrimCopy(payload.value("kind", std::string())));
+			std::string resolvedSessionKey = TrimCopy(job.value("sessionKey", std::string()));
+			if (resolvedSessionKey.empty() &&
+				payload.contains("sessionKey") &&
+				payload["sessionKey"].is_string()) {
+				resolvedSessionKey = TrimCopy(payload["sessionKey"].get<std::string>());
+			}
+			if (resolvedSessionKey.empty() &&
+				sessionTarget.rfind("session:", 0) == 0 &&
+				sessionTargetRaw.size() > std::string("session:").size()) {
+				resolvedSessionKey = TrimCopy(
+					sessionTargetRaw.substr(std::string("session:").size()));
+			}
+
+			if (sessionTarget == "current") {
+				if (!resolvedSessionKey.empty()) {
+					outcome.sessionId = std::string("session:") + resolvedSessionKey;
+				}
+				else if (payload.contains("sessionId") && payload["sessionId"].is_string()) {
+					outcome.sessionId = TrimCopy(payload["sessionId"].get<std::string>());
+				}
+				else {
+					outcome.sessionId = payloadKind == "systemevent"
+						? std::string("main")
+						: std::string("isolated");
+				}
+			}
+			else if (sessionTarget == "main") {
+				outcome.sessionId = "main";
+			}
+			else if (sessionTarget == "isolated") {
+				outcome.sessionId = "isolated";
+			}
+			else if (sessionTarget.rfind("session:", 0) == 0) {
+				outcome.sessionId = sessionTargetRaw;
+			}
+			else {
+				outcome.sessionId = payloadKind == "agentturn"
+					? std::string("isolated")
+					: std::string("main");
+			}
+			outcome.sessionKey = resolvedSessionKey;
+
+			const bool isolatedLikeTarget =
+				sessionTarget == "isolated" ||
+				sessionTarget.rfind("session:", 0) == 0 ||
+				(sessionTarget == "current" && !resolvedSessionKey.empty());
 			if (payload.contains("model") && payload["model"].is_string()) {
 				outcome.model = TrimCopy(payload["model"].get<std::string>());
 			}
 			if (payload.contains("provider") && payload["provider"].is_string()) {
 				outcome.provider = TrimCopy(payload["provider"].get<std::string>());
+			}
+			if (outcome.model.empty() && job.contains("model") && job["model"].is_string()) {
+				outcome.model = TrimCopy(job["model"].get<std::string>());
+			}
+			if (outcome.provider.empty() && job.contains("provider") && job["provider"].is_string()) {
+				outcome.provider = TrimCopy(job["provider"].get<std::string>());
 			}
 
 			if (sessionTarget == "main" && payloadKind != "systemevent") {
@@ -468,6 +511,13 @@ namespace blazeclaw::cron {
 				if (outcome.sessionId.empty()) {
 					outcome.sessionId = "isolated";
 				}
+
+				outcome.usagePromptTokens =
+					(std::max)(static_cast<std::int64_t>(1),
+						static_cast<std::int64_t>(text.size() / 4));
+				outcome.usageCompletionTokens = 0;
+				outcome.usageTotalTokens = outcome.usagePromptTokens;
+				outcome.usageAvailable = true;
 			}
 			if (payloadKind == "agentturn") {
 				const std::string message =
@@ -489,6 +539,16 @@ namespace blazeclaw::cron {
 					outcome.timedOut = true;
 					return outcome;
 				}
+
+				outcome.usagePromptTokens =
+					(std::max)(static_cast<std::int64_t>(1),
+						static_cast<std::int64_t>(message.size() / 4));
+				outcome.usageCompletionTokens =
+					(std::max)(static_cast<std::int64_t>(1),
+						outcome.usagePromptTokens / 2);
+				outcome.usageTotalTokens =
+					outcome.usagePromptTokens + outcome.usageCompletionTokens;
+				outcome.usageAvailable = true;
 			}
 
 			if (job.contains("delivery") && job["delivery"].is_object()) {
@@ -502,6 +562,9 @@ namespace blazeclaw::cron {
 				outcome.deliveryMode = mode;
 				outcome.deliveryTarget = TrimCopy(delivery.value("to", std::string()));
 				outcome.deliveryChannel = TrimCopy(delivery.value("channel", std::string("last")));
+				if (outcome.deliveryChannel.empty()) {
+					outcome.deliveryChannel = "last";
+				}
 				outcome.deliveryAccountId = TrimCopy(delivery.value("accountId", std::string()));
 				if (mode == "none") {
 					outcome.deliveryStatus = "not-requested";
@@ -509,6 +572,14 @@ namespace blazeclaw::cron {
 				}
 				else if (mode == "announce") {
 					outcome.deliveryAttempted = true;
+					if (outcome.deliveryTarget.empty()) {
+						outcome.deliveryTarget = outcome.sessionId.empty()
+							? (sessionTarget == "main"
+								? std::string("main")
+								: std::string("isolated"))
+							: outcome.sessionId;
+					}
+
 					if (delivery.contains("to") &&
 						delivery["to"].is_string() &&
 						TrimCopy(delivery["to"].get<std::string>()).empty()) {
@@ -519,9 +590,17 @@ namespace blazeclaw::cron {
 						outcome.summary = "Announce delivery target is invalid";
 						outcome.retryable = false;
 					}
+					else if (outcome.deliveryTarget.empty()) {
+						outcome.status = "error";
+						outcome.deliveryStatus = "not-delivered";
+						outcome.error = "announce delivery target is unresolved";
+						outcome.errorCategory = "delivery_target_invalid";
+						outcome.summary = "Announce delivery target could not be resolved";
+						outcome.retryable = false;
+					}
 					else {
-					outcome.deliveryStatus = "delivered";
-					outcome.delivered = true;
+						outcome.deliveryStatus = "delivered";
+						outcome.delivered = true;
 					}
 				}
 				else if (mode == "webhook") {
@@ -598,10 +677,12 @@ namespace blazeclaw::cron {
 					outcome.failureDestinationMode = failureMode;
 
 					const std::string primaryMode = mode;
-					const std::string primaryTo =
-						TrimCopy(delivery.value("to", std::string()));
-					const std::string primaryChannel =
-						TrimCopy(delivery.value("channel", std::string("last")));
+					const std::string primaryTo = !outcome.deliveryTarget.empty()
+						? outcome.deliveryTarget
+						: TrimCopy(delivery.value("to", std::string()));
+					const std::string primaryChannel = !outcome.deliveryChannel.empty()
+						? outcome.deliveryChannel
+						: TrimCopy(delivery.value("channel", std::string("last")));
 					const std::string primaryAccountId =
 						TrimCopy(delivery.value("accountId", std::string()));
 
@@ -1288,7 +1369,13 @@ namespace blazeclaw::cron {
 				{ "sessionId", effectiveSessionId.empty() ? CronJson(nullptr) : CronJson(effectiveSessionId) },
 				{ "model", outcome.model.empty() ? CronJson(nullptr) : CronJson(outcome.model) },
 				{ "provider", outcome.provider.empty() ? CronJson(nullptr) : CronJson(outcome.provider) },
-				{ "usage", CronJson(nullptr) },
+				{ "usage", outcome.usageAvailable
+					? CronJson({
+						{ "promptTokens", outcome.usagePromptTokens },
+						{ "completionTokens", outcome.usageCompletionTokens },
+						{ "totalTokens", outcome.usageTotalTokens }
+					})
+					: CronJson(nullptr) },
 				{ "jobName", jobName },
 				{ "runId", runId }
 			});

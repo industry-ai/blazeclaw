@@ -1067,6 +1067,46 @@ TEST_CASE("Cron normalize patch clears nullable agent and session fields", "[cro
 	REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
 }
 
+TEST_CASE("Cron normalize patch backfills sessionKey from explicit session target", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-1" },
+		{ "name", "job" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "hello" } } },
+		{ "state", CronJson::object() }
+	};
+
+	const CronJson patch = {
+		{ "sessionTarget", "session:agent:main:alpha" }
+	};
+
+	CronNormalize::ApplyPatch(job, patch);
+	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:alpha");
+	REQUIRE(job.value("sessionKey", std::string()) == "agent:main:alpha");
+}
+
+TEST_CASE("Cron normalize patch clears stale session target when sessionKey removed", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-1" },
+		{ "name", "job" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hello" } } },
+		{ "sessionTarget", "session:agent:main:legacy" },
+		{ "sessionKey", "agent:main:legacy" },
+		{ "state", CronJson::object() }
+	};
+
+	const CronJson patch = {
+		{ "sessionKey", "" }
+	};
+
+	CronNormalize::ApplyPatch(job, patch);
+	REQUIRE_FALSE(job.contains("sessionKey"));
+	REQUIRE(job.value("sessionTarget", std::string()) == "main");
+}
+
 TEST_CASE("Cron normalize canonicalizes nested failureDestination fields", "[cron][normalize]") {
 	const CronJson params = {
 		{ "name", "delivery-shapes" },
@@ -1250,6 +1290,69 @@ TEST_CASE("Cron timer schedules retry for transient webhook delivery failure", "
 	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
 	REQUIRE(jobs[0]["state"].value("retryPendingUntilMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
 	REQUIRE(jobs[0]["state"].value("nextRunAtMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+}
+
+TEST_CASE("Cron timer resolves announce delivery target from session context when omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-announce-context" },
+			{ "name", "announce context" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "notify" } } },
+			{ "sessionTarget", "current" },
+			{ "sessionKey", "agent:main:alpha" },
+			{ "delivery", { { "mode", "announce" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "session:agent:main:alpha");
+	REQUIRE(runs[0].value("sessionId", std::string()) == "session:agent:main:alpha");
+}
+
+TEST_CASE("Cron timer writes runtime usage telemetry for agentTurn execution", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-usage-agent-turn" },
+			{ "name", "usage agent turn" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload",
+				{
+					{ "kind", "agentTurn" },
+					{ "message", "Run analysis for weekly status report" },
+					{ "model", "gpt-4.1" },
+					{ "provider", "openai" }
+				} },
+			{ "sessionTarget", "isolated" },
+			{ "delivery", { { "mode", "none" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].contains("usage"));
+	REQUIRE(runs[0]["usage"].is_object());
+	REQUIRE(runs[0]["usage"].contains("promptTokens"));
+	REQUIRE(runs[0]["usage"].contains("completionTokens"));
+	REQUIRE(runs[0]["usage"].contains("totalTokens"));
+	REQUIRE(runs[0]["usage"].value("totalTokens", 0) >= runs[0]["usage"].value("promptTokens", 0));
+	REQUIRE(runs[0].value("model", std::string()) == "gpt-4.1");
+	REQUIRE(runs[0].value("provider", std::string()) == "openai");
 }
 
 TEST_CASE("Cron next run respects retry pending timestamp", "[cron][timer]") {

@@ -44,9 +44,15 @@ namespace blazeclaw::cron {
 			}
 
 			entry["taskLedgerRuntime"] = "cron";
-			entry["taskLedgerPhase"] = action == "started"
-				? CronJson("active")
-				: CronJson("terminal");
+			if (action == "queued") {
+				entry["taskLedgerPhase"] = "queued";
+			}
+			else if (action == "started") {
+				entry["taskLedgerPhase"] = "active";
+			}
+			else {
+				entry["taskLedgerPhase"] = "terminal";
+			}
 			entry["taskLedgerStatus"] = status;
 
 			return entry;
@@ -861,9 +867,45 @@ namespace blazeclaw::cron {
 					finishedRun->contains("deliveryStatus")
 					? (*finishedRun)["deliveryStatus"]
 					: CronJson("not-requested");
+				terminal["deliveryMode"] =
+					finishedRun->contains("deliveryMode")
+					? (*finishedRun)["deliveryMode"]
+					: CronJson(nullptr);
+				terminal["deliveryTarget"] =
+					finishedRun->contains("deliveryTarget")
+					? (*finishedRun)["deliveryTarget"]
+					: CronJson(nullptr);
+				terminal["failureDestinationStatus"] =
+					finishedRun->contains("failureDestinationStatus")
+					? (*finishedRun)["failureDestinationStatus"]
+					: CronJson("not-requested");
 				terminal["error"] =
 					finishedRun->contains("error")
 					? (*finishedRun)["error"]
+					: CronJson(nullptr);
+				terminal["errorCategory"] =
+					finishedRun->contains("errorCategory")
+					? (*finishedRun)["errorCategory"]
+					: CronJson(nullptr);
+				terminal["sessionId"] =
+					finishedRun->contains("sessionId")
+					? (*finishedRun)["sessionId"]
+					: CronJson(nullptr);
+				terminal["sessionKey"] =
+					finishedRun->contains("sessionKey")
+					? (*finishedRun)["sessionKey"]
+					: CronJson(nullptr);
+				terminal["model"] =
+					finishedRun->contains("model")
+					? (*finishedRun)["model"]
+					: CronJson(nullptr);
+				terminal["provider"] =
+					finishedRun->contains("provider")
+					? (*finishedRun)["provider"]
+					: CronJson(nullptr);
+				terminal["usage"] =
+					finishedRun->contains("usage")
+					? (*finishedRun)["usage"]
 					: CronJson(nullptr);
 				terminal["taskLedgerDisposition"] = "dispatched";
 				terminal["taskLedgerTerminal"] = true;

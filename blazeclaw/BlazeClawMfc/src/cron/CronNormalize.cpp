@@ -791,6 +791,12 @@ namespace blazeclaw::cron {
 			}
 			else if (sessionTarget.rfind("session:", 0) == 0) {
 				job["sessionTarget"] = sessionTargetRaw;
+				const std::string embeddedSessionKey =
+					TrimCopy(sessionTargetRaw.substr(std::string("session:").size()));
+				if (!embeddedSessionKey.empty() &&
+					(!job.contains("sessionKey") || !job["sessionKey"].is_string())) {
+					job["sessionKey"] = embeddedSessionKey;
+				}
 			}
 		}
 		if (patch.contains("wakeMode") && patch["wakeMode"].is_string()) {
@@ -817,9 +823,25 @@ namespace blazeclaw::cron {
 			const std::string sessionKey = TrimCopy(patch["sessionKey"].get<std::string>());
 			if (sessionKey.empty()) {
 				job.erase("sessionKey");
+				if (job.contains("sessionTarget") &&
+					job["sessionTarget"].is_string() &&
+					ToLowerCopy(TrimCopy(job["sessionTarget"].get<std::string>())).rfind("session:", 0) == 0) {
+					const std::string payloadKind =
+						job.contains("payload") && job["payload"].is_object()
+						? ToLowerCopy(TrimCopy(job["payload"].value("kind", std::string())))
+						: std::string();
+					job["sessionTarget"] = payloadKind == "agentturn"
+						? CronJson("isolated")
+						: CronJson("main");
+				}
 			}
 			else {
 				job["sessionKey"] = sessionKey;
+				if (job.contains("sessionTarget") &&
+					job["sessionTarget"].is_string() &&
+					ToLowerCopy(TrimCopy(job["sessionTarget"].get<std::string>())) == "current") {
+					job["sessionTarget"] = "session:" + sessionKey;
+				}
 			}
 		}
 		else if (patch.contains("sessionKey") && patch["sessionKey"].is_null()) {
