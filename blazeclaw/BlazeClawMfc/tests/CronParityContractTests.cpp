@@ -20,6 +20,32 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron runs validator accepts manual lifecycle statuses array values", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-manual-lifecycle-statuses",
+		.method = "cron.runs",
+		.paramsJson = std::string(
+			"{\"scope\":\"all\",\"statuses\":[\"queued\",\"running\",\"failed\",\"timed_out\",\"aborted\"],\"limit\":20}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron runs validator rejects unsupported statuses entry", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-bad-statuses-entry",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"statuses\":[\"paused\"]}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.statuses") != std::string::npos);
+}
+
 TEST_CASE("Cron normalize defaults wake/session target", "[cron][normalize]") {
 	const CronJson params = {
 		{ "name", "nightly" },

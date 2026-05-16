@@ -1694,7 +1694,9 @@ namespace blazeclaw::gateway::protocol {
 					return true;
 				};
 
-				if (!validateCronRunsArrayValues("statuses", { "ok", "error", "skipped" }) ||
+			if (!validateCronRunsArrayValues(
+				"statuses",
+				{ "ok", "error", "skipped", "queued", "running", "failed", "timed_out", "aborted" }) ||
 					!validateCronRunsArrayValues(
 						"deliveryStatuses",
 						{ "not-requested", "delivered", "not-delivered", "suppressed" })) {

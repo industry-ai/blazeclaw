@@ -367,6 +367,38 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 	}
 	REQUIRE(foundQueuedLifecycleEntry);
 
+	const auto cronRunsQueuedFilter = Route(
+		host,
+		"p2-cron-runs-queued-filter",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"statuses\":[\"queued\"],\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRunsQueuedFilter.ok);
+	REQUIRE(cronRunsQueuedFilter.payloadJson.has_value());
+	const nlohmann::json queuedFilterPayload =
+		nlohmann::json::parse(cronRunsQueuedFilter.payloadJson.value());
+	REQUIRE(queuedFilterPayload.is_object());
+	REQUIRE(queuedFilterPayload.contains("entries"));
+	REQUIRE(queuedFilterPayload["entries"].is_array());
+
+	bool foundQueuedStatusFilteredEntry = false;
+	for (const auto& entry : queuedFilterPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (!entry.contains("runId") || !entry["runId"].is_string()) {
+			continue;
+		}
+		if (entry["runId"].get<std::string>() != queuedRunId) {
+			continue;
+		}
+		if (entry.value("status", std::string()) == "queued") {
+			foundQueuedStatusFilteredEntry = true;
+			break;
+		}
+	}
+	REQUIRE(foundQueuedStatusFilteredEntry);
+
 	const auto cronRunDue = Route(
 		host,
 		"p2-cron-run-due",
@@ -418,6 +450,21 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 		}
 	}
 	REQUIRE(foundDueTerminalEntry);
+
+	const auto cronRunsTimedOutFilter = Route(
+		host,
+		"p2-cron-runs-timedout-filter",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"statuses\":[\"timed_out\"],\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRunsTimedOutFilter.ok);
+	REQUIRE(cronRunsTimedOutFilter.payloadJson.has_value());
+	const nlohmann::json timedOutFilterPayload =
+		nlohmann::json::parse(cronRunsTimedOutFilter.payloadJson.value());
+	REQUIRE(timedOutFilterPayload.is_object());
+	REQUIRE(timedOutFilterPayload.contains("entries"));
+	REQUIRE(timedOutFilterPayload["entries"].is_array());
+	REQUIRE(timedOutFilterPayload["entries"].empty());
 
 	const auto cronRemoveInvalid = Route(
 		host,

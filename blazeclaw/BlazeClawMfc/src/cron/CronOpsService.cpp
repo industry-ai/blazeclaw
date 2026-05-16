@@ -463,7 +463,14 @@ namespace blazeclaw::cron {
 				}
 
 				const std::string value = ToLowerCopy(TrimCopy(item.get<std::string>()));
-				if (value == "ok" || value == "error" || value == "skipped") {
+				if (value == "ok" ||
+					value == "error" ||
+					value == "skipped" ||
+					value == "queued" ||
+					value == "running" ||
+					value == "failed" ||
+					value == "timed_out" ||
+					value == "aborted") {
 					statusFilters.insert(value);
 				}
 			}
