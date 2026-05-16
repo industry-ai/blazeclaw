@@ -34,6 +34,10 @@ namespace blazeclaw::gateway::protocol {
 			"action",
 			"status"
 		};
+
+		bool IsFieldNull(const std::string& json, const std::string& fieldName);
+		bool HasFieldToken(const std::string& json, const std::string& fieldName);
+
 		bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
 			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
 				if (eventName == nullptr) {
@@ -44,6 +48,228 @@ namespace blazeclaw::gateway::protocol {
 				if (payload.find(token) == std::string::npos) {
 					return false;
 				}
+			}
+
+			return true;
+		}
+
+		bool IsFieldStringNumberBooleanOrNull(
+			const std::string& payload,
+			const char* fieldName) {
+			if (!HasFieldToken(payload, fieldName)) {
+				return true;
+			}
+
+			return IsFieldValueType(payload, fieldName, '"') ||
+				IsFieldNumber(payload, fieldName) ||
+				IsFieldBoolean(payload, fieldName) ||
+				IsFieldNull(payload, fieldName);
+		}
+
+		bool IsFieldStringOrNull(
+			const std::string& payload,
+			const char* fieldName) {
+			if (!HasFieldToken(payload, fieldName)) {
+				return true;
+			}
+
+			return IsFieldValueType(payload, fieldName, '"') ||
+				IsFieldNull(payload, fieldName);
+		}
+
+		bool IsFieldNumberOrNull(
+			const std::string& payload,
+			const char* fieldName) {
+			if (!HasFieldToken(payload, fieldName)) {
+				return true;
+			}
+
+			return IsFieldNumber(payload, fieldName) ||
+				IsFieldNull(payload, fieldName);
+		}
+
+		bool ValidateCronScheduleShape(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!IsFieldValueType(payload, "kind", '"')) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (!IsFieldStringNumberBooleanOrNull(payload, "at") ||
+				!IsFieldNumberOrNull(payload, "atMs") ||
+				!IsFieldNumberOrNull(payload, "everyMs") ||
+				!IsFieldStringOrNull(payload, "expr") ||
+				!IsFieldStringOrNull(payload, "tz") ||
+				!IsFieldNumberOrNull(payload, "staggerMs") ||
+				!IsFieldNumberOrNull(payload, "anchorMs")) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronPayloadShape(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!IsFieldValueType(payload, "kind", '"')) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (!IsFieldStringOrNull(payload, "text") ||
+				!IsFieldStringOrNull(payload, "message") ||
+				!IsFieldStringOrNull(payload, "model") ||
+				!IsFieldStringOrNull(payload, "thinking") ||
+				!IsFieldNumberOrNull(payload, "timeoutSeconds") ||
+				!IsFieldValueType(payload, "fallbacks", '[') && HasFieldToken(payload, "fallbacks") ||
+				!IsFieldValueType(payload, "toolsAllow", '[') && HasFieldToken(payload, "toolsAllow") ||
+				!IsFieldBoolean(payload, "lightContext") && HasFieldToken(payload, "lightContext") ||
+				!IsFieldBoolean(payload, "allowUnsafeExternalContent") && HasFieldToken(payload, "allowUnsafeExternalContent")) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronDeliveryShape(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!HasFieldToken(payload, "delivery")) {
+				return true;
+			}
+
+			if (!IsFieldValueType(payload, "delivery", '{')) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (!IsFieldStringOrNull(payload, "mode") ||
+				!IsFieldStringOrNull(payload, "to") ||
+				!IsFieldStringOrNull(payload, "channel") ||
+				!IsFieldStringOrNull(payload, "accountId") ||
+				(!IsFieldBoolean(payload, "bestEffort") && HasFieldToken(payload, "bestEffort"))) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (HasFieldToken(payload, "failureDestination") &&
+				!IsFieldValueType(payload, "failureDestination", '{')) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronFailureAlertShape(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!HasFieldToken(payload, "failureAlert")) {
+				return true;
+			}
+
+			if (!IsFieldValueType(payload, "failureAlert", '{') &&
+				!IsFieldBoolean(payload, "failureAlert") &&
+				!IsFieldNull(payload, "failureAlert")) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (!IsFieldNumberOrNull(payload, "after") ||
+				!IsFieldNumberOrNull(payload, "cooldownMs") ||
+				!IsFieldStringOrNull(payload, "mode") ||
+				!IsFieldStringOrNull(payload, "to") ||
+				!IsFieldStringOrNull(payload, "channel") ||
+				!IsFieldStringOrNull(payload, "accountId")) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronJobReadModelDepth(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!ValidateCronScheduleShape(payload, issue, errorMessage) ||
+				!ValidateCronPayloadShape(payload, issue, errorMessage) ||
+				!ValidateCronDeliveryShape(payload, issue, errorMessage) ||
+				!ValidateCronFailureAlertShape(payload, issue, errorMessage)) {
+				return false;
+			}
+
+			if (!IsFieldStringOrNull(payload, "description") ||
+				!IsFieldStringOrNull(payload, "wakeMode") ||
+				!IsFieldStringOrNull(payload, "sessionTarget") ||
+				!IsFieldStringOrNull(payload, "agentId") ||
+				!IsFieldStringOrNull(payload, "sessionKey") ||
+				!IsFieldNumberOrNull(payload, "createdAtMs") ||
+				!IsFieldNumberOrNull(payload, "updatedAtMs") ||
+				(!IsFieldBoolean(payload, "deleteAfterRun") && HasFieldToken(payload, "deleteAfterRun")) ||
+				(!IsFieldValueType(payload, "state", '{') && HasFieldToken(payload, "state"))) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunReadModelDepth(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!IsFieldStringOrNull(payload, "jobName") ||
+				!IsFieldStringOrNull(payload, "mode") ||
+				!IsFieldStringOrNull(payload, "summary") ||
+				!IsFieldStringOrNull(payload, "error") ||
+				!IsFieldStringOrNull(payload, "deliveryStatus") ||
+				!IsFieldStringOrNull(payload, "deliveryMode") ||
+				!IsFieldStringOrNull(payload, "deliveryTarget") ||
+				!IsFieldStringOrNull(payload, "deliveryChannel") ||
+				!IsFieldStringOrNull(payload, "deliveryAccountId") ||
+				!IsFieldStringOrNull(payload, "failureDestinationStatus") ||
+				!IsFieldStringOrNull(payload, "failureDestinationMode") ||
+				!IsFieldStringOrNull(payload, "failureDestinationTarget") ||
+				!IsFieldStringOrNull(payload, "failureDestinationChannel") ||
+				!IsFieldStringOrNull(payload, "failureDestinationAccountId") ||
+				!IsFieldStringOrNull(payload, "failureDestinationError") ||
+				!IsFieldStringOrNull(payload, "errorCategory") ||
+				!IsFieldStringOrNull(payload, "sessionKey") ||
+				!IsFieldStringOrNull(payload, "sessionId") ||
+				!IsFieldStringOrNull(payload, "model") ||
+				!IsFieldStringOrNull(payload, "provider") ||
+				!IsFieldNumberOrNull(payload, "startedAtMs") ||
+				!IsFieldNumberOrNull(payload, "endedAtMs") ||
+				!IsFieldNumberOrNull(payload, "scheduledForMs") ||
+				!IsFieldNumberOrNull(payload, "deliveryHttpStatus") ||
+				!IsFieldNumberOrNull(payload, "failureDestinationHttpStatus") ||
+				(!IsFieldBoolean(payload, "delivered") && HasFieldToken(payload, "delivered")) ||
+				(!IsFieldBoolean(payload, "deliveryAttempted") && HasFieldToken(payload, "deliveryAttempted")) ||
+				(!IsFieldBoolean(payload, "failureDestinationAttempted") && HasFieldToken(payload, "failureDestinationAttempted")) ||
+				(!IsFieldBoolean(payload, "failureAlertTriggered") && HasFieldToken(payload, "failureAlertTriggered")) ||
+				(!IsFieldBoolean(payload, "failureAlertSuppressed") && HasFieldToken(payload, "failureAlertSuppressed")) ||
+				(!IsFieldBoolean(payload, "timedOut") && HasFieldToken(payload, "timedOut")) ||
+				(!IsFieldBoolean(payload, "aborted") && HasFieldToken(payload, "aborted")) ||
+				!IsFieldStringOrNull(payload, "failureAlertSuppressedReason") ||
+				!IsFieldStringOrNull(payload, "failureAlertMode") ||
+				!IsFieldStringOrNull(payload, "failureAlertTarget") ||
+				!IsFieldStringOrNull(payload, "failureAlertChannel") ||
+				!IsFieldStringOrNull(payload, "failureAlertAccountId") ||
+				!IsFieldStringOrNull(payload, "taskLedgerRuntime") ||
+				!IsFieldStringOrNull(payload, "taskLedgerPhase") ||
+				!IsFieldStringOrNull(payload, "taskLedgerStatus") ||
+				!IsFieldStringOrNull(payload, "taskLedgerDisposition") ||
+				(!IsFieldBoolean(payload, "taskLedgerTerminal") && HasFieldToken(payload, "taskLedgerTerminal"))) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
 			}
 
 			return true;
@@ -579,6 +805,14 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!IsArrayFieldExplicitlyEmpty(payload, "jobs") &&
+					!ValidateCronJobReadModelDepth(
+						payload,
+						issue,
+						"`cron.list` non-empty `jobs` entries contain invalid nested schedule/payload/read-model field types.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.runs", [&]() {
@@ -613,6 +847,14 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!IsArrayFieldExplicitlyEmpty(payload, "entries") &&
+					!ValidateCronRunReadModelDepth(
+						payload,
+						issue,
+						"`cron.runs` non-empty `entries` contain invalid lifecycle/retry/transport read-model field types.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.add", [&]() {
@@ -628,6 +870,13 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!ValidateCronJobReadModelDepth(
+					payload,
+					issue,
+					"`cron.add` response contains invalid nested schedule/payload/read-model field types.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.update", [&]() {
@@ -640,6 +889,13 @@ namespace blazeclaw::gateway::protocol {
 						issue,
 						"schema_invalid_response",
 						"`cron.update` requires `id`/`name` strings, `enabled` boolean, and object `schedule`/`payload` fields.");
+					return false;
+				}
+
+				if (!ValidateCronJobReadModelDepth(
+					payload,
+					issue,
+					"`cron.update` response contains invalid nested schedule/payload/read-model field types.")) {
 					return false;
 				}
 
