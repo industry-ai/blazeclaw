@@ -20,6 +20,102 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron timer suppresses announce failure destination when target equals primary announce target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-target-match" },
+			{ "name", "failure destination announce target match" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "target-1" },
+					{ "failureDestination",
+						{
+							{ "mode", "announce" },
+							{ "to", "target-1" },
+							{ "channel", "last" },
+							{ "accountId", "" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "target-1");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
+}
+
+TEST_CASE("Cron timer does not suppress announce failure destination when primary mode is none", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-primary-none" },
+			{ "name", "failure destination announce primary none" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "none" },
+					{ "failureDestination",
+						{
+							{ "mode", "announce" },
+							{ "to", "target-1" },
+							{ "channel", "last" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-requested");
+}
+
+TEST_CASE("Cron timer suppresses failureAlert when not explicitly configured", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-not-configured" },
+			{ "name", "alert not configured" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "bad-target" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 3 }, { "lastFailureAlertAtMs", nowMs - 1'000 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "not_configured");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE(jobs[0]["state"].value("failureAlertSuppressedReason", std::string()) == "not_configured");
+}
+
 TEST_CASE("Cron timer clears lastFailureAlertAtMs on successful run", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

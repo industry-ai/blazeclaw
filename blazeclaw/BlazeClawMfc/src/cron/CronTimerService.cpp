@@ -251,6 +251,16 @@ namespace blazeclaw::cron {
 		}
 
 		std::int64_t ResolveFailureAlertAfter(const CronJson& job) {
+			if (!job.contains("failureAlert")) {
+				return 0;
+			}
+
+			if (job["failureAlert"].is_boolean()) {
+				return job["failureAlert"].get<bool>()
+					? kDefaultFailureAlertAfter
+					: 0;
+			}
+
 			if (!job.contains("failureAlert") || !job["failureAlert"].is_object()) {
 				return kDefaultFailureAlertAfter;
 			}
@@ -261,6 +271,16 @@ namespace blazeclaw::cron {
 		}
 
 		std::int64_t ResolveFailureAlertCooldownMs(const CronJson& job) {
+			if (!job.contains("failureAlert")) {
+				return 0;
+			}
+
+			if (job["failureAlert"].is_boolean()) {
+				return job["failureAlert"].get<bool>()
+					? kDefaultFailureAlertCooldownMs
+					: 0;
+			}
+
 			if (!job.contains("failureAlert") || !job["failureAlert"].is_object()) {
 				return kDefaultFailureAlertCooldownMs;
 			}
@@ -561,14 +581,21 @@ namespace blazeclaw::cron {
 					outcome.failureDestinationChannel = failureChannel;
 					outcome.failureDestinationAccountId = failureAccountId;
 
-					const bool sameTarget =
-						((failureMode == "webhook" &&
-						  primaryMode == "webhook" &&
-						  resolvedFailureTo == primaryTo) ||
-						 (failureMode == primaryMode &&
-						  resolvedFailureTo == primaryTo &&
-						  failureChannel == primaryChannel &&
-						  failureAccountId == primaryAccountId));
+					const bool sameWebhookTarget =
+						failureMode == "webhook" &&
+						primaryMode == "webhook" &&
+						resolvedFailureTo == primaryTo;
+					const std::string normalizedPrimaryChannel =
+						primaryChannel.empty() ? std::string("last") : primaryChannel;
+					const std::string normalizedFailureChannel =
+						failureChannel.empty() ? std::string("last") : failureChannel;
+					const bool sameAnnounceTarget =
+						failureMode == "announce" &&
+						primaryMode != "none" &&
+						resolvedFailureTo == primaryTo &&
+						normalizedFailureChannel == normalizedPrimaryChannel &&
+						failureAccountId == primaryAccountId;
+					const bool sameTarget = sameWebhookTarget || sameAnnounceTarget;
 					if (sameTarget) {
 						outcome.failureDestinationStatus = "suppressed";
 						outcome.failureDestinationError =
@@ -982,6 +1009,14 @@ namespace blazeclaw::cron {
 				else {
 					const std::int64_t alertAfter = ResolveFailureAlertAfter(*it);
 					const std::int64_t cooldownMs = ResolveFailureAlertCooldownMs(*it);
+					if (alertAfter <= 0) {
+						state["lastFailureAlertAtMs"] = CronJson(nullptr);
+						state["failureAlertSuppressed"] = true;
+						state["failureAlertSuppressedReason"] = "not_configured";
+						state["lastFailureAlertMode"] = nullptr;
+						state["lastFailureAlertTarget"] = CronJson(nullptr);
+					}
+					else {
 					std::string failureAlertMode = kFailureAlertModeAnnounce;
 					std::string failureAlertTarget;
 					std::string deliveryTargetFallback;
@@ -1038,6 +1073,7 @@ namespace blazeclaw::cron {
 							state["failureAlertSuppressedReason"] = "cooldown_active";
 						}
 					}
+				}
 				}
 			}
 			else {
