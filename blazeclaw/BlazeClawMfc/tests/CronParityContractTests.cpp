@@ -1430,7 +1430,46 @@ TEST_CASE("Cron timer falls back failureAlert announce target to delivery target
 	REQUIRE(runs[0].value("failureAlertTriggered", false));
 	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "announce");
 	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "https://alerts.example/hook");
+	REQUIRE(runs[0].value("failureAlertChannel", std::string()) == "last");
+	REQUIRE(runs[0]["failureAlertAccountId"].is_null());
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/hook");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertChannel", std::string()) == "last");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAccountId"].is_null());
+}
+
+TEST_CASE("Cron timer falls back failureAlert announce channel/account to delivery", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-announce-channel-account-fallback" },
+			{ "name", "alert announce channel account fallback" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-url" },
+					{ "channel", "alerts" },
+					{ "accountId", "acc-delivery" }
+				} },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "announce" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureAlertChannel", std::string()) == "alerts");
+	REQUIRE(runs[0].value("failureAlertAccountId", std::string()) == "acc-delivery");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertChannel", std::string()) == "alerts");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertAccountId", std::string()) == "acc-delivery");
 }
 
 TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {

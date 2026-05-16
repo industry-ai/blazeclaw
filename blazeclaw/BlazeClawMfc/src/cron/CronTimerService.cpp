@@ -969,6 +969,8 @@ namespace blazeclaw::cron {
 			bool scheduledRetry = false;
 			bool failureAlertTriggered = false;
 			std::string failureAlertTargetSnapshot;
+			std::string failureAlertChannelSnapshot;
+			std::string failureAlertAccountIdSnapshot;
 			std::int64_t failureAlertAtMs = 0;
 			std::int64_t consecutiveErrors = 0;
 			std::int64_t retryAttempt = previousAttempt;
@@ -994,6 +996,8 @@ namespace blazeclaw::cron {
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
 				state["lastFailureAlertMode"] = nullptr;
+				state["lastFailureAlertChannel"] = nullptr;
+				state["lastFailureAlertAccountId"] = nullptr;
 				const bool bestEffortDelivery = IsBestEffortDelivery(*it);
 
 				if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_boolean() && !(*it)["failureAlert"].get<bool>()) {
@@ -1018,11 +1022,22 @@ namespace blazeclaw::cron {
 					}
 					else {
 					std::string failureAlertMode = kFailureAlertModeAnnounce;
+					std::string failureAlertChannel = "last";
+					std::string failureAlertAccountId;
 					std::string failureAlertTarget;
 					std::string deliveryTargetFallback;
+					std::string deliveryChannelFallback = "last";
+					std::string deliveryAccountIdFallback;
 					if ((*it).contains("delivery") && (*it)["delivery"].is_object()) {
 						deliveryTargetFallback =
 							TrimCopy((*it)["delivery"].value("to", std::string()));
+						deliveryChannelFallback =
+							TrimCopy((*it)["delivery"].value("channel", std::string("last")));
+						if (deliveryChannelFallback.empty()) {
+							deliveryChannelFallback = "last";
+						}
+						deliveryAccountIdFallback =
+							TrimCopy((*it)["delivery"].value("accountId", std::string()));
 					}
 					if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
 						failureAlertMode = ToLowerCopy(
@@ -1033,15 +1048,41 @@ namespace blazeclaw::cron {
 						}
 						failureAlertTarget =
 							TrimCopy((*it)["failureAlert"].value("to", std::string()));
+						failureAlertChannel =
+							TrimCopy((*it)["failureAlert"].value("channel", std::string()));
+						failureAlertAccountId =
+							TrimCopy((*it)["failureAlert"].value("accountId", std::string()));
 					}
 					if (failureAlertMode == kFailureAlertModeAnnounce &&
 						failureAlertTarget.empty()) {
 						failureAlertTarget = deliveryTargetFallback;
 					}
+					if (failureAlertMode == kFailureAlertModeAnnounce) {
+						if (failureAlertChannel.empty()) {
+							failureAlertChannel = deliveryChannelFallback;
+						}
+						if (failureAlertChannel.empty()) {
+							failureAlertChannel = "last";
+						}
+						if (failureAlertAccountId.empty()) {
+							failureAlertAccountId = deliveryAccountIdFallback;
+						}
+					}
+					else {
+						failureAlertChannel.clear();
+					}
 					failureAlertTargetSnapshot = failureAlertTarget;
+					failureAlertChannelSnapshot = failureAlertChannel;
+					failureAlertAccountIdSnapshot = failureAlertAccountId;
 					state["lastFailureAlertTarget"] = failureAlertTarget.empty()
 						? CronJson(nullptr)
 						: CronJson(failureAlertTarget);
+					state["lastFailureAlertChannel"] = failureAlertChannel.empty()
+						? CronJson(nullptr)
+						: CronJson(failureAlertChannel);
+					state["lastFailureAlertAccountId"] = failureAlertAccountId.empty()
+						? CronJson(nullptr)
+						: CronJson(failureAlertAccountId);
 
 					if (failureAlertMode == kFailureAlertModeWebhook &&
 						!StartsWithHttpScheme(failureAlertTarget)) {
@@ -1052,6 +1093,12 @@ namespace blazeclaw::cron {
 						state["lastFailureAlertTarget"] = failureAlertTarget.empty()
 							? CronJson(nullptr)
 							: CronJson(failureAlertTarget);
+						state["lastFailureAlertChannel"] = failureAlertChannel.empty()
+							? CronJson(nullptr)
+							: CronJson(failureAlertChannel);
+						state["lastFailureAlertAccountId"] = failureAlertAccountId.empty()
+							? CronJson(nullptr)
+							: CronJson(failureAlertAccountId);
 					}
 					else {
 						state["lastFailureAlertMode"] = failureAlertMode;
@@ -1153,6 +1200,14 @@ namespace blazeclaw::cron {
 					failureAlertTargetSnapshot.empty()
 					? CronJson(nullptr)
 					: CronJson(failureAlertTargetSnapshot) },
+				{ "failureAlertChannel",
+					failureAlertChannelSnapshot.empty()
+					? CronJson(nullptr)
+					: CronJson(failureAlertChannelSnapshot) },
+				{ "failureAlertAccountId",
+					failureAlertAccountIdSnapshot.empty()
+					? CronJson(nullptr)
+					: CronJson(failureAlertAccountIdSnapshot) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
