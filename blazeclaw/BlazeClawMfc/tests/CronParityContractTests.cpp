@@ -668,6 +668,35 @@ TEST_CASE("Cron timer suppresses failure destination when same as primary target
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
 }
 
+TEST_CASE("Cron timer marks announce failure destination empty target as not-delivered", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-empty" },
+			{ "name", "announce failure destination empty" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-url" },
+					{ "failureDestination", { { "mode", "announce" }, { "to", "" } } }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "announce failure destination target is empty");
+}
+
 TEST_CASE("Cron timer suppresses failure alert for best-effort delivery", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -721,6 +750,32 @@ TEST_CASE("Cron timer suppresses invalid failureAlert webhook target", "[cron][t
 	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "bad-target");
 	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "bad-target");
+}
+
+TEST_CASE("Cron timer falls back failureAlert announce target to delivery target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-announce-fallback" },
+			{ "name", "alert announce fallback" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "announce" }, { "to", "team-room" } } },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "announce" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "team-room");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "team-room");
 }
 
 TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {

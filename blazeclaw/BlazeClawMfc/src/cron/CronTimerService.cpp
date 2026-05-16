@@ -313,7 +313,16 @@ namespace blazeclaw::cron {
 					}
 					else {
 						outcome.failureDestinationAttempted = true;
-						outcome.failureDestinationStatus = "delivered";
+						if (failureDestination.contains("to") &&
+							failureDestination["to"].is_string() &&
+							failureTo.empty()) {
+							outcome.failureDestinationStatus = "not-delivered";
+							outcome.failureDestinationError =
+								"announce failure destination target is empty";
+						}
+						else {
+							outcome.failureDestinationStatus = "delivered";
+						}
 					}
 				}
 			}
@@ -662,6 +671,11 @@ namespace blazeclaw::cron {
 					const std::int64_t cooldownMs = ResolveFailureAlertCooldownMs(*it);
 					std::string failureAlertMode = kFailureAlertModeAnnounce;
 					std::string failureAlertTarget;
+					std::string deliveryTargetFallback;
+					if ((*it).contains("delivery") && (*it)["delivery"].is_object()) {
+						deliveryTargetFallback =
+							TrimCopy((*it)["delivery"].value("to", std::string()));
+					}
 					if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
 						failureAlertMode = ToLowerCopy(
 							TrimCopy((*it)["failureAlert"].value("mode", std::string(kFailureAlertModeAnnounce))));
@@ -671,6 +685,10 @@ namespace blazeclaw::cron {
 						}
 						failureAlertTarget =
 							TrimCopy((*it)["failureAlert"].value("to", std::string()));
+					}
+					if (failureAlertMode == kFailureAlertModeAnnounce &&
+						failureAlertTarget.empty()) {
+						failureAlertTarget = deliveryTargetFallback;
 					}
 					failureAlertTargetSnapshot = failureAlertTarget;
 
