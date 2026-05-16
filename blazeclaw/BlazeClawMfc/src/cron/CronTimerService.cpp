@@ -289,10 +289,13 @@ namespace blazeclaw::cron {
 						TrimCopy(failureDestination.value("accountId", std::string()));
 
 					const bool sameTarget =
-						failureMode == primaryMode &&
-						failureTo == primaryTo &&
-						failureChannel == primaryChannel &&
-						failureAccountId == primaryAccountId;
+						((failureMode == "webhook" &&
+						  primaryMode == "webhook" &&
+						  failureTo == primaryTo) ||
+						 (failureMode == primaryMode &&
+						  failureTo == primaryTo &&
+						  failureChannel == primaryChannel &&
+						  failureAccountId == primaryAccountId));
 					if (sameTarget) {
 						outcome.failureDestinationStatus = "suppressed";
 						outcome.failureDestinationError =
