@@ -2,6 +2,7 @@
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewaySchemaCatalog.Generated.h"
 
+#include <cstdlib>
 #include <functional>
 #include <string_view>
 #include <unordered_set>
@@ -132,6 +133,55 @@ namespace blazeclaw::gateway::protocol {
 
 			std::string parsed;
 			if (!TryConsumeJsonString(json, valuePos, parsed)) {
+				return false;
+			}
+
+			valueOut = parsed;
+			return true;
+		}
+
+		bool TryReadTopLevelNumberField(
+			const std::string& json,
+			const std::string& fieldName,
+			double& valueOut) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			valuePos = SkipWhitespace(json, valuePos + 1);
+			if (valuePos >= json.size()) {
+				return false;
+			}
+
+			std::size_t endPos = valuePos;
+			while (endPos < json.size()) {
+				const char ch = json[endPos];
+				if ((ch >= '0' && ch <= '9') ||
+					ch == '-' ||
+					ch == '+' ||
+					ch == '.' ||
+					ch == 'e' ||
+					ch == 'E') {
+					++endPos;
+					continue;
+				}
+				break;
+			}
+
+			if (endPos <= valuePos) {
+				return false;
+			}
+
+			const std::string token = json.substr(valuePos, endPos - valuePos);
+			char* parsedEnd = nullptr;
+			const double parsed = std::strtod(token.c_str(), &parsedEnd);
+			if (parsedEnd == token.c_str() || *parsedEnd != '\0' || !std::isfinite(parsed)) {
 				return false;
 			}
 
@@ -530,6 +580,46 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (request.paramsJson.has_value()) {
+				auto validateIntegralRange = [&](const char* fieldName, double minValue, double maxValue, bool boundedMax) {
+					double value = 0.0;
+					if (!TryReadTopLevelNumberField(request.paramsJson.value(), fieldName, value)) {
+						return true;
+					}
+
+					if (std::floor(value) != value) {
+						SetIssue(
+							issue,
+							"schema_invalid_value",
+							"Method `cron.list` requires `params." + std::string(fieldName) + "` to be an integer.");
+						return false;
+					}
+
+					if (value < minValue || (boundedMax && value > maxValue)) {
+						std::string message =
+							"Method `cron.list` requires `params." + std::string(fieldName) + "` to be ";
+						if (boundedMax) {
+							message += "between " + std::to_string(static_cast<int>(minValue)) +
+								" and " + std::to_string(static_cast<int>(maxValue)) + ".";
+						}
+						else {
+							message += "greater than or equal to " +
+								std::to_string(static_cast<int>(minValue)) + ".";
+						}
+
+						SetIssue(issue, "schema_invalid_value", message);
+						return false;
+					}
+
+					return true;
+				};
+
+				if (!validateIntegralRange("limit", 1.0, 200.0, true) ||
+					!validateIntegralRange("offset", 0.0, 0.0, false)) {
+					return false;
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName(
 					{ "limit", "offset", "includeDisabled", "enabled", "query", "sortBy", "sortDir" },
@@ -722,6 +812,61 @@ namespace blazeclaw::gateway::protocol {
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "deliveryStatus", { "not-requested", "delivered", "not-delivered", "suppressed" }, issue) ||
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "sortDir", { "asc", "desc" }, issue)) {
 				return false;
+			}
+
+			if (request.paramsJson.has_value()) {
+				auto validateIntegralRange = [&](const char* fieldName, double minValue, double maxValue, bool boundedMax) {
+					double value = 0.0;
+					if (!TryReadTopLevelNumberField(request.paramsJson.value(), fieldName, value)) {
+						return true;
+					}
+
+					if (std::floor(value) != value) {
+						SetIssue(
+							issue,
+							"schema_invalid_value",
+							"Method `cron.runs` requires `params." + std::string(fieldName) + "` to be an integer.");
+						return false;
+					}
+
+					if (value < minValue || (boundedMax && value > maxValue)) {
+						std::string message =
+							"Method `cron.runs` requires `params." + std::string(fieldName) + "` to be ";
+						if (boundedMax) {
+							message += "between " + std::to_string(static_cast<int>(minValue)) +
+								" and " + std::to_string(static_cast<int>(maxValue)) + ".";
+						}
+						else {
+							message += "greater than or equal to " +
+								std::to_string(static_cast<int>(minValue)) + ".";
+						}
+
+						SetIssue(issue, "schema_invalid_value", message);
+						return false;
+					}
+
+					return true;
+				};
+
+				if (!validateIntegralRange("limit", 1.0, 200.0, true) ||
+					!validateIntegralRange("offset", 0.0, 0.0, false)) {
+					return false;
+				}
+
+				std::string scope;
+				if (TryReadTopLevelStringField(request.paramsJson.value(), "scope", scope) && scope == "job") {
+					std::string id;
+					std::string jobId;
+					const bool hasId = TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && !Trim(id).empty();
+					const bool hasJobId = TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && !Trim(jobId).empty();
+					if (!hasId && !hasJobId) {
+						SetIssue(
+							issue,
+							"schema_missing_field",
+							"Method `cron.runs` requires `params.id` or `params.jobId` when `params.scope` is `job`.");
+						return false;
+					}
+				}
 			}
 
 			if (request.paramsJson.has_value()) {

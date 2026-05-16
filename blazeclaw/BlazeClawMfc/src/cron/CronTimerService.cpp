@@ -92,6 +92,7 @@ namespace blazeclaw::cron {
 			std::string error;
 			std::string deliveryStatus = "not-requested";
 			bool delivered = false;
+			bool retryable = false;
 			std::string failureDestinationStatus = "not-requested";
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
@@ -135,6 +136,7 @@ namespace blazeclaw::cron {
 				outcome.error = "invalid payload";
 				outcome.errorCategory = "invalid_payload";
 				outcome.summary = "Payload missing or invalid";
+				outcome.retryable = false;
 				return outcome;
 			}
 
@@ -177,6 +179,7 @@ namespace blazeclaw::cron {
 						outcome.error = "announce delivery target is empty";
 						outcome.errorCategory = "delivery_target_invalid";
 						outcome.summary = "Announce delivery target is invalid";
+						outcome.retryable = false;
 					}
 					else {
 					outcome.deliveryStatus = "delivered";
@@ -196,6 +199,7 @@ namespace blazeclaw::cron {
 						outcome.error = "invalid webhook delivery target";
 						outcome.errorCategory = "delivery_target_invalid";
 						outcome.summary = "Webhook delivery target is invalid";
+						outcome.retryable = false;
 					}
 				}
 				else {
@@ -204,6 +208,7 @@ namespace blazeclaw::cron {
 					outcome.error = "unsupported delivery mode";
 					outcome.errorCategory = "delivery_mode_invalid";
 					outcome.summary = "Delivery mode is invalid";
+					outcome.retryable = false;
 				}
 
 				if (outcome.status == "error" &&
@@ -217,10 +222,35 @@ namespace blazeclaw::cron {
 					}
 					outcome.failureDestinationMode = failureMode;
 
+					const std::string primaryMode = mode;
+					const std::string primaryTo =
+						TrimCopy(delivery.value("to", std::string()));
+					const std::string primaryChannel =
+						TrimCopy(delivery.value("channel", std::string("last")));
+					const std::string primaryAccountId =
+						TrimCopy(delivery.value("accountId", std::string()));
+
+					const std::string failureTo =
+						TrimCopy(failureDestination.value("to", std::string()));
+					const std::string failureChannel =
+						TrimCopy(failureDestination.value("channel", std::string("last")));
+					const std::string failureAccountId =
+						TrimCopy(failureDestination.value("accountId", std::string()));
+
+					const bool sameTarget =
+						failureMode == primaryMode &&
+						failureTo == primaryTo &&
+						failureChannel == primaryChannel &&
+						failureAccountId == primaryAccountId;
+					if (sameTarget) {
+						outcome.failureDestinationStatus = "suppressed";
+						outcome.failureDestinationError =
+							"failure destination matches primary delivery target";
+						return outcome;
+					}
+
 					if (failureMode == "webhook") {
-						const std::string destination =
-							TrimCopy(failureDestination.value("to", std::string()));
-						if (StartsWithHttpScheme(destination)) {
+						if (StartsWithHttpScheme(failureTo)) {
 							outcome.failureDestinationStatus = "delivered";
 						}
 						else {
@@ -239,6 +269,7 @@ namespace blazeclaw::cron {
 				outcome.errorCategory = IsTransientErrorCategory(outcome.error)
 					? "transient"
 					: "runtime";
+				outcome.retryable = outcome.errorCategory == "transient";
 			}
 
 			if (outcome.status == "ok" && outcome.summary.empty()) {
@@ -527,7 +558,7 @@ namespace blazeclaw::cron {
 			std::int64_t consecutiveErrors = 0;
 			std::int64_t retryAttempt = previousAttempt;
 			std::optional<std::int64_t> nextAfterRun;
-			if (outcome.status == "error" && previousAttempt < maxAttempts) {
+			if (outcome.status == "error" && outcome.retryable && previousAttempt < maxAttempts) {
 				retryAttempt = previousAttempt + 1;
 				const std::int64_t delayMs = ResolveRetryDelayMs(retry, retryAttempt);
 				const std::int64_t retryAtMs = nowMs + (std::max)(static_cast<std::int64_t>(0), delayMs);

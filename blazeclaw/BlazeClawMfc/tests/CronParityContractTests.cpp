@@ -71,6 +71,45 @@ TEST_CASE("Cron update validator accepts id and patch", "[cron][schema]") {
 	REQUIRE(issue.code.empty());
 }
 
+TEST_CASE("Cron runs validator rejects scope job without id", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-job-missing-id",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"scope\":\"job\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_missing_field");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator rejects non-integer limit", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-non-integer-limit",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"limit\":1.5}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.limit") != std::string::npos);
+}
+
+TEST_CASE("Cron list validator rejects out-of-range limit", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "list-bad-limit",
+		.method = "cron.list",
+		.paramsJson = std::string("{\"limit\":201}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.limit") != std::string::npos);
+}
+
 TEST_CASE("Cron runs validator rejects empty statuses array", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-empty-statuses",
@@ -252,7 +291,7 @@ TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer
 	REQUIRE(nextRun.value() == expected);
 }
 
-TEST_CASE("Cron timer schedules retry and records delivery failure", "[cron][timer]") {
+TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
 
@@ -276,10 +315,9 @@ TEST_CASE("Cron timer schedules retry and records delivery failure", "[cron][tim
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
-	REQUIRE(runs[0].value("retryScheduled", false));
-	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
-	REQUIRE(runs[0].value("retryScheduledAtMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
-	REQUIRE(jobs[0]["state"].value("retryPendingUntilMs", static_cast<std::int64_t>(0)) == nowMs + 5'000);
+	REQUIRE_FALSE(runs[0].value("retryScheduled", true));
+	REQUIRE(runs[0].value("retryAttempt", 1) == 0);
+	REQUIRE(jobs[0]["state"]["retryPendingUntilMs"].is_null());
 }
 
 TEST_CASE("Cron next run respects retry pending timestamp", "[cron][timer]") {
@@ -450,6 +488,34 @@ TEST_CASE("Cron timer records failure destination metadata on delivery error", "
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "invalid failure destination webhook target");
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationStatus", std::string()) == "not-delivered");
+}
+
+TEST_CASE("Cron timer suppresses failure destination when same as primary target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-suppressed" },
+			{ "name", "failure destination suppressed" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-url" },
+					{ "failureDestination", { { "mode", "webhook" }, { "to", "invalid-url" } } }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
 }
 
 TEST_CASE("Cron timer run ids are unique for same tick", "[cron][timer]") {
