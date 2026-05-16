@@ -3272,6 +3272,128 @@
             return delivery;
         }
 
+        function stripThreadSuffixFromSessionKey(sessionKey) {
+            const normalized = normalizeLowercaseStringOrEmpty(sessionKey);
+            const marker = ":thread:";
+            const markerIndex = normalized.lastIndexOf(marker);
+            if (markerIndex <= 0) {
+                return String(sessionKey || "").trim();
+            }
+
+            const rawKey = String(sessionKey || "").trim();
+            const parent = rawKey.slice(0, markerIndex).trim();
+            return parent || rawKey;
+        }
+
+        function inferCronAnnounceDeliveryFromSessionKey(sessionKey) {
+            const rawSessionKey = String(sessionKey || "").trim();
+            if (!rawSessionKey) {
+                return null;
+            }
+
+            const keyWithoutThread = stripThreadSuffixFromSessionKey(rawSessionKey);
+            const segments = keyWithoutThread.split(":").filter(function (part) {
+                return String(part || "").trim().length > 0;
+            });
+            if (segments.length < 4) {
+                return null;
+            }
+
+            const prefix = normalizeLowercaseStringOrEmpty(segments[0]);
+            if (prefix !== "agent") {
+                return null;
+            }
+
+            const rest = segments.slice(2);
+            const markerIndex = rest.findIndex(function (part) {
+                const normalizedPart = normalizeLowercaseStringOrEmpty(part);
+                return normalizedPart === "direct" ||
+                    normalizedPart === "dm" ||
+                    normalizedPart === "group" ||
+                    normalizedPart === "channel";
+            });
+            if (markerIndex < 0) {
+                return null;
+            }
+
+            const peerParts = rest.slice(markerIndex + 1);
+            const peerId = peerParts.join(":").trim();
+            if (!peerId) {
+                return null;
+            }
+
+            const inferred = {
+                mode: "announce",
+                to: peerId,
+            };
+
+            if (markerIndex >= 1) {
+                const normalizedChannel = normalizeLowercaseStringOrEmpty(rest[0]);
+                if (normalizedChannel &&
+                    normalizedChannel !== "main" &&
+                    normalizedChannel !== "subagent" &&
+                    normalizedChannel !== "acp") {
+                    inferred.channel = normalizedChannel;
+                }
+            }
+
+            return inferred;
+        }
+
+        function applyCronToolParityToMutationPayload(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const normalized = Object.assign({}, source);
+            const payloadObject = normalized.payload && typeof normalized.payload === "object"
+                ? normalized.payload
+                : null;
+            const deliveryObject = normalized.delivery && typeof normalized.delivery === "object"
+                ? Object.assign({}, normalized.delivery)
+                : null;
+
+            if (!payloadObject || String(payloadObject.kind || "").trim() !== "agentTurn") {
+                return normalized;
+            }
+
+            if (!deliveryObject) {
+                return normalized;
+            }
+
+            const mode = normalizeLowercaseStringOrEmpty(deliveryObject.mode || "none");
+            if (mode === "webhook") {
+                const webhookTo = String(deliveryObject.to || "").trim();
+                if (webhookTo) {
+                    deliveryObject.to = webhookTo.replace(/^https?:\/\//i, function (prefix) {
+                        return prefix.toLowerCase();
+                    });
+                    normalized.delivery = deliveryObject;
+                }
+                return normalized;
+            }
+
+            if (mode !== "announce") {
+                return normalized;
+            }
+
+            const hasTarget =
+                String(deliveryObject.channel || "").trim().length > 0 ||
+                String(deliveryObject.to || "").trim().length > 0;
+            if (hasTarget) {
+                normalized.delivery = deliveryObject;
+                return normalized;
+            }
+
+            const inferred = inferCronAnnounceDeliveryFromSessionKey(state.sessionKey);
+            if (!inferred) {
+                normalized.delivery = deliveryObject;
+                return normalized;
+            }
+
+            normalized.delivery = Object.assign({}, deliveryObject, inferred);
+            return normalized;
+        }
+
         function recoverCronFlatJobShape(input) {
             const source = input && typeof input === "object"
                 ? input
@@ -3528,14 +3650,16 @@
                     payload.failureAlert = failureAlert;
                 }
 
+                const normalizedPayload = applyCronToolParityToMutationPayload(payload);
+
                 if (state.agentCronEditingJobId) {
                     await request("cron.update", {
                         id: state.agentCronEditingJobId,
-                        patch: recoverCronFlatJobShape(payload) || payload,
+                        patch: recoverCronFlatJobShape(normalizedPayload) || normalizedPayload,
                     });
                     state.agentCronEditingJobId = null;
                 } else {
-                    await request("cron.add", recoverCronFlatJobShape(payload) || payload);
+                    await request("cron.add", recoverCronFlatJobShape(normalizedPayload) || normalizedPayload);
                     resetCronFormToDefaults();
                 }
 
@@ -3835,10 +3959,13 @@
             onStateUpdated();
 
             try {
-                const scope = state.agentCronRunsScope === "job"
+                const requestedScope = state.agentCronRunsScope === "job"
                     ? "job"
                     : "all";
                 const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                const scope = requestedScope === "job" && selectedJobId
+                    ? "job"
+                    : "all";
                 const res = await request("cron.runs", {
                     scope: scope,
                     id: scope === "job" && selectedJobId ? selectedJobId : undefined,

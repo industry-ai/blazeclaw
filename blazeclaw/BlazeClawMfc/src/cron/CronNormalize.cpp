@@ -3,10 +3,13 @@
 #include "CronNormalize.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace blazeclaw::cron {
 
 	namespace {
+		constexpr std::size_t kInferredNameMaxLength = 72;
+
 		CronJson& EnsureStateObject(CronJson& job) {
 			if (!job.contains("state") || !job["state"].is_object()) {
 				job["state"] = CronJson::object();
@@ -45,6 +48,296 @@ namespace blazeclaw::cron {
 				return normalized;
 			}
 			return {};
+		}
+
+		bool IsLeapYear(const int year) {
+			if (year % 400 == 0) {
+				return true;
+			}
+			if (year % 100 == 0) {
+				return false;
+			}
+			return year % 4 == 0;
+		}
+
+		int DaysInMonth(const int year, const int month) {
+			switch (month) {
+			case 1:
+			case 3:
+			case 5:
+			case 7:
+			case 8:
+			case 10:
+			case 12:
+				return 31;
+			case 4:
+			case 6:
+			case 9:
+			case 11:
+				return 30;
+			case 2:
+				return IsLeapYear(year) ? 29 : 28;
+			default:
+				return 0;
+			}
+		}
+
+		std::int64_t DaysFromCivil(
+			int year,
+			unsigned month,
+			unsigned day) {
+			year -= month <= 2;
+			const int era = (year >= 0 ? year : year - 399) / 400;
+			const unsigned yoe = static_cast<unsigned>(year - era * 400);
+			const unsigned doy =
+				(153 * (month + (month > 2 ? static_cast<unsigned>(-3) : 9)) + 2) / 5 + day - 1;
+			const unsigned doe =
+				yoe * 365 + yoe / 4 - yoe / 100 + doy;
+			return static_cast<std::int64_t>(era) * 146097 +
+				static_cast<std::int64_t>(doe) -
+				719468;
+		}
+
+		std::optional<int> ParseFixedInt(
+			const std::string& text,
+			const std::size_t offset,
+			const std::size_t count) {
+			if (offset + count > text.size()) {
+				return std::nullopt;
+			}
+
+			int parsed = 0;
+			for (std::size_t index = 0; index < count; ++index) {
+				const unsigned char ch = static_cast<unsigned char>(text[offset + index]);
+				if (std::isdigit(ch) == 0) {
+					return std::nullopt;
+				}
+				parsed = parsed * 10 + (ch - '0');
+			}
+			return parsed;
+		}
+
+		std::optional<std::int64_t> ParseIso8601ToUtcMs(const std::string& value) {
+			const std::string text = TrimCopy(value);
+			if (text.size() < 19) {
+				return std::nullopt;
+			}
+
+			if (text[4] != '-' ||
+				text[7] != '-' ||
+				(text[10] != 'T' && text[10] != 't' && text[10] != ' ') ||
+				text[13] != ':' ||
+				text[16] != ':') {
+				return std::nullopt;
+			}
+
+			const auto year = ParseFixedInt(text, 0, 4);
+			const auto month = ParseFixedInt(text, 5, 2);
+			const auto day = ParseFixedInt(text, 8, 2);
+			const auto hour = ParseFixedInt(text, 11, 2);
+			const auto minute = ParseFixedInt(text, 14, 2);
+			const auto second = ParseFixedInt(text, 17, 2);
+			if (!year.has_value() ||
+				!month.has_value() ||
+				!day.has_value() ||
+				!hour.has_value() ||
+				!minute.has_value() ||
+				!second.has_value()) {
+				return std::nullopt;
+			}
+
+			if (month.value() < 1 || month.value() > 12) {
+				return std::nullopt;
+			}
+			const int maxDay = DaysInMonth(year.value(), month.value());
+			if (day.value() < 1 || day.value() > maxDay) {
+				return std::nullopt;
+			}
+			if (hour.value() < 0 || hour.value() > 23 ||
+				minute.value() < 0 || minute.value() > 59 ||
+				second.value() < 0 || second.value() > 59) {
+				return std::nullopt;
+			}
+
+			std::size_t index = 19;
+			std::int64_t millis = 0;
+			if (index < text.size() && text[index] == '.') {
+				++index;
+				std::size_t digits = 0;
+				std::int64_t fraction = 0;
+				while (index < text.size()) {
+					const unsigned char ch = static_cast<unsigned char>(text[index]);
+					if (std::isdigit(ch) == 0) {
+						break;
+					}
+					if (digits < 3) {
+						fraction = fraction * 10 + (ch - '0');
+					}
+					++digits;
+					++index;
+				}
+				if (digits == 0) {
+					return std::nullopt;
+				}
+				if (digits == 1) {
+					millis = fraction * 100;
+				}
+				else if (digits == 2) {
+					millis = fraction * 10;
+				}
+				else {
+					millis = fraction;
+				}
+			}
+
+			int timezoneOffsetMinutes = 0;
+			if (index < text.size()) {
+				if ((text[index] == 'Z' || text[index] == 'z') && index + 1 == text.size()) {
+					index = text.size();
+				}
+				else if (text[index] == '+' || text[index] == '-') {
+					const int sign = text[index] == '+' ? 1 : -1;
+					++index;
+					const auto offsetHour = ParseFixedInt(text, index, 2);
+					if (!offsetHour.has_value()) {
+						return std::nullopt;
+					}
+					index += 2;
+
+					if (index < text.size() && text[index] == ':') {
+						++index;
+					}
+
+					const auto offsetMinute = ParseFixedInt(text, index, 2);
+					if (!offsetMinute.has_value()) {
+						return std::nullopt;
+					}
+					index += 2;
+					if (index != text.size()) {
+						return std::nullopt;
+					}
+
+					if (offsetHour.value() < 0 || offsetHour.value() > 23 ||
+						offsetMinute.value() < 0 || offsetMinute.value() > 59) {
+						return std::nullopt;
+					}
+
+					timezoneOffsetMinutes = sign *
+						(offsetHour.value() * 60 + offsetMinute.value());
+				}
+				else {
+					return std::nullopt;
+				}
+			}
+
+			const std::int64_t daysSinceEpoch = DaysFromCivil(
+				year.value(),
+				static_cast<unsigned>(month.value()),
+				static_cast<unsigned>(day.value()));
+			const std::int64_t secondsSinceEpoch =
+				daysSinceEpoch * 24 * 60 * 60 +
+				static_cast<std::int64_t>(hour.value()) * 60 * 60 +
+				static_cast<std::int64_t>(minute.value()) * 60 +
+				static_cast<std::int64_t>(second.value());
+
+			return secondsSinceEpoch * 1000 + millis -
+				static_cast<std::int64_t>(timezoneOffsetMinutes) * 60 * 1000;
+		}
+
+		std::optional<std::int64_t> ResolveScheduleAtMs(const CronJson& schedule) {
+			if (schedule.contains("atMs")) {
+				const auto atMs = ParseInt64Loose(schedule["atMs"]);
+				if (atMs.has_value()) {
+					return atMs;
+				}
+			}
+
+			if (!schedule.contains("at")) {
+				return std::nullopt;
+			}
+
+			const auto numericAt = ParseInt64Loose(schedule["at"]);
+			if (numericAt.has_value()) {
+				return numericAt;
+			}
+
+			if (schedule["at"].is_string()) {
+				return ParseIso8601ToUtcMs(schedule["at"].get<std::string>());
+			}
+
+			return std::nullopt;
+		}
+
+		std::string CollapseWhitespace(const std::string& value) {
+			std::string collapsed;
+			collapsed.reserve(value.size());
+			bool previousWhitespace = false;
+			for (char ch : value) {
+				const bool isWhitespace = std::isspace(static_cast<unsigned char>(ch)) != 0;
+				if (isWhitespace) {
+					if (!previousWhitespace) {
+						collapsed.push_back(' ');
+					}
+					previousWhitespace = true;
+					continue;
+				}
+
+				collapsed.push_back(ch);
+				previousWhitespace = false;
+			}
+
+			return TrimCopy(collapsed);
+		}
+
+		std::string TruncateForName(const std::string& value) {
+			if (value.size() <= kInferredNameMaxLength) {
+				return value;
+			}
+
+			if (kInferredNameMaxLength <= 3) {
+				return value.substr(0, kInferredNameMaxLength);
+			}
+
+			return value.substr(0, kInferredNameMaxLength - 3) + "...";
+		}
+
+		std::string InferCronName(
+			const CronJson& params,
+			const CronJson& normalizedPayload,
+			const CronJson& normalizedSchedule) {
+			const std::string explicitName =
+				TrimCopy(params.value("name", std::string()));
+			if (!explicitName.empty()) {
+				return explicitName;
+			}
+
+			std::string candidate;
+			if (normalizedPayload.is_object()) {
+				const std::string payloadKind = ToLowerCopy(
+					TrimCopy(normalizedPayload.value("kind", std::string())));
+				if (payloadKind == "agentturn") {
+					candidate = TrimCopy(normalizedPayload.value("message", std::string()));
+				}
+				else {
+					candidate = TrimCopy(normalizedPayload.value("text", std::string()));
+				}
+			}
+
+			candidate = TruncateForName(CollapseWhitespace(candidate));
+			if (!candidate.empty()) {
+				return candidate;
+			}
+
+			const std::string scheduleKind = ToLowerCopy(
+				TrimCopy(normalizedSchedule.value("kind", std::string("every"))));
+			if (scheduleKind == "at") {
+				return "cron-at";
+			}
+			if (scheduleKind == "cron") {
+				return "cron-expression";
+			}
+
+			return "cron-job";
 		}
 
 		CronJson NormalizeScheduleObject(const CronJson& scheduleInput) {
@@ -110,13 +403,7 @@ namespace blazeclaw::cron {
 			}
 
 			// at
-			std::optional<std::int64_t> atMs;
-			if (schedule.contains("atMs")) {
-				atMs = ParseInt64Loose(schedule["atMs"]);
-			}
-			if (!atMs.has_value() && schedule.contains("at")) {
-				atMs = ParseInt64Loose(schedule["at"]);
-			}
+			const std::optional<std::int64_t> atMs = ResolveScheduleAtMs(schedule);
 			if (atMs.has_value()) {
 				schedule["atMs"] = atMs.value();
 			}
@@ -370,10 +657,6 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronNormalize::NormalizeAddInput(const CronJson& params) {
-		const std::string name = TrimCopy(params.value("name", std::string()));
-		if (name.empty()) {
-			throw std::invalid_argument("`name` must be a non-empty string");
-		}
 		if (!params.contains("schedule")) {
 			throw std::invalid_argument("`schedule` must be an object");
 		}
@@ -385,9 +668,13 @@ namespace blazeclaw::cron {
 		const CronJson normalizedPayload = NormalizePayloadObject(params["payload"]);
 		const std::string scheduleKind =
 			ToLowerCopy(normalizedSchedule.value("kind", std::string()));
+		const std::string resolvedName = InferCronName(
+			params,
+			normalizedPayload,
+			normalizedSchedule);
 
 		CronJson normalized = {
-			{ "name", name },
+			{ "name", resolvedName },
 			{ "description", params.value("description", std::string()) },
 			{ "enabled", params.value("enabled", true) },
 			{ "schedule", normalizedSchedule },

@@ -21,6 +21,157 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron normalize add accepts ISO schedule.at and sets atMs", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "at" }, { "at", "2026-05-17T12:34:56Z" } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized["schedule"].value("kind", std::string()) == "at");
+	REQUIRE(normalized["schedule"].contains("atMs"));
+	REQUIRE(normalized["schedule"]["atMs"].is_number_integer());
+	REQUIRE(normalized["schedule"].value("atMs", static_cast<std::int64_t>(0)) > 0);
+}
+
+TEST_CASE("Cron normalize add infers name from payload when omitted", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "nightly sync for project alpha" } } }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("name"));
+	REQUIRE(normalized["name"].is_string());
+	REQUIRE_FALSE(normalized.value("name", std::string()).empty());
+	REQUIRE(normalized.value("name", std::string()).find("nightly sync") != std::string::npos);
+}
+
+TEST_CASE("Cron normalize add uses fallback inferred name when payload text is empty", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "at" }, { "at", "2026-05-17T12:34:56Z" } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "" } } }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("name"));
+	REQUIRE(normalized["name"].is_string());
+	REQUIRE(normalized.value("name", std::string()) == "cron-at");
+}
+
+TEST_CASE("Cron add response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-add-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"id\":\"cron-1\",\"name\":\"job\",\"enabled\":true,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"}}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.add", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-add-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"id\":\"cron-1\",\"enabled\":true,\"schedule\":{},\"payload\":{}}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.add", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron update response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-update-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"id\":\"cron-1\",\"name\":\"job\",\"enabled\":false,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"}}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.update", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-update-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"id\":\"cron-1\",\"name\":\"job\",\"enabled\":\"false\",\"schedule\":{},\"payload\":{}}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.update", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron remove response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-remove-valid",
+		.ok = true,
+		.payloadJson = std::string("{\"ok\":true,\"removed\":true}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.remove", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-remove-invalid",
+		.ok = true,
+		.payloadJson = std::string("{\"ok\":true,\"removed\":\"yes\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.remove", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-run-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"queueDepth\":1,\"runState\":\"queued\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":\"1700000000000\",\"runState\":\"queued\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Wake response validator enforces required fields", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "wake-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"mode\":\"now\",\"text\":\"wake\",\"requestedAtMs\":1700000000000}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("wake", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "wake-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"mode\":\"now\",\"text\":\"wake\",\"requestedAtMs\":\"1700000000000\"}"),
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("wake", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Cron runs validator rejects statuses array above max cardinality", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-statuses-too-many",

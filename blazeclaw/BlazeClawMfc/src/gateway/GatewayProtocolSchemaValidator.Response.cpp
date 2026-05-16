@@ -615,6 +615,90 @@ namespace blazeclaw::gateway::protocol {
 
 				return true;
 			} },
+			{ "cron.add", [&]() {
+				if (!IsFieldValueType(payload, "id", '"') ||
+					!IsFieldValueType(payload, "name", '"') ||
+					!IsFieldBoolean(payload, "enabled") ||
+					!IsFieldValueType(payload, "schedule", '{') ||
+					!IsFieldValueType(payload, "payload", '{')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.add` requires `id`/`name` strings, `enabled` boolean, and object `schedule`/`payload` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "cron.update", [&]() {
+				if (!IsFieldValueType(payload, "id", '"') ||
+					!IsFieldValueType(payload, "name", '"') ||
+					!IsFieldBoolean(payload, "enabled") ||
+					!IsFieldValueType(payload, "schedule", '{') ||
+					!IsFieldValueType(payload, "payload", '{')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.update` requires `id`/`name` strings, `enabled` boolean, and object `schedule`/`payload` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "cron.remove", [&]() {
+				if (!IsFieldBoolean(payload, "ok") ||
+					!IsFieldBoolean(payload, "removed")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.remove` requires `ok` and `removed` boolean fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "cron.run", [&]() {
+				if (!IsFieldBoolean(payload, "ok") ||
+					!IsFieldValueType(payload, "runId", '"') ||
+					!IsFieldBoolean(payload, "enqueued") ||
+					!IsFieldBoolean(payload, "started") ||
+					!IsFieldValueType(payload, "reason", '"') ||
+					!IsFieldValueType(payload, "cronId", '"') ||
+					!IsFieldValueType(payload, "mode", '"') ||
+					!IsFieldNumber(payload, "queuedAtMs") ||
+					!IsFieldValueType(payload, "runState", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.run` requires `ok`, `runId`, `enqueued`, `started`, `reason`, `cronId`, `mode`, `queuedAtMs`, and `runState` fields.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "queueDepth") &&
+					!IsFieldNumber(payload, "queueDepth")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`cron.run` optional `queueDepth` must be number when present.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "wake", [&]() {
+				if (!IsFieldBoolean(payload, "ok") ||
+					!IsFieldValueType(payload, "mode", '"') ||
+					!IsFieldValueType(payload, "text", '"') ||
+					!IsFieldNumber(payload, "requestedAtMs")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`wake` requires `ok` boolean, `mode`/`text` strings, and `requestedAtMs` number fields.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.embeddings.generate", [&]() {
 				if (!IsFieldValueType(payload, "vector", '[') ||
 					!IsFieldNumber(payload, "dimension") ||
