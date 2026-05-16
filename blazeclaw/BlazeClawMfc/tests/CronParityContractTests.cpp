@@ -95,6 +95,21 @@ TEST_CASE("Cron list response validator enforces pagination shape", "[cron][sche
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Cron list response validator enforces non-empty job entry tokens", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-list-entry-missing-fields",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"jobs\":[{\"id\":\"cron-1\",\"name\":\"nightly\",\"enabled\":true,\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"}}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.list", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Cron runs response validator enforces entries contract", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -114,6 +129,21 @@ TEST_CASE("Cron runs response validator enforces entries contract", "[cron][sche
 			"{\"entries\":{},\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
 		.error = std::nullopt,
 	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator enforces non-empty entry tokens", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-entry-missing-fields",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"action\":\"finished\",\"status\":\"ok\"}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
 	REQUIRE(issue.code == "schema_invalid_response");
 }

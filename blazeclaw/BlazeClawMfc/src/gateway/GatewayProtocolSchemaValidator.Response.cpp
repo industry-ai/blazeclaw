@@ -20,6 +20,20 @@ namespace blazeclaw::gateway::protocol {
 		constexpr const char* kChannelAdapterFieldTokens[] = { "id", "label", "defaultAccountId" };
 		constexpr const char* kFileFieldTokens[] = { "path", "size", "updatedMs", "content" };
 		constexpr const char* kFileListFieldTokens[] = { "path", "size", "updatedMs" };
+		constexpr const char* kCronJobFieldTokens[] = {
+			"id",
+			"name",
+			"enabled",
+			"schedule",
+			"payload"
+		};
+		constexpr const char* kCronRunFieldTokens[] = {
+			"ts",
+			"jobId",
+			"runId",
+			"action",
+			"status"
+		};
 		bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
 			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
 				if (eventName == nullptr) {
@@ -556,6 +570,15 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!ValidateArrayWithOptionalEntryTokens(
+					payload,
+					"jobs",
+					kCronJobFieldTokens,
+					issue,
+					"`cron.list` non-empty `jobs` entries must include `id`, `name`, `enabled`, `schedule`, and `payload` fields.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.runs", [&]() {
@@ -578,6 +601,15 @@ namespace blazeclaw::gateway::protocol {
 						issue,
 						"schema_invalid_response",
 						"`cron.runs` requires `nextOffset` to be number or null.");
+					return false;
+				}
+
+				if (!ValidateArrayWithOptionalEntryTokens(
+					payload,
+					"entries",
+					kCronRunFieldTokens,
+					issue,
+					"`cron.runs` non-empty `entries` must include `ts`, `jobId`, `runId`, `action`, and `status` fields.")) {
 					return false;
 				}
 
