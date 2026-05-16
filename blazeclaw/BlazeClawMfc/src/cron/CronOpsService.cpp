@@ -43,7 +43,7 @@ namespace blazeclaw::cron {
 		EnsureLoadedLocked();
 		RunStartupCatchupLocked();
 		const std::int64_t nowMs = UtcNowMs();
-		SyncDueRunsLocked(nowMs, false);
+		RefreshSchedulesOnlyLocked(nowMs);
 		const std::int64_t nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
 		return {
 			{ "enabled", true },
@@ -57,12 +57,13 @@ namespace blazeclaw::cron {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 		RunStartupCatchupLocked();
-		SyncDueRunsLocked(UtcNowMs(), false);
+		RefreshSchedulesOnlyLocked(UtcNowMs());
 
 		const std::size_t requestedLimit =
 			ClampLimit(params.value("limit", 20), 1, 200, 20);
 		const std::size_t requestedOffset =
 			ClampLimit(params.value("offset", 0), 0, 1'000'000, 0);
+		const bool includeDisabled = params.value("includeDisabled", false);
 		const std::string enabledFilter =
 			ToLowerCopy(TrimCopy(params.value("enabled", std::string())));
 		const std::string query =
@@ -76,10 +77,14 @@ namespace blazeclaw::cron {
 		filtered.reserve(m_store.Jobs().size());
 		for (const auto& job : m_store.Jobs()) {
 			const bool enabled = job.value("enabled", true);
-			if (enabledFilter == "enabled" && !enabled) {
+			const std::string resolvedEnabledFilter =
+				enabledFilter == "all" || enabledFilter == "enabled" || enabledFilter == "disabled"
+				? enabledFilter
+				: (includeDisabled ? "all" : "enabled");
+			if (resolvedEnabledFilter == "enabled" && !enabled) {
 				continue;
 			}
-			if (enabledFilter == "disabled" && enabled) {
+			if (resolvedEnabledFilter == "disabled" && enabled) {
 				continue;
 			}
 			if (!query.empty()) {
@@ -277,6 +282,7 @@ namespace blazeclaw::cron {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 		RunStartupCatchupLocked();
+		RefreshSchedulesOnlyLocked(UtcNowMs());
 
 		const std::size_t requestedLimit =
 			ClampLimit(params.value("limit", 20), 1, 200, 20);
@@ -365,7 +371,7 @@ namespace blazeclaw::cron {
 			SyncDueRunsLocked(nowMs, false);
 		}
 		else {
-			SyncDueRunsLocked(nowMs, false);
+			RefreshSchedulesOnlyLocked(nowMs);
 		}
 
 		return {
@@ -411,6 +417,14 @@ namespace blazeclaw::cron {
 
 		m_startupCatchupDone = true;
 		SyncDueRunsLocked(UtcNowMs(), false);
+	}
+
+	void CronOpsService::RefreshSchedulesOnlyLocked(const std::int64_t nowMs) {
+		const bool changed = m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
+		if (changed) {
+			m_store.SaveJobs();
+		}
+		m_lastSyncAtMs = nowMs;
 	}
 
 	void CronOpsService::SyncDueRunsLocked(

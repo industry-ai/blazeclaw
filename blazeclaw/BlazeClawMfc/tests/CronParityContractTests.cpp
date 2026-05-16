@@ -71,6 +71,31 @@ TEST_CASE("Cron update validator accepts id and patch", "[cron][schema]") {
 	REQUIRE(issue.code.empty());
 }
 
+TEST_CASE("Cron list validator accepts includeDisabled", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3b",
+		.method = "cron.list",
+		.paramsJson = std::string("{\"includeDisabled\":true,\"limit\":20}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron add validator accepts failureAlert false", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3c",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"failureAlert\":false}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
 TEST_CASE("Cron normalize coerces legacy schedule/payload shapes", "[cron][normalize]") {
 	const CronJson params = {
 		{ "name", "legacy-job" },
@@ -83,6 +108,30 @@ TEST_CASE("Cron normalize coerces legacy schedule/payload shapes", "[cron][norma
 	REQUIRE(normalized["schedule"].value("expr", std::string()) == "0 9 * * *");
 	REQUIRE(normalized["payload"].value("kind", std::string()) == "systemEvent");
 	REQUIRE(normalized["payload"].value("text", std::string()) == "daily report");
+}
+
+TEST_CASE("Cron normalize patch clears nullable agent and session fields", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-1" },
+		{ "name", "job" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hello" } } },
+		{ "agentId", "agent-a" },
+		{ "sessionKey", "session-a" },
+		{ "state", CronJson::object() }
+	};
+
+	const CronJson patch = {
+		{ "agentId", nullptr },
+		{ "sessionKey", "" },
+		{ "sessionTarget", "current" }
+	};
+
+	CronNormalize::ApplyPatch(job, patch);
+	REQUIRE_FALSE(job.contains("agentId"));
+	REQUIRE_FALSE(job.contains("sessionKey"));
+	REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
 }
 
 TEST_CASE("Cron store loads legacy array shape and rewrites envelope", "[cron][store]") {

@@ -39,6 +39,7 @@ namespace blazeclaw::cron {
 		CronJson* FindJobByIdLocked(const std::string& id);
 		void EnsureLoadedLocked();
 		void RunStartupCatchupLocked();
+		void RefreshSchedulesOnlyLocked(std::int64_t nowMs);
 		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
 	};
 

@@ -516,6 +516,7 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!RequireFieldKindIfPresent(fieldKinds, "limit", JsonFieldKind::Number, issue, "cron.list", "numeric") ||
 				!RequireFieldKindIfPresent(fieldKinds, "offset", JsonFieldKind::Number, issue, "cron.list", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "includeDisabled", JsonFieldKind::Boolean, issue, "cron.list", "boolean") ||
 				!RequireFieldKindIfPresent(fieldKinds, "enabled", JsonFieldKind::String, issue, "cron.list", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "query", JsonFieldKind::String, issue, "cron.list", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "sortBy", JsonFieldKind::String, issue, "cron.list", "a string") ||
@@ -530,7 +531,9 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (ContainsFieldName({ "limit", "offset", "enabled", "query", "sortBy", "sortDir" }, field)) {
+				if (ContainsFieldName(
+					{ "limit", "offset", "includeDisabled", "enabled", "query", "sortBy", "sortDir" },
+					field)) {
 					continue;
 				}
 
@@ -571,8 +574,18 @@ namespace blazeclaw::gateway::protocol {
 				!RequireFieldKindIfPresent(fieldKinds, "delivery", JsonFieldKind::Object, issue, "cron.add", "an object") ||
 				!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "cron.add", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "sessionKey", JsonFieldKind::String, issue, "cron.add", "a string") ||
-				!RequireFieldKindIfPresent(fieldKinds, "retry", JsonFieldKind::Object, issue, "cron.add", "an object") ||
-				!RequireFieldKindIfPresent(fieldKinds, "failureAlert", JsonFieldKind::Object, issue, "cron.add", "an object")) {
+				!RequireFieldKindIfPresent(fieldKinds, "retry", JsonFieldKind::Object, issue, "cron.add", "an object")) {
+				return false;
+			}
+
+			const auto failureAlertIt = fieldKinds.find("failureAlert");
+			if (failureAlertIt != fieldKinds.end() &&
+				failureAlertIt->second != JsonFieldKind::Object &&
+				failureAlertIt->second != JsonFieldKind::Boolean) {
+				SetIssue(
+					issue,
+					"schema_invalid_type",
+					"Method `cron.add` expects `params.failureAlert` to be an object or boolean.");
 				return false;
 			}
 

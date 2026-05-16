@@ -210,6 +210,16 @@ namespace blazeclaw::cron {
 					delivery["to"] = to;
 				}
 			}
+
+			if (delivery.contains("accountId") && delivery["accountId"].is_string()) {
+				const std::string accountId = TrimCopy(delivery["accountId"].get<std::string>());
+				if (accountId.empty()) {
+					delivery.erase("accountId");
+				}
+				else {
+					delivery["accountId"] = accountId;
+				}
+			}
 		}
 
 		void NormalizeRetryObject(CronJson& root) {
@@ -341,10 +351,22 @@ namespace blazeclaw::cron {
 			normalized["delivery"] = params["delivery"];
 		}
 		if (params.contains("agentId") && params["agentId"].is_string()) {
-			normalized["agentId"] = TrimCopy(params["agentId"].get<std::string>());
+			const std::string agentId = TrimCopy(params["agentId"].get<std::string>());
+			if (!agentId.empty()) {
+				normalized["agentId"] = agentId;
+			}
+		}
+		else if (params.contains("agentId") && params["agentId"].is_null()) {
+			normalized["agentId"] = nullptr;
 		}
 		if (params.contains("sessionKey") && params["sessionKey"].is_string()) {
-			normalized["sessionKey"] = TrimCopy(params["sessionKey"].get<std::string>());
+			const std::string sessionKey = TrimCopy(params["sessionKey"].get<std::string>());
+			if (!sessionKey.empty()) {
+				normalized["sessionKey"] = sessionKey;
+			}
+		}
+		else if (params.contains("sessionKey") && params["sessionKey"].is_null()) {
+			normalized["sessionKey"] = nullptr;
 		}
 		if (params.contains("retry") && params["retry"].is_object()) {
 			normalized["retry"] = params["retry"];
@@ -406,7 +428,17 @@ namespace blazeclaw::cron {
 			job["failureAlert"] = false;
 		}
 		if (patch.contains("sessionTarget") && patch["sessionTarget"].is_string()) {
-			job["sessionTarget"] = TrimCopy(patch["sessionTarget"].get<std::string>());
+			const std::string sessionTargetRaw = TrimCopy(patch["sessionTarget"].get<std::string>());
+			const std::string sessionTarget = ToLowerCopy(sessionTargetRaw);
+			if (sessionTarget == "main" || sessionTarget == "isolated") {
+				job["sessionTarget"] = sessionTarget;
+			}
+			else if (sessionTarget == "current") {
+				job["sessionTarget"] = "isolated";
+			}
+			else if (sessionTarget.rfind("session:", 0) == 0) {
+				job["sessionTarget"] = sessionTargetRaw;
+			}
 		}
 		if (patch.contains("wakeMode") && patch["wakeMode"].is_string()) {
 			const std::string wakeMode =
@@ -417,10 +449,28 @@ namespace blazeclaw::cron {
 			job["deleteAfterRun"] = patch["deleteAfterRun"].get<bool>();
 		}
 		if (patch.contains("agentId") && patch["agentId"].is_string()) {
-			job["agentId"] = TrimCopy(patch["agentId"].get<std::string>());
+			const std::string agentId = TrimCopy(patch["agentId"].get<std::string>());
+			if (agentId.empty()) {
+				job.erase("agentId");
+			}
+			else {
+				job["agentId"] = agentId;
+			}
+		}
+		else if (patch.contains("agentId") && patch["agentId"].is_null()) {
+			job.erase("agentId");
 		}
 		if (patch.contains("sessionKey") && patch["sessionKey"].is_string()) {
-			job["sessionKey"] = TrimCopy(patch["sessionKey"].get<std::string>());
+			const std::string sessionKey = TrimCopy(patch["sessionKey"].get<std::string>());
+			if (sessionKey.empty()) {
+				job.erase("sessionKey");
+			}
+			else {
+				job["sessionKey"] = sessionKey;
+			}
+		}
+		else if (patch.contains("sessionKey") && patch["sessionKey"].is_null()) {
+			job.erase("sessionKey");
 		}
 	}
 
