@@ -516,6 +516,197 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (request.paramsJson.has_value() &&
+				fieldKinds.find("delivery") != fieldKinds.end()) {
+				const std::string& json = request.paramsJson.value();
+				std::size_t deliveryTokenPos = 0;
+				if (ContainsFieldToken(json, "delivery", deliveryTokenPos)) {
+					std::size_t deliveryValuePos = json.find(':', deliveryTokenPos);
+					if (deliveryValuePos != std::string::npos) {
+						deliveryValuePos = SkipWhitespace(json, deliveryValuePos + 1);
+						if (deliveryValuePos < json.size() && json[deliveryValuePos] == '{') {
+							std::size_t deliveryCursor = deliveryValuePos;
+							if (!TryConsumeBalancedComposite(json, deliveryCursor, '{', '}')) {
+								SetIssue(
+									issue,
+									"schema_invalid_params",
+									"Method `cron.add` has invalid `params.delivery` JSON shape.");
+								return false;
+							}
+
+							const std::string deliveryJson =
+								json.substr(deliveryValuePos, deliveryCursor - deliveryValuePos);
+							ParsedObjectFieldKinds deliveryKinds;
+							if (!TryParseTopLevelObjectFieldKinds(deliveryJson, deliveryKinds)) {
+								SetIssue(
+									issue,
+									"schema_invalid_params",
+									"Method `cron.add` has invalid `params.delivery` object shape.");
+								return false;
+							}
+
+							auto requireDeliveryFieldKind = [&](const char* fieldName,
+								JsonFieldKind expected,
+								const char* typeLabel) {
+								const auto it = deliveryKinds.find(fieldName);
+								if (it == deliveryKinds.end()) {
+									return true;
+								}
+								if (it->second == expected) {
+									return true;
+								}
+
+								SetIssue(
+									issue,
+									"schema_invalid_type",
+									"Method `cron.add` expects `params.delivery." +
+									std::string(fieldName) + "` to be " + typeLabel + ".");
+								return false;
+							};
+
+							if (!requireDeliveryFieldKind("mode", JsonFieldKind::String, "a string") ||
+								!requireDeliveryFieldKind("channel", JsonFieldKind::String, "a string") ||
+								!requireDeliveryFieldKind("to", JsonFieldKind::String, "a string") ||
+								!requireDeliveryFieldKind("accountId", JsonFieldKind::String, "a string") ||
+								!requireDeliveryFieldKind("bestEffort", JsonFieldKind::Boolean, "boolean") ||
+								!requireDeliveryFieldKind("failureDestination", JsonFieldKind::Object, "an object")) {
+								return false;
+							}
+
+							if (deliveryKinds.find("mode") != deliveryKinds.end()) {
+								std::string mode;
+								if (TryReadTopLevelStringField(deliveryJson, "mode", mode)) {
+									const std::string normalizedMode = Trim(mode);
+									if (normalizedMode != "none" &&
+										normalizedMode != "announce" &&
+										normalizedMode != "webhook") {
+										SetIssue(
+											issue,
+											"schema_invalid_value",
+											"Method `cron.add` requires `params.delivery.mode` to be one of: `none`, `announce`, `webhook`.");
+										return false;
+									}
+
+									if (normalizedMode == "webhook") {
+										std::string toValue;
+										if (!TryReadTopLevelStringField(deliveryJson, "to", toValue) ||
+											Trim(toValue).empty()) {
+											SetIssue(
+												issue,
+												"schema_invalid_value",
+												"Method `cron.add` requires `params.delivery.to` to be a non-empty string when `params.delivery.mode` is `webhook`.");
+											return false;
+										}
+									}
+								}
+							}
+
+							if (deliveryKinds.find("failureDestination") != deliveryKinds.end()) {
+								std::size_t failureDestinationTokenPos = 0;
+								if (ContainsFieldToken(deliveryJson, "failureDestination", failureDestinationTokenPos)) {
+									std::size_t failureDestinationValuePos =
+										deliveryJson.find(':', failureDestinationTokenPos);
+									if (failureDestinationValuePos != std::string::npos) {
+										failureDestinationValuePos =
+											SkipWhitespace(deliveryJson, failureDestinationValuePos + 1);
+										if (failureDestinationValuePos < deliveryJson.size() &&
+											deliveryJson[failureDestinationValuePos] == '{') {
+											std::size_t failureDestinationCursor = failureDestinationValuePos;
+											if (!TryConsumeBalancedComposite(
+												deliveryJson,
+												failureDestinationCursor,
+												'{',
+												'}')) {
+												SetIssue(
+													issue,
+													"schema_invalid_params",
+													"Method `cron.add` has invalid `params.delivery.failureDestination` JSON shape.");
+												return false;
+											}
+
+											const std::string failureDestinationJson =
+												deliveryJson.substr(
+													failureDestinationValuePos,
+													failureDestinationCursor - failureDestinationValuePos);
+											ParsedObjectFieldKinds failureDestinationKinds;
+											if (!TryParseTopLevelObjectFieldKinds(
+												failureDestinationJson,
+												failureDestinationKinds)) {
+												SetIssue(
+													issue,
+													"schema_invalid_params",
+													"Method `cron.add` has invalid `params.delivery.failureDestination` object shape.");
+												return false;
+											}
+
+											auto requireFailureDestinationFieldKind = [&](const char* fieldName,
+												JsonFieldKind expected,
+												const char* typeLabel) {
+												const auto it = failureDestinationKinds.find(fieldName);
+												if (it == failureDestinationKinds.end()) {
+													return true;
+												}
+												if (it->second == expected) {
+													return true;
+												}
+
+												SetIssue(
+													issue,
+													"schema_invalid_type",
+													"Method `cron.add` expects `params.delivery.failureDestination." +
+													std::string(fieldName) + "` to be " + typeLabel + ".");
+												return false;
+											};
+
+											if (!requireFailureDestinationFieldKind("mode", JsonFieldKind::String, "a string") ||
+												!requireFailureDestinationFieldKind("channel", JsonFieldKind::String, "a string") ||
+												!requireFailureDestinationFieldKind("to", JsonFieldKind::String, "a string") ||
+												!requireFailureDestinationFieldKind("accountId", JsonFieldKind::String, "a string")) {
+												return false;
+											}
+
+											if (failureDestinationKinds.find("mode") != failureDestinationKinds.end()) {
+												std::string failureDestinationMode;
+												if (TryReadTopLevelStringField(
+													failureDestinationJson,
+													"mode",
+													failureDestinationMode)) {
+													const std::string normalizedFailureDestinationMode =
+														Trim(failureDestinationMode);
+													if (normalizedFailureDestinationMode != "announce" &&
+														normalizedFailureDestinationMode != "webhook") {
+														SetIssue(
+															issue,
+															"schema_invalid_value",
+															"Method `cron.add` requires `params.delivery.failureDestination.mode` to be one of: `announce`, `webhook`.");
+														return false;
+													}
+
+													if (normalizedFailureDestinationMode == "webhook") {
+														std::string failureDestinationTo;
+														if (!TryReadTopLevelStringField(
+															failureDestinationJson,
+															"to",
+															failureDestinationTo) ||
+															Trim(failureDestinationTo).empty()) {
+															SetIssue(
+																issue,
+																"schema_invalid_value",
+																"Method `cron.add` requires `params.delivery.failureDestination.to` to be a non-empty string when `params.delivery.failureDestination.mode` is `webhook`.");
+															return false;
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName(
 					{ "active",

@@ -220,6 +220,50 @@ namespace blazeclaw::cron {
 					delivery["accountId"] = accountId;
 				}
 			}
+
+			if (delivery.contains("bestEffort") && !delivery["bestEffort"].is_boolean()) {
+				delivery.erase("bestEffort");
+			}
+
+			if (delivery.contains("failureDestination") && delivery["failureDestination"].is_object()) {
+				CronJson& failureDestination = delivery["failureDestination"];
+				std::string failureMode = ToLowerCopy(
+					TrimCopy(failureDestination.value("mode", std::string("announce"))));
+				if (failureMode != "announce" && failureMode != "webhook") {
+					failureMode = "announce";
+				}
+				failureDestination["mode"] = failureMode;
+
+				if (failureDestination.contains("channel") && failureDestination["channel"].is_string()) {
+					const std::string channel = TrimCopy(failureDestination["channel"].get<std::string>());
+					if (channel.empty()) {
+						failureDestination.erase("channel");
+					}
+					else {
+						failureDestination["channel"] = channel;
+					}
+				}
+
+				if (failureDestination.contains("to") && failureDestination["to"].is_string()) {
+					const std::string to = TrimCopy(failureDestination["to"].get<std::string>());
+					if (to.empty()) {
+						failureDestination.erase("to");
+					}
+					else {
+						failureDestination["to"] = to;
+					}
+				}
+
+				if (failureDestination.contains("accountId") && failureDestination["accountId"].is_string()) {
+					const std::string accountId = TrimCopy(failureDestination["accountId"].get<std::string>());
+					if (accountId.empty()) {
+						failureDestination.erase("accountId");
+					}
+					else {
+						failureDestination["accountId"] = accountId;
+					}
+				}
+			}
 		}
 
 		void NormalizeRetryObject(CronJson& root) {

@@ -71,6 +71,34 @@ TEST_CASE("Cron update validator accepts id and patch", "[cron][schema]") {
 	REQUIRE(issue.code.empty());
 }
 
+TEST_CASE("Cron add validator rejects delivery webhook without target", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3d",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"delivery\":{\"mode\":\"webhook\"}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.delivery.to") != std::string::npos);
+}
+
+TEST_CASE("Cron add validator rejects invalid failureDestination mode", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "3e",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"name\":\"job\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"ping\"},\"delivery\":{\"mode\":\"announce\",\"failureDestination\":{\"mode\":\"none\"}}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.delivery.failureDestination.mode") != std::string::npos);
+}
+
 TEST_CASE("Cron runs validator rejects scope job without id", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-job-missing-id",
@@ -197,6 +225,34 @@ TEST_CASE("Cron normalize patch clears nullable agent and session fields", "[cro
 	REQUIRE_FALSE(job.contains("agentId"));
 	REQUIRE_FALSE(job.contains("sessionKey"));
 	REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
+}
+
+TEST_CASE("Cron normalize canonicalizes nested failureDestination fields", "[cron][normalize]") {
+	const CronJson params = {
+		{ "name", "delivery-shapes" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "ping" } } },
+		{ "delivery",
+			{
+				{ "mode", "ANNOUNCE" },
+				{ "bestEffort", "yes" },
+				{ "failureDestination",
+					{
+						{ "mode", "INVALID" },
+						{ "to", "  https://example.test/hook  " },
+						{ "accountId", "  acc-1  " }
+					} }
+			} }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("delivery"));
+	REQUIRE(normalized["delivery"].value("mode", std::string()) == "announce");
+	REQUIRE_FALSE(normalized["delivery"].contains("bestEffort"));
+	REQUIRE(normalized["delivery"].contains("failureDestination"));
+	REQUIRE(normalized["delivery"]["failureDestination"].value("mode", std::string()) == "announce");
+	REQUIRE(normalized["delivery"]["failureDestination"].value("to", std::string()) == "https://example.test/hook");
+	REQUIRE(normalized["delivery"]["failureDestination"].value("accountId", std::string()) == "acc-1");
 }
 
 TEST_CASE("Cron store loads legacy array shape and rewrites envelope", "[cron][store]") {

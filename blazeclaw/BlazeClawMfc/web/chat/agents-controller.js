@@ -3249,6 +3249,54 @@
             return payload;
         }
 
+        function buildCronDelivery(form) {
+            const mode = String(form && form.deliveryMode || "none").trim();
+            if (mode === "none") {
+                return { mode: "none" };
+            }
+
+            const delivery = {
+                mode: mode === "webhook" ? "webhook" : "announce",
+            };
+
+            const to = String(form && form.deliveryTo || "").trim();
+            if (to) {
+                delivery.to = to;
+            }
+
+            return delivery;
+        }
+
+        function buildCronFailureAlert(form) {
+            const mode = String(form && form.failureAlertMode || "inherit").trim();
+            if (mode === "disabled") {
+                return false;
+            }
+            if (mode !== "custom") {
+                return undefined;
+            }
+
+            const afterText = String(form && form.failureAlertAfter || "").trim();
+            const cooldownText = String(form && form.failureAlertCooldownSeconds || "").trim();
+            const failureAlert = {};
+            if (afterText) {
+                const after = toNumber(afterText, 0);
+                if (after > 0) {
+                    failureAlert.after = Math.floor(after);
+                }
+            }
+            if (cooldownText) {
+                const cooldownSeconds = toNumber(cooldownText, -1);
+                if (cooldownSeconds >= 0) {
+                    failureAlert.cooldownMs = Math.floor(cooldownSeconds * 1000);
+                }
+            }
+
+            return Object.keys(failureAlert).length > 0
+                ? failureAlert
+                : undefined;
+        }
+
         function resetCronFormToDefaults() {
             state.agentCronEditingJobId = null;
             state.agentCronForm = {
@@ -3420,10 +3468,13 @@
                     enabled: normalizedForm.enabled !== false,
                     schedule: buildCronSchedule(normalizedForm),
                     payload: buildCronPayload(normalizedForm),
-                    delivery: String(normalizedForm.deliveryMode || "none").trim() === "none"
-                        ? { mode: "none" }
-                        : undefined,
+                    delivery: buildCronDelivery(normalizedForm),
                 };
+
+                const failureAlert = buildCronFailureAlert(normalizedForm);
+                if (failureAlert !== undefined) {
+                    payload.failureAlert = failureAlert;
+                }
 
                 if (state.agentCronEditingJobId) {
                     await request("cron.update", {
