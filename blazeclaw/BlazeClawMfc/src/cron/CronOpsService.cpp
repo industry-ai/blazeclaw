@@ -1001,7 +1001,12 @@ namespace blazeclaw::cron {
 	}
 
 	void CronOpsService::RefreshSchedulesOnlyLocked(const std::int64_t nowMs) {
-		const bool changed = m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
+		CronRecomputeOptions recomputeOptions;
+		recomputeOptions.preserveDueSlots = true;
+		const bool changed = m_timer.RecomputeSchedules(
+			m_store.Jobs(),
+			nowMs,
+			recomputeOptions);
 		if (changed) {
 			m_store.SaveJobs();
 		}
@@ -1011,7 +1016,12 @@ namespace blazeclaw::cron {
 	void CronOpsService::SyncDueRunsLocked(
 		const std::int64_t nowMs,
 		const bool forceRunDue) {
-		bool changed = m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
+		CronRecomputeOptions executionRecomputeOptions;
+		executionRecomputeOptions.preserveDueSlots = false;
+		bool changed = m_timer.RecomputeSchedules(
+			m_store.Jobs(),
+			nowMs,
+			executionRecomputeOptions);
 		std::size_t executedTotal = 0;
 		std::size_t loops = 0;
 
@@ -1024,7 +1034,10 @@ namespace blazeclaw::cron {
 
 			executedTotal += executed;
 			changed = true;
-			m_timer.RecomputeSchedules(m_store.Jobs(), nowMs);
+			m_timer.RecomputeSchedules(
+				m_store.Jobs(),
+				nowMs,
+				executionRecomputeOptions);
 			++loops;
 		}
 

@@ -553,6 +553,86 @@ namespace blazeclaw::cron {
 			}
 		}
 
+		bool HasFlattenedPayloadFields(const CronJson& value) {
+			if (!value.is_object()) {
+				return false;
+			}
+
+			return value.contains("message") ||
+				value.contains("text") ||
+				value.contains("model") ||
+				value.contains("fallbacks") ||
+				value.contains("toolsAllow") ||
+				value.contains("thinking") ||
+				value.contains("timeoutSeconds") ||
+				value.contains("lightContext") ||
+				value.contains("allowUnsafeExternalContent");
+		}
+
+		void MergeFlattenedPayloadFields(
+			const CronJson& source,
+			CronJson& payload) {
+			auto copyIfPresent = [&](const char* fieldName) {
+				if (source.contains(fieldName)) {
+					payload[fieldName] = source[fieldName];
+				}
+			};
+
+			copyIfPresent("message");
+			copyIfPresent("text");
+			copyIfPresent("model");
+			copyIfPresent("fallbacks");
+			copyIfPresent("toolsAllow");
+			copyIfPresent("thinking");
+			copyIfPresent("timeoutSeconds");
+			copyIfPresent("lightContext");
+			copyIfPresent("allowUnsafeExternalContent");
+		}
+
+		void StripFlattenedPayloadFields(CronJson& value) {
+			value.erase("message");
+			value.erase("text");
+			value.erase("model");
+			value.erase("fallbacks");
+			value.erase("toolsAllow");
+			value.erase("thinking");
+			value.erase("timeoutSeconds");
+			value.erase("lightContext");
+			value.erase("allowUnsafeExternalContent");
+		}
+
+		CronJson BuildPayloadFromObjectCompatibility(const CronJson& value) {
+			if (value.contains("payload") && value["payload"].is_object()) {
+				CronJson payload = value["payload"];
+				MergeFlattenedPayloadFields(value, payload);
+				return payload;
+			}
+
+			if (!HasFlattenedPayloadFields(value)) {
+				return CronJson::object();
+			}
+
+			CronJson payload = CronJson::object();
+			MergeFlattenedPayloadFields(value, payload);
+			if (!payload.contains("kind")) {
+				const bool hasMessage = payload.contains("message") && payload["message"].is_string() &&
+					!TrimCopy(payload["message"].get<std::string>()).empty();
+				const bool hasText = payload.contains("text") && payload["text"].is_string() &&
+					!TrimCopy(payload["text"].get<std::string>()).empty();
+				if (hasMessage || payload.contains("model") || payload.contains("fallbacks") ||
+					payload.contains("toolsAllow") || payload.contains("thinking") ||
+					payload.contains("timeoutSeconds") || payload.contains("lightContext") ||
+					payload.contains("allowUnsafeExternalContent")) {
+					payload["kind"] = "agentTurn";
+				}
+				else if (hasText) {
+					payload["kind"] = "systemEvent";
+				}
+			}
+
+			return payload;
+		}
+
 		void NormalizeRetryObject(CronJson& root) {
 			if (!root.contains("retry") || !root["retry"].is_object()) {
 				return;
@@ -660,12 +740,14 @@ namespace blazeclaw::cron {
 		if (!params.contains("schedule")) {
 			throw std::invalid_argument("`schedule` must be an object");
 		}
-		if (!params.contains("payload")) {
+
+		CronJson payloadInput = BuildPayloadFromObjectCompatibility(params);
+		if (!payloadInput.is_object() || payloadInput.empty()) {
 			throw std::invalid_argument("`payload` must be an object");
 		}
 
 		const CronJson normalizedSchedule = NormalizeScheduleObject(params["schedule"]);
-		const CronJson normalizedPayload = NormalizePayloadObject(params["payload"]);
+		const CronJson normalizedPayload = NormalizePayloadObject(payloadInput);
 		const std::string scheduleKind =
 			ToLowerCopy(normalizedSchedule.value("kind", std::string()));
 		const std::string resolvedName = InferCronName(
@@ -721,60 +803,89 @@ namespace blazeclaw::cron {
 		NormalizeDeliveryObject(normalized, "delivery");
 		NormalizeRetryObject(normalized);
 		NormalizeFailureAlertObject(normalized);
+		StripFlattenedPayloadFields(normalized);
+
+		return normalized;
+	}
+
+	CronJson CronNormalize::NormalizePatchInput(const CronJson& patch) {
+		if (!patch.is_object()) {
+			throw std::invalid_argument("`patch` must be an object");
+		}
+
+		CronJson normalized = patch;
+		if (normalized.contains("schedule") && normalized["schedule"].is_object()) {
+			normalized["schedule"] = NormalizeScheduleObject(normalized["schedule"]);
+		}
+
+		const CronJson payloadCompatibility = BuildPayloadFromObjectCompatibility(normalized);
+		if (payloadCompatibility.is_object() && !payloadCompatibility.empty()) {
+			normalized["payload"] = NormalizePayloadObject(payloadCompatibility);
+		}
+
+		if (normalized.contains("delivery") && normalized["delivery"].is_object()) {
+			NormalizeDeliveryObject(normalized, "delivery");
+		}
+		if (normalized.contains("retry") && normalized["retry"].is_object()) {
+			NormalizeRetryObject(normalized);
+		}
+		if (normalized.contains("failureAlert") && normalized["failureAlert"].is_object()) {
+			NormalizeFailureAlertObject(normalized);
+		}
+
+		StripFlattenedPayloadFields(normalized);
 
 		return normalized;
 	}
 
 	void CronNormalize::ApplyPatch(CronJson& job, const CronJson& patch) {
-		if (!patch.is_object()) {
-			throw std::invalid_argument("`patch` must be an object");
-		}
+		const CronJson normalizedPatch = NormalizePatchInput(patch);
 
-		if (patch.contains("name") && patch["name"].is_string()) {
-			const std::string name = TrimCopy(patch["name"].get<std::string>());
+		if (normalizedPatch.contains("name") && normalizedPatch["name"].is_string()) {
+			const std::string name = TrimCopy(normalizedPatch["name"].get<std::string>());
 			if (!name.empty()) {
 				job["name"] = name;
 			}
 		}
-		if (patch.contains("description") && patch["description"].is_string()) {
-			job["description"] = patch["description"].get<std::string>();
+		if (normalizedPatch.contains("description") && normalizedPatch["description"].is_string()) {
+			job["description"] = normalizedPatch["description"].get<std::string>();
 		}
-		if (patch.contains("enabled") && patch["enabled"].is_boolean()) {
-			job["enabled"] = patch["enabled"].get<bool>();
+		if (normalizedPatch.contains("enabled") && normalizedPatch["enabled"].is_boolean()) {
+			job["enabled"] = normalizedPatch["enabled"].get<bool>();
 		}
-		if (patch.contains("schedule") && patch["schedule"].is_object()) {
-			job["schedule"] = NormalizeScheduleObject(patch["schedule"]);
+		if (normalizedPatch.contains("schedule") && normalizedPatch["schedule"].is_object()) {
+			job["schedule"] = normalizedPatch["schedule"];
 		}
-		if (patch.contains("payload") && patch["payload"].is_object()) {
-			job["payload"] = NormalizePayloadObject(patch["payload"]);
+		if (normalizedPatch.contains("payload") && normalizedPatch["payload"].is_object()) {
+			job["payload"] = normalizedPatch["payload"];
 		}
-		if (patch.contains("delivery") && patch["delivery"].is_object()) {
-			job["delivery"] = patch["delivery"];
+		if (normalizedPatch.contains("delivery") && normalizedPatch["delivery"].is_object()) {
+			job["delivery"] = normalizedPatch["delivery"];
 			NormalizeDeliveryObject(job, "delivery");
 		}
-		if (patch.contains("retry") && patch["retry"].is_object()) {
-			job["retry"] = patch["retry"];
+		if (normalizedPatch.contains("retry") && normalizedPatch["retry"].is_object()) {
+			job["retry"] = normalizedPatch["retry"];
 			NormalizeRetryObject(job);
 		}
-		if (patch.contains("failureAlert") && patch["failureAlert"].is_object()) {
-			job["failureAlert"] = patch["failureAlert"];
+		if (normalizedPatch.contains("failureAlert") && normalizedPatch["failureAlert"].is_object()) {
+			job["failureAlert"] = normalizedPatch["failureAlert"];
 			NormalizeFailureAlertObject(job);
 		}
-		else if (patch.contains("failureAlert") &&
-			patch["failureAlert"].is_boolean() &&
-			!patch["failureAlert"].get<bool>()) {
+		else if (normalizedPatch.contains("failureAlert") &&
+			normalizedPatch["failureAlert"].is_boolean() &&
+			!normalizedPatch["failureAlert"].get<bool>()) {
 			job["failureAlert"] = false;
 		}
-		if (patch.contains("sessionTarget") && patch["sessionTarget"].is_string()) {
-			const std::string sessionTargetRaw = TrimCopy(patch["sessionTarget"].get<std::string>());
+		if (normalizedPatch.contains("sessionTarget") && normalizedPatch["sessionTarget"].is_string()) {
+			const std::string sessionTargetRaw = TrimCopy(normalizedPatch["sessionTarget"].get<std::string>());
 			const std::string sessionTarget = ToLowerCopy(sessionTargetRaw);
 			if (sessionTarget == "main" || sessionTarget == "isolated") {
 				job["sessionTarget"] = sessionTarget;
 			}
 			else if (sessionTarget == "current") {
 				std::string resolvedSessionKey;
-				if (patch.contains("sessionKey") && patch["sessionKey"].is_string()) {
-					resolvedSessionKey = TrimCopy(patch["sessionKey"].get<std::string>());
+				if (normalizedPatch.contains("sessionKey") && normalizedPatch["sessionKey"].is_string()) {
+					resolvedSessionKey = TrimCopy(normalizedPatch["sessionKey"].get<std::string>());
 				}
 				if (resolvedSessionKey.empty() &&
 					job.contains("sessionKey") &&
@@ -799,16 +910,16 @@ namespace blazeclaw::cron {
 				}
 			}
 		}
-		if (patch.contains("wakeMode") && patch["wakeMode"].is_string()) {
+		if (normalizedPatch.contains("wakeMode") && normalizedPatch["wakeMode"].is_string()) {
 			const std::string wakeMode =
-				NormalizeWakeMode(patch["wakeMode"].get<std::string>());
+				NormalizeWakeMode(normalizedPatch["wakeMode"].get<std::string>());
 			job["wakeMode"] = wakeMode;
 		}
-		if (patch.contains("deleteAfterRun") && patch["deleteAfterRun"].is_boolean()) {
-			job["deleteAfterRun"] = patch["deleteAfterRun"].get<bool>();
+		if (normalizedPatch.contains("deleteAfterRun") && normalizedPatch["deleteAfterRun"].is_boolean()) {
+			job["deleteAfterRun"] = normalizedPatch["deleteAfterRun"].get<bool>();
 		}
-		if (patch.contains("agentId") && patch["agentId"].is_string()) {
-			const std::string agentId = TrimCopy(patch["agentId"].get<std::string>());
+		if (normalizedPatch.contains("agentId") && normalizedPatch["agentId"].is_string()) {
+			const std::string agentId = TrimCopy(normalizedPatch["agentId"].get<std::string>());
 			if (agentId.empty()) {
 				job.erase("agentId");
 			}
@@ -816,11 +927,11 @@ namespace blazeclaw::cron {
 				job["agentId"] = agentId;
 			}
 		}
-		else if (patch.contains("agentId") && patch["agentId"].is_null()) {
+		else if (normalizedPatch.contains("agentId") && normalizedPatch["agentId"].is_null()) {
 			job.erase("agentId");
 		}
-		if (patch.contains("sessionKey") && patch["sessionKey"].is_string()) {
-			const std::string sessionKey = TrimCopy(patch["sessionKey"].get<std::string>());
+		if (normalizedPatch.contains("sessionKey") && normalizedPatch["sessionKey"].is_string()) {
+			const std::string sessionKey = TrimCopy(normalizedPatch["sessionKey"].get<std::string>());
 			if (sessionKey.empty()) {
 				job.erase("sessionKey");
 				if (job.contains("sessionTarget") &&
@@ -844,7 +955,7 @@ namespace blazeclaw::cron {
 				}
 			}
 		}
-		else if (patch.contains("sessionKey") && patch["sessionKey"].is_null()) {
+		else if (normalizedPatch.contains("sessionKey") && normalizedPatch["sessionKey"].is_null()) {
 			job.erase("sessionKey");
 		}
 	}

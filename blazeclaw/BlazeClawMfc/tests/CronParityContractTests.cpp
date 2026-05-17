@@ -24,6 +24,79 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron add validator accepts nullable identity fields and flattened payload fields", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "1-nullable-flattened",
+		.method = "cron.add",
+		.paramsJson = std::string(
+			"{\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"message\":\"nightly ping\",\"agentId\":null,\"sessionKey\":null}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron normalize add builds payload from flattened fields", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "message", "run nightly sync" },
+		{ "model", "gpt-4.1" }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("payload"));
+	REQUIRE(normalized["payload"].is_object());
+	REQUIRE(normalized["payload"].value("kind", std::string()) == "agentTurn");
+	REQUIRE(normalized["payload"].value("message", std::string()) == "run nightly sync");
+	REQUIRE(normalized["payload"].value("model", std::string()) == "gpt-4.1");
+	REQUIRE_FALSE(normalized.contains("message"));
+	REQUIRE_FALSE(normalized.contains("model"));
+}
+
+TEST_CASE("Cron timer computes deterministic stagger offset for the same job", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	const CronJson job = {
+		{ "id", "cron-deterministic-stagger" },
+		{ "enabled", true },
+		{ "schedule",
+			{
+				{ "kind", "cron" },
+				{ "expr", "* * * * *" },
+				{ "staggerMs", 60'000 }
+			} },
+		{ "state", CronJson::object() }
+	};
+
+	const auto first = timer.ComputeNextRunAtMs(job, nowMs);
+	const auto second = timer.ComputeNextRunAtMs(job, nowMs);
+	REQUIRE(first.has_value());
+	REQUIRE(second.has_value());
+	REQUIRE(first.value() == second.value());
+	REQUIRE(first.value() > nowMs);
+}
+
+TEST_CASE("Cron timer maintenance recompute preserves due slot when configured", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	const std::int64_t dueAtMs = nowMs - 5'000;
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "cron-preserve-due" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 }, { "anchorMs", nowMs - 120'000 } } },
+			{ "state", { { "nextRunAtMs", dueAtMs } } }
+		}
+	});
+
+	blazeclaw::cron::CronRecomputeOptions options;
+	options.preserveDueSlots = true;
+	const bool changed = timer.RecomputeSchedules(jobs, nowMs, options);
+	REQUIRE_FALSE(changed);
+	REQUIRE(jobs[0]["state"].value("nextRunAtMs", static_cast<std::int64_t>(0)) == dueAtMs);
+}
+
 TEST_CASE("Cron normalize add accepts ISO schedule.at and sets atMs", "[cron][normalize]") {
 	const CronJson params = {
 		{ "schedule", { { "kind", "at" }, { "at", "2026-05-17T12:34:56Z" } } },
@@ -130,7 +203,7 @@ TEST_CASE("Cron update response validator enforces nested payload shape", "[cron
 		.id = "cron-update-invalid-payload-kind",
 		.ok = true,
 		.payloadJson = std::string(
-			"{\"id\":\"cron-1\",\"name\":\"job\",\"enabled\":true,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":false,\"text\":\"ping\"}}"),
+			"{\"id\":\"cron-1\",\"name\":\"job\",\"enabled\":true,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":123}}"),
 		.error = std::nullopt,
 	};
 
@@ -1126,7 +1199,7 @@ TEST_CASE("Cron normalize patch clears nullable agent and session fields", "[cro
 	CronNormalize::ApplyPatch(job, patch);
 	REQUIRE_FALSE(job.contains("agentId"));
 	REQUIRE_FALSE(job.contains("sessionKey"));
-	REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
+	REQUIRE(job.value("sessionTarget", std::string()) == "main");
 }
 
 TEST_CASE("Cron normalize patch backfills sessionKey from explicit session target", "[cron][normalize]") {

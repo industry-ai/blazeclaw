@@ -15,6 +15,13 @@ Generated: 2026-04-23T08:58:28.321Z
 - Deferred/unmatched count: **0**
 - Literal evidence coverage: **100%**
 
+## Cron behavior parity note
+
+- Event evidence confirms cron event-string coverage only.
+- Full cron runtime capability parity (normalization, scheduling semantics,
+  maintenance behavior, and tool-surface parity) is tracked in:
+  `artifacts/gateway-parity/openclaw-vs-blazeclaw-cron-capability-gap.md`
+
 ## Event Mapping
 
 - `agent` — **implemented**

@@ -15,6 +15,10 @@ namespace blazeclaw::cron {
 		CronRuntimeExecutionAdapter isolatedSession;
 	};
 
+	struct CronRecomputeOptions {
+		bool preserveDueSlots = false;
+	};
+
 	class CronTimerService {
 	public:
 		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
@@ -25,7 +29,8 @@ namespace blazeclaw::cron {
 
 		bool RecomputeSchedules(
 			CronJson& jobs,
-			std::int64_t nowMs) const;
+			std::int64_t nowMs,
+			const CronRecomputeOptions& opts = {}) const;
 
 		std::int64_t ComputeNextWakeAtMs(const CronJson& jobs) const;
 

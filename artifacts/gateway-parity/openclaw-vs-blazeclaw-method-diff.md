@@ -24,6 +24,13 @@ See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract ref
   - Actionable missing: **0**
 - BlazeClaw-only: **784**
 
+## Cron behavior parity note
+
+- This document reports **method-surface parity**, not full runtime behavior parity.
+- Cron method coverage is present at the RPC level, but capability-level gaps
+  are tracked separately in:
+  `artifacts/gateway-parity/openclaw-vs-blazeclaw-cron-capability-gap.md`
+
 ## Missing in BlazeClaw (Actionable)
 
 - _None_

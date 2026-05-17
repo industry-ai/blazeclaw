@@ -863,16 +863,8 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
-			if (fieldKinds.find("name") == fieldKinds.end()) {
-				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.name`.");
-				return false;
-			}
 			if (fieldKinds.find("schedule") == fieldKinds.end()) {
 				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.schedule`.");
-				return false;
-			}
-			if (fieldKinds.find("payload") == fieldKinds.end()) {
-				SetIssue(issue, "schema_missing_field", "Method `cron.add` requires `params.payload`.");
 				return false;
 			}
 
@@ -885,9 +877,32 @@ namespace blazeclaw::gateway::protocol {
 				!RequireFieldKindIfPresent(fieldKinds, "sessionTarget", JsonFieldKind::String, issue, "cron.add", "a string") ||
 				!RequireFieldKindIfPresent(fieldKinds, "deleteAfterRun", JsonFieldKind::Boolean, issue, "cron.add", "boolean") ||
 				!RequireFieldKindIfPresent(fieldKinds, "delivery", JsonFieldKind::Object, issue, "cron.add", "an object") ||
-				!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "cron.add", "a string") ||
-				!RequireFieldKindIfPresent(fieldKinds, "sessionKey", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "message", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "text", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "model", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "fallbacks", JsonFieldKind::Array, issue, "cron.add", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "toolsAllow", JsonFieldKind::Array, issue, "cron.add", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "thinking", JsonFieldKind::String, issue, "cron.add", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "timeoutSeconds", JsonFieldKind::Number, issue, "cron.add", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "lightContext", JsonFieldKind::Boolean, issue, "cron.add", "boolean") ||
+				!RequireFieldKindIfPresent(fieldKinds, "allowUnsafeExternalContent", JsonFieldKind::Boolean, issue, "cron.add", "boolean") ||
 				!RequireFieldKindIfPresent(fieldKinds, "retry", JsonFieldKind::Object, issue, "cron.add", "an object")) {
+				return false;
+			}
+
+			const auto agentIdIt = fieldKinds.find("agentId");
+			if (agentIdIt != fieldKinds.end() &&
+				agentIdIt->second != JsonFieldKind::String &&
+				agentIdIt->second != JsonFieldKind::Null) {
+				SetIssue(issue, "schema_invalid_type", "Method `cron.add` expects `params.agentId` to be a string or null.");
+				return false;
+			}
+
+			const auto sessionKeyIt = fieldKinds.find("sessionKey");
+			if (sessionKeyIt != fieldKinds.end() &&
+				sessionKeyIt->second != JsonFieldKind::String &&
+				sessionKeyIt->second != JsonFieldKind::Null) {
+				SetIssue(issue, "schema_invalid_type", "Method `cron.add` expects `params.sessionKey` to be a string or null.");
 				return false;
 			}
 
@@ -1233,7 +1248,7 @@ namespace blazeclaw::gateway::protocol {
 
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName(
-					{ "name", "description", "enabled", "schedule", "payload", "wakeMode", "sessionTarget", "deleteAfterRun", "delivery", "agentId", "sessionKey", "retry", "failureAlert" },
+					{ "name", "description", "enabled", "schedule", "payload", "wakeMode", "sessionTarget", "deleteAfterRun", "delivery", "agentId", "sessionKey", "retry", "failureAlert", "message", "text", "model", "fallbacks", "toolsAllow", "thinking", "timeoutSeconds", "lightContext", "allowUnsafeExternalContent" },
 					field)) {
 					continue;
 				}

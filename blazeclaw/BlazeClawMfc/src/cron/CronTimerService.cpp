@@ -4,7 +4,9 @@
 
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <sstream>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,6 +23,8 @@ namespace {
 namespace blazeclaw::cron {
 
 	namespace {
+		inline constexpr std::int64_t kMaxScheduleErrors = 3;
+
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
 		inline constexpr std::int64_t kDefaultFailureAlertAfter = 2;
 		inline constexpr std::int64_t kDefaultFailureAlertCooldownMs = 60 * 60'000;
@@ -884,38 +888,114 @@ namespace blazeclaw::cron {
 			return outcome;
 		}
 
-		std::optional<std::pair<int, int>> ParseCronMinuteHour(
-			const std::string& exprRaw) {
-			const std::string expr = TrimCopy(exprRaw);
-			if (expr.empty()) {
+		std::optional<int> ParseTimezoneOffsetMinutes(const std::string& tzRaw) {
+			const std::string tz = ToLowerCopy(TrimCopy(tzRaw));
+			if (tz.empty() || tz == "utc" || tz == "gmt" || tz == "z") {
+				return 0;
+			}
+
+			std::size_t offsetPos = std::string::npos;
+			if (tz.rfind("utc", 0) == 0 || tz.rfind("gmt", 0) == 0) {
+				offsetPos = 3;
+			}
+			else if (tz[0] == '+' || tz[0] == '-') {
+				offsetPos = 0;
+			}
+
+			if (offsetPos == std::string::npos || offsetPos >= tz.size()) {
 				return std::nullopt;
 			}
 
-			std::istringstream stream(expr);
-			std::vector<std::string> parts;
-			std::string token;
-			while (stream >> token) {
-				parts.push_back(token);
-			}
-			if (parts.size() < 2) {
+			const char signCh = tz[offsetPos];
+			if (signCh != '+' && signCh != '-') {
 				return std::nullopt;
 			}
 
-			if (parts[0] == "*" && parts[1] == "*") {
-				return std::make_pair(-1, -1);
+			const int sign = signCh == '+' ? 1 : -1;
+			std::string digits = tz.substr(offsetPos + 1);
+			digits.erase(std::remove(digits.begin(), digits.end(), ':'), digits.end());
+			if (digits.empty() || digits.size() > 4) {
+				return std::nullopt;
 			}
 
-			try {
-				const int minute = std::stoi(parts[0]);
-				const int hour = std::stoi(parts[1]);
-				if (minute < 0 || minute > 59 || hour < 0 || hour > 23) {
+			for (const char ch : digits) {
+				if (std::isdigit(static_cast<unsigned char>(ch)) == 0) {
 					return std::nullopt;
 				}
-				return std::make_pair(minute, hour);
+			}
+
+			int hours = 0;
+			int minutes = 0;
+			try {
+				if (digits.size() <= 2) {
+					hours = std::stoi(digits);
+				}
+				else {
+					hours = std::stoi(digits.substr(0, digits.size() - 2));
+					minutes = std::stoi(digits.substr(digits.size() - 2));
+				}
 			}
 			catch (...) {
 				return std::nullopt;
 			}
+
+			if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+				return std::nullopt;
+			}
+
+			return sign * (hours * 60 + minutes);
+		}
+
+		bool MatchCronToken(const std::string& tokenRaw, const int value, const int maxValue) {
+			const std::string token = TrimCopy(tokenRaw);
+			if (token.empty() || token == "*") {
+				return true;
+			}
+
+			if (token.rfind("*/", 0) == 0) {
+				try {
+					const int step = std::stoi(token.substr(2));
+					return step > 0 && value % step == 0;
+				}
+				catch (...) {
+					return false;
+				}
+			}
+
+			std::istringstream parts(token);
+			std::string item;
+			while (std::getline(parts, item, ',')) {
+				const std::string trimmed = TrimCopy(item);
+				if (trimmed.empty()) {
+					continue;
+				}
+
+				try {
+					const int parsed = std::stoi(trimmed);
+					if (parsed >= 0 && parsed <= maxValue && parsed == value) {
+						return true;
+					}
+				}
+				catch (...) {
+					return false;
+				}
+			}
+
+			return false;
+		}
+
+		std::int64_t ResolveStableCronOffsetMs(const CronJson& job, const std::int64_t staggerMs) {
+			if (staggerMs <= 1) {
+				return 0;
+			}
+
+			const std::string jobId = job.value("id", std::string());
+			if (jobId.empty()) {
+				return 0;
+			}
+
+			const std::uint64_t hashValue = std::hash<std::string>{}(jobId);
+			return static_cast<std::int64_t>(hashValue % static_cast<std::uint64_t>(staggerMs));
 		}
 
 		std::int64_t ResolveEveryAnchorMs(const CronJson& schedule, const CronJson& job) {
@@ -988,32 +1068,48 @@ namespace blazeclaw::cron {
 
 		std::optional<std::int64_t> ComputeNextCron(
 			const CronJson& schedule,
+			const CronJson& job,
 			const std::int64_t nowMs) {
 			const std::string expr =
 				TrimCopy(schedule.value("expr", std::string("* * * * *")));
-			const auto parsed = ParseCronMinuteHour(expr);
-			if (!parsed.has_value()) {
+			std::istringstream stream(expr);
+			std::vector<std::string> parts;
+			std::string token;
+			while (stream >> token) {
+				parts.push_back(token);
+			}
+			if (parts.size() < 2) {
 				return nowMs + kMinuteMs;
 			}
 
-			const int minute = parsed->first;
-			const int hour = parsed->second;
-			if (minute < 0 || hour < 0) {
-				return ((nowMs / kMinuteMs) + 1) * kMinuteMs;
+			const auto timezoneOffsetMinutes =
+				ParseTimezoneOffsetMinutes(schedule.value("tz", std::string()));
+			const std::int64_t timezoneOffsetMs =
+				static_cast<std::int64_t>(timezoneOffsetMinutes.value_or(0)) * 60 * 1000;
+			std::int64_t localNowMs = nowMs + timezoneOffsetMs;
+			std::int64_t candidateLocalMs = ((localNowMs / kMinuteMs) + 1) * kMinuteMs;
+
+			for (int attempt = 0; attempt < 60 * 24 * 7; ++attempt) {
+				const std::int64_t minuteOfDay =
+					((candidateLocalMs / kMinuteMs) % (24 * 60) + (24 * 60)) % (24 * 60);
+				const int hour = static_cast<int>(minuteOfDay / 60);
+				const int minute = static_cast<int>(minuteOfDay % 60);
+				if (MatchCronToken(parts[0], minute, 59) &&
+					MatchCronToken(parts[1], hour, 23)) {
+					std::int64_t candidate = candidateLocalMs - timezoneOffsetMs;
+					const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
+					if (staggerMs.has_value() && staggerMs.value() > 0) {
+						candidate += ResolveStableCronOffsetMs(job, staggerMs.value());
+					}
+					if (candidate > nowMs) {
+						return candidate;
+					}
+				}
+
+				candidateLocalMs += kMinuteMs;
 			}
 
-			const std::int64_t dayStart = (nowMs / kDayMs) * kDayMs;
-			std::int64_t candidate = dayStart + hour * kHourMs + minute * kMinuteMs;
-			if (candidate <= nowMs) {
-				candidate += kDayMs;
-			}
-
-			const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
-			if (staggerMs.has_value() && staggerMs.value() > 0) {
-				candidate += (std::abs(static_cast<int>(candidate % staggerMs.value())));
-			}
-
-			return candidate;
+			return nowMs + kMinuteMs;
 		}
 	}
 
@@ -1050,7 +1146,7 @@ namespace blazeclaw::cron {
 		}
 
 		if (kind == "cron") {
-			return ComputeNextCron(schedule, nowMs);
+			return ComputeNextCron(schedule, job, nowMs);
 		}
 
 		return std::nullopt;
@@ -1058,17 +1154,57 @@ namespace blazeclaw::cron {
 
 	bool CronTimerService::RecomputeSchedules(
 		CronJson& jobs,
-		const std::int64_t nowMs) const {
+		const std::int64_t nowMs,
+		const CronRecomputeOptions& opts) const {
 		bool changed = false;
 		for (auto& job : jobs) {
 			CronJson& state = EnsureStateObject(job);
-			const std::optional<std::int64_t> nextRunAtMs =
-				ComputeNextRunAtMs(job, nowMs);
-			const CronJson nextJson =
-				nextRunAtMs.has_value() ? CronJson(nextRunAtMs.value()) : CronJson(nullptr);
-			if (!state.contains("nextRunAtMs") || state["nextRunAtMs"] != nextJson) {
-				state["nextRunAtMs"] = nextJson;
+			const auto currentNextRunAtMs = TryReadInt64Field(state, "nextRunAtMs");
+			const bool hasRunningMarker = TryReadInt64Field(state, "runningAtMs").has_value();
+			if (opts.preserveDueSlots &&
+				currentNextRunAtMs.has_value() &&
+				currentNextRunAtMs.value() > 0 &&
+				currentNextRunAtMs.value() <= nowMs &&
+				!hasRunningMarker) {
+				continue;
+			}
+
+			try {
+				const std::optional<std::int64_t> nextRunAtMs =
+					ComputeNextRunAtMs(job, nowMs);
+				const CronJson nextJson =
+					nextRunAtMs.has_value() ? CronJson(nextRunAtMs.value()) : CronJson(nullptr);
+				if (!state.contains("nextRunAtMs") || state["nextRunAtMs"] != nextJson) {
+					state["nextRunAtMs"] = nextJson;
+					changed = true;
+				}
+
+				if (state.contains("scheduleErrorCount") && !state["scheduleErrorCount"].is_null()) {
+					state["scheduleErrorCount"] = nullptr;
+					changed = true;
+				}
+			}
+			catch (const std::exception& ex) {
+				const std::int64_t errorCount =
+					TryReadInt64Field(state, "scheduleErrorCount").value_or(0) + 1;
+				state["scheduleErrorCount"] = errorCount;
+				state["nextRunAtMs"] = nullptr;
+				state["lastError"] = std::string("schedule error: ") + ex.what();
 				changed = true;
+				if (errorCount >= kMaxScheduleErrors) {
+					job["enabled"] = false;
+				}
+			}
+			catch (...) {
+				const std::int64_t errorCount =
+					TryReadInt64Field(state, "scheduleErrorCount").value_or(0) + 1;
+				state["scheduleErrorCount"] = errorCount;
+				state["nextRunAtMs"] = nullptr;
+				state["lastError"] = "schedule error: unknown";
+				changed = true;
+				if (errorCount >= kMaxScheduleErrors) {
+					job["enabled"] = false;
+				}
 			}
 		}
 
