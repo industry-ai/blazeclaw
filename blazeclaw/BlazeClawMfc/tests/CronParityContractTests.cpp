@@ -24,6 +24,67 @@ namespace {
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
 }
 
+TEST_CASE("Cron timer accepts webhook url alias when delivery.to is omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-webhook-url-alias" },
+			{ "name", "webhook url alias" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", { { "mode", "webhook" }, { "url", "https://example.test/hook" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed =
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "https://example.test/hook");
+}
+
+TEST_CASE("Cron timer accepts webhook url alias for failure destination", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-webhook-failure-url-alias" },
+			{ "name", "webhook failure url alias" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-target" },
+					{ "failureDestination",
+						{
+							{ "mode", "webhook" },
+							{ "url", "https://example.test/failure" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed =
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://example.test/failure");
+}
+
 TEST_CASE("Cron add validator accepts nullable identity fields and flattened payload fields", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "1-nullable-flattened",
@@ -2531,6 +2592,59 @@ TEST_CASE("Cron timer runtime adapter handled=true allows systemEvent without te
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-handled");
+}
+
+TEST_CASE("Cron timer runtime adapter can skip delivery simulation with runtime transport outcome", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-skip-delivery") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "skipDelivery", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-delivery-handled" },
+				{ "sessionId", "main" },
+				{ "deliveryStatus", "delivered" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/hook" },
+				{ "deliveryAttempted", true },
+				{ "deliveryHttpStatus", 202 },
+				{ "delivered", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-skip-delivery" },
+			{ "name", "runtime adapter skip delivery" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-target" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "https://runtime.example/hook");
+	REQUIRE(runs[0].value("deliveryAttempted", false));
+	REQUIRE(runs[0].value("deliveryHttpStatus", 0) == 202);
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-delivery-handled");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

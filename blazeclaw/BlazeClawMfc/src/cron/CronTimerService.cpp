@@ -326,6 +326,7 @@ namespace blazeclaw::cron {
 			std::string failureDestinationMode;
 			std::string errorCategory;
 			bool timedOut = false;
+			bool skipDeliverySimulation = false;
 		};
 
 		void ApplyWebhookHttpStatusToPrimaryOutcome(
@@ -394,6 +395,10 @@ namespace blazeclaw::cron {
 			if (runtimeResult.contains("retryable") && runtimeResult["retryable"].is_boolean()) {
 				outcome.retryable = runtimeResult["retryable"].get<bool>();
 			}
+			if (runtimeResult.contains("skipDelivery") &&
+				runtimeResult["skipDelivery"].is_boolean()) {
+				outcome.skipDeliverySimulation = runtimeResult["skipDelivery"].get<bool>();
+			}
 			if (runtimeResult.contains("timedOut") && runtimeResult["timedOut"].is_boolean()) {
 				outcome.timedOut = runtimeResult["timedOut"].get<bool>();
 			}
@@ -411,6 +416,79 @@ namespace blazeclaw::cron {
 			}
 			if (runtimeResult.contains("provider") && runtimeResult["provider"].is_string()) {
 				outcome.provider = TrimCopy(runtimeResult["provider"].get<std::string>());
+			}
+
+			if (runtimeResult.contains("delivered") && runtimeResult["delivered"].is_boolean()) {
+				outcome.delivered = runtimeResult["delivered"].get<bool>();
+			}
+			if (runtimeResult.contains("deliveryStatus") && runtimeResult["deliveryStatus"].is_string()) {
+				outcome.deliveryStatus = ToLowerCopy(
+					TrimCopy(runtimeResult["deliveryStatus"].get<std::string>()));
+			}
+			if (runtimeResult.contains("deliveryMode") && runtimeResult["deliveryMode"].is_string()) {
+				outcome.deliveryMode = ToLowerCopy(
+					TrimCopy(runtimeResult["deliveryMode"].get<std::string>()));
+			}
+			if (runtimeResult.contains("deliveryTarget") && runtimeResult["deliveryTarget"].is_string()) {
+				outcome.deliveryTarget = TrimCopy(runtimeResult["deliveryTarget"].get<std::string>());
+			}
+			if (runtimeResult.contains("deliveryChannel") && runtimeResult["deliveryChannel"].is_string()) {
+				outcome.deliveryChannel = TrimCopy(runtimeResult["deliveryChannel"].get<std::string>());
+			}
+			if (runtimeResult.contains("deliveryAccountId") && runtimeResult["deliveryAccountId"].is_string()) {
+				outcome.deliveryAccountId = TrimCopy(runtimeResult["deliveryAccountId"].get<std::string>());
+			}
+			if (runtimeResult.contains("deliveryAttempted") && runtimeResult["deliveryAttempted"].is_boolean()) {
+				outcome.deliveryAttempted = runtimeResult["deliveryAttempted"].get<bool>();
+			}
+			if (runtimeResult.contains("deliveryHttpStatus")) {
+				const auto maybeStatus = TryReadInt64Field(runtimeResult, "deliveryHttpStatus");
+				if (maybeStatus.has_value()) {
+					outcome.deliveryHttpStatus = maybeStatus.value();
+				}
+			}
+
+			if (runtimeResult.contains("failureDestinationStatus") &&
+				runtimeResult["failureDestinationStatus"].is_string()) {
+				outcome.failureDestinationStatus = ToLowerCopy(
+					TrimCopy(runtimeResult["failureDestinationStatus"].get<std::string>()));
+			}
+			if (runtimeResult.contains("failureDestinationMode") &&
+				runtimeResult["failureDestinationMode"].is_string()) {
+				outcome.failureDestinationMode = ToLowerCopy(
+					TrimCopy(runtimeResult["failureDestinationMode"].get<std::string>()));
+			}
+			if (runtimeResult.contains("failureDestinationTarget") &&
+				runtimeResult["failureDestinationTarget"].is_string()) {
+				outcome.failureDestinationTarget =
+					TrimCopy(runtimeResult["failureDestinationTarget"].get<std::string>());
+			}
+			if (runtimeResult.contains("failureDestinationChannel") &&
+				runtimeResult["failureDestinationChannel"].is_string()) {
+				outcome.failureDestinationChannel =
+					TrimCopy(runtimeResult["failureDestinationChannel"].get<std::string>());
+			}
+			if (runtimeResult.contains("failureDestinationAccountId") &&
+				runtimeResult["failureDestinationAccountId"].is_string()) {
+				outcome.failureDestinationAccountId =
+					TrimCopy(runtimeResult["failureDestinationAccountId"].get<std::string>());
+			}
+			if (runtimeResult.contains("failureDestinationAttempted") &&
+				runtimeResult["failureDestinationAttempted"].is_boolean()) {
+				outcome.failureDestinationAttempted =
+					runtimeResult["failureDestinationAttempted"].get<bool>();
+			}
+			if (runtimeResult.contains("failureDestinationHttpStatus")) {
+				const auto maybeFailureStatus =
+					TryReadInt64Field(runtimeResult, "failureDestinationHttpStatus");
+				if (maybeFailureStatus.has_value()) {
+					outcome.failureDestinationHttpStatus = maybeFailureStatus.value();
+				}
+			}
+			if (runtimeResult.contains("failureDestinationError") &&
+				runtimeResult["failureDestinationError"].is_string()) {
+				outcome.failureDestinationError =
+					TrimCopy(runtimeResult["failureDestinationError"].get<std::string>());
 			}
 
 			if (runtimeResult.contains("usage") && runtimeResult["usage"].is_object()) {
@@ -646,7 +724,9 @@ namespace blazeclaw::cron {
 				outcome.error.clear();
 			}
 
-			if (job.contains("delivery") && job["delivery"].is_object()) {
+			if (!(runtimeHandled && outcome.skipDeliverySimulation) &&
+				job.contains("delivery") &&
+				job["delivery"].is_object()) {
 				const CronJson& delivery = job["delivery"];
 				const bool simulateTransientFailure =
 					delivery.contains("simulateTransientFailure") &&
@@ -700,8 +780,14 @@ namespace blazeclaw::cron {
 				}
 				else if (mode == "webhook") {
 					outcome.deliveryAttempted = true;
-					const std::string to =
+					std::string to =
 						TrimCopy(delivery.value("to", std::string()));
+					if (to.empty() &&
+						delivery.contains("url") &&
+						delivery["url"].is_string()) {
+						to = TrimCopy(delivery["url"].get<std::string>());
+					}
+					outcome.deliveryTarget = to;
 					const bool transportDispatch = IsTransportDispatchEnabled(delivery);
 					const auto simulatedHttpStatus =
 						TryReadInt64Field(delivery, "simulateHttpStatus");
@@ -784,9 +870,14 @@ namespace blazeclaw::cron {
 					const bool failureHasExplicitTo =
 						failureDestination.contains("to") &&
 						failureDestination["to"].is_string();
-					const std::string failureTo = failureHasExplicitTo
+					std::string failureTo = failureHasExplicitTo
 						? TrimCopy(failureDestination["to"].get<std::string>())
 						: std::string();
+					if (failureTo.empty() &&
+						failureDestination.contains("url") &&
+						failureDestination["url"].is_string()) {
+						failureTo = TrimCopy(failureDestination["url"].get<std::string>());
+					}
 					const std::string resolvedFailureTo =
 						(failureMode == "announce" &&
 							!failureHasExplicitTo &&
