@@ -319,6 +319,36 @@ TEST_CASE("Cron run response validator enforces required fields", "[cron][schema
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Cron run response validator rejects inconsistent queued semantics", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-consistency-queued-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"already_running\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"queued\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator rejects enqueued terminal semantics", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-consistency-terminal-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"terminal\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Wake response validator enforces required fields", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -489,6 +519,36 @@ TEST_CASE("Cron runs response validator enforces entries contract", "[cron][sche
 			"{\"entries\":{},\"total\":0,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
 		.error = std::nullopt,
 	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator rejects inconsistent action status semantics", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-action-status-inconsistent",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"started\",\"status\":\"ok\"}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator rejects inconsistent task-ledger terminal projection", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-task-ledger-terminal-inconsistent",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"ok\",\"taskLedgerPhase\":\"terminal\",\"taskLedgerTerminal\":false}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
 	REQUIRE(issue.code == "schema_invalid_response");
 }

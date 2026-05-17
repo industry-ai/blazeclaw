@@ -42,10 +42,22 @@ namespace blazeclaw::gateway::protocol {
 			const std::string& json,
 			const char* fieldName,
 			std::string& valueOut);
+		bool TryReadTopLevelBooleanField(
+			const std::string& json,
+			const char* fieldName,
+			bool& valueOut);
 		bool ValidateTopLevelEnumStringField(
 			const std::string& payload,
 			const char* fieldName,
 			std::initializer_list<const char*> allowedValues,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage);
+		bool ValidateCronRunResponseConsistency(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage);
+		bool ValidateCronRunsEntryLifecycleConsistency(
+			const std::string& payload,
 			SchemaValidationIssue& issue,
 			const std::string& errorMessage);
 
@@ -244,6 +256,138 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldNumberOrNull(payload, "anchorMs")) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunResponseConsistency(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			std::string runState;
+			if (!TryReadTopLevelStringField(payload, "runState", runState)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			std::string reason;
+			if (!TryReadTopLevelStringField(payload, "reason", reason)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			bool enqueued = false;
+			if (!TryReadTopLevelBooleanField(payload, "enqueued", enqueued)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			bool started = false;
+			if (!TryReadTopLevelBooleanField(payload, "started", started)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (reason != "queued" &&
+				reason != "already_running" &&
+				reason != "not_due") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (enqueued && runState != "queued") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (runState == "queued" && reason != "queued") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (runState == "queued" && !enqueued) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (runState == "queued" && started) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (runState == "terminal" && started) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if ((reason == "already_running" || reason == "not_due") && runState != "terminal") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if ((reason == "already_running" || reason == "not_due") && enqueued) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunsEntryLifecycleConsistency(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			std::string action;
+			if (!TryReadTopLevelStringField(payload, "action", action)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			std::string status;
+			if (!TryReadTopLevelStringField(payload, "status", status)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (action == "queued" && status != "queued") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (action == "started" && status != "running") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (action == "finished" && (status == "queued" || status == "running")) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (HasFieldToken(payload, "taskLedgerPhase") &&
+				HasFieldToken(payload, "taskLedgerTerminal")) {
+				std::string phase;
+				if (!TryReadTopLevelStringField(payload, "taskLedgerPhase", phase)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				bool terminal = false;
+				if (!TryReadTopLevelBooleanField(payload, "taskLedgerTerminal", terminal)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (phase == "terminal" && !terminal) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if ((phase == "queued" || phase == "active") && terminal) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
 			}
 
 			return true;
@@ -757,6 +901,39 @@ namespace blazeclaw::gateway::protocol {
 			return TryConsumeJsonString(json, valuePos, valueOut);
 		}
 
+		bool TryReadTopLevelBooleanField(
+			const std::string& json,
+			const char* fieldName,
+			bool& valueOut) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			++valuePos;
+			while (valuePos < json.size() &&
+				std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+				++valuePos;
+			}
+
+			if (json.compare(valuePos, 4, "true") == 0) {
+				valueOut = true;
+				return true;
+			}
+
+			if (json.compare(valuePos, 5, "false") == 0) {
+				valueOut = false;
+				return true;
+			}
+
+			return false;
+		}
+
 		bool ValidateTopLevelEnumStringField(
 			const std::string& payload,
 			const char* fieldName,
@@ -1108,6 +1285,14 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!IsArrayFieldExplicitlyEmpty(payload, "entries") &&
+					!ValidateCronRunsEntryLifecycleConsistency(
+						payload,
+						issue,
+						"`cron.runs` non-empty `entries` contain inconsistent lifecycle action/status or task-ledger terminal projection semantics.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.add", [&]() {
@@ -1207,6 +1392,13 @@ namespace blazeclaw::gateway::protocol {
 					{ "queued", "active", "terminal" },
 					issue,
 					"`cron.run` requires `runState` to be one of `queued`, `active`, or `terminal`.")) {
+					return false;
+				}
+
+				if (!ValidateCronRunResponseConsistency(
+					payload,
+					issue,
+					"`cron.run` contains inconsistent `reason`/`runState`/`enqueued`/`started` semantics.")) {
 					return false;
 				}
 
