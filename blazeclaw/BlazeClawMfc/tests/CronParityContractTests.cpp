@@ -354,6 +354,20 @@ TEST_CASE("Cron runs response validator enforces entries contract", "[cron][sche
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Cron runs response validator accepts lifecycle-derived taskLedgerDisposition taxonomy", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-runs-disposition-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"failed\",\"taskLedgerDisposition\":\"failed\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+}
+
 TEST_CASE("Cron runs response validator rejects unsupported value taxonomy", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -2245,6 +2259,50 @@ TEST_CASE("Cron timer runtime adapters override simulation outcome for agentTurn
 	REQUIRE(runs[0]["usage"].value("completionTokens", 0) == 0);
 	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 11);
 	REQUIRE(jobs[0]["state"].value("lastRunTimedOut", false));
+}
+
+TEST_CASE("Cron timer runtime adapter infers timeout category from timedOut flag", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t adapterNowMs)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-timeout-infer") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "error" },
+				{ "summary", "runtime timeout inferred" },
+				{ "error", "runtime timed out" },
+				{ "timedOut", true },
+				{ "sessionId", "isolated" },
+				{ "observedAtMs", adapterNowMs }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-timeout-infer" },
+			{ "name", "runtime adapter timeout infer" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("timedOut", false));
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "timeout");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

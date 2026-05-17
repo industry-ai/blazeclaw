@@ -171,7 +171,18 @@ namespace blazeclaw::gateway::protocol {
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"taskLedgerDisposition",
-					{ "queued", "dispatched", "scheduled", "already_running", "not_due", "missing_terminal_run" },
+					{
+						"queued",
+						"dispatched",
+						"scheduled",
+						"started",
+						"failed",
+						"timed_out",
+						"aborted",
+						"already_running",
+						"not_due",
+						"missing_terminal_run"
+					},
 					issue,
 					errorMessage)) {
 				return false;

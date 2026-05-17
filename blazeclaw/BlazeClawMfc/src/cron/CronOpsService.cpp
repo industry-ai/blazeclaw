@@ -92,14 +92,67 @@ namespace blazeclaw::cron {
 
 			const std::string sourceStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "status"));
+			const std::string sourceErrorCategory =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "errorCategory"));
+			const std::string sourceDeliveryStatus =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "deliveryStatus"));
 			if (sourceStatus == "ok") {
 				return "ok";
 			}
+			if (sourceStatus == "queued") {
+				return "queued";
+			}
+			if (sourceStatus == "running") {
+				return "running";
+			}
 			if (sourceStatus == "error") {
+				if (sourceErrorCategory == "timeout") {
+					return "timed_out";
+				}
+				if (sourceDeliveryStatus == "suppressed") {
+					return "skipped";
+				}
 				return "failed";
+			}
+			if (sourceStatus == "failed") {
+				return "failed";
+			}
+			if (sourceStatus == "timed_out") {
+				return "timed_out";
+			}
+			if (sourceStatus == "aborted") {
+				return "aborted";
 			}
 
 			return "skipped";
+		}
+
+		std::string MapTerminalDisposition(const CronJson& finishedRun) {
+			if (finishedRun.value("timedOut", false)) {
+				return "timed_out";
+			}
+
+			if (finishedRun.value("aborted", false)) {
+				return "aborted";
+			}
+
+			const std::string sourceStatus =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "status"));
+			if (sourceStatus == "ok") {
+				return "dispatched";
+			}
+			if (sourceStatus == "error" ||
+				sourceStatus == "failed") {
+				return "failed";
+			}
+			if (sourceStatus == "timed_out") {
+				return "timed_out";
+			}
+			if (sourceStatus == "aborted") {
+				return "aborted";
+			}
+
+			return "dispatched";
 		}
 	}
 
@@ -851,6 +904,7 @@ namespace blazeclaw::cron {
 
 			if (finishedRun != nullptr) {
 				const std::string mappedStatus = MapTerminalStatus(*finishedRun);
+				const std::string mappedDisposition = MapTerminalDisposition(*finishedRun);
 				CronJson terminal = BuildManualLifecycleEntry(
 					request.runId,
 					request.jobId,
@@ -858,7 +912,7 @@ namespace blazeclaw::cron {
 					"finished",
 					mappedStatus,
 					"terminal",
-					"dispatched",
+					mappedDisposition,
 					"manual run completed after dispatch",
 					nowMs,
 					request.queuedAtMs,
@@ -914,7 +968,7 @@ namespace blazeclaw::cron {
 					finishedRun->contains("usage")
 					? (*finishedRun)["usage"]
 					: CronJson(nullptr);
-				terminal["taskLedgerDisposition"] = "dispatched";
+				terminal["taskLedgerDisposition"] = mappedDisposition;
 				terminal["taskLedgerTerminal"] = true;
 				m_store.Runs().push_back(terminal);
 			}

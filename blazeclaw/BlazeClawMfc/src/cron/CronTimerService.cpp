@@ -385,13 +385,16 @@ namespace blazeclaw::cron {
 			if (runtimeResult.contains("errorCategory") &&
 				runtimeResult["errorCategory"].is_string()) {
 				outcome.errorCategory =
-					TrimCopy(runtimeResult["errorCategory"].get<std::string>());
+					ToLowerCopy(TrimCopy(runtimeResult["errorCategory"].get<std::string>()));
 			}
 			if (runtimeResult.contains("retryable") && runtimeResult["retryable"].is_boolean()) {
 				outcome.retryable = runtimeResult["retryable"].get<bool>();
 			}
 			if (runtimeResult.contains("timedOut") && runtimeResult["timedOut"].is_boolean()) {
 				outcome.timedOut = runtimeResult["timedOut"].get<bool>();
+			}
+			if (outcome.timedOut && outcome.errorCategory.empty()) {
+				outcome.errorCategory = "timeout";
 			}
 			if (runtimeResult.contains("sessionId") && runtimeResult["sessionId"].is_string()) {
 				outcome.sessionId = TrimCopy(runtimeResult["sessionId"].get<std::string>());
@@ -627,6 +630,11 @@ namespace blazeclaw::cron {
 						outcome.usagePromptTokens + outcome.usageCompletionTokens;
 					outcome.usageAvailable = true;
 				}
+			}
+
+			if (outcome.status == "ok" &&
+				!outcome.error.empty()) {
+				outcome.error.clear();
 			}
 
 			if (job.contains("delivery") && job["delivery"].is_object()) {
