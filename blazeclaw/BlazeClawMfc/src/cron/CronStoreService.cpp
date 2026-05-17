@@ -4,6 +4,7 @@
 
 #include "CronNormalize.h"
 
+#include <chrono>
 #include <fstream>
 
 namespace blazeclaw::cron {
@@ -20,6 +21,33 @@ namespace blazeclaw::cron {
 				{ "values", values }
 			};
 		}
+
+		CronJson ParseArrayPayload(std::istream& stream) {
+			CronJson parsed;
+			stream >> parsed;
+			if (parsed.is_array()) {
+				return parsed;
+			}
+			if (parsed.is_object()) {
+				const auto valuesIt = parsed.find("values");
+				if (valuesIt != parsed.end() && valuesIt->is_array()) {
+					return *valuesIt;
+				}
+			}
+
+			return CronJson::array();
+		}
+
+		std::filesystem::file_time_type ReadLastWriteTime(
+			const std::filesystem::path& path) {
+			std::error_code ec;
+			const std::filesystem::file_time_type writeTime =
+				std::filesystem::last_write_time(path, ec);
+			if (ec) {
+				return std::filesystem::file_time_type{};
+			}
+			return writeTime;
+		}
 	}
 
 	CronStoreService::CronStoreService(
@@ -29,8 +57,15 @@ namespace blazeclaw::cron {
 		m_runsPath(std::move(runsPath)) {
 	}
 
-	void CronStoreService::EnsureLoaded() {
-		if (m_loaded) {
+	void CronStoreService::EnsureLoaded(bool forceReload) {
+		const std::filesystem::file_time_type currentJobsWriteTime =
+			ReadLastWriteTime(m_jobsPath);
+		const std::filesystem::file_time_type currentRunsWriteTime =
+			ReadLastWriteTime(m_runsPath);
+
+		if (m_loaded && !forceReload &&
+			currentJobsWriteTime == m_jobsLastWriteTime &&
+			currentRunsWriteTime == m_runsLastWriteTime) {
 			return;
 		}
 
@@ -44,6 +79,8 @@ namespace blazeclaw::cron {
 		}
 
 		m_loaded = true;
+		m_jobsLastWriteTime = currentJobsWriteTime;
+		m_runsLastWriteTime = currentRunsWriteTime;
 	}
 
 	CronJson& CronStoreService::Jobs() {
@@ -58,12 +95,14 @@ namespace blazeclaw::cron {
 		return m_jobsPath;
 	}
 
-	void CronStoreService::SaveJobs() const {
+	void CronStoreService::SaveJobs() {
 		SaveArrayFile(m_jobsPath, m_jobs);
+		m_jobsLastWriteTime = ReadLastWriteTime(m_jobsPath);
 	}
 
-	void CronStoreService::SaveRuns() const {
+	void CronStoreService::SaveRuns() {
 		SaveArrayFile(m_runsPath, m_runs);
+		m_runsLastWriteTime = ReadLastWriteTime(m_runsPath);
 	}
 
 	CronJson CronStoreService::LoadArrayFile(const std::filesystem::path& path) {
@@ -77,19 +116,20 @@ namespace blazeclaw::cron {
 		}
 
 		try {
-			CronJson parsed;
-			stream >> parsed;
-			if (parsed.is_array()) {
-				return parsed;
-			}
-			if (parsed.is_object()) {
-				const auto valuesIt = parsed.find("values");
-				if (valuesIt != parsed.end() && valuesIt->is_array()) {
-					return *valuesIt;
-				}
-			}
+			return ParseArrayPayload(stream);
 		}
 		catch (...) {
+			const std::filesystem::path backupPath = path.string() + ".bak";
+			std::ifstream backup(backupPath, std::ios::binary);
+			if (!backup.is_open()) {
+				return CronJson::array();
+			}
+
+			try {
+				return ParseArrayPayload(backup);
+			}
+			catch (...) {
+			}
 		}
 
 		return CronJson::array();
@@ -100,6 +140,15 @@ namespace blazeclaw::cron {
 		const CronJson& values) {
 		std::error_code ec;
 		std::filesystem::create_directories(path.parent_path(), ec);
+		if (std::filesystem::exists(path)) {
+			const std::filesystem::path backupPath = path.string() + ".bak";
+			std::filesystem::copy_file(
+				path,
+				backupPath,
+				std::filesystem::copy_options::overwrite_existing,
+				ec);
+			ec.clear();
+		}
 
 		const std::filesystem::path tempPath = path.string() + ".tmp";
 		std::ofstream stream(tempPath, std::ios::binary | std::ios::trunc);

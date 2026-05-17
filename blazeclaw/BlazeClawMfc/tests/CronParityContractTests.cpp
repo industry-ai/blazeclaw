@@ -7,8 +7,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <utility>
 
 namespace {
@@ -1259,6 +1261,74 @@ TEST_CASE("Cron store loads envelope with legacy values shape", "[cron][store]")
 	REQUIRE(store.Jobs().is_array());
 	REQUIRE(store.Jobs().size() == 1);
 	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-envelope");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store reloads when backing file changes on disk", "[cron][store]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-reload-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[{\"id\":\"job-a\",\"name\":\"A\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hi\"}}]";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-a");
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[{\"id\":\"job-b\",\"name\":\"B\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hello\"}}]";
+	}
+
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-b");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store falls back to backup when primary file is corrupted", "[cron][store]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-backup-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobsBackup(jobsPath.string() + ".bak", std::ios::binary | std::ios::trunc);
+		jobsBackup << "[{\"id\":\"job-backup\",\"name\":\"backup\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hi\"}}]";
+	}
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "{";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-backup");
 
 	std::filesystem::remove_all(root, ec);
 }

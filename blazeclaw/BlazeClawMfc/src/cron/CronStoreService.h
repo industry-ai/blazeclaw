@@ -12,19 +12,21 @@ namespace blazeclaw::cron {
 			std::filesystem::path jobsPath,
 			std::filesystem::path runsPath);
 
-		void EnsureLoaded();
+		void EnsureLoaded(bool forceReload = false);
 
 		CronJson& Jobs();
 		CronJson& Runs();
 		const std::filesystem::path& JobsPath() const noexcept;
 
-		void SaveJobs() const;
-		void SaveRuns() const;
+		void SaveJobs();
+		void SaveRuns();
 
 	private:
 		std::filesystem::path m_jobsPath;
 		std::filesystem::path m_runsPath;
 		bool m_loaded = false;
+		std::filesystem::file_time_type m_jobsLastWriteTime{};
+		std::filesystem::file_time_type m_runsLastWriteTime{};
 		CronJson m_jobs = CronJson::array();
 		CronJson m_runs = CronJson::array();
 
