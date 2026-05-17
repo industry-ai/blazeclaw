@@ -2167,6 +2167,7 @@ TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {
 			{ "id", "job-timeout" },
 			{ "name", "timeout job" },
 			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
 			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
 			{ "payload", { { "kind", "agentTurn" }, { "message", "ping" }, { "timeoutSeconds", 1 } } },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
@@ -2373,6 +2374,90 @@ TEST_CASE("Cron timer runtime adapter infers timeout category from timedOut flag
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("timedOut", false));
 	REQUIRE(runs[0].value("errorCategory", std::string()) == "timeout");
+}
+
+TEST_CASE("Cron timer runtime adapter handled=true bypasses agentTurn timeout simulation", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-handled-timeout") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-handled-ok" },
+				{ "sessionId", "isolated" },
+				{ "sessionKey", "runtime-handled" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-handled-timeout" },
+			{ "name", "runtime adapter handled timeout" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" }, { "timeoutSeconds", 1 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-handled-ok");
+	REQUIRE(runs[0].value("sessionKey", std::string()) == "runtime-handled");
+}
+
+TEST_CASE("Cron timer runtime adapter handled=true allows systemEvent without text", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-handled-empty-text") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-handled" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-handled-empty-text" },
+			{ "name", "runtime adapter handled empty text" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-handled");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

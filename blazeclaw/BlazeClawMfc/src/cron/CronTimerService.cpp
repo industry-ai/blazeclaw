@@ -473,6 +473,7 @@ namespace blazeclaw::cron {
 			const std::int64_t nowMs,
 			const CronRuntimeExecutionAdapters& adapters) {
 			RunOutcome outcome;
+			bool runtimeHandled = false;
 			const std::string sessionTargetRaw =
 				TrimCopy(job.value("sessionTarget", std::string("main")));
 			const std::string sessionTarget = ToLowerCopy(sessionTargetRaw);
@@ -573,10 +574,14 @@ namespace blazeclaw::cron {
 					(*runtimeAdapter)(job, nowMs);
 				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
 					ApplyRuntimeExecutionResult(outcome, runtimeResult.value());
+					if (runtimeResult.value().contains("handled") &&
+						runtimeResult.value()["handled"].is_boolean()) {
+						runtimeHandled = runtimeResult.value()["handled"].get<bool>();
+					}
 				}
 			}
 
-			if (payloadKind == "systemevent") {
+			if (!runtimeHandled && payloadKind == "systemevent") {
 				const std::string text =
 					TrimCopy(payload.value("text", std::string()));
 				if (text.empty()) {
@@ -598,7 +603,7 @@ namespace blazeclaw::cron {
 					outcome.usageAvailable = true;
 				}
 			}
-			if (payloadKind == "agentturn") {
+			if (!runtimeHandled && payloadKind == "agentturn") {
 				const std::string message =
 					TrimCopy(payload.value("message", std::string()));
 				if (message.empty()) {
