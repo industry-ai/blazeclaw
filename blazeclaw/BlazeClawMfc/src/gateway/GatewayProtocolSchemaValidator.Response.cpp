@@ -4,6 +4,7 @@
 #include "generated/GatewaySchemaCatalog.Generated.h"
 
 #include <functional>
+#include <initializer_list>
 #include <string_view>
 #include <unordered_map>
 
@@ -37,6 +38,16 @@ namespace blazeclaw::gateway::protocol {
 
 		bool IsFieldNull(const std::string& json, const std::string& fieldName);
 		bool HasFieldToken(const std::string& json, const std::string& fieldName);
+		bool TryReadTopLevelStringField(
+			const std::string& json,
+			const char* fieldName,
+			std::string& valueOut);
+		bool ValidateTopLevelEnumStringField(
+			const std::string& payload,
+			const char* fieldName,
+			std::initializer_list<const char*> allowedValues,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage);
 
 		bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
 			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
@@ -48,6 +59,122 @@ namespace blazeclaw::gateway::protocol {
 				if (payload.find(token) == std::string::npos) {
 					return false;
 				}
+			}
+
+			return true;
+		}
+
+		bool ValidateCronRunValueTaxonomy(
+			const std::string& payload,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			if (!ValidateTopLevelEnumStringField(
+				payload,
+				"status",
+				{ "ok", "error", "skipped", "queued", "running", "failed", "timed_out", "aborted" },
+				issue,
+				errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "deliveryStatus") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"deliveryStatus",
+					{ "not-requested", "delivered", "not-delivered", "unknown", "suppressed" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "taskLedgerPhase") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"taskLedgerPhase",
+					{ "queued", "active", "terminal" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "mode") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"mode",
+					{ "force", "due" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "runState") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"runState",
+					{ "queued", "active", "terminal" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "action") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"action",
+					{ "queued", "started", "finished" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "failureDestinationStatus") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"failureDestinationStatus",
+					{ "not-requested", "delivered", "not-delivered", "suppressed", "unknown" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "failureDestinationMode") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"failureDestinationMode",
+					{ "announce", "webhook" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "failureAlertMode") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"failureAlertMode",
+					{ "announce", "webhook" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "taskLedgerStatus") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"taskLedgerStatus",
+					{ "queued", "running", "ok", "failed", "timed_out", "aborted", "skipped", "error" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "taskLedgerDisposition") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"taskLedgerDisposition",
+					{ "queued", "dispatched", "scheduled", "already_running", "not_due", "missing_terminal_run" },
+					issue,
+					errorMessage)) {
+				return false;
 			}
 
 			return true;
@@ -534,6 +661,113 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool TryConsumeJsonString(
+			const std::string& json,
+			std::size_t& position,
+			std::string& valueOut) {
+			if (position >= json.size() || json[position] != '"') {
+				return false;
+			}
+
+			++position;
+			std::string parsed;
+			bool escaped = false;
+			while (position < json.size()) {
+				const char ch = json[position++];
+				if (escaped) {
+					switch (ch) {
+					case '"':
+					case '\\':
+					case '/':
+						parsed.push_back(ch);
+						break;
+					case 'b':
+						parsed.push_back('\b');
+						break;
+					case 'f':
+						parsed.push_back('\f');
+						break;
+					case 'n':
+						parsed.push_back('\n');
+						break;
+					case 'r':
+						parsed.push_back('\r');
+						break;
+					case 't':
+						parsed.push_back('\t');
+						break;
+					default:
+						parsed.push_back(ch);
+						break;
+					}
+					escaped = false;
+					continue;
+				}
+
+				if (ch == '\\') {
+					escaped = true;
+					continue;
+				}
+				if (ch == '"') {
+					valueOut = parsed;
+					return true;
+				}
+
+				parsed.push_back(ch);
+			}
+
+			return false;
+		}
+
+		bool TryReadTopLevelStringField(
+			const std::string& json,
+			const char* fieldName,
+			std::string& valueOut) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			++valuePos;
+			while (valuePos < json.size() &&
+				std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+				++valuePos;
+			}
+
+			if (valuePos >= json.size() || json[valuePos] != '"') {
+				return false;
+			}
+
+			return TryConsumeJsonString(json, valuePos, valueOut);
+		}
+
+		bool ValidateTopLevelEnumStringField(
+			const std::string& payload,
+			const char* fieldName,
+			std::initializer_list<const char*> allowedValues,
+			SchemaValidationIssue& issue,
+			const std::string& errorMessage) {
+			std::string value;
+			if (!TryReadTopLevelStringField(payload, fieldName, value)) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			for (const char* allowed : allowedValues) {
+				if (value == allowed) {
+					return true;
+				}
+			}
+
+			SetIssue(issue, "schema_invalid_response", errorMessage);
+			return false;
+		}
+
 		bool ValidateStringAndBoolean(
 			const std::string& payload,
 			const char* stringField,
@@ -855,6 +1089,14 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!IsArrayFieldExplicitlyEmpty(payload, "entries") &&
+					!ValidateCronRunValueTaxonomy(
+						payload,
+						issue,
+						"`cron.runs` non-empty `entries` contain invalid lifecycle/retry/transport read-model value taxonomy.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "cron.add", [&]() {
@@ -939,6 +1181,24 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!ValidateTopLevelEnumStringField(
+					payload,
+					"mode",
+					{ "due", "force" },
+					issue,
+					"`cron.run` requires `mode` to be one of `due` or `force`.")) {
+					return false;
+				}
+
+				if (!ValidateTopLevelEnumStringField(
+					payload,
+					"runState",
+					{ "queued", "active", "terminal" },
+					issue,
+					"`cron.run` requires `runState` to be one of `queued`, `active`, or `terminal`.")) {
+					return false;
+				}
+
 				return true;
 			} },
 			{ "wake", [&]() {
@@ -950,6 +1210,15 @@ namespace blazeclaw::gateway::protocol {
 						issue,
 						"schema_invalid_response",
 						"`wake` requires `ok` boolean, `mode`/`text` strings, and `requestedAtMs` number fields.");
+					return false;
+				}
+
+				if (!ValidateTopLevelEnumStringField(
+					payload,
+					"mode",
+					{ "now", "next-heartbeat" },
+					issue,
+					"`wake` requires `mode` to be one of `now` or `next-heartbeat`.")) {
 					return false;
 				}
 

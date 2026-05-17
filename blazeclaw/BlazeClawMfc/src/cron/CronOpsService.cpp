@@ -5,6 +5,7 @@
 #include "../gateway/GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <utility>
 #include <unordered_set>
 
 namespace blazeclaw::cron {
@@ -617,6 +618,12 @@ namespace blazeclaw::cron {
 			{ "text", params.value("text", std::string()) },
 			{ "requestedAtMs", nowMs }
 		};
+	}
+
+	void CronOpsService::SetRuntimeExecutionAdapters(
+		CronRuntimeExecutionAdapters adapters) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_timer.SetRuntimeExecutionAdapters(std::move(adapters));
 	}
 
 	void CronOpsService::StartBackgroundScheduler() {

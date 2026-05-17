@@ -2,12 +2,23 @@
 
 #include "CronModels.h"
 
+#include <functional>
 #include <optional>
 
 namespace blazeclaw::cron {
 
+	using CronRuntimeExecutionAdapter =
+		std::function<std::optional<CronJson>(const CronJson& job, std::int64_t nowMs)>;
+
+	struct CronRuntimeExecutionAdapters {
+		CronRuntimeExecutionAdapter mainSession;
+		CronRuntimeExecutionAdapter isolatedSession;
+	};
+
 	class CronTimerService {
 	public:
+		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
+
 		std::optional<std::int64_t> ComputeNextRunAtMs(
 			const CronJson& job,
 			std::int64_t nowMs) const;
@@ -23,6 +34,9 @@ namespace blazeclaw::cron {
 			CronJson& runs,
 			std::int64_t nowMs,
 			bool forceRunDue = false) const;
+
+	private:
+		CronRuntimeExecutionAdapters m_runtimeAdapters;
 	};
 
 } // namespace blazeclaw::cron

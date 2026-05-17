@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <utility>
 
 namespace {
 	using blazeclaw::cron::CronJson;
@@ -202,6 +203,21 @@ TEST_CASE("Wake response validator enforces required fields", "[cron][schema][re
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Wake response validator rejects unsupported mode taxonomy", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "wake-invalid-mode",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"mode\":\"later\",\"text\":\"wake\",\"requestedAtMs\":1700000000000}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("wake", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Cron runs validator rejects statuses array above max cardinality", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-statuses-too-many",
@@ -335,6 +351,36 @@ TEST_CASE("Cron runs response validator enforces entries contract", "[cron][sche
 		.error = std::nullopt,
 	};
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator rejects unsupported value taxonomy", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-taxonomy-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"ok\",\"deliveryStatus\":\"queued\",\"taskLedgerPhase\":\"terminal\",\"taskLedgerStatus\":\"ok\",\"taskLedgerDisposition\":\"scheduled\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator rejects unsupported runState taxonomy", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-runstate-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"pending\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
@@ -2086,6 +2132,119 @@ TEST_CASE("Cron timer run ids are unique for same tick", "[cron][timer]") {
 	REQUIRE(runs[0].value("runId", std::string()) != runs[1].value("runId", std::string()));
 	REQUIRE(jobs[0]["state"].contains("lastRunId"));
 	REQUIRE(jobs[1]["state"].contains("lastRunId"));
+}
+
+TEST_CASE("Cron timer runtime adapters override simulation outcome for systemEvent", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t adapterNowMs)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-main") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "ok" },
+				{ "summary", "runtime-main-success" },
+				{ "sessionId", "main" },
+				{ "sessionKey", "runtime-main" },
+				{ "model", "gpt-runtime" },
+				{ "provider", "azure-openai" },
+				{ "usage", {
+					{ "promptTokens", 21 },
+					{ "completionTokens", 5 },
+					{ "totalTokens", 26 }
+				} },
+				{ "observedAtMs", adapterNowMs }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-main" },
+			{ "name", "runtime adapter main" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-success");
+	REQUIRE(runs[0].value("sessionKey", std::string()) == "runtime-main");
+	REQUIRE(runs[0].value("model", std::string()) == "gpt-runtime");
+	REQUIRE(runs[0].value("provider", std::string()) == "azure-openai");
+	REQUIRE(runs[0]["usage"].value("promptTokens", 0) == 21);
+	REQUIRE(runs[0]["usage"].value("completionTokens", 0) == 5);
+	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 26);
+	REQUIRE(jobs[0]["state"].value("lastModel", std::string()) == "gpt-runtime");
+	REQUIRE(jobs[0]["state"].value("lastProvider", std::string()) == "azure-openai");
+}
+
+TEST_CASE("Cron timer runtime adapters override simulation outcome for agentTurn", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t adapterNowMs)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-isolated") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "error" },
+				{ "summary", "runtime-isolated-timeout" },
+				{ "error", "runtime timeout" },
+				{ "errorCategory", "timeout" },
+				{ "retryable", true },
+				{ "timedOut", true },
+				{ "sessionId", "isolated" },
+				{ "sessionKey", "runtime-iso" },
+				{ "usage", {
+					{ "promptTokens", 11 },
+					{ "completionTokens", 0 },
+					{ "totalTokens", 11 }
+				} },
+				{ "observedAtMs", adapterNowMs }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-isolated" },
+			{ "name", "runtime adapter isolated" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-isolated-timeout");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "timeout");
+	REQUIRE(runs[0].value("timedOut", false));
+	REQUIRE(runs[0].value("sessionKey", std::string()) == "runtime-iso");
+	REQUIRE(runs[0]["usage"].value("promptTokens", 0) == 11);
+	REQUIRE(runs[0]["usage"].value("completionTokens", 0) == 0);
+	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 11);
+	REQUIRE(jobs[0]["state"].value("lastRunTimedOut", false));
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

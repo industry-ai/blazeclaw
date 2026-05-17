@@ -25,6 +25,8 @@ namespace blazeclaw::cron {
 		CronJson Runs(const CronJson& params);
 		CronJson Wake(const CronJson& params);
 
+		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
+
 		void StartBackgroundScheduler();
 		void StopBackgroundScheduler();
 

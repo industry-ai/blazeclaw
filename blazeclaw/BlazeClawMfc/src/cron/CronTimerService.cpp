@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include <winhttp.h>
@@ -368,6 +369,61 @@ namespace blazeclaw::cron {
 				"failure destination webhook returned HTTP " + std::to_string(statusCode);
 		}
 
+		void ApplyRuntimeExecutionResult(
+			RunOutcome& outcome,
+			const CronJson& runtimeResult) {
+			if (runtimeResult.contains("status") && runtimeResult["status"].is_string()) {
+				outcome.status =
+					ToLowerCopy(TrimCopy(runtimeResult["status"].get<std::string>()));
+			}
+			if (runtimeResult.contains("summary") && runtimeResult["summary"].is_string()) {
+				outcome.summary = TrimCopy(runtimeResult["summary"].get<std::string>());
+			}
+			if (runtimeResult.contains("error") && runtimeResult["error"].is_string()) {
+				outcome.error = TrimCopy(runtimeResult["error"].get<std::string>());
+			}
+			if (runtimeResult.contains("errorCategory") &&
+				runtimeResult["errorCategory"].is_string()) {
+				outcome.errorCategory =
+					TrimCopy(runtimeResult["errorCategory"].get<std::string>());
+			}
+			if (runtimeResult.contains("retryable") && runtimeResult["retryable"].is_boolean()) {
+				outcome.retryable = runtimeResult["retryable"].get<bool>();
+			}
+			if (runtimeResult.contains("timedOut") && runtimeResult["timedOut"].is_boolean()) {
+				outcome.timedOut = runtimeResult["timedOut"].get<bool>();
+			}
+			if (runtimeResult.contains("sessionId") && runtimeResult["sessionId"].is_string()) {
+				outcome.sessionId = TrimCopy(runtimeResult["sessionId"].get<std::string>());
+			}
+			if (runtimeResult.contains("sessionKey") && runtimeResult["sessionKey"].is_string()) {
+				outcome.sessionKey = TrimCopy(runtimeResult["sessionKey"].get<std::string>());
+			}
+			if (runtimeResult.contains("model") && runtimeResult["model"].is_string()) {
+				outcome.model = TrimCopy(runtimeResult["model"].get<std::string>());
+			}
+			if (runtimeResult.contains("provider") && runtimeResult["provider"].is_string()) {
+				outcome.provider = TrimCopy(runtimeResult["provider"].get<std::string>());
+			}
+
+			if (runtimeResult.contains("usage") && runtimeResult["usage"].is_object()) {
+				const CronJson& usage = runtimeResult["usage"];
+				const auto promptTokens = TryReadInt64Field(usage, "promptTokens");
+				const auto completionTokens = TryReadInt64Field(usage, "completionTokens");
+				const auto totalTokens = TryReadInt64Field(usage, "totalTokens");
+				if (promptTokens.has_value() ||
+					completionTokens.has_value() ||
+					totalTokens.has_value()) {
+					outcome.usagePromptTokens = promptTokens.value_or(0);
+					outcome.usageCompletionTokens = completionTokens.value_or(0);
+					outcome.usageTotalTokens = totalTokens.has_value()
+						? totalTokens.value()
+						: (outcome.usagePromptTokens + outcome.usageCompletionTokens);
+					outcome.usageAvailable = true;
+				}
+			}
+		}
+
 		bool IsTransientErrorCategory(const std::string& errorText) {
 			const std::string lowered = ToLowerCopy(errorText);
 			return lowered.find("timeout") != std::string::npos ||
@@ -409,7 +465,10 @@ namespace blazeclaw::cron {
 			return job["delivery"]["bestEffort"].get<bool>();
 		}
 
-		RunOutcome EvaluateRunOutcome(const CronJson& job) {
+		RunOutcome EvaluateRunOutcome(
+			const CronJson& job,
+			const std::int64_t nowMs,
+			const CronRuntimeExecutionAdapters& adapters) {
 			RunOutcome outcome;
 			const std::string sessionTargetRaw =
 				TrimCopy(job.value("sessionTarget", std::string("main")));
@@ -499,6 +558,21 @@ namespace blazeclaw::cron {
 				return outcome;
 			}
 
+			const CronRuntimeExecutionAdapter* runtimeAdapter = nullptr;
+			if (payloadKind == "systemevent") {
+				runtimeAdapter = &adapters.mainSession;
+			}
+			else if (payloadKind == "agentturn") {
+				runtimeAdapter = &adapters.isolatedSession;
+			}
+			if (runtimeAdapter != nullptr && static_cast<bool>(*runtimeAdapter)) {
+				const std::optional<CronJson> runtimeResult =
+					(*runtimeAdapter)(job, nowMs);
+				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
+					ApplyRuntimeExecutionResult(outcome, runtimeResult.value());
+				}
+			}
+
 			if (payloadKind == "systemevent") {
 				const std::string text =
 					TrimCopy(payload.value("text", std::string()));
@@ -512,12 +586,14 @@ namespace blazeclaw::cron {
 					outcome.sessionId = "isolated";
 				}
 
-				outcome.usagePromptTokens =
-					(std::max)(static_cast<std::int64_t>(1),
-						static_cast<std::int64_t>(text.size() / 4));
-				outcome.usageCompletionTokens = 0;
-				outcome.usageTotalTokens = outcome.usagePromptTokens;
-				outcome.usageAvailable = true;
+				if (!outcome.usageAvailable) {
+					outcome.usagePromptTokens =
+						(std::max)(static_cast<std::int64_t>(1),
+							static_cast<std::int64_t>(text.size() / 4));
+					outcome.usageCompletionTokens = 0;
+					outcome.usageTotalTokens = outcome.usagePromptTokens;
+					outcome.usageAvailable = true;
+				}
 			}
 			if (payloadKind == "agentturn") {
 				const std::string message =
@@ -540,15 +616,17 @@ namespace blazeclaw::cron {
 					return outcome;
 				}
 
-				outcome.usagePromptTokens =
-					(std::max)(static_cast<std::int64_t>(1),
-						static_cast<std::int64_t>(message.size() / 4));
-				outcome.usageCompletionTokens =
-					(std::max)(static_cast<std::int64_t>(1),
-						outcome.usagePromptTokens / 2);
-				outcome.usageTotalTokens =
-					outcome.usagePromptTokens + outcome.usageCompletionTokens;
-				outcome.usageAvailable = true;
+				if (!outcome.usageAvailable) {
+					outcome.usagePromptTokens =
+						(std::max)(static_cast<std::int64_t>(1),
+							static_cast<std::int64_t>(message.size() / 4));
+					outcome.usageCompletionTokens =
+						(std::max)(static_cast<std::int64_t>(1),
+							outcome.usagePromptTokens / 2);
+					outcome.usageTotalTokens =
+						outcome.usagePromptTokens + outcome.usageCompletionTokens;
+					outcome.usageAvailable = true;
+				}
 			}
 
 			if (job.contains("delivery") && job["delivery"].is_object()) {
@@ -926,6 +1004,11 @@ namespace blazeclaw::cron {
 		}
 	}
 
+	void CronTimerService::SetRuntimeExecutionAdapters(
+		CronRuntimeExecutionAdapters adapters) {
+		m_runtimeAdapters = std::move(adapters);
+	}
+
 	std::optional<std::int64_t> CronTimerService::ComputeNextRunAtMs(
 		const CronJson& job,
 		const std::int64_t nowMs) const {
@@ -1029,7 +1112,8 @@ namespace blazeclaw::cron {
 			}
 
 			CronJson& state = EnsureStateObject(*it);
-			const RunOutcome outcome = EvaluateRunOutcome(*it);
+			const RunOutcome outcome =
+				EvaluateRunOutcome(*it, nowMs, m_runtimeAdapters);
 			state["runningAtMs"] = nowMs;
 			state["startedAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
