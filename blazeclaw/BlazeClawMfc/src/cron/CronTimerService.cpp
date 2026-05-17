@@ -666,16 +666,28 @@ namespace blazeclaw::cron {
 				const std::optional<CronJson> runtimeResult =
 					(*runtimeAdapter)(job, nowMs);
 				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
+					const CronJson& runtimeNode = runtimeResult.value();
 					ApplyRuntimeExecutionResult(outcome, runtimeResult.value());
-					if (runtimeResult.value().contains("handled") &&
-						runtimeResult.value()["handled"].is_boolean()) {
-						runtimeHandled = runtimeResult.value()["handled"].get<bool>();
+					if (runtimeNode.contains("handled") &&
+						runtimeNode["handled"].is_boolean()) {
+						runtimeHandled = runtimeNode["handled"].get<bool>();
+					}
+					else {
+						const bool hasExplicitRuntimeOutcome =
+							runtimeNode.contains("status") ||
+							runtimeNode.contains("summary") ||
+							runtimeNode.contains("error") ||
+							runtimeNode.contains("timedOut") ||
+							runtimeNode.contains("aborted");
+						if (hasExplicitRuntimeOutcome) {
+							runtimeHandled = true;
+						}
 					}
 
 					const bool heartbeatBusy =
-						runtimeResult.value().contains("busy") &&
-						runtimeResult.value()["busy"].is_boolean() &&
-						runtimeResult.value()["busy"].get<bool>();
+						runtimeNode.contains("busy") &&
+						runtimeNode["busy"].is_boolean() &&
+						runtimeNode["busy"].get<bool>();
 					if (heartbeatBusy &&
 						payloadKind == "systemevent" &&
 						sessionTarget == "main") {
