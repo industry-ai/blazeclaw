@@ -673,6 +673,76 @@ TEST_CASE("Cron timer suppresses announce failure destination when target equals
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
 }
 
+TEST_CASE("Cron timer suppresses webhook failure destination for scheme-case-equivalent target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-webhook-scheme-case-equivalent" },
+			{ "name", "failure destination webhook scheme case equivalent" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "HTTPS://Example.Test/hooks/primary" },
+					{ "simulateTransientFailure", true },
+					{ "failureDestination",
+						{
+							{ "mode", "webhook" },
+							{ "to", "https://example.test/hooks/primary" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
+}
+
+TEST_CASE("Cron timer suppresses webhook failure destination for default-port-equivalent target", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-webhook-default-port-equivalent" },
+			{ "name", "failure destination webhook default port equivalent" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://example.test:443/hooks/primary" },
+					{ "simulateTransientFailure", true },
+					{ "failureDestination",
+						{
+							{ "mode", "webhook" },
+							{ "to", "https://example.test/hooks/primary" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
+}
+
 TEST_CASE("Cron timer does not suppress announce failure destination when primary mode is none", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

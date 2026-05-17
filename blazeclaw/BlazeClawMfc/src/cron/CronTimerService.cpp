@@ -174,6 +174,16 @@ namespace blazeclaw::cron {
 			return TrimCopy(target);
 		}
 
+		std::string CanonicalizeDeliveryRouteTargetForCompare(
+			const std::string& mode,
+			const std::string& target) {
+			if (ToLowerCopy(TrimCopy(mode)) == "webhook") {
+				return CanonicalizeFailureAlertRouteTarget("webhook", target);
+			}
+
+			return TrimCopy(target);
+		}
+
 		bool IsTransportDispatchEnabled(const CronJson& node) {
 			return node.contains("transportDispatch") &&
 				node["transportDispatch"].is_boolean() &&
@@ -1106,7 +1116,12 @@ namespace blazeclaw::cron {
 					const bool sameWebhookTarget =
 						failureMode == "webhook" &&
 						primaryMode == "webhook" &&
-						resolvedFailureTo == primaryTo;
+						CanonicalizeDeliveryRouteTargetForCompare(
+							failureMode,
+							resolvedFailureTo) ==
+						CanonicalizeDeliveryRouteTargetForCompare(
+							primaryMode,
+							primaryTo);
 					const bool sameAnnounceTarget =
 						failureMode == "announce" &&
 						primaryMode != "none" &&
