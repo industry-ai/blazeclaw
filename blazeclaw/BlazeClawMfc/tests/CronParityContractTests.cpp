@@ -834,6 +834,45 @@ TEST_CASE("Cron timer announce failure destination falls back to primary target 
 	REQUIRE(jobs[0]["state"].value("lastFailureDestinationTarget", std::string()) == "invalid-url");
 }
 
+TEST_CASE("Cron timer announce failure destination falls back channel/account from primary delivery", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-fallback-channel-account" },
+			{ "name", "failure destination announce fallback channel account" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "invalid-url" },
+					{ "channel", "ops" },
+					{ "accountId", "acc-primary" },
+					{ "failureDestination",
+						{
+							{ "mode", "announce" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "invalid-url");
+	REQUIRE(runs[0].value("failureDestinationChannel", std::string()) == "ops");
+	REQUIRE(runs[0].value("failureDestinationAccountId", std::string()) == "acc-primary");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationChannel", std::string()) == "ops");
+	REQUIRE(jobs[0]["state"].value("lastFailureDestinationAccountId", std::string()) == "acc-primary");
+}
+
 TEST_CASE("Cron runs validator accepts manual lifecycle statuses array values within max cardinality", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-manual-lifecycle-statuses",
@@ -2944,6 +2983,35 @@ TEST_CASE("Cron ops includes failure-destination suppression metadata in termina
 	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
 	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "not_delivered");
 	REQUIRE(failedPayloads.back().value("failureDestinationStatus", std::string()) == "suppressed");
+}
+
+TEST_CASE("Cron ops maps retry-scheduled delivery failure to failed disposition", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled retry-scheduled fail" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", { { "mode", "webhook" }, { "to", "https://example.test/hook" }, { "simulateHttpStatus", 503 } } },
+		{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "failed");
+	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-delivered");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

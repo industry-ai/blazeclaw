@@ -936,27 +936,35 @@ namespace blazeclaw::cron {
 						? primaryTo
 						: failureTo;
 					outcome.failureDestinationTarget = resolvedFailureTo;
-					const std::string failureChannel =
-						TrimCopy(failureDestination.value("channel", std::string("last")));
+					const bool failureHasExplicitChannel =
+						failureDestination.contains("channel") &&
+						failureDestination["channel"].is_string();
+					const std::string failureChannel = failureHasExplicitChannel
+						? TrimCopy(failureDestination["channel"].get<std::string>())
+						: std::string();
 					const std::string failureAccountId =
 						TrimCopy(failureDestination.value("accountId", std::string()));
-					outcome.failureDestinationChannel = failureChannel;
-					outcome.failureDestinationAccountId = failureAccountId;
+					const std::string normalizedPrimaryChannel =
+						primaryChannel.empty() ? std::string("last") : primaryChannel;
+					const std::string normalizedFailureChannel =
+						failureChannel.empty() ? std::string("last") : failureChannel;
+					const std::string resolvedFailureChannel =
+						failureChannel.empty() ? normalizedPrimaryChannel : failureChannel;
+					const std::string resolvedFailureAccountId =
+						failureAccountId.empty() ? primaryAccountId : failureAccountId;
+					outcome.failureDestinationChannel = resolvedFailureChannel;
+					outcome.failureDestinationAccountId = resolvedFailureAccountId;
 
 					const bool sameWebhookTarget =
 						failureMode == "webhook" &&
 						primaryMode == "webhook" &&
 						resolvedFailureTo == primaryTo;
-					const std::string normalizedPrimaryChannel =
-						primaryChannel.empty() ? std::string("last") : primaryChannel;
-					const std::string normalizedFailureChannel =
-						failureChannel.empty() ? std::string("last") : failureChannel;
 					const bool sameAnnounceTarget =
 						failureMode == "announce" &&
 						primaryMode != "none" &&
 						resolvedFailureTo == primaryTo &&
 						normalizedFailureChannel == normalizedPrimaryChannel &&
-						failureAccountId == primaryAccountId;
+						resolvedFailureAccountId == primaryAccountId;
 					const bool sameTarget = sameWebhookTarget || sameAnnounceTarget;
 					if (sameTarget) {
 						outcome.failureDestinationStatus = "suppressed";
