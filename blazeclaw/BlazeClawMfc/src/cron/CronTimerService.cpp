@@ -45,11 +45,63 @@ namespace blazeclaw::cron {
 			}
 
 			std::string lowered = ToLowerCopy(trimmed);
+			std::size_t schemeLength = 0;
 			if (lowered.rfind("http://", 0) == 0) {
-				return std::string("http://") + trimmed.substr(7);
+				schemeLength = 7;
 			}
-			if (lowered.rfind("https://", 0) == 0) {
-				return std::string("https://") + trimmed.substr(8);
+			else if (lowered.rfind("https://", 0) == 0) {
+				schemeLength = 8;
+			}
+			if (schemeLength > 0) {
+				std::string canonical =
+					lowered.substr(0, schemeLength) + trimmed.substr(schemeLength);
+
+				const std::size_t authorityStart = schemeLength;
+				const std::size_t authorityEnd = canonical.find_first_of("/?#", authorityStart);
+				const std::size_t authorityLength = authorityEnd == std::string::npos
+					? canonical.size() - authorityStart
+					: authorityEnd - authorityStart;
+
+				if (authorityLength > 0) {
+					const std::string authority = canonical.substr(authorityStart, authorityLength);
+					const std::size_t atPos = authority.rfind('@');
+					const std::string userInfo = atPos == std::string::npos
+						? std::string()
+						: authority.substr(0, atPos + 1);
+					const std::string hostPort = atPos == std::string::npos
+						? authority
+						: authority.substr(atPos + 1);
+
+					std::string canonicalHostPort = hostPort;
+					if (!hostPort.empty()) {
+						if (hostPort.front() == '[') {
+							const std::size_t closeBracket = hostPort.find(']');
+							if (closeBracket != std::string::npos) {
+								const std::string host = hostPort.substr(0, closeBracket + 1);
+								const std::string port = hostPort.substr(closeBracket + 1);
+								canonicalHostPort = ToLowerCopy(host) + port;
+							}
+						}
+						else {
+							const std::size_t colonPos = hostPort.rfind(':');
+							if (colonPos != std::string::npos) {
+								const std::string host = hostPort.substr(0, colonPos);
+								const std::string port = hostPort.substr(colonPos);
+								canonicalHostPort = ToLowerCopy(host) + port;
+							}
+							else {
+								canonicalHostPort = ToLowerCopy(hostPort);
+							}
+						}
+					}
+
+					canonical.replace(
+						authorityStart,
+						authorityLength,
+						userInfo + canonicalHostPort);
+				}
+
+				return canonical;
 			}
 
 			return trimmed;
