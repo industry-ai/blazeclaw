@@ -110,6 +110,12 @@ namespace blazeclaw::cron {
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "errorCategory"));
 			const std::string sourceDeliveryStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "deliveryStatus"));
+			if (sourceErrorCategory == "timeout") {
+				return kTaskLedgerStatusTimedOut;
+			}
+			if (sourceErrorCategory == "aborted") {
+				return kTaskLedgerStatusAborted;
+			}
 			const bool retryScheduled =
 				finishedRun.contains("retryScheduled") &&
 				finishedRun["retryScheduled"].is_boolean() &&
@@ -162,8 +168,16 @@ namespace blazeclaw::cron {
 
 			const std::string sourceStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "status"));
+			const std::string sourceErrorCategory =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "errorCategory"));
 			const std::string sourceDeliveryStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "deliveryStatus"));
+			if (sourceErrorCategory == "timeout") {
+				return kTaskLedgerDispositionTimedOut;
+			}
+			if (sourceErrorCategory == "aborted") {
+				return kTaskLedgerDispositionAborted;
+			}
 			const bool retryScheduled =
 				finishedRun.contains("retryScheduled") &&
 				finishedRun["retryScheduled"].is_boolean() &&

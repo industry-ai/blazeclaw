@@ -3014,6 +3014,92 @@ TEST_CASE("Cron ops maps retry-scheduled delivery failure to failed disposition"
 	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-delivered");
 }
 
+TEST_CASE("Cron ops maps timeout error-category to timed_out terminal hook semantics", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson&, const std::int64_t)
+		-> std::optional<CronJson> {
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-timeout" },
+				{ "error", "runtime timed out" },
+				{ "errorCategory", "timeout" },
+				{ "timedOut", true }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled timeout-category mapping" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "timed_out");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "timed_out");
+	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "timeout");
+}
+
+TEST_CASE("Cron ops maps aborted error-category to aborted terminal hook semantics", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson&, const std::int64_t)
+		-> std::optional<CronJson> {
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-aborted" },
+				{ "error", "runtime aborted" },
+				{ "errorCategory", "aborted" },
+				{ "aborted", true }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled aborted-category mapping" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "aborted");
+}
+
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-bad-mode",
