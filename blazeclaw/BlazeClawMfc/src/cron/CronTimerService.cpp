@@ -112,7 +112,63 @@ namespace blazeclaw::cron {
 			const std::string& target) {
 			const std::string normalizedMode = ToLowerCopy(TrimCopy(mode));
 			if (normalizedMode == kFailureAlertModeWebhook) {
-				return CanonicalizeHttpUrlForRouteCompare(target);
+				const std::string canonical =
+					CanonicalizeHttpUrlForRouteCompare(target);
+				const std::size_t schemePos = canonical.find("://");
+				if (schemePos == std::string::npos) {
+					return canonical;
+				}
+
+				const std::string scheme = canonical.substr(0, schemePos);
+				const std::size_t authorityStart = schemePos + 3;
+				const std::size_t authorityEnd =
+					canonical.find_first_of("/?#", authorityStart);
+				if (authorityEnd == std::string::npos) {
+					return canonical;
+				}
+
+				const std::string authority =
+					canonical.substr(authorityStart, authorityEnd - authorityStart);
+				const std::size_t atPos = authority.rfind('@');
+				const std::string userInfo = atPos == std::string::npos
+					? std::string()
+					: authority.substr(0, atPos + 1);
+				const std::string hostPort = atPos == std::string::npos
+					? authority
+					: authority.substr(atPos + 1);
+
+				if (hostPort.empty()) {
+					return canonical;
+				}
+
+				std::string host = hostPort;
+				std::string port;
+				if (hostPort.front() == '[') {
+					const std::size_t closeBracket = hostPort.find(']');
+					if (closeBracket != std::string::npos) {
+						host = hostPort.substr(0, closeBracket + 1);
+						port = hostPort.substr(closeBracket + 1);
+					}
+				}
+				else {
+					const std::size_t colonPos = hostPort.rfind(':');
+					if (colonPos != std::string::npos) {
+						host = hostPort.substr(0, colonPos);
+						port = hostPort.substr(colonPos);
+					}
+				}
+
+				if ((scheme == "http" && port == ":80") ||
+					(scheme == "https" && port == ":443")) {
+					std::string normalized = canonical;
+					normalized.replace(
+						authorityStart,
+						authorityEnd - authorityStart,
+						userInfo + host);
+					return normalized;
+				}
+
+				return canonical;
 			}
 
 			return TrimCopy(target);
