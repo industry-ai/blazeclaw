@@ -723,6 +723,79 @@ TEST_CASE("Cron timer clears lastFailureAlertAtMs on skipped run", "[cron][timer
 	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
 }
 
+TEST_CASE("Cron timer failureAlert webhook mode falls back target to delivery.to", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-webhook-fallback-target" },
+			{ "name", "alert webhook fallback target" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/delivery" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "webhook" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "https://alerts.example/delivery");
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertMode", std::string()) == "webhook");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/delivery");
+}
+
+TEST_CASE("Cron timer failureAlert cooldown opens when alert route changes", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-route-change-cooldown" },
+			{ "name", "alert route change cooldown" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" }, { "channel", "last" } } },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 600'000 }, { "mode", "announce" }, { "to", "team-secondary" }, { "channel", "alerts" } } },
+			{ "state",
+				{
+					{ "nextRunAtMs", nowMs - 1 },
+					{ "consecutiveErrors", 1 },
+					{ "lastFailureAlertAtMs", nowMs - 1'000 },
+					{ "lastFailureAlertMode", "announce" },
+					{ "lastFailureAlertTarget", "team-primary" },
+					{ "lastFailureAlertChannel", "last" },
+					{ "lastFailureAlertAccountId", nullptr }
+				} }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "team-secondary");
+	REQUIRE(runs[0].value("failureAlertChannel", std::string()) == "alerts");
+	REQUIRE_FALSE(runs[0].value("failureAlertSuppressed", true));
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs);
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "team-secondary");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertChannel", std::string()) == "alerts");
+}
+
 TEST_CASE("Cron timer announce failure destination falls back to primary target when to is omitted", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -2595,6 +2668,101 @@ TEST_CASE("Cron timer runtime adapter handled=true allows systemEvent without te
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-handled");
+}
+
+TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter reports busy", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-heartbeat-busy") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "busy", true },
+				{ "status", "error" },
+				{ "summary", "runtime-main-busy" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-heartbeat-busy" },
+			{ "name", "runtime heartbeat busy" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" }, { "heartbeatBusyMaxAttempts", 3 }, { "heartbeatBusyDelayMs", 2000 } } },
+			{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "heartbeatBusyAttempts", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "heartbeat_busy");
+	REQUIRE(runs[0].value("retryScheduled", false));
+	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
+	REQUIRE(runs[0].value("retryScheduledAtMs", static_cast<std::int64_t>(0)) == nowMs + 2000);
+	REQUIRE(jobs[0]["state"].value("heartbeatBusyAttempts", 0) == 1);
+	REQUIRE_FALSE(jobs[0]["state"].value("heartbeatFallbackWakeRequested", true));
+}
+
+TEST_CASE("Cron timer requests fallback wake after bounded main heartbeat busy retries", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-heartbeat-busy-fallback") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "busy", true },
+				{ "status", "error" },
+				{ "summary", "runtime-main-busy-fallback" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-heartbeat-busy-fallback" },
+			{ "name", "runtime heartbeat busy fallback" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" }, { "heartbeatBusyMaxAttempts", 1 }, { "heartbeatBusyDelayMs", 1500 } } },
+			{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "heartbeatBusyAttempts", 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "heartbeat_busy_fallback");
+	REQUIRE_FALSE(runs[0].value("retryScheduled", true));
+	REQUIRE(jobs[0]["state"].value("heartbeatBusyAttempts", -1) == 0);
+	REQUIRE(jobs[0]["state"].value("heartbeatFallbackWakeRequested", false));
+	REQUIRE(jobs[0]["state"].value("heartbeatFallbackWakeRequestedAtMs", static_cast<std::int64_t>(0)) == nowMs);
 }
 
 TEST_CASE("Cron timer runtime adapter can skip delivery simulation with runtime transport outcome", "[cron][timer]") {

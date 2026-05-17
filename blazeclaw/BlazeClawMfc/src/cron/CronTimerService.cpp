@@ -26,6 +26,8 @@ namespace blazeclaw::cron {
 		inline constexpr std::int64_t kMaxScheduleErrors = 3;
 
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
+		inline constexpr std::int64_t kDefaultHeartbeatBusyMaxAttempts = 2;
+		inline constexpr std::int64_t kDefaultHeartbeatBusyDelayMs = 1500;
 		inline constexpr std::int64_t kDefaultFailureAlertAfter = 2;
 		inline constexpr std::int64_t kDefaultFailureAlertCooldownMs = 60 * 60'000;
 			inline constexpr const char* kFailureAlertModeAnnounce = "announce";
@@ -327,6 +329,8 @@ namespace blazeclaw::cron {
 			std::string errorCategory;
 			bool timedOut = false;
 			bool skipDeliverySimulation = false;
+			bool hasRetryDelayOverride = false;
+			std::int64_t retryDelayOverrideMs = 0;
 		};
 
 		void ApplyWebhookHttpStatusToPrimaryOutcome(
@@ -394,6 +398,13 @@ namespace blazeclaw::cron {
 			}
 			if (runtimeResult.contains("retryable") && runtimeResult["retryable"].is_boolean()) {
 				outcome.retryable = runtimeResult["retryable"].get<bool>();
+			}
+			if (runtimeResult.contains("retryAfterMs")) {
+				const auto maybeRetryAfter = TryReadInt64Field(runtimeResult, "retryAfterMs");
+				if (maybeRetryAfter.has_value() && maybeRetryAfter.value() >= 0) {
+					outcome.hasRetryDelayOverride = true;
+					outcome.retryDelayOverrideMs = maybeRetryAfter.value();
+				}
 			}
 			if (runtimeResult.contains("skipDelivery") &&
 				runtimeResult["skipDelivery"].is_boolean()) {
@@ -659,6 +670,46 @@ namespace blazeclaw::cron {
 					if (runtimeResult.value().contains("handled") &&
 						runtimeResult.value()["handled"].is_boolean()) {
 						runtimeHandled = runtimeResult.value()["handled"].get<bool>();
+					}
+
+					const bool heartbeatBusy =
+						runtimeResult.value().contains("busy") &&
+						runtimeResult.value()["busy"].is_boolean() &&
+						runtimeResult.value()["busy"].get<bool>();
+					if (heartbeatBusy &&
+						payloadKind == "systemevent" &&
+						sessionTarget == "main") {
+						const std::int64_t heartbeatBusyAttempts = (std::max)(
+							static_cast<std::int64_t>(0),
+							TryReadInt64Field(job.value("state", CronJson::object()),
+								"heartbeatBusyAttempts")
+							.value_or(0));
+						const std::int64_t maxBusyAttempts = (std::max)(
+							static_cast<std::int64_t>(1),
+							TryReadInt64Field(payload, "heartbeatBusyMaxAttempts")
+							.value_or(kDefaultHeartbeatBusyMaxAttempts));
+						const std::int64_t busyDelayMs = (std::max)(
+							static_cast<std::int64_t>(1),
+							TryReadInt64Field(payload, "heartbeatBusyDelayMs")
+							.value_or(kDefaultHeartbeatBusyDelayMs));
+
+						if (heartbeatBusyAttempts < maxBusyAttempts) {
+							outcome.status = "error";
+							outcome.error = "main heartbeat busy";
+							outcome.errorCategory = "heartbeat_busy";
+							outcome.summary = "Main heartbeat busy; retry scheduled";
+							outcome.retryable = true;
+							outcome.hasRetryDelayOverride = true;
+							outcome.retryDelayOverrideMs = busyDelayMs;
+						}
+						else {
+							outcome.status = "error";
+							outcome.error = "main heartbeat busy fallback wake requested";
+							outcome.errorCategory = "heartbeat_busy_fallback";
+							outcome.summary =
+								"Main heartbeat busy after retries; fallback wake requested";
+							outcome.retryable = false;
+						}
 					}
 				}
 			}
@@ -1434,9 +1485,33 @@ namespace blazeclaw::cron {
 			std::int64_t consecutiveErrors = 0;
 			std::int64_t retryAttempt = previousAttempt;
 			std::optional<std::int64_t> nextAfterRun;
+			const bool heartbeatBusyRun =
+				outcome.errorCategory == "heartbeat_busy" ||
+				outcome.errorCategory == "heartbeat_busy_fallback";
+			if (heartbeatBusyRun) {
+				const std::int64_t previousBusyAttempts =
+					TryReadInt64Field(state, "heartbeatBusyAttempts").value_or(0);
+				if (outcome.errorCategory == "heartbeat_busy") {
+					state["heartbeatBusyAttempts"] = previousBusyAttempts + 1;
+					state["heartbeatFallbackWakeRequested"] = false;
+					state["heartbeatFallbackWakeRequestedAtMs"] = CronJson(nullptr);
+				}
+				else {
+					state["heartbeatBusyAttempts"] = 0;
+					state["heartbeatFallbackWakeRequested"] = true;
+					state["heartbeatFallbackWakeRequestedAtMs"] = nowMs;
+				}
+			}
+			else {
+				state["heartbeatBusyAttempts"] = 0;
+				state["heartbeatFallbackWakeRequested"] = false;
+				state["heartbeatFallbackWakeRequestedAtMs"] = CronJson(nullptr);
+			}
 			if (outcome.status == "error" && outcome.retryable && previousAttempt < maxAttempts) {
 				retryAttempt = previousAttempt + 1;
-				const std::int64_t delayMs = ResolveRetryDelayMs(retry, retryAttempt);
+				const std::int64_t delayMs = outcome.hasRetryDelayOverride
+					? outcome.retryDelayOverrideMs
+					: ResolveRetryDelayMs(retry, retryAttempt);
 				const std::int64_t retryAtMs = nowMs + (std::max)(static_cast<std::int64_t>(0), delayMs);
 				state["retryAttempt"] = retryAttempt;
 				state["retryPendingUntilMs"] = retryAtMs;
@@ -1480,56 +1555,81 @@ namespace blazeclaw::cron {
 						state["lastFailureAlertTarget"] = CronJson(nullptr);
 					}
 					else {
-					std::string failureAlertMode = kFailureAlertModeAnnounce;
-					std::string failureAlertChannel = "last";
-					std::string failureAlertAccountId;
-					std::string failureAlertTarget;
-					std::string deliveryTargetFallback;
-					std::string deliveryChannelFallback = "last";
-					std::string deliveryAccountIdFallback;
-					if ((*it).contains("delivery") && (*it)["delivery"].is_object()) {
-						deliveryTargetFallback =
-							TrimCopy((*it)["delivery"].value("to", std::string()));
-						deliveryChannelFallback =
-							TrimCopy((*it)["delivery"].value("channel", std::string("last")));
-						if (deliveryChannelFallback.empty()) {
-							deliveryChannelFallback = "last";
+						auto readOptionalString = [](const CronJson& node, const char* key)
+							-> std::string {
+							if (!node.contains(key) || node[key].is_null() || !node[key].is_string()) {
+								return std::string();
+							}
+							return TrimCopy(node[key].get<std::string>());
+						};
+
+						std::string failureAlertMode = kFailureAlertModeAnnounce;
+						std::string failureAlertChannel = "last";
+						std::string failureAlertAccountId;
+						std::string failureAlertTarget;
+						std::string deliveryTargetFallback;
+						std::string deliveryChannelFallback = "last";
+						std::string deliveryAccountIdFallback;
+						if ((*it).contains("delivery") && (*it)["delivery"].is_object()) {
+							deliveryTargetFallback =
+								TrimCopy((*it)["delivery"].value("to", std::string()));
+							deliveryChannelFallback =
+								TrimCopy((*it)["delivery"].value("channel", std::string("last")));
+							if (deliveryChannelFallback.empty()) {
+								deliveryChannelFallback = "last";
+							}
+							deliveryAccountIdFallback =
+								TrimCopy((*it)["delivery"].value("accountId", std::string()));
 						}
-						deliveryAccountIdFallback =
-							TrimCopy((*it)["delivery"].value("accountId", std::string()));
-					}
-					if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
-						failureAlertMode = ToLowerCopy(
-							TrimCopy((*it)["failureAlert"].value("mode", std::string(kFailureAlertModeAnnounce))));
-						if (failureAlertMode != kFailureAlertModeAnnounce &&
-							failureAlertMode != kFailureAlertModeWebhook) {
-							failureAlertMode = kFailureAlertModeAnnounce;
+
+						const std::string previousFailureAlertMode = ToLowerCopy(
+							readOptionalString(state, "lastFailureAlertMode"));
+						const std::string previousFailureAlertTarget =
+							readOptionalString(state, "lastFailureAlertTarget");
+						const std::string previousFailureAlertChannel = ToLowerCopy(
+							readOptionalString(state, "lastFailureAlertChannel"));
+						const std::string previousFailureAlertAccountId =
+							readOptionalString(state, "lastFailureAlertAccountId");
+
+						if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
+							failureAlertMode = ToLowerCopy(
+								TrimCopy((*it)["failureAlert"].value("mode", std::string(kFailureAlertModeAnnounce))));
+							if (failureAlertMode != kFailureAlertModeAnnounce &&
+								failureAlertMode != kFailureAlertModeWebhook) {
+								failureAlertMode = kFailureAlertModeAnnounce;
+							}
+							failureAlertTarget =
+								TrimCopy((*it)["failureAlert"].value("to", std::string()));
+							failureAlertChannel =
+								TrimCopy((*it)["failureAlert"].value("channel", std::string()));
+							failureAlertAccountId =
+								TrimCopy((*it)["failureAlert"].value("accountId", std::string()));
 						}
-						failureAlertTarget =
-							TrimCopy((*it)["failureAlert"].value("to", std::string()));
-						failureAlertChannel =
-							TrimCopy((*it)["failureAlert"].value("channel", std::string()));
-						failureAlertAccountId =
-							TrimCopy((*it)["failureAlert"].value("accountId", std::string()));
-					}
-					if (failureAlertMode == kFailureAlertModeAnnounce &&
-						failureAlertTarget.empty()) {
-						failureAlertTarget = deliveryTargetFallback;
-					}
-					if (failureAlertMode == kFailureAlertModeAnnounce) {
-						if (failureAlertChannel.empty()) {
-							failureAlertChannel = deliveryChannelFallback;
+
+						if (failureAlertTarget.empty()) {
+							failureAlertTarget = deliveryTargetFallback;
 						}
-						if (failureAlertChannel.empty()) {
-							failureAlertChannel = "last";
+
+						if (failureAlertMode == kFailureAlertModeAnnounce) {
+							if (failureAlertChannel.empty()) {
+								failureAlertChannel = deliveryChannelFallback;
+							}
+							if (failureAlertChannel.empty()) {
+								failureAlertChannel = "last";
+							}
+							if (failureAlertAccountId.empty()) {
+								failureAlertAccountId = deliveryAccountIdFallback;
+							}
 						}
-						if (failureAlertAccountId.empty()) {
-							failureAlertAccountId = deliveryAccountIdFallback;
+						else {
+							failureAlertChannel.clear();
 						}
-					}
-					else {
-						failureAlertChannel.clear();
-					}
+
+						const bool failureAlertRouteChanged =
+							previousFailureAlertMode != failureAlertMode ||
+							previousFailureAlertTarget != failureAlertTarget ||
+							previousFailureAlertChannel != ToLowerCopy(TrimCopy(failureAlertChannel)) ||
+							previousFailureAlertAccountId != failureAlertAccountId;
 					failureAlertTargetSnapshot = failureAlertTarget;
 					failureAlertChannelSnapshot = failureAlertChannel;
 					failureAlertAccountIdSnapshot = failureAlertAccountId;
@@ -1564,7 +1664,9 @@ namespace blazeclaw::cron {
 						const std::int64_t lastAlertAtMs =
 							TryReadInt64Field(state, "lastFailureAlertAtMs").value_or(0);
 						const bool cooldownOpen =
-							lastAlertAtMs <= 0 || (nowMs - lastAlertAtMs) >= cooldownMs;
+							failureAlertRouteChanged ||
+							lastAlertAtMs <= 0 ||
+							(nowMs - lastAlertAtMs) >= cooldownMs;
 						if (consecutiveErrors >= alertAfter && cooldownOpen) {
 							failureAlertTriggered = true;
 							failureAlertAtMs = nowMs;
