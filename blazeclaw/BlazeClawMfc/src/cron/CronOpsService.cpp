@@ -10,6 +10,20 @@
 
 namespace blazeclaw::cron {
 	namespace {
+			inline constexpr const char* kTaskLedgerStatusOk = "ok";
+			inline constexpr const char* kTaskLedgerStatusFailed = "failed";
+			inline constexpr const char* kTaskLedgerStatusTimedOut = "timed_out";
+			inline constexpr const char* kTaskLedgerStatusAborted = "aborted";
+			inline constexpr const char* kTaskLedgerStatusSkipped = "skipped";
+
+			inline constexpr const char* kTaskLedgerDispositionDispatched = "dispatched";
+			inline constexpr const char* kTaskLedgerDispositionFailed = "failed";
+			inline constexpr const char* kTaskLedgerDispositionTimedOut = "timed_out";
+			inline constexpr const char* kTaskLedgerDispositionAborted = "aborted";
+			inline constexpr const char* kTaskLedgerDispositionSkipped = "skipped";
+			inline constexpr const char* kTaskLedgerDispositionSuppressed = "suppressed";
+			inline constexpr const char* kTaskLedgerDispositionNotDelivered = "not_delivered";
+
 		CronJson BuildManualLifecycleEntry(
 			const std::string& runId,
 			const std::string& jobId,
@@ -96,8 +110,12 @@ namespace blazeclaw::cron {
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "errorCategory"));
 			const std::string sourceDeliveryStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "deliveryStatus"));
+			const bool retryScheduled =
+				finishedRun.contains("retryScheduled") &&
+				finishedRun["retryScheduled"].is_boolean() &&
+				finishedRun["retryScheduled"].get<bool>();
 			if (sourceStatus == "ok") {
-				return "ok";
+				return kTaskLedgerStatusOk;
 			}
 			if (sourceStatus == "queued") {
 				return "queued";
@@ -107,52 +125,76 @@ namespace blazeclaw::cron {
 			}
 			if (sourceStatus == "error") {
 				if (sourceErrorCategory == "timeout") {
-					return "timed_out";
+					return kTaskLedgerStatusTimedOut;
 				}
 				if (sourceDeliveryStatus == "suppressed") {
-					return "skipped";
+					return kTaskLedgerStatusSkipped;
 				}
-				return "failed";
+				if (sourceDeliveryStatus == "not-delivered" && !retryScheduled) {
+					return kTaskLedgerStatusFailed;
+				}
+				return kTaskLedgerStatusFailed;
 			}
 			if (sourceStatus == "failed") {
-				return "failed";
+				return kTaskLedgerStatusFailed;
 			}
 			if (sourceStatus == "timed_out") {
-				return "timed_out";
+				return kTaskLedgerStatusTimedOut;
 			}
 			if (sourceStatus == "aborted") {
-				return "aborted";
+				return kTaskLedgerStatusAborted;
+			}
+			if (sourceStatus == "skipped") {
+				return kTaskLedgerStatusSkipped;
 			}
 
-			return "skipped";
+			return kTaskLedgerStatusSkipped;
 		}
 
 		std::string MapTerminalDisposition(const CronJson& finishedRun) {
 			if (finishedRun.value("timedOut", false)) {
-				return "timed_out";
+				return kTaskLedgerDispositionTimedOut;
 			}
 
 			if (finishedRun.value("aborted", false)) {
-				return "aborted";
+				return kTaskLedgerDispositionAborted;
 			}
 
 			const std::string sourceStatus =
 				ToLowerCopy(ReadStringOrEmpty(finishedRun, "status"));
+			const std::string sourceDeliveryStatus =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "deliveryStatus"));
+			const bool retryScheduled =
+				finishedRun.contains("retryScheduled") &&
+				finishedRun["retryScheduled"].is_boolean() &&
+				finishedRun["retryScheduled"].get<bool>();
 			if (sourceStatus == "ok") {
-				return "dispatched";
+				if (sourceDeliveryStatus == "suppressed") {
+					return kTaskLedgerDispositionSuppressed;
+				}
+				return kTaskLedgerDispositionDispatched;
 			}
 			if (sourceStatus == "error" ||
 				sourceStatus == "failed") {
-				return "failed";
+				if (sourceDeliveryStatus == "suppressed") {
+					return kTaskLedgerDispositionSuppressed;
+				}
+				if (sourceDeliveryStatus == "not-delivered" && !retryScheduled) {
+					return kTaskLedgerDispositionNotDelivered;
+				}
+				return kTaskLedgerDispositionFailed;
 			}
 			if (sourceStatus == "timed_out") {
-				return "timed_out";
+				return kTaskLedgerDispositionTimedOut;
 			}
 			if (sourceStatus == "aborted") {
-				return "aborted";
+				return kTaskLedgerDispositionAborted;
+			}
+			if (sourceStatus == "skipped") {
+				return kTaskLedgerDispositionSkipped;
 			}
 
-			return "dispatched";
+			return kTaskLedgerDispositionDispatched;
 		}
 
 		bool IsFailureTaskLedgerStatus(const std::string& statusRaw) {
@@ -174,6 +216,19 @@ namespace blazeclaw::cron {
 				{ "disposition", ReadStringOrEmpty(runEntry, "taskLedgerDisposition") }
 			};
 
+			if (runEntry.contains("taskLedgerStatus")) {
+				payload["taskLedgerStatus"] = runEntry["taskLedgerStatus"];
+			}
+			if (runEntry.contains("taskLedgerPhase")) {
+				payload["taskLedgerPhase"] = runEntry["taskLedgerPhase"];
+			}
+			if (runEntry.contains("taskLedgerRuntime")) {
+				payload["taskLedgerRuntime"] = runEntry["taskLedgerRuntime"];
+			}
+			if (runEntry.contains("taskLedgerTerminal")) {
+				payload["taskLedgerTerminal"] = runEntry["taskLedgerTerminal"];
+			}
+
 			if (runEntry.contains("error")) {
 				payload["error"] = runEntry["error"];
 			}
@@ -182,6 +237,36 @@ namespace blazeclaw::cron {
 			}
 			if (runEntry.contains("deliveryStatus")) {
 				payload["deliveryStatus"] = runEntry["deliveryStatus"];
+			}
+			if (runEntry.contains("deliveryMode")) {
+				payload["deliveryMode"] = runEntry["deliveryMode"];
+			}
+			if (runEntry.contains("deliveryTarget")) {
+				payload["deliveryTarget"] = runEntry["deliveryTarget"];
+			}
+			if (runEntry.contains("failureDestinationStatus")) {
+				payload["failureDestinationStatus"] = runEntry["failureDestinationStatus"];
+			}
+			if (runEntry.contains("failureDestinationMode")) {
+				payload["failureDestinationMode"] = runEntry["failureDestinationMode"];
+			}
+			if (runEntry.contains("failureDestinationTarget")) {
+				payload["failureDestinationTarget"] = runEntry["failureDestinationTarget"];
+			}
+			if (runEntry.contains("sessionId")) {
+				payload["sessionId"] = runEntry["sessionId"];
+			}
+			if (runEntry.contains("sessionKey")) {
+				payload["sessionKey"] = runEntry["sessionKey"];
+			}
+			if (runEntry.contains("model")) {
+				payload["model"] = runEntry["model"];
+			}
+			if (runEntry.contains("provider")) {
+				payload["provider"] = runEntry["provider"];
+			}
+			if (runEntry.contains("usage")) {
+				payload["usage"] = runEntry["usage"];
 			}
 
 			return payload;
@@ -1120,8 +1205,9 @@ namespace blazeclaw::cron {
 	}
 
 	void CronOpsService::EmitTaskLedgerTerminalHook(const CronJson& runEntry) {
-		const std::string status = ReadStringOrEmpty(runEntry, "status");
-		const bool failed = IsFailureTaskLedgerStatus(status);
+		const std::string mappedStatus = MapTerminalStatus(runEntry);
+		const std::string mappedDisposition = MapTerminalDisposition(runEntry);
+		const bool failed = IsFailureTaskLedgerStatus(mappedStatus);
 		const TaskLedgerHook& hook = failed
 			? m_taskLedgerHooks.failTaskRunByRunId
 			: m_taskLedgerHooks.completeTaskRunByRunId;
@@ -1130,6 +1216,10 @@ namespace blazeclaw::cron {
 		}
 
 		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
+		payload["status"] = mappedStatus;
+		payload["taskLedgerStatus"] = mappedStatus;
+		payload["disposition"] = mappedDisposition;
+		payload["taskLedgerDisposition"] = mappedDisposition;
 		payload["phase"] = "terminal";
 		payload["terminal"] = true;
 		try {

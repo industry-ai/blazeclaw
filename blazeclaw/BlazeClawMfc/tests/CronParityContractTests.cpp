@@ -2684,7 +2684,13 @@ TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron
 	REQUIRE_FALSE(completedPayloads.empty());
 	REQUIRE(failedPayloads.empty());
 	REQUIRE(runningPayloads.back().value("runtime", std::string()) == "cron");
+	REQUIRE(runningPayloads.back().value("taskLedgerPhase", std::string()) == "terminal");
+	REQUIRE(runningPayloads.back().value("taskLedgerTerminal", true));
+	REQUIRE(runningPayloads.back().contains("deliveryStatus"));
+	REQUIRE(runningPayloads.back().contains("taskLedgerStatus"));
 	REQUIRE(completedPayloads.back().value("terminal", false));
+	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
+	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
 }
 
 TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[cron][ops]") {
@@ -2726,6 +2732,50 @@ TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[
 	REQUIRE(completedPayloads.empty());
 	REQUIRE(failedPayloads.back().value("runtime", std::string()) == "cron");
 	REQUIRE(failedPayloads.back().value("terminal", false));
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "not_delivered");
+	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(failedPayloads.back().contains("deliveryMode"));
+	REQUIRE(failedPayloads.back().contains("deliveryTarget"));
+}
+
+TEST_CASE("Cron ops includes failure-destination suppression metadata in terminal fail hook", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+	std::vector<CronJson> completedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled suppressed delivery" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery",
+			{
+				{ "mode", "webhook" },
+				{ "to", "https://example.test/hook" },
+				{ "simulateTransientFailure", true },
+				{ "failureDestination", { { "mode", "webhook" }, { "to", "https://example.test/hook" } } }
+			} },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE(completedPayloads.empty());
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "not_delivered");
+	REQUIRE(failedPayloads.back().value("failureDestinationStatus", std::string()) == "suppressed");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
