@@ -3182,6 +3182,96 @@ TEST_CASE("Cron ops maps aborted error-category to aborted terminal hook semanti
 	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "aborted");
 }
 
+TEST_CASE("Cron ops integrates inferred-handled runtime main-session outcomes without explicit handled flag", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops runtime inferred handled main") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "ok" },
+				{ "summary", "ops-runtime-main-inferred-handled" },
+				{ "sessionId", "main" }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops runtime inferred handled main" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(completedPayloads.empty());
+	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
+	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
+	REQUIRE(completedPayloads.back().value("summary", std::string()) == "ops-runtime-main-inferred-handled");
+}
+
+TEST_CASE("Cron ops integrates inferred-handled runtime isolated outcomes without explicit handled flag", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops runtime inferred handled isolated") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "ok" },
+				{ "summary", "ops-runtime-isolated-inferred-handled" },
+				{ "sessionId", "isolated" },
+				{ "sessionKey", "ops-runtime-session" }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops runtime inferred handled isolated" },
+		{ "sessionTarget", "isolated" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(completedPayloads.empty());
+	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
+	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
+	REQUIRE(completedPayloads.back().value("summary", std::string()) == "ops-runtime-isolated-inferred-handled");
+	REQUIRE(completedPayloads.back().value("sessionKey", std::string()) == "ops-runtime-session");
+}
+
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-bad-mode",
