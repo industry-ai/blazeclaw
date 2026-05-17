@@ -154,6 +154,38 @@ namespace blazeclaw::cron {
 
 			return "dispatched";
 		}
+
+		bool IsFailureTaskLedgerStatus(const std::string& statusRaw) {
+			const std::string status = ToLowerCopy(TrimCopy(statusRaw));
+			return status == "error" ||
+				status == "failed" ||
+				status == "timed_out" ||
+				status == "aborted";
+		}
+
+		CronJson BuildTaskLedgerHookPayload(const CronJson& runEntry) {
+			CronJson payload = {
+				{ "runtime", "cron" },
+				{ "runId", ReadStringOrEmpty(runEntry, "runId") },
+				{ "jobId", ReadStringOrEmpty(runEntry, "jobId") },
+				{ "status", ReadStringOrEmpty(runEntry, "status") },
+				{ "summary", ReadStringOrEmpty(runEntry, "summary") },
+				{ "action", ReadStringOrEmpty(runEntry, "action") },
+				{ "disposition", ReadStringOrEmpty(runEntry, "taskLedgerDisposition") }
+			};
+
+			if (runEntry.contains("error")) {
+				payload["error"] = runEntry["error"];
+			}
+			if (runEntry.contains("errorCategory")) {
+				payload["errorCategory"] = runEntry["errorCategory"];
+			}
+			if (runEntry.contains("deliveryStatus")) {
+				payload["deliveryStatus"] = runEntry["deliveryStatus"];
+			}
+
+			return payload;
+		}
 	}
 
 	CronOpsService::CronOpsService()
@@ -659,6 +691,7 @@ namespace blazeclaw::cron {
 		RunStartupCatchupLocked();
 		const std::int64_t nowMs = UtcNowMs();
 		if (mode == kWakeModeNow) {
+			ProcessManualRunQueueLocked(nowMs);
 			SyncDueRunsLocked(nowMs, false);
 		}
 		else {
@@ -677,6 +710,11 @@ namespace blazeclaw::cron {
 		CronRuntimeExecutionAdapters adapters) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_timer.SetRuntimeExecutionAdapters(std::move(adapters));
+	}
+
+	void CronOpsService::SetTaskLedgerHooks(TaskLedgerHooks hooks) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_taskLedgerHooks = std::move(hooks);
 	}
 
 	void CronOpsService::StartBackgroundScheduler() {
@@ -882,6 +920,7 @@ namespace blazeclaw::cron {
 				std::nullopt));
 			m_store.Runs().back()["taskLedgerDisposition"] = "started";
 			m_store.Runs().back()["taskLedgerTerminal"] = false;
+			EmitTaskLedgerCreateRunningHook(m_store.Runs().back());
 			runsChanged = true;
 
 			const std::size_t runsBeforeDispatch = m_store.Runs().size();
@@ -971,6 +1010,7 @@ namespace blazeclaw::cron {
 				terminal["taskLedgerDisposition"] = mappedDisposition;
 				terminal["taskLedgerTerminal"] = true;
 				m_store.Runs().push_back(terminal);
+				EmitTaskLedgerTerminalHook(m_store.Runs().back());
 			}
 			else {
 				m_store.Runs().push_back(BuildManualLifecycleEntry(
@@ -988,6 +1028,7 @@ namespace blazeclaw::cron {
 					nowMs));
 				m_store.Runs().back()["taskLedgerDisposition"] = "missing_terminal_run";
 				m_store.Runs().back()["taskLedgerTerminal"] = true;
+				EmitTaskLedgerTerminalHook(m_store.Runs().back());
 			}
 			runsChanged = true;
 		}
@@ -1026,10 +1067,22 @@ namespace blazeclaw::cron {
 		std::size_t loops = 0;
 
 		while (loops < m_maxCatchupRunsPerSync) {
+			const std::size_t runsBeforePump = m_store.Runs().size();
 			const std::size_t executed =
 				m_timer.PumpDueRuns(m_store.Jobs(), m_store.Runs(), nowMs, forceRunDue);
 			if (executed == 0) {
 				break;
+			}
+
+			if (!forceRunDue) {
+				for (std::size_t index = runsBeforePump; index < m_store.Runs().size(); ++index) {
+					const CronJson& runEntry = m_store.Runs()[index];
+					if (ToLowerCopy(ReadStringOrEmpty(runEntry, "action")) != "finished") {
+						continue;
+					}
+					EmitTaskLedgerCreateRunningHook(runEntry);
+					EmitTaskLedgerTerminalHook(runEntry);
+				}
 			}
 
 			executedTotal += executed;
@@ -1049,6 +1102,41 @@ namespace blazeclaw::cron {
 		}
 
 		m_lastSyncAtMs = nowMs;
+	}
+
+	void CronOpsService::EmitTaskLedgerCreateRunningHook(const CronJson& runEntry) {
+		if (!static_cast<bool>(m_taskLedgerHooks.createRunningTaskRun)) {
+			return;
+		}
+
+		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
+		payload["phase"] = "active";
+		payload["terminal"] = false;
+		try {
+			m_taskLedgerHooks.createRunningTaskRun(payload);
+		}
+		catch (...) {
+		}
+	}
+
+	void CronOpsService::EmitTaskLedgerTerminalHook(const CronJson& runEntry) {
+		const std::string status = ReadStringOrEmpty(runEntry, "status");
+		const bool failed = IsFailureTaskLedgerStatus(status);
+		const TaskLedgerHook& hook = failed
+			? m_taskLedgerHooks.failTaskRunByRunId
+			: m_taskLedgerHooks.completeTaskRunByRunId;
+		if (!static_cast<bool>(hook)) {
+			return;
+		}
+
+		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
+		payload["phase"] = "terminal";
+		payload["terminal"] = true;
+		try {
+			hook(payload);
+		}
+		catch (...) {
+		}
 	}
 
 	CronOpsService& GetCronOpsService() {

@@ -6,6 +6,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <thread>
 
@@ -13,6 +14,14 @@ namespace blazeclaw::cron {
 
 	class CronOpsService {
 	public:
+		using TaskLedgerHook = std::function<void(const CronJson& payload)>;
+
+		struct TaskLedgerHooks {
+			TaskLedgerHook createRunningTaskRun;
+			TaskLedgerHook completeTaskRunByRunId;
+			TaskLedgerHook failTaskRunByRunId;
+		};
+
 		CronOpsService();
 		~CronOpsService();
 
@@ -26,6 +35,7 @@ namespace blazeclaw::cron {
 		CronJson Wake(const CronJson& params);
 
 		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
+		void SetTaskLedgerHooks(TaskLedgerHooks hooks);
 
 		void StartBackgroundScheduler();
 		void StopBackgroundScheduler();
@@ -53,6 +63,7 @@ namespace blazeclaw::cron {
 
 		std::deque<ManualRunRequest> m_manualRunQueue;
 		std::uint64_t m_manualRunCounter = 0;
+		TaskLedgerHooks m_taskLedgerHooks;
 
 		static std::size_t ClampLimit(
 			const CronJson& value,
@@ -67,6 +78,8 @@ namespace blazeclaw::cron {
 		void ProcessManualRunQueueLocked(std::int64_t nowMs);
 		void RefreshSchedulesOnlyLocked(std::int64_t nowMs);
 		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
+		void EmitTaskLedgerCreateRunningHook(const CronJson& runEntry);
+		void EmitTaskLedgerTerminalHook(const CronJson& runEntry);
 	};
 
 	CronOpsService& GetCronOpsService();

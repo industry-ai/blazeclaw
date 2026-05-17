@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "../src/cron/CronNormalize.h"
+#include "../src/cron/CronOpsService.h"
 #include "../src/cron/CronStoreService.h"
 #include "../src/cron/CronTimerService.h"
 #include "../src/gateway/GatewayProtocolSchemaValidator.h"
@@ -12,10 +13,12 @@
 #include <fstream>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace {
 	using blazeclaw::cron::CronJson;
 	using blazeclaw::cron::CronNormalize;
+	using blazeclaw::cron::CronOpsService;
 	using blazeclaw::cron::CronStoreService;
 	using blazeclaw::cron::CronTimerService;
 	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
@@ -2645,6 +2648,84 @@ TEST_CASE("Cron timer runtime adapter can skip delivery simulation with runtime 
 	REQUIRE(runs[0].value("deliveryAttempted", false));
 	REQUIRE(runs[0].value("deliveryHttpStatus", 0) == 202);
 	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-delivery-handled");
+}
+
+TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> runningPayloads;
+	std::vector<CronJson> completedPayloads;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.createRunningTaskRun = [&runningPayloads](const CronJson& payload) {
+		runningPayloads.push_back(payload);
+	};
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled hook ok" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hook" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(runningPayloads.empty());
+	REQUIRE_FALSE(completedPayloads.empty());
+	REQUIRE(failedPayloads.empty());
+	REQUIRE(runningPayloads.back().value("runtime", std::string()) == "cron");
+	REQUIRE(completedPayloads.back().value("terminal", false));
+}
+
+TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> runningPayloads;
+	std::vector<CronJson> completedPayloads;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.createRunningTaskRun = [&runningPayloads](const CronJson& payload) {
+		runningPayloads.push_back(payload);
+	};
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "manual hook fail" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hook" } } },
+		{ "delivery", { { "mode", "webhook" }, { "to", "invalid-target" } } },
+		{ "deleteAfterRun", true }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	CronJson run = ops.Run({ { "id", jobId }, { "mode", "force" } });
+	REQUIRE(run.value("enqueued", false));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "manual" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(runningPayloads.empty());
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(completedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("runtime", std::string()) == "cron");
+	REQUIRE(failedPayloads.back().value("terminal", false));
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
