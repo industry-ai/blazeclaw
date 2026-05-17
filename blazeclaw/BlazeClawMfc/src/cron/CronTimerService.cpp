@@ -38,6 +38,34 @@ namespace blazeclaw::cron {
 			return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
 		}
 
+		std::string CanonicalizeHttpUrlForRouteCompare(const std::string& value) {
+			const std::string trimmed = TrimCopy(value);
+			if (trimmed.empty()) {
+				return std::string();
+			}
+
+			std::string lowered = ToLowerCopy(trimmed);
+			if (lowered.rfind("http://", 0) == 0) {
+				return std::string("http://") + trimmed.substr(7);
+			}
+			if (lowered.rfind("https://", 0) == 0) {
+				return std::string("https://") + trimmed.substr(8);
+			}
+
+			return trimmed;
+		}
+
+		std::string CanonicalizeFailureAlertRouteTarget(
+			const std::string& mode,
+			const std::string& target) {
+			const std::string normalizedMode = ToLowerCopy(TrimCopy(mode));
+			if (normalizedMode == kFailureAlertModeWebhook) {
+				return CanonicalizeHttpUrlForRouteCompare(target);
+			}
+
+			return TrimCopy(target);
+		}
+
 		bool IsTransportDispatchEnabled(const CronJson& node) {
 			return node.contains("transportDispatch") &&
 				node["transportDispatch"].is_boolean() &&
@@ -1547,6 +1575,21 @@ namespace blazeclaw::cron {
 			if (outcome.status == "error") {
 				consecutiveErrors = previousConsecutiveErrors + 1;
 				state["consecutiveErrors"] = consecutiveErrors;
+				auto readOptionalStateString = [](const CronJson& node, const char* key)
+					-> std::string {
+					if (!node.contains(key) || node[key].is_null() || !node[key].is_string()) {
+						return std::string();
+					}
+					return TrimCopy(node[key].get<std::string>());
+				};
+				const std::string previousFailureAlertMode = ToLowerCopy(
+					readOptionalStateString(state, "lastFailureAlertMode"));
+				const std::string previousFailureAlertTarget =
+					readOptionalStateString(state, "lastFailureAlertTarget");
+				const std::string previousFailureAlertChannel = ToLowerCopy(
+					readOptionalStateString(state, "lastFailureAlertChannel"));
+				const std::string previousFailureAlertAccountId =
+					readOptionalStateString(state, "lastFailureAlertAccountId");
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
 				state["lastFailureAlertMode"] = nullptr;
@@ -1575,14 +1618,6 @@ namespace blazeclaw::cron {
 						state["lastFailureAlertTarget"] = CronJson(nullptr);
 					}
 					else {
-						auto readOptionalString = [](const CronJson& node, const char* key)
-							-> std::string {
-							if (!node.contains(key) || node[key].is_null() || !node[key].is_string()) {
-								return std::string();
-							}
-							return TrimCopy(node[key].get<std::string>());
-						};
-
 						std::string failureAlertMode = kFailureAlertModeAnnounce;
 						std::string failureAlertChannel = "last";
 						std::string failureAlertAccountId;
@@ -1601,15 +1636,6 @@ namespace blazeclaw::cron {
 							deliveryAccountIdFallback =
 								TrimCopy((*it)["delivery"].value("accountId", std::string()));
 						}
-
-						const std::string previousFailureAlertMode = ToLowerCopy(
-							readOptionalString(state, "lastFailureAlertMode"));
-						const std::string previousFailureAlertTarget =
-							readOptionalString(state, "lastFailureAlertTarget");
-						const std::string previousFailureAlertChannel = ToLowerCopy(
-							readOptionalString(state, "lastFailureAlertChannel"));
-						const std::string previousFailureAlertAccountId =
-							readOptionalString(state, "lastFailureAlertAccountId");
 
 						if ((*it).contains("failureAlert") && (*it)["failureAlert"].is_object()) {
 							failureAlertMode = ToLowerCopy(
@@ -1645,11 +1671,19 @@ namespace blazeclaw::cron {
 							failureAlertChannel.clear();
 						}
 
-						const bool failureAlertRouteChanged =
-							previousFailureAlertMode != failureAlertMode ||
-							previousFailureAlertTarget != failureAlertTarget ||
-							previousFailureAlertChannel != ToLowerCopy(TrimCopy(failureAlertChannel)) ||
-							previousFailureAlertAccountId != failureAlertAccountId;
+					const std::string previousFailureAlertRouteTarget =
+						CanonicalizeFailureAlertRouteTarget(
+							previousFailureAlertMode,
+							previousFailureAlertTarget);
+					const std::string currentFailureAlertRouteTarget =
+						CanonicalizeFailureAlertRouteTarget(
+							failureAlertMode,
+							failureAlertTarget);
+					const bool failureAlertRouteChanged =
+						previousFailureAlertMode != failureAlertMode ||
+						previousFailureAlertRouteTarget != currentFailureAlertRouteTarget ||
+						previousFailureAlertChannel != ToLowerCopy(TrimCopy(failureAlertChannel)) ||
+						previousFailureAlertAccountId != failureAlertAccountId;
 					failureAlertTargetSnapshot = failureAlertTarget;
 					failureAlertChannelSnapshot = failureAlertChannel;
 					failureAlertAccountIdSnapshot = failureAlertAccountId;
