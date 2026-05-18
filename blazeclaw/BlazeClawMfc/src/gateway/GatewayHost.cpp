@@ -2675,7 +2675,9 @@ namespace blazeclaw::gateway {
 
 		entries.push_back(
 			cron_production::BuildCronTaskDeltaEntry(cronPayload, entries.size(), terminal));
-		m_taskDeltaRepository.Upsert(runId, entries);
+		if (!m_taskDeltaRepository.Upsert(runId, entries)) {
+			return;
+		}
 	}
 
 	void GatewayHost::HandleCronTaskLedgerCreateRunning(const nlohmann::json& payload) {

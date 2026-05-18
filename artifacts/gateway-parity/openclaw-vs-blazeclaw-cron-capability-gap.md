@@ -34,7 +34,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, but non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
 2. **Transport execution** — announce paths and default webhook policy still lag OpenClaw; opt-in WinHTTP dispatch exists for webhooks.
-3. **Shared task-ledger transition depth** — production hook wiring is active, and create-running payload phasing now emits active/running non-terminal semantics, but retry/cooldown/consumer depth remains open.
+3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, and hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is now landed; retry/cooldown/consumer depth remains open.
 4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation; pre-validator normalization bridge for legacy/flat tool shapes is still lighter than OpenClaw server-methods.
 5. **Tool-surface parity** — WebView shaping (`agents-controller.js`) covers much of `cron-tool.ts` ergonomics; dedicated agent cron tool adapter and CLI/controller/bootstrap parity remain open.
 
@@ -55,7 +55,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 | Startup catch-up behavior | Explicit missed-job planning and recovery controls | Bounded startup catch-up loop present | Medium |
 | Delivery + failure destination | Full transport execution | Metadata + suppression + opt-in webhook WinHTTP dispatch | Medium |
 | Failure alerts | Full policy behavior | Threshold/cooldown/suppression landed; recurring carry-forward depth open | Medium |
-| Run ledger / task-ledger hooks | Integrated shared ledger transitions | Hook contracts + emission in ops; **production hooks not wired** | Medium |
+| Run ledger / task-ledger hooks | Integrated shared ledger transitions | Hook contracts + emission in ops with production wiring and timing metadata projection; deeper retry/cooldown/consumer depth remains | Medium |
 | Store reload discipline | mtime-aware reload + recovery policy | mtime reload, force-reload, `.bak` fallback landed | Low-Medium |
 
 ## Highest-Impact Parity Gaps and Suggestions
@@ -69,6 +69,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 **Next depth**
 
 - Add explicit production integration smoke coverage and extend cross-layer parity assertions for retry/cooldown/phasing behavior.
+- Continue extending cross-layer assertions for hook payload consistency across queued/retry/cooldown transitions.
 
 ### 1) Normalize-then-validate gateway flow
 

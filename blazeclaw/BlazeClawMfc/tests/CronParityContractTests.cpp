@@ -815,6 +815,40 @@ TEST_CASE("Cron timer does not suppress announce failure destination when primar
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-requested");
 }
 
+TEST_CASE("Cron timer marks announce failure destination unresolved when fallback target is unavailable", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-announce-unresolved" },
+			{ "name", "failure destination announce unresolved" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "bad-target" },
+					{ "failureDestination",
+						{
+							{ "mode", "announce" }
+						} }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
+	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "announce failure destination target is unresolved");
+}
+
 TEST_CASE("Cron timer suppresses failureAlert when not explicitly configured", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -3341,6 +3375,8 @@ TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron
 	REQUIRE(completedPayloads.back().value("terminal", false));
 	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
 	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
+	REQUIRE(runningPayloads.back().contains("startedAtMs"));
+	REQUIRE(completedPayloads.back().contains("endedAtMs"));
 }
 
 TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[cron][ops]") {
@@ -3387,6 +3423,9 @@ TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[
 	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-delivered");
 	REQUIRE(failedPayloads.back().contains("deliveryMode"));
 	REQUIRE(failedPayloads.back().contains("deliveryTarget"));
+	REQUIRE(failedPayloads.back().contains("queuedAtMs"));
+	REQUIRE(failedPayloads.back().contains("startedAtMs"));
+	REQUIRE(failedPayloads.back().contains("endedAtMs"));
 }
 
 TEST_CASE("Cron ops includes failure-destination suppression metadata in terminal fail hook", "[cron][ops]") {

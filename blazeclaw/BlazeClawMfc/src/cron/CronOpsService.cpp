@@ -242,6 +242,15 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("taskLedgerTerminal")) {
 				payload["taskLedgerTerminal"] = runEntry["taskLedgerTerminal"];
 			}
+		if (runEntry.contains("queuedAtMs")) {
+			payload["queuedAtMs"] = runEntry["queuedAtMs"];
+		}
+		if (runEntry.contains("startedAtMs")) {
+			payload["startedAtMs"] = runEntry["startedAtMs"];
+		}
+		if (runEntry.contains("endedAtMs")) {
+			payload["endedAtMs"] = runEntry["endedAtMs"];
+		}
 
 			if (runEntry.contains("error")) {
 				payload["error"] = runEntry["error"];

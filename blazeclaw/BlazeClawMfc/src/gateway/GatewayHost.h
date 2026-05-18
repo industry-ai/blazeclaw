@@ -31,6 +31,7 @@
 #include "../core/runtime/TextToSpeech/ITextToSpeechRuntime.h"
 
 #include <memory>
+#include <nlohmann/json.hpp>
 
 #include <unordered_set>
 
