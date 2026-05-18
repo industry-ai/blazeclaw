@@ -3715,6 +3715,14 @@ TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter report
 			{ "sessionTarget", "main" },
 			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
 			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" }, { "heartbeatBusyMaxAttempts", 3 }, { "heartbeatBusyDelayMs", 2000 } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "to", "https://example.test/primary" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "https://example.test/failure" }
+				} }
+			} },
 			{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
 			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "heartbeatBusyAttempts", 0 } } }
 		}
@@ -3729,6 +3737,10 @@ TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter report
 	REQUIRE(runs[0].value("retryScheduled", false));
 	REQUIRE(runs[0].value("retryAttempt", 0) == 1);
 	REQUIRE(runs[0].value("retryScheduledAtMs", static_cast<std::int64_t>(0)) == nowMs + 2000);
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-requested");
+	REQUIRE_FALSE(runs[0].value("deliveryAttempted", true));
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-requested");
+	REQUIRE_FALSE(runs[0].value("failureDestinationAttempted", true));
 	REQUIRE(jobs[0]["state"].value("heartbeatBusyAttempts", 0) == 1);
 	REQUIRE_FALSE(jobs[0]["state"].value("heartbeatFallbackWakeRequested", true));
 }
@@ -3763,6 +3775,14 @@ TEST_CASE("Cron timer requests fallback wake after bounded main heartbeat busy r
 			{ "sessionTarget", "main" },
 			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
 			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" }, { "heartbeatBusyMaxAttempts", 1 }, { "heartbeatBusyDelayMs", 1500 } } },
+			{ "delivery", {
+				{ "mode", "announce" },
+				{ "to", "ops-room" },
+				{ "failureDestination", {
+					{ "mode", "announce" },
+					{ "to", "ops-fallback" }
+				} }
+			} },
 			{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
 			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "heartbeatBusyAttempts", 1 } } }
 		}
@@ -3775,6 +3795,10 @@ TEST_CASE("Cron timer requests fallback wake after bounded main heartbeat busy r
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("errorCategory", std::string()) == "heartbeat_busy_fallback");
 	REQUIRE_FALSE(runs[0].value("retryScheduled", true));
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-requested");
+	REQUIRE_FALSE(runs[0].value("deliveryAttempted", true));
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-requested");
+	REQUIRE_FALSE(runs[0].value("failureDestinationAttempted", true));
 	REQUIRE(jobs[0]["state"].value("heartbeatBusyAttempts", -1) == 0);
 	REQUIRE(jobs[0]["state"].value("heartbeatFallbackWakeRequested", false));
 	REQUIRE(jobs[0]["state"].value("heartbeatFallbackWakeRequestedAtMs", static_cast<std::int64_t>(0)) == nowMs);

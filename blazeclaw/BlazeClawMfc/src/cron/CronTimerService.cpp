@@ -1019,7 +1019,20 @@ namespace blazeclaw::cron {
 				outcome.error.clear();
 			}
 
-			if (!(runtimeHandled && outcome.skipDeliverySimulation) &&
+			const bool heartbeatBusyDeliverySuppressed =
+				outcome.errorCategory == "heartbeat_busy" ||
+				outcome.errorCategory == "heartbeat_busy_fallback";
+			if (heartbeatBusyDeliverySuppressed) {
+				outcome.deliveryStatus = "not-requested";
+				outcome.delivered = false;
+				outcome.deliveryAttempted = false;
+				outcome.failureDestinationStatus = "not-requested";
+				outcome.failureDestinationAttempted = false;
+				outcome.failureDestinationError.clear();
+			}
+
+			if (!heartbeatBusyDeliverySuppressed &&
+				!(runtimeHandled && outcome.skipDeliverySimulation) &&
 				job.contains("delivery") &&
 				job["delivery"].is_object()) {
 				const CronJson& delivery = job["delivery"];

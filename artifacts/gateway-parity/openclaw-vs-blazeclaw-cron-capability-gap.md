@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest `cron.update` flat-shape canonicalization depth increment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest heartbeat busy-lane transport-suppression increment)
 
 ## Scope
 
@@ -32,7 +32,7 @@ BlazeClaw has method-surface parity for core cron RPC endpoints (`cron.status/li
 
 Main parity gaps are in **execution fidelity** and **cross-layer depth**, not endpoint presence:
 
-1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, but non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
+1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, and heartbeat busy-lane runtime outcomes now suppress delivery/failure-destination transport simulation attempts; non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
 2. **Transport execution** — announce paths and default webhook policy still lag OpenClaw; opt-in WinHTTP dispatch exists for webhooks.
 3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, and hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is now landed; retry/cooldown/consumer depth remains open.
 4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation, and `GatewayHost::HandleInboundText` now applies pre-validator canonicalization for legacy/flat payloads across `cron.add`/`cron.update`/`cron.run`/`cron.runs`/`wake`; latest increment deepens `cron.update` flat schedule/payload/delivery alias lifting into nested patch structure. Remaining gap is broader tool-surface action depth, not absence of gateway normalization bridge.
