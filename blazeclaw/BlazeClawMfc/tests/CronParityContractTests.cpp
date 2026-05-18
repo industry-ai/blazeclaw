@@ -4580,6 +4580,44 @@ TEST_CASE("Cron ops integrates inferred-handled runtime isolated outcomes withou
 	REQUIRE(completedPayloads.back().value("sessionKey", std::string()) == "ops-runtime-session");
 }
 
+TEST_CASE("Cron ops integrates failure-alert webhook fallback target from delivery url alias", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops failure-alert fallback url alias" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery",
+			{
+				{ "mode", "webhook" },
+				{ "url", "https://example.test/delivery-alias" },
+				{ "simulateTransientFailure", true }
+			} },
+		{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "webhook" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(failedPayloads.back().value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(failedPayloads.back().value("failureAlertTarget", std::string()) == "https://example.test/delivery-alias");
+	REQUIRE(failedPayloads.back().value("failureAlertSuppressed", true) == false);
+	REQUIRE(failedPayloads.back().value("failureAlertTriggered", false));
+	REQUIRE(failedPayloads.back().contains("failureAlertAtMs"));
+	REQUIRE_FALSE(failedPayloads.back()["failureAlertAtMs"].is_null());
+}
+
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-bad-mode",

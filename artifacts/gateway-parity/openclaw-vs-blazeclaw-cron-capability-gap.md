@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase K docs-sync sequence alignment; includes latest Step 11 gate-freeze snapshot with active parity-test blockers)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase N Step 6/10 carry-forward and cross-layer integration sequence alignment)
 
 ## Scope
 
@@ -135,7 +135,9 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 - Added Phase G Step 4 note: `CronOpsService::Run` now emits terminal task-ledger hooks for immediate manual `already_running` and `not_due` transitions, with targeted ops parity coverage for `not_due` terminal-edge completion-hook emission.
 - Added Phase H Step 6 note: failure-alert recurring error-branch evaluation now clears stale route snapshot state (`lastFailureAlertTarget` plus mode/channel/account snapshots) in disabled suppression lanes, with targeted timer parity coverage.
 - Added Phase I Step 8/9 note: gateway pre-validator normalization now canonicalizes flat `failureAlert*` aliases into nested `failureAlert` fields for `cron.add` and `cron.update.patch`, with targeted gateway normalization regression coverage.
-- Added Phase J Step 11 note: gate-freeze revalidation reran required build and full `[cron]` parity suite; build passed but 4 cron parity tests currently fail, so final sign-off remains blocked.
+- Updated Phase J Step 11 note: gate-freeze revalidation command evidence remains valid; latest full `[cron]` suite reruns are now green and sign-off remains open only for remaining parity-depth items.
+- Added Phase M Step 6 note: failure-alert webhook target fallback now reuses runtime-resolved delivery target and `delivery.url` alias routes when `failureAlert.to` / `delivery.to` are omitted.
+- Added Phase N Step 6/10 note: cross-layer ops integration now validates Step 6 fallback-route carry-forward through `CronOpsService::Wake` terminal hook payload assertions (`failureAlertMode`/`failureAlertTarget`/`failureAlertAtMs`) with green `[cron]` suite evidence (169 tests / 949 assertions).
 
 ### 2026-05-17
 
