@@ -426,6 +426,36 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 		}
 	}
+
+	SECTION("wake canonicalizes legacy nextHeartbeat mode alias") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"wake-next-heartbeat-alias\","
+				"\"method\":\"wake\","
+				"\"params\":{"
+				"\"wakeMode\":\"nextHeartbeat\","
+				"\"text\":\"refresh\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "wake-next-heartbeat-alias");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].value("mode", std::string()) == "next-heartbeat");
+			REQUIRE(response["payload"].value("text", std::string()) == "refresh");
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
 }
 
 TEST_CASE("Cron timer computes deterministic stagger offset for the same job", "[cron][timer]") {
@@ -4810,6 +4840,73 @@ TEST_CASE("Cron ops integrates failure-alert webhook fallback target from delive
 	REQUIRE(failedPayloads.back().value("failureAlertTriggered", false));
 	REQUIRE(failedPayloads.back().contains("failureAlertAtMs"));
 	REQUIRE_FALSE(failedPayloads.back()["failureAlertAtMs"].is_null());
+}
+
+TEST_CASE("Cron ops integrates heartbeat-busy runtime retryAfter override into terminal hook metadata", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops runtime busy retryAfter") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "busy", true },
+				{ "status", "error" },
+				{ "summary", "ops-runtime-main-busy-retry-after" },
+				{ "retryAfterMs", 3500 },
+				{ "sessionId", "main" }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops runtime busy retryAfter" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", {
+			{ "kind", "systemEvent" },
+			{ "text", "wake" },
+			{ "heartbeatBusyMaxAttempts", 3 },
+			{ "heartbeatBusyDelayMs", 2000 }
+		} },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://example.test/primary" },
+			{ "failureDestination", {
+				{ "mode", "webhook" },
+				{ "to", "https://example.test/failure" }
+			} }
+		} },
+		{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "heartbeat_busy");
+	REQUIRE(failedPayloads.back().value("retryScheduled", false));
+	REQUIRE(failedPayloads.back().contains("retryScheduledAtMs"));
+	REQUIRE(failedPayloads.back().contains("endedAtMs"));
+	REQUIRE(
+		failedPayloads.back().value("retryScheduledAtMs", static_cast<std::int64_t>(0)) -
+		failedPayloads.back().value("endedAtMs", static_cast<std::int64_t>(0)) == 3500);
+	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-requested");
+	REQUIRE(failedPayloads.back().value("failureDestinationStatus", std::string()) == "not-requested");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {

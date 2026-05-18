@@ -528,6 +528,41 @@ namespace blazeclaw::gateway {
 				changed = true;
 			}
 
+			if (method == "wake" &&
+				params.contains("mode") &&
+				params["mode"].is_string()) {
+				std::string modeRaw = params["mode"].get<std::string>();
+				modeRaw.erase(
+					modeRaw.begin(),
+					std::find_if(
+						modeRaw.begin(),
+						modeRaw.end(),
+						[](unsigned char ch) {
+							return !std::isspace(ch);
+						}));
+				modeRaw.erase(
+					std::find_if(
+						modeRaw.rbegin(),
+						modeRaw.rend(),
+						[](unsigned char ch) {
+							return !std::isspace(ch);
+						}).base(),
+					modeRaw.end());
+				std::transform(
+					modeRaw.begin(),
+					modeRaw.end(),
+					modeRaw.begin(),
+					[](unsigned char ch) {
+						return static_cast<char>(std::tolower(ch));
+					});
+				if (modeRaw == "nextheartbeat" ||
+					modeRaw == "next_heartbeat" ||
+					modeRaw == "next heartbeat") {
+					params["mode"] = "next-heartbeat";
+					changed = true;
+				}
+			}
+
 			if (!changed) {
 				return std::nullopt;
 			}
