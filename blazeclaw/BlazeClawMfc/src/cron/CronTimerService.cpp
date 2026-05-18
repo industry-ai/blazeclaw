@@ -475,6 +475,7 @@ namespace blazeclaw::cron {
 			std::string failureDestinationMode;
 			std::string errorCategory;
 			bool timedOut = false;
+			bool aborted = false;
 			bool skipDeliverySimulation = false;
 			bool runtimeProjectedTransport = false;
 			bool hasRetryDelayOverride = false;
@@ -562,8 +563,14 @@ namespace blazeclaw::cron {
 			if (runtimeResult.contains("timedOut") && runtimeResult["timedOut"].is_boolean()) {
 				outcome.timedOut = runtimeResult["timedOut"].get<bool>();
 			}
+			if (runtimeResult.contains("aborted") && runtimeResult["aborted"].is_boolean()) {
+				outcome.aborted = runtimeResult["aborted"].get<bool>();
+			}
 			if (outcome.timedOut && outcome.errorCategory.empty()) {
 				outcome.errorCategory = "timeout";
+			}
+			if (outcome.aborted && outcome.errorCategory.empty()) {
+				outcome.errorCategory = "aborted";
 			}
 			if (runtimeResult.contains("sessionId") && runtimeResult["sessionId"].is_string()) {
 				outcome.sessionId = TrimCopy(runtimeResult["sessionId"].get<std::string>());
@@ -2035,7 +2042,7 @@ namespace blazeclaw::cron {
 			state["lastFinishedAtMs"] = nowMs;
 			state["endedAtMs"] = nowMs;
 			state["lastRunTimedOut"] = outcome.timedOut;
-			state["lastRunAborted"] = false;
+			state["lastRunAborted"] = outcome.aborted;
 			state["lastTaskLedgerRuntime"] = "cron";
 			state["lastTaskLedgerPhase"] = "terminal";
 			state["lastTaskLedgerStatus"] = outcome.status;
@@ -2125,7 +2132,7 @@ namespace blazeclaw::cron {
 				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
 				{ "timedOut", outcome.timedOut },
-				{ "aborted", false },
+				{ "aborted", outcome.aborted },
 				{ "taskLedgerRuntime", "cron" },
 				{ "taskLedgerPhase", "terminal" },
 				{ "taskLedgerStatus", outcome.status },

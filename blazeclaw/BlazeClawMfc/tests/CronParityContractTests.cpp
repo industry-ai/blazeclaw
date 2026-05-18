@@ -4488,6 +4488,47 @@ TEST_CASE("Cron ops maps aborted error-category to aborted terminal hook semanti
 	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "aborted");
 	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "aborted");
 	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("aborted", false));
+}
+
+TEST_CASE("Cron timer carries runtime aborted markers into state and run logs", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson&, const std::int64_t)
+		-> std::optional<CronJson> {
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime aborted" },
+				{ "error", "execution aborted" },
+				{ "errorCategory", "aborted" },
+				{ "aborted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-aborted-carry-forward" },
+			{ "name", "runtime aborted carry forward" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", { { "mode", "none" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "aborted");
+	REQUIRE(runs[0].value("aborted", false));
+	REQUIRE(jobs[0]["state"].value("lastRunAborted", false));
 }
 
 TEST_CASE("Cron ops integrates inferred-handled runtime main-session outcomes without explicit handled flag", "[cron][ops]") {

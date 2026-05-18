@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase N Step 6/10 carry-forward and cross-layer integration sequence alignment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase O Step 2/4 carry-forward sequence alignment)
 
 ## Scope
 
@@ -138,6 +138,7 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 - Updated Phase J Step 11 note: gate-freeze revalidation command evidence remains valid; latest full `[cron]` suite reruns are now green and sign-off remains open only for remaining parity-depth items.
 - Added Phase M Step 6 note: failure-alert webhook target fallback now reuses runtime-resolved delivery target and `delivery.url` alias routes when `failureAlert.to` / `delivery.to` are omitted.
 - Added Phase N Step 6/10 note: cross-layer ops integration now validates Step 6 fallback-route carry-forward through `CronOpsService::Wake` terminal hook payload assertions (`failureAlertMode`/`failureAlertTarget`/`failureAlertAtMs`) with green `[cron]` suite evidence (169 tests / 949 assertions).
+- Added Phase O Step 2/4 note: runtime adapter `aborted=true` outcomes now carry through timer state/run projections (`lastRunAborted`, run-log `aborted`) and ops aborted terminal-hook coverage now asserts `aborted=true` payload projection.
 
 ### 2026-05-17
 
