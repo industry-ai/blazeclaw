@@ -4343,6 +4343,49 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 	REQUIRE(sawNotDue);
 }
 
+TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job terminal edge", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson runUnknown = ops.Run({ { "id", "missing-manual-job" }, { "mode", "force" } });
+	REQUIRE(runUnknown.value("enqueued", false));
+	REQUIRE(runUnknown.value("reason", std::string()) == "queued");
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "manual" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE(failedPayloads.empty());
+	REQUIRE_FALSE(completedPayloads.empty());
+
+	bool sawUnknownJob = false;
+	for (const auto& payload : completedPayloads) {
+		if (payload.value("jobId", std::string()) == "missing-manual-job" &&
+			payload.value("taskLedgerStatus", std::string()) == "skipped" &&
+			payload.value("disposition", std::string()) == "skipped") {
+			sawUnknownJob = true;
+			REQUIRE(payload.value("action", std::string()) == "finished");
+			REQUIRE(payload.value("phase", std::string()) == "terminal");
+			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.contains("queuedAtMs"));
+			REQUIRE(
+				payload.value("summary", std::string()).find("no longer exists") !=
+				std::string::npos);
+		}
+	}
+
+	REQUIRE(sawUnknownJob);
+}
+
 TEST_CASE("Cron ops includes failure-destination suppression metadata in terminal fail hook", "[cron][ops]") {
 	CronOpsService ops;
 	std::vector<CronJson> failedPayloads;

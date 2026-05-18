@@ -1026,6 +1026,7 @@ namespace blazeclaw::cron {
 					nowMs));
 				m_store.Runs().back()["taskLedgerDisposition"] = "unknown_job";
 				m_store.Runs().back()["taskLedgerTerminal"] = true;
+				EmitTaskLedgerTerminalHook(m_store.Runs().back());
 				runsChanged = true;
 				continue;
 			}

@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase Q Step 4 terminal-hook aborted carry-forward consistency alignment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase R Step 4 manual unknown-job terminal-hook consistency alignment)
 
 ## Scope
 
