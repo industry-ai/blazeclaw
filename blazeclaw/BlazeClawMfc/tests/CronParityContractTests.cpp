@@ -231,6 +231,64 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
 	}
 
+	SECTION("cron.update canonicalizes flat schedule payload and delivery aliases") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\"," 
+				"\"id\":\"cron-update-flat-shape\"," 
+				"\"method\":\"cron.update\"," 
+				"\"params\":{"
+				"\"cronId\":\"cron-1\"," 
+				"\"kind\":\"every\"," 
+				"\"everyMs\":60000," 
+				"\"message\":\"nightly sweep\"," 
+				"\"deliveryMode\":\"webhook\"," 
+				"\"deliveryTo\":\"https://example.test/update-hook\"," 
+				"\"failureDestinationMode\":\"announce\"," 
+				"\"failureDestinationTo\":\"ops-room\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-flat-shape");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
+	SECTION("cron.update canonicalizes aliases inside explicit patch object") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\"," 
+				"\"id\":\"cron-update-patch-flat\"," 
+				"\"method\":\"cron.update\"," 
+				"\"params\":{"
+				"\"id\":\"cron-1\"," 
+				"\"patch\":{"
+				"\"kind\":\"cron\"," 
+				"\"expr\":\"*/5 * * * *\"," 
+				"\"text\":\"refresh cache\"," 
+				"\"deliveryMode\":\"webhook\"," 
+				"\"deliveryTo\":\"https://example.test/patch-hook\""
+				"}"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-patch-flat");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
 	SECTION("cron.run maps cronId alias to id") {
 		const nlohmann::json response = ParseGatewayFrame(
 			host.HandleInboundText(

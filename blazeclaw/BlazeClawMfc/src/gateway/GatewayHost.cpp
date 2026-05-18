@@ -258,6 +258,128 @@ namespace blazeclaw::gateway {
 						changed = true;
 					}
 				}
+
+				if (params.contains("patch") && params["patch"].is_object()) {
+					Json& patch = params["patch"];
+
+					if (patch.contains("kind") ||
+						patch.contains("everyMs") ||
+						patch.contains("at") ||
+						patch.contains("atMs") ||
+						patch.contains("expr") ||
+						patch.contains("tz") ||
+						patch.contains("staggerMs") ||
+						patch.contains("anchorMs")) {
+						Json& schedule = ensureObjectField(patch, "schedule");
+						moveFieldIfPresent(patch, schedule, "kind");
+						moveFieldIfPresent(patch, schedule, "everyMs");
+						moveFieldIfPresent(patch, schedule, "at");
+						moveFieldIfPresent(patch, schedule, "atMs");
+						moveFieldIfPresent(patch, schedule, "expr");
+						moveFieldIfPresent(patch, schedule, "tz");
+						moveFieldIfPresent(patch, schedule, "staggerMs");
+						moveFieldIfPresent(patch, schedule, "anchorMs");
+					}
+
+					if (!patch.contains("payload") &&
+						(patch.contains("text") || patch.contains("message"))) {
+						Json payload = Json::object();
+						if (patch.contains("message")) {
+							payload["kind"] = "agentTurn";
+							moveFieldIfPresent(patch, payload, "message");
+						}
+						else {
+							payload["kind"] = "systemEvent";
+							moveFieldIfPresent(patch, payload, "text");
+						}
+						moveFieldIfPresent(patch, payload, "model");
+						moveFieldIfPresent(patch, payload, "fallbacks");
+						moveFieldIfPresent(patch, payload, "toolsAllow");
+						moveFieldIfPresent(patch, payload, "thinking");
+						moveFieldIfPresent(patch, payload, "timeoutSeconds");
+						moveFieldIfPresent(patch, payload, "lightContext");
+						moveFieldIfPresent(patch, payload, "allowUnsafeExternalContent");
+						patch["payload"] = std::move(payload);
+						changed = true;
+					}
+
+					if (patch.contains("deliveryMode") ||
+						patch.contains("deliveryTo") ||
+						patch.contains("deliveryChannel") ||
+						patch.contains("deliveryAccountId") ||
+						patch.contains("deliveryBestEffort") ||
+						patch.contains("failureDestinationMode") ||
+						patch.contains("failureDestinationTo") ||
+						patch.contains("failureDestinationChannel") ||
+						patch.contains("failureDestinationAccountId")) {
+						Json& delivery = ensureObjectField(patch, "delivery");
+						moveFieldIfPresent(patch, delivery, "deliveryMode");
+						if (delivery.contains("deliveryMode") && !delivery.contains("mode")) {
+							delivery["mode"] = delivery["deliveryMode"];
+							delivery.erase("deliveryMode");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, delivery, "deliveryTo");
+						if (delivery.contains("deliveryTo") && !delivery.contains("to")) {
+							delivery["to"] = delivery["deliveryTo"];
+							delivery.erase("deliveryTo");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, delivery, "deliveryChannel");
+						if (delivery.contains("deliveryChannel") && !delivery.contains("channel")) {
+							delivery["channel"] = delivery["deliveryChannel"];
+							delivery.erase("deliveryChannel");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, delivery, "deliveryAccountId");
+						if (delivery.contains("deliveryAccountId") && !delivery.contains("accountId")) {
+							delivery["accountId"] = delivery["deliveryAccountId"];
+							delivery.erase("deliveryAccountId");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, delivery, "deliveryBestEffort");
+						if (delivery.contains("deliveryBestEffort") && !delivery.contains("bestEffort")) {
+							delivery["bestEffort"] = delivery["deliveryBestEffort"];
+							delivery.erase("deliveryBestEffort");
+							changed = true;
+						}
+
+						if (patch.contains("failureDestinationMode") ||
+							patch.contains("failureDestinationTo") ||
+							patch.contains("failureDestinationChannel") ||
+							patch.contains("failureDestinationAccountId")) {
+							Json& failureDestination = ensureObjectField(delivery, "failureDestination");
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationMode");
+							if (failureDestination.contains("failureDestinationMode") &&
+								!failureDestination.contains("mode")) {
+								failureDestination["mode"] = failureDestination["failureDestinationMode"];
+								failureDestination.erase("failureDestinationMode");
+								changed = true;
+							}
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationTo");
+							if (failureDestination.contains("failureDestinationTo") &&
+								!failureDestination.contains("to")) {
+								failureDestination["to"] = failureDestination["failureDestinationTo"];
+								failureDestination.erase("failureDestinationTo");
+								changed = true;
+							}
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationChannel");
+							if (failureDestination.contains("failureDestinationChannel") &&
+								!failureDestination.contains("channel")) {
+								failureDestination["channel"] = failureDestination["failureDestinationChannel"];
+								failureDestination.erase("failureDestinationChannel");
+								changed = true;
+							}
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationAccountId");
+							if (failureDestination.contains("failureDestinationAccountId") &&
+								!failureDestination.contains("accountId")) {
+								failureDestination["accountId"] = failureDestination["failureDestinationAccountId"];
+								failureDestination.erase("failureDestinationAccountId");
+								changed = true;
+							}
+						}
+					}
+				}
 			}
 
 			if (method == "cron.run") {

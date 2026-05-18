@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest `cron.update` flat-shape canonicalization depth increment)
 
 ## Scope
 
@@ -35,7 +35,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, but non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
 2. **Transport execution** — announce paths and default webhook policy still lag OpenClaw; opt-in WinHTTP dispatch exists for webhooks.
 3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, and hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is now landed; retry/cooldown/consumer depth remains open.
-4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation; pre-validator normalization bridge for legacy/flat tool shapes is still lighter than OpenClaw server-methods.
+4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation, and `GatewayHost::HandleInboundText` now applies pre-validator canonicalization for legacy/flat payloads across `cron.add`/`cron.update`/`cron.run`/`cron.runs`/`wake`; latest increment deepens `cron.update` flat schedule/payload/delivery alias lifting into nested patch structure. Remaining gap is broader tool-surface action depth, not absence of gateway normalization bridge.
 5. **Tool-surface parity** — WebView shaping (`agents-controller.js`) covers much of `cron-tool.ts` ergonomics; dedicated agent cron tool adapter and CLI/controller/bootstrap parity remain open.
 
 ## Capability Matrix (reconciled 2026-05-18)
@@ -44,10 +44,10 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 |---|---|---|---|
 | RPC method surface | Full cron RPC handlers with typed validation in server-method layer | RPC handlers present and wired via `CronOpsService` | Low |
 | Production runtime adapter wiring | Heartbeat/isolated runtime invoked by default | `GatewayHost::WireCronProductionIntegration()` registers adapters/hooks before scheduler startup; simulation fallback remains for non-adapter lanes | Medium |
-| Method param normalization before validation | Server methods normalize before validator checks | Ops-layer normalize after gateway validator; WebView pre-shaping | Medium |
+| Method param normalization before validation | Server methods normalize before validator checks | Ops-layer normalize after gateway validator plus gateway pre-validator canonicalization in `GatewayHost` for legacy/flat cron payloads | Medium-Low |
 | Agent tool surface (`cron` tool) | Rich flattened/object payload recovery and session-aware defaults | WebView parity helpers; no dedicated agent cron tool adapter | Medium |
 | Schedule kinds (`at/every/cron`) | Supported | Supported | Low |
-| Cron expression behavior | Richer cron semantics (day/month/dom, IANA-style `tz`) | Minute/hour matcher with `tz` offset parsing; day/month/dom lighter | Medium |
+| Cron expression behavior | Richer cron semantics (Croner-grade syntax, IANA-style `tz`) | 5-field matcher (minute/hour/day-of-month/month/day-of-week) with `tz` offset parsing; broader syntax/timezone semantics still lighter | Medium |
 | Stable stagger behavior | Per-job stable offset hash for stagger windows | `ResolveStableCronOffsetMs` (job-id hash) landed | Low-Medium |
 | One-shot re-arm behavior | Defensive `at` handling with legacy compatibility | `at` supported with last-run guard semantics | Medium |
 | Maintenance recompute semantics | Maintenance recompute preserves due slots | `preserveDueSlots` wired for read refresh vs execution sync | Low-Medium |
@@ -75,17 +75,17 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 **Gap**
 
-- OpenClaw server methods normalize before validating; BlazeClaw validates at gateway boundary then normalizes in ops for add/update.
+- OpenClaw server methods normalize before validating; BlazeClaw now combines gateway pre-validator canonicalization for legacy/flat cron payloads with ops-layer normalization for canonical add/update shapes.
 
 **Suggestion**
 
-- Add pre-validator normalization bridge for legacy/flat tool shapes while keeping post-normalize strict validation.
+- Keep expanding canonicalization coverage only where additional legacy aliases are discovered; preserve strict validator behavior.
 
 ### 2) Cron expression and notification parity
 
 **Gap**
 
-- BlazeClaw `ComputeNextCron` is minute/hour-focused; expression breadth and schedule-error user notification still lag OpenClaw.
+- BlazeClaw cron matcher now includes 5-field depth (minute/hour/day-of-month/month/day-of-week), but broader OpenClaw cron syntax/timezone semantics and schedule-error user notification still lag.
 
 **Suggestion**
 
