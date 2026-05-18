@@ -3,6 +3,7 @@
 #include "GatewayProtocolSchemaValidator.Internal.h"
 #include "generated/GatewaySchemaCatalog.Generated.h"
 
+#include <cmath>
 #include <functional>
 #include <initializer_list>
 #include <string_view>
@@ -60,6 +61,10 @@ namespace blazeclaw::gateway::protocol {
 			const std::string& payload,
 			SchemaValidationIssue& issue,
 			const std::string& errorMessage);
+		bool TryReadTopLevelNumberField(
+			const std::string& json,
+			const char* fieldName,
+			double& valueOut);
 
 		bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
 			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
@@ -319,6 +324,16 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (runState == "active" && !started) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (runState == "active" && !enqueued) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
 			if (runState == "terminal" && started) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;
@@ -332,6 +347,24 @@ namespace blazeclaw::gateway::protocol {
 			if ((reason == "already_running" || reason == "not_due") && enqueued) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;
+			}
+
+			double queuedAtMs = 0.0;
+			if (!TryReadTopLevelNumberField(payload, "queuedAtMs", queuedAtMs) ||
+				std::floor(queuedAtMs) != queuedAtMs ||
+				queuedAtMs < 0.0) {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
+			if (HasFieldToken(payload, "queueDepth")) {
+				double queueDepth = 0.0;
+				if (!TryReadTopLevelNumberField(payload, "queueDepth", queueDepth) ||
+					std::floor(queueDepth) != queueDepth ||
+					queueDepth < 0.0) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
 			}
 
 			return true;
@@ -935,6 +968,58 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			return false;
+		}
+
+		bool TryReadTopLevelNumberField(
+			const std::string& json,
+			const char* fieldName,
+			double& valueOut) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			++valuePos;
+			while (valuePos < json.size() &&
+				std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+				++valuePos;
+			}
+
+			if (valuePos >= json.size()) {
+				return false;
+			}
+
+			std::size_t parsedLength = 0;
+			try {
+				valueOut = std::stod(json.substr(valuePos), &parsedLength);
+			}
+			catch (...) {
+				return false;
+			}
+
+			if (parsedLength == 0) {
+				return false;
+			}
+
+			std::size_t next = valuePos + parsedLength;
+			while (next < json.size() &&
+				std::isspace(static_cast<unsigned char>(json[next])) != 0) {
+				++next;
+			}
+
+			if (next < json.size() &&
+				json[next] != ',' &&
+				json[next] != '}' &&
+				json[next] != ']') {
+				return false;
+			}
+
+			return true;
 		}
 
 		bool ValidateTopLevelEnumStringField(

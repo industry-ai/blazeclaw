@@ -4,6 +4,7 @@
 #include "../src/cron/CronOpsService.h"
 #include "../src/cron/CronStoreService.h"
 #include "../src/cron/CronTimerService.h"
+#include "../src/gateway/GatewayHost.h"
 #include "../src/gateway/GatewayProtocolSchemaValidator.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -12,6 +13,8 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -22,10 +25,15 @@ namespace {
 	using blazeclaw::cron::CronOpsService;
 	using blazeclaw::cron::CronStoreService;
 	using blazeclaw::cron::CronTimerService;
+	using blazeclaw::gateway::GatewayHost;
 	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
 	using blazeclaw::gateway::protocol::RequestFrame;
 	using blazeclaw::gateway::protocol::ResponseFrame;
 	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	nlohmann::json ParseGatewayFrame(const std::string& frameJson) {
+		return nlohmann::json::parse(frameJson);
+	}
 }
 
 TEST_CASE("Cron timer accepts webhook url alias when delivery.to is omitted", "[cron][timer]") {
@@ -117,6 +125,152 @@ TEST_CASE("Cron normalize add builds payload from flattened fields", "[cron][nor
 	REQUIRE(normalized["payload"].value("model", std::string()) == "gpt-4.1");
 	REQUIRE_FALSE(normalized.contains("message"));
 	REQUIRE_FALSE(normalized.contains("model"));
+}
+
+TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat cron.add params", "[cron][gateway][normalize]") {
+	GatewayHost host;
+
+	const std::string frame = host.HandleInboundText(
+		"{"
+		"\"type\":\"req\","
+		"\"id\":\"cron-add-flat\","
+		"\"method\":\"cron.add\","
+		"\"params\":{"
+		"\"kind\":\"every\","
+		"\"everyMs\":60000,"
+		"\"message\":\"nightly ping\","
+		"\"model\":\"gpt-4.1\","
+		"\"deliveryMode\":\"webhook\","
+		"\"deliveryTo\":\"https://example.test/hook\","
+		"\"failureDestinationMode\":\"announce\","
+		"\"failureDestinationTo\":\"ops-room\""
+		"}"
+		"}");
+
+	const nlohmann::json response = ParseGatewayFrame(frame);
+	REQUIRE(response.value("type", std::string()) == "res");
+	REQUIRE(response.value("id", std::string()) == "cron-add-flat");
+	if (response.value("ok", false)) {
+		REQUIRE(response.contains("payload"));
+		REQUIRE(response["payload"].is_object());
+		REQUIRE(response["payload"].contains("id"));
+	}
+	else {
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+}
+
+TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/run/runs/wake params", "[cron][gateway][normalize]") {
+	GatewayHost host;
+
+	SECTION("cron.update lifts flat patch fields and cronId alias") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-update-flat\","
+				"\"method\":\"cron.update\","
+				"\"params\":{"
+				"\"cronId\":\"cron-1\","
+				"\"enabled\":false,"
+				"\"failureAlert\":false"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-flat");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+	}
+
+	SECTION("cron.run maps cronId alias to id") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-run-flat\","
+				"\"method\":\"cron.run\","
+				"\"params\":{"
+				"\"cronId\":\"cron-1\","
+				"\"mode\":\"force\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-run-flat");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+	}
+
+	SECTION("cron.runs normalizes string list aliases and invalid job scope") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-runs-flat\","
+				"\"method\":\"cron.runs\","
+				"\"params\":{"
+				"\"scope\":\"job\","
+				"\"statuses\":\"ok\","
+				"\"deliveryStatuses\":\"delivered\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-runs-flat");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].contains("entries"));
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
+
+	SECTION("wake maps wakeMode alias to mode") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"wake-flat\","
+				"\"method\":\"wake\","
+				"\"params\":{"
+				"\"wakeMode\":\"now\","
+				"\"text\":\"wake up\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "wake-flat");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].value("mode", std::string()) == "now");
+			REQUIRE(response["payload"].value("text", std::string()) == "wake up");
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
 }
 
 TEST_CASE("Cron timer computes deterministic stagger offset for the same job", "[cron][timer]") {
@@ -402,6 +556,49 @@ TEST_CASE("Cron runs validator rejects statuses array above max cardinality", "[
 	REQUIRE(issue.message.find("at most 3") != std::string::npos);
 }
 
+TEST_CASE("Cron update validator rejects id containing path separators", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "update-id-path-separator",
+		.method = "cron.update",
+		.paramsJson = std::string(
+			"{\"id\":\"jobs/cron-1\",\"patch\":{\"enabled\":true}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+	REQUIRE(issue.message.find("path separators") != std::string::npos);
+}
+
+TEST_CASE("Cron remove validator rejects jobId containing path separators", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "remove-jobid-path-separator",
+		.method = "cron.remove",
+		.paramsJson = std::string("{\"jobId\":\"jobs\\\\cron-1\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.jobId") != std::string::npos);
+	REQUIRE(issue.message.find("path separators") != std::string::npos);
+}
+
+TEST_CASE("Cron run validator rejects id containing path separators", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "run-id-path-separator",
+		.method = "cron.run",
+		.paramsJson = std::string("{\"id\":\"jobs/cron-1\",\"mode\":\"force\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("params.id") != std::string::npos);
+	REQUIRE(issue.message.find("path separators") != std::string::npos);
+}
+
 TEST_CASE("Cron runs validator rejects deliveryStatuses array above max cardinality", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-delivery-statuses-too-many",
@@ -631,6 +828,51 @@ TEST_CASE("Cron run response validator rejects unsupported runState taxonomy", "
 		.ok = true,
 		.payloadJson = std::string(
 			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"pending\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator rejects active state without started", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-active-without-started",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"active\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator rejects non-integer queuedAtMs", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-queued-atms-non-integer",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000.5,\"runState\":\"queued\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron run response validator rejects negative queueDepth", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-queue-depth-negative",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"queueDepth\":-1,\"runState\":\"queued\"}"),
 		.error = std::nullopt,
 	};
 

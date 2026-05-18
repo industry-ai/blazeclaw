@@ -1282,6 +1282,27 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (request.paramsJson.has_value()) {
+			auto validateJobIdentityField = [&](const char* fieldName) {
+				std::string value;
+				if (!TryReadTopLevelStringField(request.paramsJson.value(), fieldName, value)) {
+					return true;
+				}
+
+				const std::string trimmed = Trim(value);
+				if (trimmed.find('/') != std::string::npos ||
+					trimmed.find('\\') != std::string::npos) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `cron.update` requires `params." +
+						std::string(fieldName) +
+						"` to not contain path separators.");
+					return false;
+				}
+
+				return true;
+			};
+
 				std::string id;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.update` requires `params.id` to be a non-empty string.");
@@ -1291,6 +1312,10 @@ namespace blazeclaw::gateway::protocol {
 				std::string jobId;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.update` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
+
+				if (!validateJobIdentityField("id") || !validateJobIdentityField("jobId")) {
 					return false;
 				}
 
@@ -1461,6 +1486,27 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (request.paramsJson.has_value()) {
+			auto validateJobIdentityField = [&](const char* fieldName) {
+				std::string value;
+				if (!TryReadTopLevelStringField(request.paramsJson.value(), fieldName, value)) {
+					return true;
+				}
+
+				const std::string trimmed = Trim(value);
+				if (trimmed.find('/') != std::string::npos ||
+					trimmed.find('\\') != std::string::npos) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `cron.remove` requires `params." +
+						std::string(fieldName) +
+						"` to not contain path separators.");
+					return false;
+				}
+
+				return true;
+			};
+
 				std::string id;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.remove` requires `params.id` to be a non-empty string.");
@@ -1470,6 +1516,10 @@ namespace blazeclaw::gateway::protocol {
 				std::string jobId;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.remove` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
+
+				if (!validateJobIdentityField("id") || !validateJobIdentityField("jobId")) {
 					return false;
 				}
 			}
@@ -1508,6 +1558,27 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (request.paramsJson.has_value()) {
+			auto validateJobIdentityField = [&](const char* fieldName) {
+				std::string value;
+				if (!TryReadTopLevelStringField(request.paramsJson.value(), fieldName, value)) {
+					return true;
+				}
+
+				const std::string trimmed = Trim(value);
+				if (trimmed.find('/') != std::string::npos ||
+					trimmed.find('\\') != std::string::npos) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `cron.run` requires `params." +
+						std::string(fieldName) +
+						"` to not contain path separators.");
+					return false;
+				}
+
+				return true;
+			};
+
 				std::string id;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "id", id) && Trim(id).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.run` requires `params.id` to be a non-empty string.");
@@ -1517,6 +1588,10 @@ namespace blazeclaw::gateway::protocol {
 				std::string jobId;
 				if (TryReadTopLevelStringField(request.paramsJson.value(), "jobId", jobId) && Trim(jobId).empty()) {
 					SetIssue(issue, "schema_invalid_value", "Method `cron.run` requires `params.jobId` to be a non-empty string.");
+					return false;
+				}
+
+				if (!validateJobIdentityField("id") || !validateJobIdentityField("jobId")) {
 					return false;
 				}
 			}
