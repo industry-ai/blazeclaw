@@ -1063,7 +1063,7 @@ TEST_CASE("Cron timer suppresses announce failure destination when target equals
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
 	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "target-1");
@@ -1099,7 +1099,7 @@ TEST_CASE("Cron timer suppresses webhook failure destination for scheme-case-equ
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
@@ -1134,7 +1134,7 @@ TEST_CASE("Cron timer suppresses webhook failure destination for default-port-eq
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
@@ -1548,6 +1548,51 @@ TEST_CASE("Cron timer failureAlert cooldown opens for materially changed webhook
 	REQUIRE_FALSE(runs[0].value("failureAlertSuppressed", true));
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs);
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/route-v2");
+}
+
+TEST_CASE("Cron timer clears stale failureAlert route snapshot when alert is disabled", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-disabled-clears-route-snapshot" },
+			{ "name", "alert disabled clears route snapshot" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/primary" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "failureAlert", false },
+			{ "state",
+				{
+					{ "nextRunAtMs", nowMs - 1 },
+					{ "consecutiveErrors", 3 },
+					{ "lastFailureAlertAtMs", nowMs - 1'000 },
+					{ "lastFailureAlertMode", "webhook" },
+					{ "lastFailureAlertTarget", "https://alerts.example/stale" },
+					{ "lastFailureAlertChannel", "stale" },
+					{ "lastFailureAlertAccountId", "acct-stale" }
+				} }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "disabled");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertMode"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertTarget"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertChannel"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAccountId"].is_null());
 }
 
 TEST_CASE("Cron timer announce failure destination falls back to primary target when to is omitted", "[cron][timer]") {

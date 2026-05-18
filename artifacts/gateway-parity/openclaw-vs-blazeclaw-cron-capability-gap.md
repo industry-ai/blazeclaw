@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest Step 4 manual queued-edge immediate terminal-hook increment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest Step 6 failure-alert recurring carry-forward snapshot-hygiene increment)
 
 ## Scope
 
@@ -132,6 +132,7 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 - Updated schedule/maintenance rows (`tz`, stagger, `preserveDueSlots`, `scheduleErrorCount` auto-disable).
 - Pointed authoritative plan to `blazeclaw/docs/cron-parity-gap-and-port-plan.md`.
 - Added Phase G Step 4 note: `CronOpsService::Run` now emits terminal task-ledger hooks for immediate manual `already_running` and `not_due` transitions, with targeted ops parity coverage for `not_due` terminal-edge completion-hook emission.
+- Added Phase H Step 6 note: failure-alert recurring error-branch evaluation now clears stale route snapshot state (`lastFailureAlertTarget` plus mode/channel/account snapshots) in disabled suppression lanes, with targeted timer parity coverage.
 
 ### 2026-05-17
 

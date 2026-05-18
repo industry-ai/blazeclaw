@@ -1856,6 +1856,7 @@ namespace blazeclaw::cron {
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
 				state["lastFailureAlertMode"] = nullptr;
+				state["lastFailureAlertTarget"] = CronJson(nullptr);
 				state["lastFailureAlertChannel"] = nullptr;
 				state["lastFailureAlertAccountId"] = nullptr;
 				const bool bestEffortDelivery = IsBestEffortDelivery(*it);
@@ -1877,8 +1878,6 @@ namespace blazeclaw::cron {
 						state["lastFailureAlertAtMs"] = CronJson(nullptr);
 						state["failureAlertSuppressed"] = true;
 						state["failureAlertSuppressedReason"] = "not_configured";
-						state["lastFailureAlertMode"] = nullptr;
-						state["lastFailureAlertTarget"] = CronJson(nullptr);
 					}
 					else {
 						std::string failureAlertMode = kFailureAlertModeAnnounce;
