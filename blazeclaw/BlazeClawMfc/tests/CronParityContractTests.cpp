@@ -341,6 +341,62 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 		}
 	}
 
+	SECTION("cron.add lifts flat failureAlert aliases into failureAlert object") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-add-flat-failure-alert\","
+				"\"method\":\"cron.add\","
+				"\"params\":{"
+				"\"kind\":\"every\","
+				"\"everyMs\":60000,"
+				"\"text\":\"nightly ping\","
+				"\"failureAlertAfter\":2,"
+				"\"failureAlertCooldownMs\":120000,"
+				"\"failureAlertMode\":\"announce\","
+				"\"failureAlertTo\":\"ops-room\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-add-flat-failure-alert");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
+	SECTION("cron.update patch lifts flat failureAlert aliases") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-update-flat-failure-alert\","
+				"\"method\":\"cron.update\","
+				"\"params\":{"
+				"\"id\":\"cron-1\","
+				"\"patch\":{"
+				"\"failureAlertAfter\":3,"
+				"\"failureAlertCooldownMs\":180000,"
+				"\"failureAlertMode\":\"announce\","
+				"\"failureAlertTo\":\"ops-room\""
+				"}"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-flat-failure-alert");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
 	SECTION("wake maps wakeMode alias to mode") {
 		const nlohmann::json response = ParseGatewayFrame(
 			host.HandleInboundText(

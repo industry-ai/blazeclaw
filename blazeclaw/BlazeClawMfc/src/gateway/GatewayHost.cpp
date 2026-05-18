@@ -231,6 +231,57 @@ namespace blazeclaw::gateway {
 						}
 					}
 				}
+
+				if (params.contains("failureAlertAfter") ||
+					params.contains("failureAlertCooldownMs") ||
+					params.contains("failureAlertMode") ||
+					params.contains("failureAlertTo") ||
+					params.contains("failureAlertChannel") ||
+					params.contains("failureAlertAccountId")) {
+					Json& failureAlert = ensureObjectField(params, "failureAlert");
+					moveFieldIfPresent(params, failureAlert, "failureAlertAfter");
+					if (failureAlert.contains("failureAlertAfter") &&
+						!failureAlert.contains("after")) {
+						failureAlert["after"] = failureAlert["failureAlertAfter"];
+						failureAlert.erase("failureAlertAfter");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertCooldownMs");
+					if (failureAlert.contains("failureAlertCooldownMs") &&
+						!failureAlert.contains("cooldownMs")) {
+						failureAlert["cooldownMs"] = failureAlert["failureAlertCooldownMs"];
+						failureAlert.erase("failureAlertCooldownMs");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertMode");
+					if (failureAlert.contains("failureAlertMode") &&
+						!failureAlert.contains("mode")) {
+						failureAlert["mode"] = failureAlert["failureAlertMode"];
+						failureAlert.erase("failureAlertMode");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertTo");
+					if (failureAlert.contains("failureAlertTo") &&
+						!failureAlert.contains("to")) {
+						failureAlert["to"] = failureAlert["failureAlertTo"];
+						failureAlert.erase("failureAlertTo");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertChannel");
+					if (failureAlert.contains("failureAlertChannel") &&
+						!failureAlert.contains("channel")) {
+						failureAlert["channel"] = failureAlert["failureAlertChannel"];
+						failureAlert.erase("failureAlertChannel");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertAccountId");
+					if (failureAlert.contains("failureAlertAccountId") &&
+						!failureAlert.contains("accountId")) {
+						failureAlert["accountId"] = failureAlert["failureAlertAccountId"];
+						failureAlert.erase("failureAlertAccountId");
+						changed = true;
+					}
+				}
 			}
 
 			if (method == "cron.update") {
@@ -377,6 +428,57 @@ namespace blazeclaw::gateway {
 								failureDestination.erase("failureDestinationAccountId");
 								changed = true;
 							}
+						}
+					}
+
+					if (patch.contains("failureAlertAfter") ||
+						patch.contains("failureAlertCooldownMs") ||
+						patch.contains("failureAlertMode") ||
+						patch.contains("failureAlertTo") ||
+						patch.contains("failureAlertChannel") ||
+						patch.contains("failureAlertAccountId")) {
+						Json& failureAlert = ensureObjectField(patch, "failureAlert");
+						moveFieldIfPresent(patch, failureAlert, "failureAlertAfter");
+						if (failureAlert.contains("failureAlertAfter") &&
+							!failureAlert.contains("after")) {
+							failureAlert["after"] = failureAlert["failureAlertAfter"];
+							failureAlert.erase("failureAlertAfter");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertCooldownMs");
+						if (failureAlert.contains("failureAlertCooldownMs") &&
+							!failureAlert.contains("cooldownMs")) {
+							failureAlert["cooldownMs"] = failureAlert["failureAlertCooldownMs"];
+							failureAlert.erase("failureAlertCooldownMs");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertMode");
+						if (failureAlert.contains("failureAlertMode") &&
+							!failureAlert.contains("mode")) {
+							failureAlert["mode"] = failureAlert["failureAlertMode"];
+							failureAlert.erase("failureAlertMode");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertTo");
+						if (failureAlert.contains("failureAlertTo") &&
+							!failureAlert.contains("to")) {
+							failureAlert["to"] = failureAlert["failureAlertTo"];
+							failureAlert.erase("failureAlertTo");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertChannel");
+						if (failureAlert.contains("failureAlertChannel") &&
+							!failureAlert.contains("channel")) {
+							failureAlert["channel"] = failureAlert["failureAlertChannel"];
+							failureAlert.erase("failureAlertChannel");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertAccountId");
+						if (failureAlert.contains("failureAlertAccountId") &&
+							!failureAlert.contains("accountId")) {
+							failureAlert["accountId"] = failureAlert["failureAlertAccountId"];
+							failureAlert.erase("failureAlertAccountId");
+							changed = true;
 						}
 					}
 				}
