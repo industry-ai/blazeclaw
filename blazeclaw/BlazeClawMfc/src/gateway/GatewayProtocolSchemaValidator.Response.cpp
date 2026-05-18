@@ -191,6 +191,9 @@ namespace blazeclaw::gateway::protocol {
 						"failed",
 						"timed_out",
 						"aborted",
+						"skipped",
+						"suppressed",
+						"not_delivered",
 						"already_running",
 						"not_due",
 						"missing_terminal_run"

@@ -23,6 +23,8 @@
 #include "GatewayNodeCatalogService.h"
 #include "GatewayNodeCanvasCapabilityService.h"
 #include "GatewayNodePendingActionQueue.h"
+
+#include <mutex>
 #include "GatewayNodeWakeService.h"
 #include "GatewayRuntimeContext.h"
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
@@ -724,6 +726,18 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] bool FinalizeRuntimeInitialization();
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
+		void WireCronProductionIntegration();
+		[[nodiscard]] std::optional<nlohmann::json> ExecuteCronMainSessionRuntime(
+			const nlohmann::json& job,
+			std::int64_t nowMs);
+		[[nodiscard]] std::optional<nlohmann::json> ExecuteCronIsolatedSessionRuntime(
+			const nlohmann::json& job,
+			std::int64_t nowMs);
+		void HandleCronTaskLedgerCreateRunning(const nlohmann::json& payload);
+		void HandleCronTaskLedgerComplete(const nlohmann::json& payload);
+		void HandleCronTaskLedgerFail(const nlohmann::json& payload);
+		void UpsertCronTaskLedgerEntry(const nlohmann::json& payload, bool terminal);
+		[[nodiscard]] bool IsCronChatSessionBusy(const std::string& sessionKey) const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
 		void EnsureFixtureParityValidated();
 
@@ -851,6 +865,8 @@ namespace blazeclaw::gateway {
 		SpeechRecognitionRuntimeStatusCallback m_speechRecognitionRuntimeStatusCallback;
 		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
+		mutable std::mutex m_cronProductionMutex;
+		bool m_cronProductionWired = false;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
 		GatewayHostRouter m_hostRouter;
 		GatewayRequestPolicyGuard m_requestPolicyGuard;

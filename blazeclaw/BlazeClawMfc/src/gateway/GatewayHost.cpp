@@ -652,6 +652,7 @@ namespace blazeclaw::gateway {
 			},
 			python::PythonRuntimeDispatcher::CreateExecutor());
 
+		WireCronProductionIntegration();
 		cron::GetCronOpsService().StartBackgroundScheduler();
 
 		return true;
@@ -916,6 +917,12 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::Stop() {
 		cron::GetCronOpsService().StopBackgroundScheduler();
+		{
+			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+			cron::GetCronOpsService().SetRuntimeExecutionAdapters({});
+			cron::GetCronOpsService().SetTaskLedgerHooks({});
+			m_cronProductionWired = false;
+		}
 		m_transport.Stop();
 		// Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
@@ -2299,6 +2306,391 @@ namespace blazeclaw::gateway {
 
 		EmitTelemetryEvent("gateway.method_surface.extension_reload", outDeltaJson);
 		return true;
+	}
+
+	namespace cron_production {
+		using CronJson = cron::CronJson;
+
+		std::string ReadStringField(const CronJson& value, const char* key) {
+			if (!value.contains(key) || !value[key].is_string()) {
+				return {};
+			}
+			return cron::TrimCopy(value[key].get<std::string>());
+		}
+
+		std::string ResolveCronChatSessionKey(const CronJson& job) {
+			std::string sessionKey = ReadStringField(job, "sessionKey");
+			if (!sessionKey.empty()) {
+				return sessionKey;
+			}
+
+			if (job.contains("payload") && job["payload"].is_object()) {
+				sessionKey = ReadStringField(job["payload"], "sessionKey");
+				if (!sessionKey.empty()) {
+					return sessionKey;
+				}
+			}
+
+			const std::string sessionTargetRaw =
+				cron::TrimCopy(job.value("sessionTarget", std::string("main")));
+			const std::string sessionTarget = cron::ToLowerCopy(sessionTargetRaw);
+			if (sessionTarget.rfind("session:", 0) == 0 &&
+				sessionTargetRaw.size() > std::string("session:").size()) {
+				return cron::TrimCopy(sessionTargetRaw.substr(std::string("session:").size()));
+			}
+
+			const std::string agentId = ReadStringField(job, "agentId");
+			if (!agentId.empty()) {
+				return agentId;
+			}
+
+			return "main";
+		}
+
+		std::string BuildCronAdapterRunId(const CronJson& job, const std::int64_t nowMs) {
+			const std::string jobId = job.value("id", std::string());
+			if (!jobId.empty()) {
+				return "cron-run-" + jobId + "-" + std::to_string(nowMs);
+			}
+			return cron::BuildCronRunId(nowMs);
+		}
+
+		bool IsCronOwnedRunId(const std::string& runId) {
+			return runId.rfind("cron-run-", 0) == 0 || runId.rfind("cron-", 0) == 0;
+		}
+
+		using ChatRuntimeResult = GatewayHost::ChatRuntimeResult;
+
+		std::optional<CronJson> MapChatRuntimeResultToCron(const ChatRuntimeResult& result) {
+			CronJson response = CronJson::object();
+			response["handled"] = true;
+			response["observedAtMs"] = cron::UtcNowMs();
+
+			if (result.ok) {
+				response["status"] = "ok";
+				std::string summary = cron::TrimCopy(result.assistantText);
+				if (summary.size() > 512) {
+					summary.resize(512);
+				}
+				if (summary.empty()) {
+					summary = "Cron runtime completed";
+				}
+				response["summary"] = summary;
+			}
+			else {
+				const std::string errorMessage = result.errorMessage.empty()
+					? "Cron runtime execution failed"
+					: result.errorMessage;
+				const std::string errorCode = result.errorCode.empty()
+					? "runtime_error"
+					: result.errorCode;
+				response["status"] = "error";
+				response["error"] = errorMessage;
+				response["errorCategory"] = errorCode;
+				response["summary"] = errorMessage;
+				response["retryable"] =
+					errorCode == "timeout" ||
+					errorCode == "network" ||
+					errorCode == "rate_limit";
+				if (errorCode == "timeout") {
+					response["timedOut"] = true;
+				}
+				if (errorCode == "aborted" || errorCode == "cancelled") {
+					response["aborted"] = true;
+				}
+			}
+
+			if (!result.modelId.empty()) {
+				response["model"] = result.modelId;
+			}
+
+			const std::string assistantText = cron::TrimCopy(result.assistantText);
+			if (!assistantText.empty()) {
+				const std::int64_t promptTokens =
+					(std::max)(static_cast<std::int64_t>(1),
+						static_cast<std::int64_t>(assistantText.size() / 4));
+				response["usage"] = CronJson{
+					{ "promptTokens", promptTokens },
+					{ "completionTokens", promptTokens },
+					{ "totalTokens", promptTokens * 2 }
+				};
+			}
+
+			if (!result.taskDeltas.empty()) {
+				response["taskDeltaCount"] = result.taskDeltas.size();
+			}
+
+			return response;
+		}
+
+		ChatRuntimeResult::TaskDeltaEntry BuildCronTaskDeltaEntry(
+			const CronJson& payload,
+			const std::size_t index,
+			const bool terminal) {
+			const std::uint64_t nowMs = static_cast<std::uint64_t>(cron::UtcNowMs());
+			ChatRuntimeResult::TaskDeltaEntry entry;
+			entry.index = index;
+			entry.runId = ReadStringField(payload, "runId");
+			entry.sessionId = ReadStringField(payload, "sessionId");
+			if (entry.sessionId.empty()) {
+				entry.sessionId = ReadStringField(payload, "sessionKey");
+			}
+			if (entry.sessionId.empty()) {
+				entry.sessionId = "cron";
+			}
+			entry.phase = ReadStringField(payload, "phase");
+			if (entry.phase.empty()) {
+				entry.phase = ReadStringField(payload, "taskLedgerPhase");
+			}
+			if (entry.phase.empty()) {
+				entry.phase = terminal ? "terminal" : "active";
+			}
+			entry.status = ReadStringField(payload, "taskLedgerStatus");
+			if (entry.status.empty()) {
+				entry.status = ReadStringField(payload, "status");
+			}
+			if (entry.status.empty()) {
+				entry.status = terminal ? "ok" : "running";
+			}
+			entry.stepLabel = "cron:" + ReadStringField(payload, "jobId");
+			if (entry.stepLabel == "cron:") {
+				entry.stepLabel = "cron";
+			}
+			entry.resultJson = ReadStringField(payload, "summary");
+			entry.errorCode = ReadStringField(payload, "errorCategory");
+			entry.errorMessage = ReadStringField(payload, "error");
+			entry.startedAtMs = nowMs;
+			entry.completedAtMs = terminal ? nowMs : 0;
+			entry.latencyMs = terminal ? 0 : 0;
+			return entry;
+		}
+
+	} // namespace cron_production
+
+	void GatewayHost::WireCronProductionIntegration() {
+		if (m_cronProductionWired) {
+			return;
+		}
+
+		cron::CronRuntimeExecutionAdapters adapters;
+		adapters.mainSession =
+			[this](const cron::CronJson& job, const std::int64_t nowMs)
+			-> std::optional<cron::CronJson> {
+				return ExecuteCronMainSessionRuntime(job, nowMs);
+			};
+		adapters.isolatedSession =
+			[this](const cron::CronJson& job, const std::int64_t nowMs)
+			-> std::optional<cron::CronJson> {
+				return ExecuteCronIsolatedSessionRuntime(job, nowMs);
+			};
+		cron::GetCronOpsService().SetRuntimeExecutionAdapters(std::move(adapters));
+
+		cron::CronOpsService::TaskLedgerHooks hooks;
+		hooks.createRunningTaskRun =
+			[this](const cron::CronJson& payload) {
+				HandleCronTaskLedgerCreateRunning(payload);
+			};
+		hooks.completeTaskRunByRunId =
+			[this](const cron::CronJson& payload) {
+				HandleCronTaskLedgerComplete(payload);
+			};
+		hooks.failTaskRunByRunId =
+			[this](const cron::CronJson& payload) {
+				HandleCronTaskLedgerFail(payload);
+			};
+		cron::GetCronOpsService().SetTaskLedgerHooks(std::move(hooks));
+
+		m_cronProductionWired = true;
+		EmitTelemetryEvent(
+			"gateway.cron.production_integration.wired",
+			"{\"runtimeAdapters\":true,\"taskLedgerHooks\":true}");
+	}
+
+	bool GatewayHost::IsCronChatSessionBusy(const std::string& sessionKey) const {
+		if (sessionKey.empty()) {
+			return false;
+		}
+
+		for (const auto& [runId, run] : m_chatRunsById) {
+			if (run.sessionKey != sessionKey || !run.active) {
+				continue;
+			}
+			if (cron_production::IsCronOwnedRunId(runId)) {
+				continue;
+			}
+			return true;
+		}
+
+		for (const auto& runId :
+			m_transportRecipientRegistry.ActiveRunsForSession(sessionKey)) {
+			if (cron_production::IsCronOwnedRunId(runId)) {
+				continue;
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	std::optional<nlohmann::json> GatewayHost::ExecuteCronMainSessionRuntime(
+		const nlohmann::json& job,
+		const std::int64_t nowMs) {
+		using CronJson = cron::CronJson;
+		const CronJson& cronJob = job;
+		if (!cronJob.contains("payload") || !cronJob["payload"].is_object()) {
+			return std::nullopt;
+		}
+
+		const CronJson& payload = cronJob["payload"];
+		const std::string payloadKind =
+			cron::ToLowerCopy(cron::TrimCopy(payload.value("kind", std::string())));
+		if (payloadKind != "systemevent") {
+			return std::nullopt;
+		}
+
+		const std::string text = cron::TrimCopy(payload.value("text", std::string()));
+		if (text.empty()) {
+			return std::nullopt;
+		}
+
+		const std::string sessionKey = cron_production::ResolveCronChatSessionKey(cronJob);
+		{
+			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+			if (IsCronChatSessionBusy(sessionKey)) {
+				return CronJson{
+					{ "handled", true },
+					{ "busy", true },
+					{ "status", "error" },
+					{ "error", "main heartbeat busy" },
+					{ "errorCategory", "heartbeat_busy" },
+					{ "summary", "Main heartbeat busy" },
+					{ "sessionKey", sessionKey },
+					{ "sessionId", "main" },
+					{ "observedAtMs", nowMs }
+				};
+			}
+		}
+
+		if (!m_chatRuntimeCallback) {
+			return std::nullopt;
+		}
+
+		const std::string runId = cron_production::BuildCronAdapterRunId(cronJob, nowMs);
+		GatewayHost::ChatRuntimeRequest request;
+		request.runId = runId;
+		request.sessionKey = sessionKey;
+		request.message = "[cron] " + text;
+		request.bodyForCommands = text;
+		request.bodyForAgent = request.message;
+		request.shouldLoadInlineSkillCommands = false;
+		request.allowInlineToolImmediateExecution = false;
+
+		ChatRuntimeResult runtimeResult;
+		{
+			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+			runtimeResult = m_chatRuntimeCallback(request);
+		}
+
+		auto mapped = cron_production::MapChatRuntimeResultToCron(runtimeResult);
+		if (!mapped.has_value()) {
+			return std::nullopt;
+		}
+
+		mapped.value()["sessionKey"] = sessionKey;
+		mapped.value()["sessionId"] = "main";
+		return mapped;
+	}
+
+	std::optional<nlohmann::json> GatewayHost::ExecuteCronIsolatedSessionRuntime(
+		const nlohmann::json& job,
+		const std::int64_t nowMs) {
+		using CronJson = cron::CronJson;
+		const CronJson& cronJob = job;
+		if (!cronJob.contains("payload") || !cronJob["payload"].is_object()) {
+			return std::nullopt;
+		}
+
+		const CronJson& payload = cronJob["payload"];
+		const std::string payloadKind =
+			cron::ToLowerCopy(cron::TrimCopy(payload.value("kind", std::string())));
+		if (payloadKind != "agentturn") {
+			return std::nullopt;
+		}
+
+		const std::string message = cron::TrimCopy(payload.value("message", std::string()));
+		if (message.empty()) {
+			return std::nullopt;
+		}
+
+		if (!m_chatRuntimeCallback) {
+			return std::nullopt;
+		}
+
+		const std::string sessionKey = cron_production::ResolveCronChatSessionKey(cronJob);
+		const std::string runId = cron_production::BuildCronAdapterRunId(cronJob, nowMs);
+		GatewayHost::ChatRuntimeRequest request;
+		request.runId = runId;
+		request.sessionKey = sessionKey;
+		request.message = message;
+		request.bodyForCommands = message;
+		request.bodyForAgent = message;
+		request.shouldLoadInlineSkillCommands = false;
+		request.allowInlineToolImmediateExecution = true;
+
+		ChatRuntimeResult runtimeResult;
+		{
+			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+			runtimeResult = m_chatRuntimeCallback(request);
+		}
+
+		auto mapped = cron_production::MapChatRuntimeResultToCron(runtimeResult);
+		if (!mapped.has_value()) {
+			return std::nullopt;
+		}
+
+		mapped.value()["sessionKey"] = sessionKey;
+		mapped.value()["sessionId"] = sessionKey.empty() ? "isolated" : sessionKey;
+		if (payload.contains("model") && payload["model"].is_string()) {
+			mapped.value()["model"] = cron::TrimCopy(payload["model"].get<std::string>());
+		}
+		if (payload.contains("provider") && payload["provider"].is_string()) {
+			mapped.value()["provider"] = cron::TrimCopy(payload["provider"].get<std::string>());
+		}
+		return mapped;
+	}
+
+	void GatewayHost::UpsertCronTaskLedgerEntry(
+		const nlohmann::json& payload,
+		const bool terminal) {
+		const cron::CronJson& cronPayload = payload;
+		const std::string runId = cron_production::ReadStringField(cronPayload, "runId");
+		if (runId.empty()) {
+			return;
+		}
+
+		std::vector<ChatRuntimeResult::TaskDeltaEntry> entries;
+		if (const auto existing = m_taskDeltaRepository.Get(runId, false)) {
+			entries = existing.value();
+		}
+
+		entries.push_back(
+			cron_production::BuildCronTaskDeltaEntry(cronPayload, entries.size(), terminal));
+		m_taskDeltaRepository.Upsert(runId, entries);
+	}
+
+	void GatewayHost::HandleCronTaskLedgerCreateRunning(const nlohmann::json& payload) {
+		std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+		UpsertCronTaskLedgerEntry(payload, false);
+	}
+
+	void GatewayHost::HandleCronTaskLedgerComplete(const nlohmann::json& payload) {
+		std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+		UpsertCronTaskLedgerEntry(payload, true);
+	}
+
+	void GatewayHost::HandleCronTaskLedgerFail(const nlohmann::json& payload) {
+		std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+		UpsertCronTaskLedgerEntry(payload, true);
 	}
 
 } // namespace blazeclaw::gateway

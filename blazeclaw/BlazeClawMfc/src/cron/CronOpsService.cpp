@@ -1209,6 +1209,10 @@ namespace blazeclaw::cron {
 		}
 
 		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
+		payload["status"] = "running";
+		payload["taskLedgerStatus"] = "running";
+		payload["taskLedgerPhase"] = "active";
+		payload["taskLedgerTerminal"] = false;
 		payload["phase"] = "active";
 		payload["terminal"] = false;
 		try {

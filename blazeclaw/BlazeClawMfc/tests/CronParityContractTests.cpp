@@ -567,6 +567,46 @@ TEST_CASE("Cron runs response validator accepts lifecycle-derived taskLedgerDisp
 	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
 }
 
+TEST_CASE("Cron runs response validator accepts expanded taskLedgerDisposition taxonomy values", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	SECTION("suppressed disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-suppressed",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"suppressed\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("not_delivered disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-not-delivered",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"failed\",\"taskLedgerDisposition\":\"not_delivered\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("skipped disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-skipped",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"skipped\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+}
+
 TEST_CASE("Cron runs response validator rejects unsupported value taxonomy", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -3294,10 +3334,10 @@ TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron
 	REQUIRE_FALSE(completedPayloads.empty());
 	REQUIRE(failedPayloads.empty());
 	REQUIRE(runningPayloads.back().value("runtime", std::string()) == "cron");
-	REQUIRE(runningPayloads.back().value("taskLedgerPhase", std::string()) == "terminal");
-	REQUIRE(runningPayloads.back().value("taskLedgerTerminal", true));
+	REQUIRE(runningPayloads.back().value("taskLedgerPhase", std::string()) == "active");
+	REQUIRE_FALSE(runningPayloads.back().value("taskLedgerTerminal", true));
+	REQUIRE(runningPayloads.back().value("taskLedgerStatus", std::string()) == "running");
 	REQUIRE(runningPayloads.back().contains("deliveryStatus"));
-	REQUIRE(runningPayloads.back().contains("taskLedgerStatus"));
 	REQUIRE(completedPayloads.back().value("terminal", false));
 	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
 	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
