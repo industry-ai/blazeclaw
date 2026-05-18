@@ -1838,6 +1838,30 @@ namespace blazeclaw::gateway::protocol {
 						4)) {
 					return false;
 				}
+
+				std::string statusValue;
+				const bool hasStatusValue =
+					TryReadTopLevelStringField(json, "status", statusValue);
+				std::string deliveryStatusValue;
+				const bool hasDeliveryStatusValue =
+					TryReadTopLevelStringField(json, "deliveryStatus", deliveryStatusValue);
+
+				if (hasStatusValue && fieldKinds.find("statuses") != fieldKinds.end()) {
+					SetIssue(
+						issue,
+						"schema_invalid_params",
+						"Method `cron.runs` does not allow using both `params.status` and `params.statuses` together.");
+					return false;
+				}
+
+				if (hasDeliveryStatusValue &&
+					fieldKinds.find("deliveryStatuses") != fieldKinds.end()) {
+					SetIssue(
+						issue,
+						"schema_invalid_params",
+						"Method `cron.runs` does not allow using both `params.deliveryStatus` and `params.deliveryStatuses` together.");
+					return false;
+				}
 			}
 
 			for (const auto& [field, _] : fieldKinds) {

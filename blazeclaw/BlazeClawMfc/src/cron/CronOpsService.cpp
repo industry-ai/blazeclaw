@@ -276,6 +276,17 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("failureDestinationTarget")) {
 				payload["failureDestinationTarget"] = runEntry["failureDestinationTarget"];
 			}
+			if (runEntry.contains("failureDestinationChannel")) {
+				payload["failureDestinationChannel"] =
+					runEntry["failureDestinationChannel"];
+			}
+			if (runEntry.contains("failureDestinationAccountId")) {
+				payload["failureDestinationAccountId"] =
+					runEntry["failureDestinationAccountId"];
+			}
+			if (runEntry.contains("failureDestinationError")) {
+				payload["failureDestinationError"] = runEntry["failureDestinationError"];
+			}
 			if (runEntry.contains("sessionId")) {
 				payload["sessionId"] = runEntry["sessionId"];
 			}
@@ -302,6 +313,17 @@ namespace blazeclaw::cron {
 			}
 			if (runEntry.contains("nextRunAtMs")) {
 				payload["nextRunAtMs"] = runEntry["nextRunAtMs"];
+			}
+			if (runEntry.contains("heartbeatBusyAttempts")) {
+				payload["heartbeatBusyAttempts"] = runEntry["heartbeatBusyAttempts"];
+			}
+			if (runEntry.contains("heartbeatFallbackWakeRequested")) {
+				payload["heartbeatFallbackWakeRequested"] =
+					runEntry["heartbeatFallbackWakeRequested"];
+			}
+			if (runEntry.contains("heartbeatFallbackWakeRequestedAtMs")) {
+				payload["heartbeatFallbackWakeRequestedAtMs"] =
+					runEntry["heartbeatFallbackWakeRequestedAtMs"];
 			}
 			if (runEntry.contains("failureAlertTriggered")) {
 				payload["failureAlertTriggered"] = runEntry["failureAlertTriggered"];
@@ -1132,6 +1154,14 @@ namespace blazeclaw::cron {
 					finishedRun->contains("failureDestinationTarget")
 					? (*finishedRun)["failureDestinationTarget"]
 					: CronJson(nullptr);
+				terminal["failureDestinationChannel"] =
+					finishedRun->contains("failureDestinationChannel")
+					? (*finishedRun)["failureDestinationChannel"]
+					: CronJson(nullptr);
+				terminal["failureDestinationAccountId"] =
+					finishedRun->contains("failureDestinationAccountId")
+					? (*finishedRun)["failureDestinationAccountId"]
+					: CronJson(nullptr);
 				terminal["failureDestinationError"] =
 					finishedRun->contains("failureDestinationError")
 					? (*finishedRun)["failureDestinationError"]
@@ -1179,6 +1209,18 @@ namespace blazeclaw::cron {
 				terminal["nextRunAtMs"] =
 					finishedRun->contains("nextRunAtMs")
 					? (*finishedRun)["nextRunAtMs"]
+					: CronJson(nullptr);
+				terminal["heartbeatBusyAttempts"] =
+					finishedRun->contains("heartbeatBusyAttempts")
+					? (*finishedRun)["heartbeatBusyAttempts"]
+					: CronJson(0);
+				terminal["heartbeatFallbackWakeRequested"] =
+					finishedRun->contains("heartbeatFallbackWakeRequested")
+					? (*finishedRun)["heartbeatFallbackWakeRequested"]
+					: CronJson(false);
+				terminal["heartbeatFallbackWakeRequestedAtMs"] =
+					finishedRun->contains("heartbeatFallbackWakeRequestedAtMs")
+					? (*finishedRun)["heartbeatFallbackWakeRequestedAtMs"]
 					: CronJson(nullptr);
 				terminal["failureAlertTriggered"] =
 					finishedRun->contains("failureAlertTriggered")

@@ -1797,6 +1797,14 @@ namespace blazeclaw::cron {
 				state["heartbeatFallbackWakeRequested"] = false;
 				state["heartbeatFallbackWakeRequestedAtMs"] = CronJson(nullptr);
 			}
+			const std::int64_t heartbeatBusyAttemptsSnapshot =
+				TryReadInt64Field(state, "heartbeatBusyAttempts").value_or(0);
+			const bool heartbeatFallbackWakeRequestedSnapshot =
+				state.contains("heartbeatFallbackWakeRequested") &&
+				state["heartbeatFallbackWakeRequested"].is_boolean() &&
+				state["heartbeatFallbackWakeRequested"].get<bool>();
+			const std::optional<std::int64_t> heartbeatFallbackWakeRequestedAtMsSnapshot =
+				TryReadInt64Field(state, "heartbeatFallbackWakeRequestedAtMs");
 			if (outcome.status == "error" && outcome.retryable && previousAttempt < maxAttempts) {
 				retryAttempt = previousAttempt + 1;
 				const std::int64_t delayMs = outcome.hasRetryDelayOverride
@@ -2004,6 +2012,12 @@ namespace blazeclaw::cron {
 			state["lastTaskLedgerStatus"] = outcome.status;
 			state["lastTaskLedgerDisposition"] = "scheduled";
 			state["lastTaskLedgerTerminal"] = true;
+			state["lastHeartbeatBusyAttempts"] = heartbeatBusyAttemptsSnapshot;
+			state["lastHeartbeatFallbackWakeRequested"] = heartbeatFallbackWakeRequestedSnapshot;
+			state["lastHeartbeatFallbackWakeRequestedAtMs"] =
+				heartbeatFallbackWakeRequestedAtMsSnapshot.has_value()
+				? CronJson(heartbeatFallbackWakeRequestedAtMsSnapshot.value())
+				: CronJson(nullptr);
 
 			runs.push_back({
 				{ "ts", nowMs },
@@ -2071,6 +2085,12 @@ namespace blazeclaw::cron {
 					? CronJson(nullptr)
 					: CronJson(failureAlertAccountIdSnapshot) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
+				{ "heartbeatBusyAttempts", heartbeatBusyAttemptsSnapshot },
+				{ "heartbeatFallbackWakeRequested", heartbeatFallbackWakeRequestedSnapshot },
+				{ "heartbeatFallbackWakeRequestedAtMs",
+					heartbeatFallbackWakeRequestedAtMsSnapshot.has_value()
+					? CronJson(heartbeatFallbackWakeRequestedAtMsSnapshot.value())
+					: CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
 				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },

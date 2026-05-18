@@ -586,6 +586,10 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldStringOrNull(payload, "failureAlertTarget") ||
 				!IsFieldStringOrNull(payload, "failureAlertChannel") ||
 				!IsFieldStringOrNull(payload, "failureAlertAccountId") ||
+				!IsFieldNumberOrNull(payload, "heartbeatBusyAttempts") ||
+				(!IsFieldBoolean(payload, "heartbeatFallbackWakeRequested") &&
+					HasFieldToken(payload, "heartbeatFallbackWakeRequested")) ||
+				!IsFieldNumberOrNull(payload, "heartbeatFallbackWakeRequestedAtMs") ||
 				!IsFieldStringOrNull(payload, "taskLedgerRuntime") ||
 				!IsFieldStringOrNull(payload, "taskLedgerPhase") ||
 				!IsFieldStringOrNull(payload, "taskLedgerStatus") ||

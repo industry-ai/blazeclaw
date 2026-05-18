@@ -34,6 +34,21 @@ namespace {
 	nlohmann::json ParseGatewayFrame(const std::string& frameJson) {
 		return nlohmann::json::parse(frameJson);
 	}
+
+TEST_CASE("Cron runs response validator rejects non-boolean heartbeat fallback marker", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-heartbeat-fallback-bad-type",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"failed\",\"heartbeatFallbackWakeRequested\":\"yes\"}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
 }
 
 TEST_CASE("Cron timer accepts webhook url alias when delivery.to is omitted", "[cron][timer]") {
@@ -108,6 +123,32 @@ TEST_CASE("Cron add validator accepts nullable identity fields and flattened pay
 	SchemaValidationIssue issue{};
 	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron runs validator rejects mixed status and statuses filters", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-status-and-statuses-mixed",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"status\":\"running\",\"statuses\":[\"queued\",\"failed\"]}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.status") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator rejects mixed deliveryStatus and deliveryStatuses filters", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-delivery-status-and-delivery-statuses-mixed",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"deliveryStatus\":\"delivered\",\"deliveryStatuses\":[\"suppressed\",\"unknown\"]}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_params");
+	REQUIRE(issue.message.find("params.deliveryStatus") != std::string::npos);
 }
 
 TEST_CASE("Cron normalize add builds payload from flattened fields", "[cron][normalize]") {
@@ -2600,6 +2641,12 @@ TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadat
 	REQUIRE(payload.contains("failureAlertTarget"));
 	REQUIRE(payload.contains("failureDestinationStatus"));
 	REQUIRE(payload.contains("failureDestinationMode"));
+	REQUIRE(payload.contains("failureDestinationChannel"));
+	REQUIRE(payload.contains("failureDestinationAccountId"));
+	REQUIRE(payload.contains("failureDestinationError"));
+	REQUIRE(payload.contains("heartbeatBusyAttempts"));
+	REQUIRE(payload.contains("heartbeatFallbackWakeRequested"));
+	REQUIRE(payload.contains("heartbeatFallbackWakeRequestedAtMs"));
 }
 
 TEST_CASE("Cron run validator accepts id and mode force", "[cron][schema]") {
@@ -2659,7 +2706,7 @@ TEST_CASE("Cron runs validator accepts statuses and delivery filters", "[cron][s
 		.id = "runs-filters",
 		.method = "cron.runs",
 		.paramsJson = std::string(
-			"{\"scope\":\"all\",\"statuses\":[\"ok\",\"error\"],\"deliveryStatuses\":[\"delivered\",\"not-delivered\"],\"deliveryStatus\":\"delivered\",\"limit\":20}")
+			"{\"scope\":\"all\",\"statuses\":[\"ok\",\"error\"],\"deliveryStatuses\":[\"delivered\",\"not-delivered\"],\"limit\":20}")
 	};
 
 	SchemaValidationIssue issue{};
