@@ -4067,6 +4067,56 @@ TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[
 	REQUIRE(failedPayloads.back().contains("endedAtMs"));
 }
 
+TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due terminal edge", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson dueAdded = ops.Add({
+		{ "name", "manual queued-edge not-due" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 4'102'444'800'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hook" } } },
+		{ "delivery", { { "mode", "none" } } }
+	});
+	const std::string dueJobId = dueAdded.value("id", std::string());
+	REQUIRE_FALSE(dueJobId.empty());
+
+	CronJson runNotDue = ops.Run({ { "id", dueJobId }, { "mode", "due" } });
+	REQUIRE_FALSE(runNotDue.value("enqueued", true));
+	REQUIRE(runNotDue.value("reason", std::string()) == "not_due");
+	REQUIRE(runNotDue.value("runState", std::string()) == "terminal");
+
+	REQUIRE(failedPayloads.empty());
+	REQUIRE_FALSE(completedPayloads.empty());
+
+	bool sawNotDue = false;
+	for (const auto& payload : completedPayloads) {
+		if (payload.value("jobId", std::string()) == dueJobId &&
+			payload.value("taskLedgerStatus", std::string()) == "skipped" &&
+			payload.value("disposition", std::string()) == "skipped") {
+			sawNotDue = true;
+			REQUIRE(payload.value("action", std::string()) == "finished");
+			REQUIRE(payload.value("phase", std::string()) == "terminal");
+			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.contains("queuedAtMs"));
+			REQUIRE(
+				payload.value("summary", std::string()).find("not due") !=
+				std::string::npos);
+		}
+	}
+
+	REQUIRE(sawNotDue);
+}
+
 TEST_CASE("Cron ops includes failure-destination suppression metadata in terminal fail hook", "[cron][ops]") {
 	CronOpsService ops;
 	std::vector<CronJson> failedPayloads;

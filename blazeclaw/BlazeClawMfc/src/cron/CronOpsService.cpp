@@ -604,6 +604,7 @@ namespace blazeclaw::cron {
 				alreadyRunningAtMs));
 			m_store.Runs().back()["taskLedgerDisposition"] = "already_running";
 			m_store.Runs().back()["taskLedgerTerminal"] = true;
+			EmitTaskLedgerTerminalHook(m_store.Runs().back());
 			m_store.SaveRuns();
 
 			return {
@@ -645,6 +646,7 @@ namespace blazeclaw::cron {
 				nowMs));
 			m_store.Runs().back()["taskLedgerDisposition"] = "not_due";
 			m_store.Runs().back()["taskLedgerTerminal"] = true;
+			EmitTaskLedgerTerminalHook(m_store.Runs().back());
 			m_store.SaveRuns();
 
 			return {
@@ -1046,6 +1048,7 @@ namespace blazeclaw::cron {
 					nowMs));
 				m_store.Runs().back()["taskLedgerDisposition"] = "already_running";
 				m_store.Runs().back()["taskLedgerTerminal"] = true;
+				EmitTaskLedgerTerminalHook(m_store.Runs().back());
 				runsChanged = true;
 				continue;
 			}
@@ -1068,6 +1071,7 @@ namespace blazeclaw::cron {
 					nowMs));
 				m_store.Runs().back()["taskLedgerDisposition"] = "not_due";
 				m_store.Runs().back()["taskLedgerTerminal"] = true;
+				EmitTaskLedgerTerminalHook(m_store.Runs().back());
 				runsChanged = true;
 				continue;
 			}

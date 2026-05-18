@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest heartbeat busy-lane transport-suppression increment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest Step 4 manual queued-edge immediate terminal-hook increment)
 
 ## Scope
 
@@ -34,7 +34,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, and heartbeat busy-lane runtime outcomes now suppress delivery/failure-destination transport simulation attempts; non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
 2. **Transport execution** — announce paths and default webhook policy still lag OpenClaw; opt-in WinHTTP dispatch exists for webhooks.
-3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, and hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is now landed; retry/cooldown/consumer depth remains open.
+3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is landed, and immediate manual terminal edges (`already_running`/`not_due`) now emit terminal hooks in `cron.run`; broader retry/cooldown/consumer depth remains open.
 4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation, and `GatewayHost::HandleInboundText` now applies pre-validator canonicalization for legacy/flat payloads across `cron.add`/`cron.update`/`cron.run`/`cron.runs`/`wake`; latest increment deepens `cron.update` flat schedule/payload/delivery alias lifting into nested patch structure. Remaining gap is broader tool-surface action depth, not absence of gateway normalization bridge.
 5. **Tool-surface parity** — WebView shaping (`agents-controller.js`) covers much of `cron-tool.ts` ergonomics; dedicated agent cron tool adapter and CLI/controller/bootstrap parity remain open.
 
@@ -131,6 +131,7 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 - Reconciled production wiring status: adapters/hooks are registered from `GatewayHost` startup, with remaining work moved to execution-depth parity.
 - Updated schedule/maintenance rows (`tz`, stagger, `preserveDueSlots`, `scheduleErrorCount` auto-disable).
 - Pointed authoritative plan to `blazeclaw/docs/cron-parity-gap-and-port-plan.md`.
+- Added Phase G Step 4 note: `CronOpsService::Run` now emits terminal task-ledger hooks for immediate manual `already_running` and `not_due` transitions, with targeted ops parity coverage for `not_due` terminal-edge completion-hook emission.
 
 ### 2026-05-17
 
