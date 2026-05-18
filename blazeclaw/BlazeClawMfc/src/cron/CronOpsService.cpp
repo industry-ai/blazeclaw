@@ -548,14 +548,6 @@ namespace blazeclaw::cron {
 
 		const bool removed = m_store.Jobs().size() != before;
 		if (removed) {
-			m_manualRunQueue.erase(
-				std::remove_if(
-					m_manualRunQueue.begin(),
-					m_manualRunQueue.end(),
-					[id](const ManualRunRequest& request) {
-						return request.jobId == id;
-					}),
-				m_manualRunQueue.end());
 			m_store.SaveJobs();
 		}
 
@@ -1393,6 +1385,12 @@ namespace blazeclaw::cron {
 		payload["taskLedgerStatus"] = mappedStatus;
 		payload["disposition"] = mappedDisposition;
 		payload["taskLedgerDisposition"] = mappedDisposition;
+		payload["timedOut"] =
+			runEntry.value("timedOut", false) ||
+			ToLowerCopy(ReadStringOrEmpty(runEntry, "errorCategory")) == "timeout";
+		payload["aborted"] =
+			runEntry.value("aborted", false) ||
+			ToLowerCopy(ReadStringOrEmpty(runEntry, "errorCategory")) == "aborted";
 		payload["phase"] = "terminal";
 		payload["terminal"] = true;
 		try {

@@ -4030,6 +4030,55 @@ TEST_CASE("Cron timer requests fallback wake after bounded main heartbeat busy r
 	REQUIRE(jobs[0]["state"].value("heartbeatFallbackWakeRequestedAtMs", static_cast<std::int64_t>(0)) == nowMs);
 }
 
+TEST_CASE("Cron timer heartbeat-busy lane honors runtime retryAfter override", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-heartbeat-busy-retryafter") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "busy", true },
+				{ "status", "error" },
+				{ "summary", "runtime-main-busy-retry-after" },
+				{ "retryAfterMs", 3500 },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-heartbeat-busy-retryafter" },
+			{ "name", "runtime heartbeat busy retryAfter" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" }, { "heartbeatBusyMaxAttempts", 3 }, { "heartbeatBusyDelayMs", 2000 } } },
+			{ "retry", { { "maxAttempts", 3 }, { "backoffMs", CronJson::array({ 9'999 }) } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "heartbeatBusyAttempts", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "heartbeat_busy");
+	REQUIRE(runs[0].value("retryScheduled", false));
+	REQUIRE(runs[0].value("retryScheduledAtMs", static_cast<std::int64_t>(0)) == nowMs + 3500);
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-requested");
+	REQUIRE_FALSE(runs[0].value("deliveryAttempted", true));
+	REQUIRE(jobs[0]["state"].value("heartbeatBusyAttempts", 0) == 1);
+}
+
 TEST_CASE("Cron timer runtime adapter can skip delivery simulation with runtime transport outcome", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -4357,9 +4406,20 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 	};
 	ops.SetTaskLedgerHooks(std::move(hooks));
 
-	CronJson runUnknown = ops.Run({ { "id", "missing-manual-job" }, { "mode", "force" } });
-	REQUIRE(runUnknown.value("enqueued", false));
-	REQUIRE(runUnknown.value("reason", std::string()) == "queued");
+	CronJson added = ops.Add({
+		{ "name", "manual unknown-job edge" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hook" } } },
+		{ "delivery", { { "mode", "none" } } }
+	});
+	const std::string removedJobId = added.value("id", std::string());
+	REQUIRE_FALSE(removedJobId.empty());
+	CronJson runRemoved = ops.Run({ { "id", removedJobId }, { "mode", "force" } });
+	REQUIRE(runRemoved.value("enqueued", false));
+	REQUIRE(runRemoved.value("reason", std::string()) == "queued");
+
+	CronJson removed = ops.Remove({ { "id", removedJobId } });
+	REQUIRE(removed.value("removed", false));
 
 	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "manual" } });
 	REQUIRE(wake.value("ok", false));
@@ -4369,7 +4429,7 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 
 	bool sawUnknownJob = false;
 	for (const auto& payload : completedPayloads) {
-		if (payload.value("jobId", std::string()) == "missing-manual-job" &&
+		if (payload.value("jobId", std::string()) == removedJobId &&
 			payload.value("taskLedgerStatus", std::string()) == "skipped" &&
 			payload.value("disposition", std::string()) == "skipped") {
 			sawUnknownJob = true;

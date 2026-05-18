@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase R Step 4 manual unknown-job terminal-hook consistency alignment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase S Step 2/4 runtime retryAfter + queued-remove unknown-job edge consistency alignment)
 
 ## Scope
 

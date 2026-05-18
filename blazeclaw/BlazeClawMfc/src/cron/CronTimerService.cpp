@@ -951,6 +951,11 @@ namespace blazeclaw::cron {
 							static_cast<std::int64_t>(1),
 							TryReadInt64Field(payload, "heartbeatBusyDelayMs")
 							.value_or(kDefaultHeartbeatBusyDelayMs));
+						const std::int64_t resolvedBusyDelayMs =
+							outcome.hasRetryDelayOverride
+							? (std::max)(static_cast<std::int64_t>(1),
+								outcome.retryDelayOverrideMs)
+							: busyDelayMs;
 
 						if (heartbeatBusyAttempts < maxBusyAttempts) {
 							outcome.status = "error";
@@ -959,7 +964,7 @@ namespace blazeclaw::cron {
 							outcome.summary = "Main heartbeat busy; retry scheduled";
 							outcome.retryable = true;
 							outcome.hasRetryDelayOverride = true;
-							outcome.retryDelayOverrideMs = busyDelayMs;
+							outcome.retryDelayOverrideMs = resolvedBusyDelayMs;
 						}
 						else {
 							outcome.status = "error";
