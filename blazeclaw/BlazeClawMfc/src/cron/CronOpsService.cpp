@@ -1124,6 +1124,18 @@ namespace blazeclaw::cron {
 					finishedRun->contains("failureDestinationStatus")
 					? (*finishedRun)["failureDestinationStatus"]
 					: CronJson("not-requested");
+				terminal["failureDestinationMode"] =
+					finishedRun->contains("failureDestinationMode")
+					? (*finishedRun)["failureDestinationMode"]
+					: CronJson(nullptr);
+				terminal["failureDestinationTarget"] =
+					finishedRun->contains("failureDestinationTarget")
+					? (*finishedRun)["failureDestinationTarget"]
+					: CronJson(nullptr);
+				terminal["failureDestinationError"] =
+					finishedRun->contains("failureDestinationError")
+					? (*finishedRun)["failureDestinationError"]
+					: CronJson(nullptr);
 				terminal["error"] =
 					finishedRun->contains("error")
 					? (*finishedRun)["error"]
@@ -1151,6 +1163,54 @@ namespace blazeclaw::cron {
 				terminal["usage"] =
 					finishedRun->contains("usage")
 					? (*finishedRun)["usage"]
+					: CronJson(nullptr);
+				terminal["retryAttempt"] =
+					finishedRun->contains("retryAttempt")
+					? (*finishedRun)["retryAttempt"]
+					: CronJson(0);
+				terminal["retryScheduled"] =
+					finishedRun->contains("retryScheduled")
+					? (*finishedRun)["retryScheduled"]
+					: CronJson(false);
+				terminal["retryScheduledAtMs"] =
+					finishedRun->contains("retryScheduledAtMs")
+					? (*finishedRun)["retryScheduledAtMs"]
+					: CronJson(nullptr);
+				terminal["nextRunAtMs"] =
+					finishedRun->contains("nextRunAtMs")
+					? (*finishedRun)["nextRunAtMs"]
+					: CronJson(nullptr);
+				terminal["failureAlertTriggered"] =
+					finishedRun->contains("failureAlertTriggered")
+					? (*finishedRun)["failureAlertTriggered"]
+					: CronJson(false);
+				terminal["failureAlertSuppressed"] =
+					finishedRun->contains("failureAlertSuppressed")
+					? (*finishedRun)["failureAlertSuppressed"]
+					: CronJson(false);
+				terminal["failureAlertSuppressedReason"] =
+					finishedRun->contains("failureAlertSuppressedReason")
+					? (*finishedRun)["failureAlertSuppressedReason"]
+					: CronJson(nullptr);
+				terminal["failureAlertMode"] =
+					finishedRun->contains("failureAlertMode")
+					? (*finishedRun)["failureAlertMode"]
+					: CronJson(nullptr);
+				terminal["failureAlertTarget"] =
+					finishedRun->contains("failureAlertTarget")
+					? (*finishedRun)["failureAlertTarget"]
+					: CronJson(nullptr);
+				terminal["failureAlertChannel"] =
+					finishedRun->contains("failureAlertChannel")
+					? (*finishedRun)["failureAlertChannel"]
+					: CronJson(nullptr);
+				terminal["failureAlertAccountId"] =
+					finishedRun->contains("failureAlertAccountId")
+					? (*finishedRun)["failureAlertAccountId"]
+					: CronJson(nullptr);
+				terminal["failureAlertAtMs"] =
+					finishedRun->contains("failureAlertAtMs")
+					? (*finishedRun)["failureAlertAtMs"]
 					: CronJson(nullptr);
 				terminal["taskLedgerDisposition"] = mappedDisposition;
 				terminal["taskLedgerTerminal"] = true;

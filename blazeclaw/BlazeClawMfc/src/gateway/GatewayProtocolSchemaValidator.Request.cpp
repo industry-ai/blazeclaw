@@ -1629,7 +1629,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "scope", { "job", "all" }, issue) ||
-				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "status", { "all", "ok", "error", "skipped" }, issue) ||
+				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "status", { "all", "ok", "error", "skipped", "queued", "running", "failed", "timed_out", "aborted" }, issue) ||
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "deliveryStatus", { "not-requested", "delivered", "not-delivered", "unknown", "suppressed" }, issue) ||
 				!ValidateCronEnumStringField(request, fieldKinds, "cron.runs", "sortDir", { "asc", "desc" }, issue)) {
 				return false;

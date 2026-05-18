@@ -1260,13 +1260,15 @@ namespace blazeclaw::cron {
 					}
 					else {
 						outcome.failureDestinationAttempted = true;
+						const bool failureHasExplicitEmptyTo =
+							failureHasExplicitTo && failureTo.empty();
 						if ((failureHasExplicitTo &&
 							failureTo.empty()) ||
 							resolvedFailureTo.empty()) {
 							outcome.failureDestinationStatus = "not-delivered";
-							outcome.failureDestinationError = resolvedFailureTo.empty()
-								? std::string("announce failure destination target is unresolved")
-								: std::string("announce failure destination target is empty");
+							outcome.failureDestinationError = failureHasExplicitEmptyTo
+								? std::string("announce failure destination target is empty")
+								: std::string("announce failure destination target is unresolved");
 						}
 						else {
 							outcome.failureDestinationStatus = "delivered";

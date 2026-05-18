@@ -474,6 +474,21 @@ TEST_CASE("Cron run response validator enforces required fields", "[cron][schema
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Cron run response validator rejects active state with non-queued reason", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-active-reason-mismatch",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":true,\"started\":true,\"reason\":\"already_running\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"active\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Cron run response validator rejects inconsistent queued semantics", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -1087,9 +1102,11 @@ TEST_CASE("Cron timer marks announce failure destination unresolved when fallbac
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
-	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
-	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "announce failure destination target is unresolved");
+	REQUIRE(
+		runs[0].value("failureDestinationError", std::string()) ==
+		"failure destination matches primary delivery target");
 }
 
 TEST_CASE("Cron timer suppresses failureAlert when not explicitly configured", "[cron][timer]") {
@@ -2520,6 +2537,69 @@ TEST_CASE("Wake validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
+}
+
+TEST_CASE("Cron runs validator accepts manual lifecycle status filter in single status field", "[cron][schema]") {
+	const RequestFrame request{
+		.id = "runs-status-manual-lifecycle-single",
+		.method = "cron.runs",
+		.paramsJson = std::string("{\"status\":\"running\"}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code.empty());
+}
+
+TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadata", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "manual terminal metadata carry-forward" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://example.test/hook" },
+			{ "simulateHttpStatus", 503 }
+		} },
+		{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
+		{ "failureAlert", {
+			{ "after", 1 },
+			{ "cooldownMs", 0 },
+			{ "mode", "announce" },
+			{ "to", "ops-room" }
+		} },
+		{ "deleteAfterRun", true }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	CronJson run = ops.Run({ { "id", jobId }, { "mode", "force" } });
+	REQUIRE(run.value("enqueued", false));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	const CronJson& payload = failedPayloads.back();
+	REQUIRE(payload.contains("retryAttempt"));
+	REQUIRE(payload.contains("retryScheduled"));
+	REQUIRE(payload.contains("retryScheduledAtMs"));
+	REQUIRE(payload.contains("nextRunAtMs"));
+	REQUIRE(payload.contains("failureAlertTriggered"));
+	REQUIRE(payload.contains("failureAlertSuppressed"));
+	REQUIRE(payload.contains("failureAlertMode"));
+	REQUIRE(payload.contains("failureAlertTarget"));
+	REQUIRE(payload.contains("failureDestinationStatus"));
+	REQUIRE(payload.contains("failureDestinationMode"));
 }
 
 TEST_CASE("Cron run validator accepts id and mode force", "[cron][schema]") {

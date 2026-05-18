@@ -334,6 +334,11 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (runState == "active" && reason != "queued") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
 			if (runState == "terminal" && started) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;
