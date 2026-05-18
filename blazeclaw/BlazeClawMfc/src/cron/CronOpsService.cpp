@@ -291,6 +291,43 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("usage")) {
 				payload["usage"] = runEntry["usage"];
 			}
+			if (runEntry.contains("retryAttempt")) {
+				payload["retryAttempt"] = runEntry["retryAttempt"];
+			}
+			if (runEntry.contains("retryScheduled")) {
+				payload["retryScheduled"] = runEntry["retryScheduled"];
+			}
+			if (runEntry.contains("retryScheduledAtMs")) {
+				payload["retryScheduledAtMs"] = runEntry["retryScheduledAtMs"];
+			}
+			if (runEntry.contains("nextRunAtMs")) {
+				payload["nextRunAtMs"] = runEntry["nextRunAtMs"];
+			}
+			if (runEntry.contains("failureAlertTriggered")) {
+				payload["failureAlertTriggered"] = runEntry["failureAlertTriggered"];
+			}
+			if (runEntry.contains("failureAlertSuppressed")) {
+				payload["failureAlertSuppressed"] = runEntry["failureAlertSuppressed"];
+			}
+			if (runEntry.contains("failureAlertSuppressedReason")) {
+				payload["failureAlertSuppressedReason"] =
+					runEntry["failureAlertSuppressedReason"];
+			}
+			if (runEntry.contains("failureAlertMode")) {
+				payload["failureAlertMode"] = runEntry["failureAlertMode"];
+			}
+			if (runEntry.contains("failureAlertTarget")) {
+				payload["failureAlertTarget"] = runEntry["failureAlertTarget"];
+			}
+			if (runEntry.contains("failureAlertChannel")) {
+				payload["failureAlertChannel"] = runEntry["failureAlertChannel"];
+			}
+			if (runEntry.contains("failureAlertAccountId")) {
+				payload["failureAlertAccountId"] = runEntry["failureAlertAccountId"];
+			}
+			if (runEntry.contains("failureAlertAtMs")) {
+				payload["failureAlertAtMs"] = runEntry["failureAlertAtMs"];
+			}
 
 			return payload;
 		}

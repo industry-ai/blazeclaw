@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <functional>
 #include <sstream>
 #include <unordered_map>
@@ -727,6 +728,65 @@ namespace blazeclaw::cron {
 			return job["delivery"]["bestEffort"].get<bool>();
 		}
 
+		bool IsWildcardCronToken(const std::string& tokenRaw) {
+			const std::string token = TrimCopy(tokenRaw);
+			if (token.empty() || token == "*") {
+				return true;
+			}
+
+			if (token.rfind("*/", 0) == 0) {
+				try {
+					return std::stoi(token.substr(2)) == 1;
+				}
+				catch (...) {
+					return false;
+				}
+			}
+
+			return false;
+		}
+
+		bool MatchCronDayOfWeekToken(const std::string& tokenRaw, const int dayOfWeek) {
+			const std::string token = TrimCopy(tokenRaw);
+			if (token.empty() || token == "*") {
+				return true;
+			}
+
+			if (token.rfind("*/", 0) == 0) {
+				try {
+					const int step = std::stoi(token.substr(2));
+					return step > 0 && dayOfWeek % step == 0;
+				}
+				catch (...) {
+					return false;
+				}
+			}
+
+			std::istringstream parts(token);
+			std::string item;
+			while (std::getline(parts, item, ',')) {
+				const std::string trimmed = TrimCopy(item);
+				if (trimmed.empty()) {
+					continue;
+				}
+
+				try {
+					int parsed = std::stoi(trimmed);
+					if (parsed == 7) {
+						parsed = 0;
+					}
+					if (parsed >= 0 && parsed <= 6 && parsed == dayOfWeek) {
+						return true;
+					}
+				}
+				catch (...) {
+					return false;
+				}
+			}
+
+			return false;
+		}
+
 		RunOutcome EvaluateRunOutcome(
 			const CronJson& job,
 			const std::int64_t nowMs,
@@ -1423,6 +1483,13 @@ namespace blazeclaw::cron {
 				return nowMs + kMinuteMs;
 			}
 
+			const std::string dayOfMonthToken =
+				parts.size() >= 3 ? parts[2] : std::string("*");
+			const std::string monthToken =
+				parts.size() >= 4 ? parts[3] : std::string("*");
+			const std::string dayOfWeekToken =
+				parts.size() >= 5 ? parts[4] : std::string("*");
+
 			const auto timezoneOffsetMinutes =
 				ParseTimezoneOffsetMinutes(schedule.value("tz", std::string()));
 			const std::int64_t timezoneOffsetMs =
@@ -1430,13 +1497,35 @@ namespace blazeclaw::cron {
 			std::int64_t localNowMs = nowMs + timezoneOffsetMs;
 			std::int64_t candidateLocalMs = ((localNowMs / kMinuteMs) + 1) * kMinuteMs;
 
-			for (int attempt = 0; attempt < 60 * 24 * 7; ++attempt) {
-				const std::int64_t minuteOfDay =
-					((candidateLocalMs / kMinuteMs) % (24 * 60) + (24 * 60)) % (24 * 60);
-				const int hour = static_cast<int>(minuteOfDay / 60);
-				const int minute = static_cast<int>(minuteOfDay % 60);
+			for (int attempt = 0; attempt < 60 * 24 * 366; ++attempt) {
+				const std::time_t candidateSeconds =
+					static_cast<std::time_t>(candidateLocalMs / 1000);
+				std::tm candidateTm{};
+				gmtime_s(&candidateTm, &candidateSeconds);
+
+				const int minute = candidateTm.tm_min;
+				const int hour = candidateTm.tm_hour;
+				const int dayOfMonth = candidateTm.tm_mday;
+				const int month = candidateTm.tm_mon + 1;
+				const int dayOfWeek = candidateTm.tm_wday;
+
+				const bool domWildcard = IsWildcardCronToken(dayOfMonthToken);
+				const bool dowWildcard = IsWildcardCronToken(dayOfWeekToken);
+				const bool dayOfMonthMatch =
+					MatchCronToken(dayOfMonthToken, dayOfMonth, 31);
+				const bool dayOfWeekMatch =
+					MatchCronDayOfWeekToken(dayOfWeekToken, dayOfWeek);
+				const bool dayMatch =
+					(domWildcard && dowWildcard) ||
+					(domWildcard && dayOfWeekMatch) ||
+					(dowWildcard && dayOfMonthMatch) ||
+					(!domWildcard && !dowWildcard &&
+						(dayOfMonthMatch || dayOfWeekMatch));
+
 				if (MatchCronToken(parts[0], minute, 59) &&
-					MatchCronToken(parts[1], hour, 23)) {
+					MatchCronToken(parts[1], hour, 23) &&
+					MatchCronToken(monthToken, month, 12) &&
+					dayMatch) {
 					std::int64_t candidate = candidateLocalMs - timezoneOffsetMs;
 					const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
 					if (staggerMs.has_value() && staggerMs.value() > 0) {

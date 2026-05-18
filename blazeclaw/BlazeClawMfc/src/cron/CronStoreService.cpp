@@ -33,6 +33,16 @@ namespace blazeclaw::cron {
 				if (valuesIt != parsed.end() && valuesIt->is_array()) {
 					return *valuesIt;
 				}
+
+				const auto itemsIt = parsed.find("items");
+				if (itemsIt != parsed.end() && itemsIt->is_array()) {
+					return *itemsIt;
+				}
+
+				const auto dataIt = parsed.find("data");
+				if (dataIt != parsed.end() && dataIt->is_array()) {
+					return *dataIt;
+				}
 			}
 
 			return CronJson::array();

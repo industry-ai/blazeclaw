@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -1881,6 +1882,35 @@ TEST_CASE("Cron store loads legacy array shape and rewrites envelope", "[cron][s
 	std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("Cron store loads envelope with legacy items/data array shapes", "[cron][store]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw-cron-store-legacy-items-data-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "{\"version\":0,\"kind\":\"jobs\",\"items\":[{\"id\":\"job-items\",\"name\":\"legacy\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hi\"}}]}";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "{\"version\":0,\"kind\":\"runs\",\"data\":[]}";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().is_array());
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-items");
+
+	std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("Cron store loads envelope with legacy values shape", "[cron][store]") {
 	const std::filesystem::path root =
 		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-envelope-test";
@@ -1999,6 +2029,48 @@ TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer
 		expected += dayMs;
 	}
 	REQUIRE(nextRun.value() == expected);
+}
+
+TEST_CASE("Cron timer computes cron expression with day-month-and-day-of-week fields", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobMonthDay = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "15 10 1 1 *" } } },
+		{ "state", CronJson::object() }
+	};
+	const auto nextMonthDay = timer.ComputeNextRunAtMs(jobMonthDay, nowMs);
+	REQUIRE(nextMonthDay.has_value());
+	REQUIRE(nextMonthDay.value() > nowMs);
+	{
+		const std::time_t t =
+			static_cast<std::time_t>(nextMonthDay.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_min == 15);
+		REQUIRE(tm.tm_hour == 10);
+		REQUIRE(tm.tm_mday == 1);
+		REQUIRE((tm.tm_mon + 1) == 1);
+	}
+
+	CronJson jobDayOfWeek = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * 7" } } },
+		{ "state", CronJson::object() }
+	};
+	const auto nextDayOfWeek = timer.ComputeNextRunAtMs(jobDayOfWeek, nowMs);
+	REQUIRE(nextDayOfWeek.has_value());
+	REQUIRE(nextDayOfWeek.value() > nowMs);
+	{
+		const std::time_t t =
+			static_cast<std::time_t>(nextDayOfWeek.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_min == 0);
+		REQUIRE(tm.tm_hour == 9);
+		REQUIRE(tm.tm_wday == 0);
+	}
 }
 
 TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {
@@ -3610,6 +3682,50 @@ TEST_CASE("Cron ops maps retry-scheduled delivery failure to failed disposition"
 	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
 	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "failed");
 	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(failedPayloads.back().value("retryScheduled", false));
+	REQUIRE(failedPayloads.back().contains("retryScheduledAtMs"));
+	REQUIRE_FALSE(failedPayloads.back()["retryScheduledAtMs"].is_null());
+}
+
+TEST_CASE("Cron ops projects failure-alert suppression metadata in terminal hook payload", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "scheduled failure-alert suppression metadata" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://example.test/hook" },
+			{ "simulateTransientFailure", true }
+		} },
+		{ "failureAlert", {
+			{ "after", 1 },
+			{ "cooldownMs", 0 },
+			{ "mode", "webhook" },
+			{ "to", "bad-target" }
+		} },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("failureAlertSuppressed", false));
+	REQUIRE(
+		failedPayloads.back().value("failureAlertSuppressedReason", std::string()) ==
+		"invalid_webhook_target");
+	REQUIRE(failedPayloads.back().value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(failedPayloads.back().value("failureAlertTarget", std::string()) == "bad-target");
 }
 
 TEST_CASE("Cron ops maps timeout error-category to timed_out terminal hook semantics", "[cron][ops]") {
