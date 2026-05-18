@@ -531,6 +531,7 @@ namespace blazeclaw::gateway {
 			if (method == "wake" &&
 				params.contains("mode") &&
 				params["mode"].is_string()) {
+				const std::string originalMode = params["mode"].get<std::string>();
 				std::string modeRaw = params["mode"].get<std::string>();
 				modeRaw.erase(
 					modeRaw.begin(),
@@ -555,10 +556,20 @@ namespace blazeclaw::gateway {
 					[](unsigned char ch) {
 						return static_cast<char>(std::tolower(ch));
 					});
-				if (modeRaw == "nextheartbeat" ||
+
+				std::string canonicalMode;
+				if (modeRaw == "now") {
+					canonicalMode = "now";
+				}
+				else if (modeRaw == "next-heartbeat" ||
 					modeRaw == "next_heartbeat" ||
-					modeRaw == "next heartbeat") {
-					params["mode"] = "next-heartbeat";
+					modeRaw == "next heartbeat" ||
+					modeRaw == "nextheartbeat") {
+					canonicalMode = "next-heartbeat";
+				}
+
+				if (!canonicalMode.empty() && canonicalMode != originalMode) {
+					params["mode"] = canonicalMode;
 					changed = true;
 				}
 			}

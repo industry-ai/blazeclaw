@@ -456,6 +456,36 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 		}
 	}
+
+	SECTION("wake canonicalizes mode casing and spacing to strict taxonomy") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"wake-mode-casing-spacing\","
+				"\"method\":\"wake\","
+				"\"params\":{"
+				"\"mode\":\"  NEXT-HEARTBEAT  \","
+				"\"text\":\"refresh\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "wake-mode-casing-spacing");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].value("mode", std::string()) == "next-heartbeat");
+			REQUIRE(response["payload"].value("text", std::string()) == "refresh");
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
 }
 
 TEST_CASE("Cron timer computes deterministic stagger offset for the same job", "[cron][timer]") {
