@@ -807,8 +807,16 @@ namespace blazeclaw::cron {
 			}
 
 			const CronJson& payload = job["payload"];
-			const std::string payloadKind =
+			std::string payloadKind =
 				ToLowerCopy(TrimCopy(payload.value("kind", std::string())));
+			if (payloadKind.empty()) {
+				if (payload.contains("message") && payload["message"].is_string()) {
+					payloadKind = "agentturn";
+				}
+				else if (payload.contains("text") && payload["text"].is_string()) {
+					payloadKind = "systemevent";
+				}
+			}
 			std::string resolvedSessionKey = TrimCopy(job.value("sessionKey", std::string()));
 			if (resolvedSessionKey.empty() &&
 				payload.contains("sessionKey") &&
@@ -1224,6 +1232,7 @@ namespace blazeclaw::cron {
 					const bool sameAnnounceTarget =
 						failureMode == "announce" &&
 						primaryMode != "none" &&
+						!primaryTo.empty() &&
 						resolvedFailureTo == primaryTo &&
 						normalizedFailureChannel == normalizedPrimaryChannel &&
 						resolvedFailureAccountId == primaryAccountId;

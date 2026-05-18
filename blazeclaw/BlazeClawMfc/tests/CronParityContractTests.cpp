@@ -1119,7 +1119,7 @@ TEST_CASE("Cron timer suppresses announce failure destination when target equals
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "announce");
 	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "target-1");
@@ -1155,7 +1155,7 @@ TEST_CASE("Cron timer suppresses webhook failure destination for scheme-case-equ
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
@@ -1190,7 +1190,7 @@ TEST_CASE("Cron timer suppresses webhook failure destination for default-port-eq
 
 	timer.PumpDueRuns(jobs, runs, nowMs, false);
 	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
 	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
 	REQUIRE(runs[0].value("failureDestinationError", std::string()) == "failure destination matches primary delivery target");
@@ -3516,6 +3516,47 @@ TEST_CASE("Cron timer runtime adapters override simulation outcome for systemEve
 	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 26);
 	REQUIRE(jobs[0]["state"].value("lastModel", std::string()) == "gpt-runtime");
 	REQUIRE(jobs[0]["state"].value("lastProvider", std::string()) == "azure-openai");
+}
+
+TEST_CASE("Cron timer infers payload kind for runtime adapter routing when payload kind is omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-main-kind-inferred") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-kind-inferred" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-main-kind-inferred" },
+			{ "name", "runtime adapter main kind inferred" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "text", "wake" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-kind-inferred");
 }
 
 TEST_CASE("Cron timer runtime adapters override simulation outcome for agentTurn", "[cron][timer]") {

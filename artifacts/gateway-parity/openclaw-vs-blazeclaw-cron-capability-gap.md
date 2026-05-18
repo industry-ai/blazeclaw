@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources; includes latest Step 8/9 failureAlert flat-alias canonicalization increment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase K docs-sync sequence alignment; includes latest Step 11 gate-freeze snapshot with active parity-test blockers)
 
 ## Scope
 
@@ -128,12 +128,14 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 ### 2026-05-18
 
 - Reconciled capability matrix with current `CronTimerService` / `CronOpsService` / `CronStoreService` behavior.
+- Added Phase K docs-sync note: remaining-gap priority sequence and tranche wording aligned with `blazeclaw/docs/cron-parity-gap-and-port-plan.md` and companion docs.
 - Reconciled production wiring status: adapters/hooks are registered from `GatewayHost` startup, with remaining work moved to execution-depth parity.
 - Updated schedule/maintenance rows (`tz`, stagger, `preserveDueSlots`, `scheduleErrorCount` auto-disable).
 - Pointed authoritative plan to `blazeclaw/docs/cron-parity-gap-and-port-plan.md`.
 - Added Phase G Step 4 note: `CronOpsService::Run` now emits terminal task-ledger hooks for immediate manual `already_running` and `not_due` transitions, with targeted ops parity coverage for `not_due` terminal-edge completion-hook emission.
 - Added Phase H Step 6 note: failure-alert recurring error-branch evaluation now clears stale route snapshot state (`lastFailureAlertTarget` plus mode/channel/account snapshots) in disabled suppression lanes, with targeted timer parity coverage.
 - Added Phase I Step 8/9 note: gateway pre-validator normalization now canonicalizes flat `failureAlert*` aliases into nested `failureAlert` fields for `cron.add` and `cron.update.patch`, with targeted gateway normalization regression coverage.
+- Added Phase J Step 11 note: gate-freeze revalidation reran required build and full `[cron]` parity suite; build passed but 4 cron parity tests currently fail, so final sign-off remains blocked.
 
 ### 2026-05-17
 
