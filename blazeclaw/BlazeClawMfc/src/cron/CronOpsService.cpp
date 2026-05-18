@@ -1133,7 +1133,9 @@ namespace blazeclaw::cron {
 				terminal["sourceStatus"] =
 					finishedRun->contains("status") ? (*finishedRun)["status"] : CronJson(nullptr);
 				terminal["timedOut"] = finishedRun->value("timedOut", false);
-				terminal["aborted"] = finishedRun->value("aborted", false);
+				terminal["aborted"] =
+					finishedRun->value("aborted", false) ||
+					ToLowerCopy(ReadStringOrEmpty(*finishedRun, "errorCategory")) == "aborted";
 				terminal["deliveryStatus"] =
 					finishedRun->contains("deliveryStatus")
 					? (*finishedRun)["deliveryStatus"]

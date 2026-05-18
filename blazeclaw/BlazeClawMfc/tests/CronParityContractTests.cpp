@@ -1592,6 +1592,57 @@ TEST_CASE("Cron timer failureAlert cooldown remains active for webhook default-p
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example:443/route");
 }
 
+TEST_CASE("Cron timer failureAlert webhook cooldown ignores announce-only account/channel snapshot drift", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-webhook-ignores-account-channel-drift" },
+			{ "name", "alert webhook ignores account/channel drift" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/primary" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "failureAlert",
+				{
+					{ "after", 1 },
+					{ "cooldownMs", 600'000 },
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/route" }
+				} },
+			{ "state",
+				{
+					{ "nextRunAtMs", nowMs - 1 },
+					{ "consecutiveErrors", 1 },
+					{ "lastFailureAlertAtMs", nowMs - 1'000 },
+					{ "lastFailureAlertMode", "webhook" },
+					{ "lastFailureAlertTarget", "https://alerts.example/route" },
+					{ "lastFailureAlertChannel", "legacy-announce-channel" },
+					{ "lastFailureAlertAccountId", "legacy-announce-account" }
+				} }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "cooldown_active");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs - 1'000);
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertMode", std::string()) == "webhook");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/route");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertChannel"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAccountId"].is_null());
+}
+
 TEST_CASE("Cron timer failureAlert cooldown opens for materially changed webhook target", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -4459,8 +4510,7 @@ TEST_CASE("Cron ops maps aborted error-category to aborted terminal hook semanti
 				{ "status", "error" },
 				{ "summary", "runtime-aborted" },
 				{ "error", "runtime aborted" },
-				{ "errorCategory", "aborted" },
-				{ "aborted", true }
+				{ "errorCategory", "aborted" }
 			};
 		};
 	ops.SetRuntimeExecutionAdapters(std::move(adapters));

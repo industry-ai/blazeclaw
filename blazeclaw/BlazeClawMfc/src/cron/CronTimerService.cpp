@@ -1955,7 +1955,17 @@ namespace blazeclaw::cron {
 						}
 						else {
 							failureAlertChannel.clear();
+							failureAlertAccountId.clear();
 						}
+
+						const std::string normalizedFailureAlertChannel =
+							ToLowerCopy(TrimCopy(failureAlertChannel));
+						const bool routeChannelChanged =
+							failureAlertMode == kFailureAlertModeAnnounce &&
+							previousFailureAlertChannel != normalizedFailureAlertChannel;
+						const bool routeAccountChanged =
+							failureAlertMode == kFailureAlertModeAnnounce &&
+							previousFailureAlertAccountId != failureAlertAccountId;
 
 					const std::string previousFailureAlertRouteTarget =
 						CanonicalizeFailureAlertRouteTarget(
@@ -1968,8 +1978,8 @@ namespace blazeclaw::cron {
 					const bool failureAlertRouteChanged =
 						previousFailureAlertMode != failureAlertMode ||
 						previousFailureAlertRouteTarget != currentFailureAlertRouteTarget ||
-						previousFailureAlertChannel != ToLowerCopy(TrimCopy(failureAlertChannel)) ||
-						previousFailureAlertAccountId != failureAlertAccountId;
+						routeChannelChanged ||
+						routeAccountChanged;
 					failureAlertTargetSnapshot = failureAlertTarget;
 					failureAlertChannelSnapshot = failureAlertChannel;
 					failureAlertAccountIdSnapshot = failureAlertAccountId;
