@@ -1893,12 +1893,20 @@ namespace blazeclaw::cron {
 						std::string failureAlertChannel = "last";
 						std::string failureAlertAccountId;
 						std::string failureAlertTarget;
-						std::string deliveryTargetFallback;
+						std::string deliveryTargetFallback = outcome.deliveryTarget;
 						std::string deliveryChannelFallback = "last";
 						std::string deliveryAccountIdFallback;
 						if ((*it).contains("delivery") && (*it)["delivery"].is_object()) {
-							deliveryTargetFallback =
-								TrimCopy((*it)["delivery"].value("to", std::string()));
+							if (deliveryTargetFallback.empty()) {
+								deliveryTargetFallback =
+									TrimCopy((*it)["delivery"].value("to", std::string()));
+							}
+							if (deliveryTargetFallback.empty() &&
+								(*it)["delivery"].contains("url") &&
+								(*it)["delivery"]["url"].is_string()) {
+								deliveryTargetFallback =
+									TrimCopy((*it)["delivery"]["url"].get<std::string>());
+							}
 							deliveryChannelFallback =
 								TrimCopy((*it)["delivery"].value("channel", std::string("last")));
 							if (deliveryChannelFallback.empty()) {

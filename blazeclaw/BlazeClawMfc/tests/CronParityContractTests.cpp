@@ -1375,6 +1375,39 @@ TEST_CASE("Cron timer failureAlert webhook mode falls back target to delivery.to
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/delivery");
 }
 
+TEST_CASE("Cron timer failureAlert webhook mode falls back target to delivery url alias", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-webhook-fallback-url-alias" },
+			{ "name", "alert webhook fallback url alias" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "url", "https://alerts.example/delivery-alias" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 0 }, { "mode", "webhook" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureAlertMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureAlertTarget", std::string()) == "https://alerts.example/delivery-alias");
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertMode", std::string()) == "webhook");
+	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/delivery-alias");
+}
+
 TEST_CASE("Cron timer failureAlert cooldown opens when alert route changes", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
