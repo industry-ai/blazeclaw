@@ -3334,6 +3334,122 @@ TEST_CASE("Cron timer runtime adapter can skip delivery simulation with runtime 
 	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-delivery-handled");
 }
 
+TEST_CASE("Cron timer infers delivery-simulation bypass when runtime projects transport outcome", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-infer-skip-delivery") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-transport-projected" },
+				{ "sessionId", "main" },
+				{ "deliveryStatus", "delivered" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/inferred" },
+				{ "deliveryAttempted", true },
+				{ "deliveryHttpStatus", 204 },
+				{ "delivered", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-infer-skip-delivery" },
+			{ "name", "runtime adapter inferred skip delivery" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "invalid-target" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "https://runtime.example/inferred");
+	REQUIRE(runs[0].value("deliveryHttpStatus", 0) == 204);
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-transport-projected");
+}
+
+TEST_CASE("Cron timer infers failure-destination bypass when runtime projects terminal transport outcome", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-infer-failure-destination") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-isolated-delivery-failed" },
+				{ "error", "runtime delivery failure" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "isolated" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/primary" },
+				{ "deliveryAttempted", true },
+				{ "failureDestinationStatus", "delivered" },
+				{ "failureDestinationMode", "webhook" },
+				{ "failureDestinationTarget", "https://runtime.example/failure" },
+				{ "failureDestinationAttempted", true },
+				{ "failureDestinationHttpStatus", 200 }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-infer-failure-destination" },
+			{ "name", "runtime adapter inferred failure destination" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "to", "invalid-target" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "invalid-target-failure" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://runtime.example/failure");
+	REQUIRE(runs[0].value("failureDestinationHttpStatus", 0) == 200);
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-isolated-delivery-failed");
+}
+
 TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron][ops]") {
 	CronOpsService ops;
 	std::vector<CronJson> runningPayloads;
