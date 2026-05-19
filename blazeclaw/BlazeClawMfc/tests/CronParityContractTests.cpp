@@ -3342,6 +3342,11 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 	REQUIRE(
 		jobs[0]["state"].value("lastError", std::string()).find("schedule error") !=
 		std::string::npos);
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabled", false));
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabledAtMs", 0LL) > 0);
+	REQUIRE(
+		jobs[0]["state"].value("scheduleAutoDisabledReason", std::string()) ==
+		"schedule_error_threshold");
 }
 
 TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {

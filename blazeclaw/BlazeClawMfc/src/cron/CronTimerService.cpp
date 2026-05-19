@@ -1960,6 +1960,18 @@ namespace blazeclaw::cron {
 					state["scheduleErrorCount"] = nullptr;
 					changed = true;
 				}
+				if (state.contains("scheduleAutoDisabled") && !state["scheduleAutoDisabled"].is_null()) {
+					state["scheduleAutoDisabled"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisabledAtMs") && !state["scheduleAutoDisabledAtMs"].is_null()) {
+					state["scheduleAutoDisabledAtMs"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisabledReason") && !state["scheduleAutoDisabledReason"].is_null()) {
+					state["scheduleAutoDisabledReason"] = nullptr;
+					changed = true;
+				}
 			}
 			catch (const std::exception& ex) {
 				const std::int64_t errorCount =
@@ -1969,6 +1981,9 @@ namespace blazeclaw::cron {
 				state["lastError"] = std::string("schedule error: ") + ex.what();
 				changed = true;
 				if (errorCount >= kMaxScheduleErrors) {
+					state["scheduleAutoDisabled"] = true;
+					state["scheduleAutoDisabledAtMs"] = nowMs;
+					state["scheduleAutoDisabledReason"] = "schedule_error_threshold";
 					job["enabled"] = false;
 				}
 			}
@@ -1980,6 +1995,9 @@ namespace blazeclaw::cron {
 				state["lastError"] = "schedule error: unknown";
 				changed = true;
 				if (errorCount >= kMaxScheduleErrors) {
+					state["scheduleAutoDisabled"] = true;
+					state["scheduleAutoDisabledAtMs"] = nowMs;
+					state["scheduleAutoDisabledReason"] = "schedule_error_threshold";
 					job["enabled"] = false;
 				}
 			}
