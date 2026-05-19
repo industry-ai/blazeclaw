@@ -158,6 +158,15 @@ namespace blazeclaw::cron {
 		}
 
 		std::string MapTerminalDisposition(const CronJson& finishedRun) {
+			const std::string explicitTaskLedgerDisposition =
+				ToLowerCopy(ReadStringOrEmpty(finishedRun, "taskLedgerDisposition"));
+			if (explicitTaskLedgerDisposition == "already_running" ||
+				explicitTaskLedgerDisposition == "not_due" ||
+				explicitTaskLedgerDisposition == "unknown_job" ||
+				explicitTaskLedgerDisposition == "missing_terminal_run") {
+				return explicitTaskLedgerDisposition;
+			}
+
 			if (finishedRun.value("timedOut", false)) {
 				return kTaskLedgerDispositionTimedOut;
 			}

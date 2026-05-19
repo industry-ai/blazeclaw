@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AW Step 9-10/10 response lifecycle consistency strictness and integration negative-path increment, plus prior Phase AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AX Step 0-4/10 task-ledger terminal disposition carry-forward and schema taxonomy alignment increment, plus prior Phase AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
 
 ## Scope
 
@@ -126,6 +126,30 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 ## Changelog
 
 ### 2026-05-19
+
+- Added Phase AX Step 0-4 note: `CronOpsService` terminal hook mapping now
+  preserves recognized manual queued-edge `taskLedgerDisposition` values
+  (`unknown_job`, `already_running`, `not_due`, `missing_terminal_run`) in
+  hook payload projection instead of flattening to generic mapped
+  dispositions.
+- Added Phase AX Step 0-4 taxonomy-alignment note:
+  `GatewayProtocolSchemaValidator.Response` now accepts
+  `taskLedgerDisposition=unknown_job` in cron run-entry response taxonomy.
+- Added Phase AX Step 0-4 parity coverage note:
+  - updated ops integration assertion for
+	`Cron ops emits task-ledger completion hook for manual unknown-job terminal edge`
+	to require `disposition=unknown_job` and
+	`taskLedgerDisposition=unknown_job`,
+  - expanded response taxonomy positive-path coverage to include
+	`unknown_job` in
+	`Cron runs response validator accepts expanded taskLedgerDisposition taxonomy values`.
+- Validation evidence updated for this tranche:
+  - `BlazeClawMfc.Tests.exe "[cron][response][schema]"` passed
+	(74 assertions / 30 test cases),
+  - `BlazeClawMfc.Tests.exe "[cron][ops]"` passed
+	(170 assertions / 16 test cases),
+  - required build gate passed via
+	`msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 
 - Added Phase AW Step 9-10 note: response validator strictness now rejects
   `cron.run` queued-reason terminal-state drift

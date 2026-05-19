@@ -201,6 +201,7 @@ namespace blazeclaw::gateway::protocol {
 						"not_delivered",
 						"already_running",
 						"not_due",
+						"unknown_job",
 						"missing_terminal_run"
 					},
 					issue,

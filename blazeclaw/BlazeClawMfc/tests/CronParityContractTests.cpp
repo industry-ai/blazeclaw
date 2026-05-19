@@ -1273,6 +1273,18 @@ TEST_CASE("Cron runs response validator accepts expanded taskLedgerDisposition t
 
 		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
 	}
+
+	SECTION("unknown_job disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-unknown-job",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"unknown_job\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
 }
 
 TEST_CASE("Cron runs response validator rejects unsupported value taxonomy", "[cron][schema][response]") {
@@ -5735,11 +5747,12 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 	for (const auto& payload : completedPayloads) {
 		if (payload.value("jobId", std::string()) == removedJobId &&
 			payload.value("taskLedgerStatus", std::string()) == "skipped" &&
-			payload.value("disposition", std::string()) == "skipped") {
+			payload.value("disposition", std::string()) == "unknown_job") {
 			sawUnknownJob = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
 			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.value("taskLedgerDisposition", std::string()) == "unknown_job");
 			REQUIRE(payload.contains("queuedAtMs"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("no longer exists") !=
