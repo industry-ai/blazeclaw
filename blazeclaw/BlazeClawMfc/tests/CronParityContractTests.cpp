@@ -327,6 +327,36 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat cron.add 
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 	}
+
+	SECTION("cron.add canonicalizes flat webhook url aliases to nested to fields") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-add-flat-url-aliases\","
+				"\"method\":\"cron.add\","
+				"\"params\":{"
+				"\"kind\":\"every\","
+				"\"everyMs\":60000,"
+				"\"text\":\"nightly ping\","
+				"\"deliveryMode\":\"webhook\","
+				"\"deliveryUrl\":\"https://example.test/delivery-url\","
+				"\"failureDestinationMode\":\"webhook\","
+				"\"failureDestinationUrl\":\"https://example.test/failure-url\","
+				"\"failureAlertMode\":\"webhook\","
+				"\"failureAlertUrl\":\"https://example.test/alert-url\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-add-flat-url-aliases");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
 }
 
 TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/run/runs/wake params", "[cron][gateway][normalize]") {
@@ -376,6 +406,36 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 
 		REQUIRE(response.value("type", std::string()) == "res");
 		REQUIRE(response.value("id", std::string()) == "cron-update-flat-shape");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
+	SECTION("cron.update patch canonicalizes flat webhook url aliases to nested to fields") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-update-flat-url-aliases\","
+				"\"method\":\"cron.update\","
+				"\"params\":{"
+				"\"id\":\"cron-1\","
+				"\"patch\":{"
+				"\"deliveryMode\":\"webhook\","
+				"\"deliveryUrl\":\"https://example.test/update-delivery-url\","
+				"\"failureDestinationMode\":\"webhook\","
+				"\"failureDestinationUrl\":\"https://example.test/update-failure-url\","
+				"\"failureAlertMode\":\"webhook\","
+				"\"failureAlertUrl\":\"https://example.test/update-alert-url\""
+				"}"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-flat-url-aliases");
 		REQUIRE_FALSE(response.value("ok", true));
 		REQUIRE(response.contains("error"));
 		REQUIRE(response["error"].is_object());

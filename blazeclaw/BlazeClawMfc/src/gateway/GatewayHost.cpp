@@ -197,11 +197,13 @@ namespace blazeclaw::gateway {
 				}
 
 				if (params.contains("deliveryMode") ||
+					params.contains("deliveryUrl") ||
 					params.contains("deliveryTo") ||
 					params.contains("deliveryChannel") ||
 					params.contains("deliveryAccountId") ||
 					params.contains("deliveryBestEffort") ||
 					params.contains("failureDestinationMode") ||
+					params.contains("failureDestinationUrl") ||
 					params.contains("failureDestinationTo") ||
 					params.contains("failureDestinationChannel") ||
 					params.contains("failureDestinationAccountId")) {
@@ -216,6 +218,16 @@ namespace blazeclaw::gateway {
 					if (delivery.contains("deliveryTo") && !delivery.contains("to")) {
 						delivery["to"] = delivery["deliveryTo"];
 						delivery.erase("deliveryTo");
+						changed = true;
+					}
+					moveFieldIfPresent(params, delivery, "deliveryUrl");
+					if (delivery.contains("deliveryUrl") && !delivery.contains("to")) {
+						delivery["to"] = delivery["deliveryUrl"];
+						delivery.erase("deliveryUrl");
+						changed = true;
+					}
+					else if (delivery.contains("deliveryUrl")) {
+						delivery.erase("deliveryUrl");
 						changed = true;
 					}
 					moveFieldIfPresent(params, delivery, "deliveryChannel");
@@ -238,6 +250,7 @@ namespace blazeclaw::gateway {
 					}
 
 					if (params.contains("failureDestinationMode") ||
+						params.contains("failureDestinationUrl") ||
 						params.contains("failureDestinationTo") ||
 						params.contains("failureDestinationChannel") ||
 						params.contains("failureDestinationAccountId")) {
@@ -254,6 +267,17 @@ namespace blazeclaw::gateway {
 							!failureDestination.contains("to")) {
 							failureDestination["to"] = failureDestination["failureDestinationTo"];
 							failureDestination.erase("failureDestinationTo");
+							changed = true;
+						}
+						moveFieldIfPresent(params, failureDestination, "failureDestinationUrl");
+						if (failureDestination.contains("failureDestinationUrl") &&
+							!failureDestination.contains("to")) {
+							failureDestination["to"] = failureDestination["failureDestinationUrl"];
+							failureDestination.erase("failureDestinationUrl");
+							changed = true;
+						}
+						else if (failureDestination.contains("failureDestinationUrl")) {
+							failureDestination.erase("failureDestinationUrl");
 							changed = true;
 						}
 						moveFieldIfPresent(params, failureDestination, "failureDestinationChannel");
@@ -276,6 +300,7 @@ namespace blazeclaw::gateway {
 				if (params.contains("failureAlertAfter") ||
 					params.contains("failureAlertCooldownMs") ||
 					params.contains("failureAlertMode") ||
+					params.contains("failureAlertUrl") ||
 					params.contains("failureAlertTo") ||
 					params.contains("failureAlertChannel") ||
 					params.contains("failureAlertAccountId")) {
@@ -306,6 +331,17 @@ namespace blazeclaw::gateway {
 						!failureAlert.contains("to")) {
 						failureAlert["to"] = failureAlert["failureAlertTo"];
 						failureAlert.erase("failureAlertTo");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertUrl");
+					if (failureAlert.contains("failureAlertUrl") &&
+						!failureAlert.contains("to")) {
+						failureAlert["to"] = failureAlert["failureAlertUrl"];
+						failureAlert.erase("failureAlertUrl");
+						changed = true;
+					}
+					else if (failureAlert.contains("failureAlertUrl")) {
+						failureAlert.erase("failureAlertUrl");
 						changed = true;
 					}
 					moveFieldIfPresent(params, failureAlert, "failureAlertChannel");
@@ -396,11 +432,13 @@ namespace blazeclaw::gateway {
 					}
 
 					if (patch.contains("deliveryMode") ||
+						patch.contains("deliveryUrl") ||
 						patch.contains("deliveryTo") ||
 						patch.contains("deliveryChannel") ||
 						patch.contains("deliveryAccountId") ||
 						patch.contains("deliveryBestEffort") ||
 						patch.contains("failureDestinationMode") ||
+						patch.contains("failureDestinationUrl") ||
 						patch.contains("failureDestinationTo") ||
 						patch.contains("failureDestinationChannel") ||
 						patch.contains("failureDestinationAccountId")) {
@@ -415,6 +453,16 @@ namespace blazeclaw::gateway {
 						if (delivery.contains("deliveryTo") && !delivery.contains("to")) {
 							delivery["to"] = delivery["deliveryTo"];
 							delivery.erase("deliveryTo");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, delivery, "deliveryUrl");
+						if (delivery.contains("deliveryUrl") && !delivery.contains("to")) {
+							delivery["to"] = delivery["deliveryUrl"];
+							delivery.erase("deliveryUrl");
+							changed = true;
+						}
+						else if (delivery.contains("deliveryUrl")) {
+							delivery.erase("deliveryUrl");
 							changed = true;
 						}
 						moveFieldIfPresent(patch, delivery, "deliveryChannel");
@@ -437,6 +485,7 @@ namespace blazeclaw::gateway {
 						}
 
 						if (patch.contains("failureDestinationMode") ||
+							patch.contains("failureDestinationUrl") ||
 							patch.contains("failureDestinationTo") ||
 							patch.contains("failureDestinationChannel") ||
 							patch.contains("failureDestinationAccountId")) {
@@ -453,6 +502,17 @@ namespace blazeclaw::gateway {
 								!failureDestination.contains("to")) {
 								failureDestination["to"] = failureDestination["failureDestinationTo"];
 								failureDestination.erase("failureDestinationTo");
+								changed = true;
+							}
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationUrl");
+							if (failureDestination.contains("failureDestinationUrl") &&
+								!failureDestination.contains("to")) {
+								failureDestination["to"] = failureDestination["failureDestinationUrl"];
+								failureDestination.erase("failureDestinationUrl");
+								changed = true;
+							}
+							else if (failureDestination.contains("failureDestinationUrl")) {
+								failureDestination.erase("failureDestinationUrl");
 								changed = true;
 							}
 							moveFieldIfPresent(patch, failureDestination, "failureDestinationChannel");
@@ -475,6 +535,7 @@ namespace blazeclaw::gateway {
 					if (patch.contains("failureAlertAfter") ||
 						patch.contains("failureAlertCooldownMs") ||
 						patch.contains("failureAlertMode") ||
+						patch.contains("failureAlertUrl") ||
 						patch.contains("failureAlertTo") ||
 						patch.contains("failureAlertChannel") ||
 						patch.contains("failureAlertAccountId")) {
@@ -505,6 +566,17 @@ namespace blazeclaw::gateway {
 							!failureAlert.contains("to")) {
 							failureAlert["to"] = failureAlert["failureAlertTo"];
 							failureAlert.erase("failureAlertTo");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertUrl");
+						if (failureAlert.contains("failureAlertUrl") &&
+							!failureAlert.contains("to")) {
+							failureAlert["to"] = failureAlert["failureAlertUrl"];
+							failureAlert.erase("failureAlertUrl");
+							changed = true;
+						}
+						else if (failureAlert.contains("failureAlertUrl")) {
+							failureAlert.erase("failureAlertUrl");
 							changed = true;
 						}
 						moveFieldIfPresent(patch, failureAlert, "failureAlertChannel");

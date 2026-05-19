@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AZ Step 7-11/10 store legacy kind-key migration increment, plus prior Phase AY/AX/AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase BA Step 8-11/10 gateway webhook-url alias canonicalization increment, plus prior Phase AZ/AY/AX/AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
 
 ## Scope
 
@@ -126,6 +126,21 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 ## Changelog
 
 ### 2026-05-19
+
+- Added Phase BA Step 8-11 note: gateway pre-validator normalization now
+  canonicalizes flat webhook URL aliases into nested target fields for
+  add/update patch payloads:
+  - `deliveryUrl` -> `delivery.to`,
+  - `failureDestinationUrl` -> `delivery.failureDestination.to`,
+  - `failureAlertUrl` -> `failureAlert.to`.
+- Added gateway normalization parity coverage notes:
+  - `cron.add canonicalizes flat webhook url aliases to nested to fields`,
+  - `cron.update patch canonicalizes flat webhook url aliases to nested to fields`.
+- Validation evidence updated for this tranche:
+  - `BlazeClawMfc.Tests.exe "[cron][gateway][normalize]"` passed
+	(95 assertions / 2 test cases),
+  - required build gate passed via
+	`msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 
 - Added Phase AZ Step 7-11 note: `CronStoreService::ParseArrayPayload` now
   accepts kind-matched legacy envelope array keys
