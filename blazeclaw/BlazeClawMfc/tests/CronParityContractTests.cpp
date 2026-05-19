@@ -4574,6 +4574,66 @@ TEST_CASE("Cron timer preserves primary delivery simulation when runtime project
 	REQUIRE(runs[0].value("failureDestinationHttpStatus", 0) == 202);
 }
 
+TEST_CASE("Cron timer suppresses webhook failure destination when primary route falls back to delivery url alias under runtime-projected transport", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-primary-url-alias-suppression") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-primary-projected-without-target" },
+				{ "error", "runtime delivery failure" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "main" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryAttempted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-primary-url-alias-suppression" },
+			{ "name", "runtime primary url alias suppression" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "url", "https://primary.example/alias" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "https://primary.example/alias" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://primary.example/alias");
+	REQUIRE(
+		runs[0].value("failureDestinationError", std::string()) ==
+		"failure destination matches primary delivery target");
+}
+
 TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron][ops]") {
 	CronOpsService ops;
 	std::vector<CronJson> runningPayloads;

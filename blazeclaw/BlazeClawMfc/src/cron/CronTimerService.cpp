@@ -1230,9 +1230,14 @@ namespace blazeclaw::cron {
 						!outcome.deliveryMode.empty()
 						? outcome.deliveryMode
 						: mode;
-					const std::string primaryTo = !outcome.deliveryTarget.empty()
+					std::string primaryTo = !outcome.deliveryTarget.empty()
 						? outcome.deliveryTarget
 						: TrimCopy(delivery.value("to", std::string()));
+					if (primaryTo.empty() &&
+						delivery.contains("url") &&
+						delivery["url"].is_string()) {
+						primaryTo = TrimCopy(delivery["url"].get<std::string>());
+					}
 					const std::string primaryChannel = !outcome.deliveryChannel.empty()
 						? outcome.deliveryChannel
 						: TrimCopy(delivery.value("channel", std::string("last")));
