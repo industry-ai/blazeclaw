@@ -1242,7 +1242,9 @@ namespace blazeclaw::cron {
 						? outcome.deliveryChannel
 						: TrimCopy(delivery.value("channel", std::string("last")));
 					const std::string primaryAccountId =
-						TrimCopy(delivery.value("accountId", std::string()));
+						!outcome.deliveryAccountId.empty()
+						? outcome.deliveryAccountId
+						: TrimCopy(delivery.value("accountId", std::string()));
 
 					const bool failureHasExplicitTo =
 						failureDestination.contains("to") &&

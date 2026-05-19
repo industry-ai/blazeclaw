@@ -1382,6 +1382,71 @@ TEST_CASE("Cron timer marks announce failure destination unresolved when fallbac
 		"failure destination matches primary delivery target");
 }
 
+TEST_CASE("Cron timer suppresses announce failure destination when runtime projects matching primary account id", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-announce-account-suppression") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-primary-announce-with-account" },
+				{ "error", "runtime delivery failure" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "isolated" },
+				{ "deliveryMode", "announce" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryTarget", "ops-room" },
+				{ "deliveryChannel", "last" },
+				{ "deliveryAccountId", "runtime-account" },
+				{ "deliveryAttempted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-announce-account-suppression" },
+			{ "name", "runtime announce account suppression" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "delivery", {
+				{ "mode", "announce" },
+				{ "to", "ops-room" },
+				{ "accountId", "config-account" },
+				{ "failureDestination", {
+					{ "mode", "announce" },
+					{ "to", "ops-room" },
+					{ "channel", "last" },
+					{ "accountId", "runtime-account" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryAccountId", std::string()) == "runtime-account");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(
+		runs[0].value("failureDestinationError", std::string()) ==
+		"failure destination matches primary delivery target");
+}
+
 TEST_CASE("Cron timer suppresses failureAlert when not explicitly configured", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
