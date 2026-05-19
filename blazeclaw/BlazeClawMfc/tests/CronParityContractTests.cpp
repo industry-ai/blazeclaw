@@ -2478,6 +2478,48 @@ TEST_CASE("Cron patch resolves sessionTarget current using persisted sessionKey 
 	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:persisted");
 }
 
+TEST_CASE("Cron patch null sessionKey canonicalizes stale session target by payload kind", "[cron][normalize]") {
+	SECTION("agentTurn payload falls back to isolated") {
+		CronJson job = {
+			{ "id", "cron-null-sessionkey-agentturn" },
+			{ "name", "nightly" },
+			{ "sessionKey", "agent:main:persisted" },
+			{ "sessionTarget", "session:agent:main:persisted" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "run" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const CronJson patch = {
+			{ "sessionKey", nullptr }
+		};
+
+		CronNormalize::ApplyPatch(job, patch);
+		REQUIRE_FALSE(job.contains("sessionKey"));
+		REQUIRE(job.value("sessionTarget", std::string()) == "isolated");
+	}
+
+	SECTION("systemEvent payload falls back to main") {
+		CronJson job = {
+			{ "id", "cron-null-sessionkey-systemevent" },
+			{ "name", "nightly" },
+			{ "sessionKey", "agent:main:persisted" },
+			{ "sessionTarget", "session:agent:main:persisted" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ping" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const CronJson patch = {
+			{ "sessionKey", nullptr }
+		};
+
+		CronNormalize::ApplyPatch(job, patch);
+		REQUIRE_FALSE(job.contains("sessionKey"));
+		REQUIRE(job.value("sessionTarget", std::string()) == "main");
+	}
+}
+
 TEST_CASE("Cron patch normalize infers webhook modes from url aliases when mode is omitted", "[cron][normalize]") {
 	CronJson job = {
 		{ "id", "cron-patch-delivery-mode-infer" },

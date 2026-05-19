@@ -990,6 +990,17 @@ namespace blazeclaw::cron {
 		}
 		else if (normalizedPatch.contains("sessionKey") && normalizedPatch["sessionKey"].is_null()) {
 			job.erase("sessionKey");
+			if (job.contains("sessionTarget") &&
+				job["sessionTarget"].is_string() &&
+				ToLowerCopy(TrimCopy(job["sessionTarget"].get<std::string>())).rfind("session:", 0) == 0) {
+				const std::string payloadKind =
+					job.contains("payload") && job["payload"].is_object()
+					? ToLowerCopy(TrimCopy(job["payload"].value("kind", std::string())))
+					: std::string();
+				job["sessionTarget"] = payloadKind == "agentturn"
+					? CronJson("isolated")
+					: CronJson("main");
+			}
 		}
 	}
 
