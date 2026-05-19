@@ -579,6 +579,49 @@ namespace blazeclaw::gateway {
 					}
 				}
 
+				if (params.contains("status") &&
+					params["status"].is_string() &&
+					!params.contains("statuses")) {
+					const std::string rawStatus = params["status"].get<std::string>();
+					const std::vector<std::string> parsedStatuses =
+						splitCsvValues(rawStatus);
+					if (parsedStatuses.size() > 1) {
+						params["statuses"] = Json::array();
+						for (const std::string& value : parsedStatuses) {
+							params["statuses"].push_back(value);
+						}
+						params.erase("status");
+						changed = true;
+					}
+					else if (parsedStatuses.size() == 1 &&
+						parsedStatuses.front() != rawStatus) {
+						params["status"] = parsedStatuses.front();
+						changed = true;
+					}
+				}
+
+				if (params.contains("deliveryStatus") &&
+					params["deliveryStatus"].is_string() &&
+					!params.contains("deliveryStatuses")) {
+					const std::string rawDeliveryStatus =
+						params["deliveryStatus"].get<std::string>();
+					const std::vector<std::string> parsedDeliveryStatuses =
+						splitCsvValues(rawDeliveryStatus);
+					if (parsedDeliveryStatuses.size() > 1) {
+						params["deliveryStatuses"] = Json::array();
+						for (const std::string& value : parsedDeliveryStatuses) {
+							params["deliveryStatuses"].push_back(value);
+						}
+						params.erase("deliveryStatus");
+						changed = true;
+					}
+					else if (parsedDeliveryStatuses.size() == 1 &&
+						parsedDeliveryStatuses.front() != rawDeliveryStatus) {
+						params["deliveryStatus"] = parsedDeliveryStatuses.front();
+						changed = true;
+					}
+				}
+
 				if (params.value("scope", std::string()) == "job" &&
 					!params.contains("id") &&
 					!params.contains("jobId")) {
