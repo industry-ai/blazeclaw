@@ -1233,10 +1233,22 @@ namespace blazeclaw::cron {
 					std::string primaryTo = !outcome.deliveryTarget.empty()
 						? outcome.deliveryTarget
 						: TrimCopy(delivery.value("to", std::string()));
+					const bool primaryHasExplicitTo =
+						delivery.contains("to") &&
+						delivery["to"].is_string();
 					if (primaryTo.empty() &&
 						delivery.contains("url") &&
 						delivery["url"].is_string()) {
 						primaryTo = TrimCopy(delivery["url"].get<std::string>());
+					}
+					if (primaryTo.empty() &&
+						!primaryHasExplicitTo &&
+						primaryMode == "announce") {
+						primaryTo = outcome.sessionId.empty()
+							? (sessionTarget == "main"
+								? std::string("main")
+								: std::string("isolated"))
+							: outcome.sessionId;
 					}
 					const std::string primaryChannel = !outcome.deliveryChannel.empty()
 						? outcome.deliveryChannel
