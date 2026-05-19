@@ -13,6 +13,9 @@ namespace blazeclaw::cron {
 	inline constexpr const char* kWakeModeNow = "now";
 	inline constexpr const char* kWakeModeNextHeartbeat = "next-heartbeat";
 
+	inline constexpr std::int64_t kCronWakeNowBusyMaxWaitMs = 120'000;
+	inline constexpr std::int64_t kCronWakeNowBusyRetryDelayMs = 250;
+
 	std::int64_t UtcNowMs();
 	std::string ToLowerCopy(const std::string& value);
 	std::string TrimCopy(const std::string& value);

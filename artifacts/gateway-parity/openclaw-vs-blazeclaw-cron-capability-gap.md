@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase BA Step 8-11/10 gateway webhook-url alias canonicalization increment, plus prior Phase AZ/AY/AX/AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-19 (Phase BC WP-A: production runtime gating landed; closure sequence WP-A baseline done → WP-B next; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
 
 ## Scope
 
@@ -38,7 +38,15 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation, and `GatewayHost::HandleInboundText` now applies pre-validator canonicalization for legacy/flat payloads across `cron.add`/`cron.update`/`cron.run`/`cron.runs`/`wake`; latest increments deepen `cron.update` flat schedule/payload/delivery alias lifting into nested patch structure, canonicalize flat `failureAlert*` aliases into nested `failureAlert` objects for add/update patch paths, canonicalize legacy wake-mode alias values to strict `next-heartbeat`, canonicalize trimmed/case-variant strict wake `mode` values to canonical taxonomy before validation, and canonicalize singular `cron.runs` CSV aliases (`status`, `deliveryStatus`) into plural array filters for multi-value forms. Remaining gap is broader tool-surface action depth, not absence of gateway normalization bridge.
 5. **Tool-surface parity** — WebView shaping (`agents-controller.js`) covers much of `cron-tool.ts` ergonomics; dedicated agent cron tool adapter and CLI/controller/bootstrap parity remain open.
 
-## Capability Matrix (reconciled 2026-05-18)
+## Closure sequence (Phase BC, 2026-05-19)
+
+**WP-A baseline landed:** `preferRuntimeExecution`, wake-now busy-wait, `runtime_unavailable` gating.
+
+**Next:** **WP-B** outbound delivery → **WP-C** → **WP-D** → **WP-E** → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
+
+Parity tests in source: **205+** `TEST_CASE`s in `CronParityContractTests.cpp` (full `[cron]` rerun required for sign-off).
+
+## Capability Matrix (reconciled 2026-05-19)
 
 | Area | OpenClaw | BlazeClaw | Gap Level |
 |---|---|---|---|

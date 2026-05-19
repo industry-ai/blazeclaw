@@ -263,6 +263,9 @@ namespace blazeclaw::gateway {
 			std::string message;
 			std::string bodyForCommands;
 			std::string bodyForAgent;
+			std::string modelIdOverride;
+			std::string providerOverride;
+			std::int64_t timeoutSeconds = 0;
 			std::string slashCommandName;
 			bool shouldLoadInlineSkillCommands = false;
 			bool inlineInvocationAuthorizedSender = true;

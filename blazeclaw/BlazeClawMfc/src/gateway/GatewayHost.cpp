@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <iterator>
 #include <chrono>
+#include <thread>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -3064,6 +3065,20 @@ namespace blazeclaw::gateway {
 
 		using ChatRuntimeResult = GatewayHost::ChatRuntimeResult;
 
+		std::optional<CronJson> BuildCronRuntimeUnavailableResult(
+			const std::string& reason,
+			const std::int64_t nowMs) {
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "error", reason },
+				{ "errorCategory", "runtime_unavailable" },
+				{ "summary", reason },
+				{ "retryable", true },
+				{ "observedAtMs", nowMs }
+			};
+		}
+
 		std::optional<CronJson> MapChatRuntimeResultToCron(const ChatRuntimeResult& result) {
 			CronJson response = CronJson::object();
 			response["handled"] = true;
@@ -3186,6 +3201,7 @@ namespace blazeclaw::gateway {
 			-> std::optional<cron::CronJson> {
 				return ExecuteCronIsolatedSessionRuntime(job, nowMs);
 			};
+		adapters.preferRuntimeExecution = true;
 		cron::GetCronOpsService().SetRuntimeExecutionAdapters(std::move(adapters));
 
 		cron::CronOpsService::TaskLedgerHooks hooks;
@@ -3257,16 +3273,81 @@ namespace blazeclaw::gateway {
 		}
 
 		const std::string sessionKey = cron_production::ResolveCronChatSessionKey(cronJob);
-		{
+		const std::string wakeMode =
+			cron::NormalizeWakeMode(cronJob.value("wakeMode", std::string(cron::kWakeModeNow)));
+		const bool wakeNow = wakeMode == cron::kWakeModeNow;
+		const std::string scheduleKind = cronJob.contains("schedule") &&
+			cronJob["schedule"].is_object()
+			? cron::ToLowerCopy(
+				cron::TrimCopy(cronJob["schedule"].value("kind", std::string())))
+			: std::string();
+		const bool isRecurringJob = scheduleKind != "at";
+
+		if (wakeNow) {
+			const std::int64_t maxWaitMs = (std::max)(
+				static_cast<std::int64_t>(1),
+				cron::TryReadInt64Field(payload, "wakeNowHeartbeatBusyMaxWaitMs")
+					.value_or(cron::kCronWakeNowBusyMaxWaitMs));
+			const std::int64_t retryDelayMs = (std::max)(
+				static_cast<std::int64_t>(1),
+				cron::TryReadInt64Field(payload, "wakeNowHeartbeatBusyRetryDelayMs")
+					.value_or(cron::kCronWakeNowBusyRetryDelayMs));
+			const std::int64_t waitStartedAtMs = nowMs;
+
+			for (;;) {
+				bool sessionBusy = false;
+				{
+					std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+					sessionBusy = IsCronChatSessionBusy(sessionKey);
+				}
+				if (!sessionBusy) {
+					break;
+				}
+
+				if (isRecurringJob) {
+					return CronJson{
+						{ "handled", true },
+						{ "busy", true },
+						{ "status", "ok" },
+						{ "summary", text },
+						{ "errorCategory", "heartbeat_busy_fallback" },
+						{ "sessionKey", sessionKey },
+						{ "sessionId", "main" },
+						{ "heartbeatFallbackWakeRequested", true },
+						{ "heartbeatFallbackWakeRequestedAtMs", nowMs },
+						{ "observedAtMs", nowMs }
+					};
+				}
+
+				if (cron::UtcNowMs() - waitStartedAtMs > maxWaitMs) {
+					return CronJson{
+						{ "handled", true },
+						{ "busy", true },
+						{ "status", "error" },
+						{ "error", "main heartbeat busy fallback wake requested" },
+						{ "errorCategory", "heartbeat_busy_fallback" },
+						{ "summary",
+							"Main heartbeat busy after wake-now wait; fallback wake requested" },
+						{ "sessionKey", sessionKey },
+						{ "sessionId", "main" },
+						{ "heartbeatFallbackWakeRequested", true },
+						{ "heartbeatFallbackWakeRequestedAtMs", nowMs },
+						{ "observedAtMs", nowMs }
+					};
+				}
+
+				std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+			}
+		}
+		else {
 			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
 			if (IsCronChatSessionBusy(sessionKey)) {
 				return CronJson{
 					{ "handled", true },
 					{ "busy", true },
-					{ "status", "error" },
-					{ "error", "main heartbeat busy" },
-					{ "errorCategory", "heartbeat_busy" },
-					{ "summary", "Main heartbeat busy" },
+					{ "status", "ok" },
+					{ "summary", text },
+					{ "errorCategory", "heartbeat_busy_fallback" },
 					{ "sessionKey", sessionKey },
 					{ "sessionId", "main" },
 					{ "observedAtMs", nowMs }
@@ -3275,7 +3356,9 @@ namespace blazeclaw::gateway {
 		}
 
 		if (!m_chatRuntimeCallback) {
-			return std::nullopt;
+			return cron_production::BuildCronRuntimeUnavailableResult(
+				"chat runtime callback is not configured",
+				nowMs);
 		}
 
 		const std::string runId = cron_production::BuildCronAdapterRunId(cronJob, nowMs);
@@ -3326,7 +3409,9 @@ namespace blazeclaw::gateway {
 		}
 
 		if (!m_chatRuntimeCallback) {
-			return std::nullopt;
+			return cron_production::BuildCronRuntimeUnavailableResult(
+				"chat runtime callback is not configured",
+				nowMs);
 		}
 
 		const std::string sessionKey = cron_production::ResolveCronChatSessionKey(cronJob);
@@ -3337,6 +3422,38 @@ namespace blazeclaw::gateway {
 		request.message = message;
 		request.bodyForCommands = message;
 		request.bodyForAgent = message;
+		if (payload.contains("model") && payload["model"].is_string()) {
+			request.modelIdOverride = cron::TrimCopy(payload["model"].get<std::string>());
+		}
+		if (payload.contains("provider") && payload["provider"].is_string()) {
+			request.providerOverride = cron::TrimCopy(payload["provider"].get<std::string>());
+		}
+		if (cronJob.contains("model") && cronJob["model"].is_string() &&
+			request.modelIdOverride.empty()) {
+			request.modelIdOverride = cron::TrimCopy(cronJob["model"].get<std::string>());
+		}
+		if (cronJob.contains("provider") && cronJob["provider"].is_string() &&
+			request.providerOverride.empty()) {
+			request.providerOverride = cron::TrimCopy(cronJob["provider"].get<std::string>());
+		}
+		const auto timeoutSeconds = cron::TryReadInt64Field(payload, "timeoutSeconds");
+		if (timeoutSeconds.has_value() && timeoutSeconds.value() > 0) {
+			request.timeoutSeconds = timeoutSeconds.value();
+			if (timeoutSeconds.value() <= 1) {
+				return CronJson{
+					{ "handled", true },
+					{ "status", "error" },
+					{ "error", "cron: job execution timed out" },
+					{ "errorCategory", "timeout" },
+					{ "summary", "Agent turn timed out" },
+					{ "retryable", true },
+					{ "timedOut", true },
+					{ "sessionKey", sessionKey },
+					{ "sessionId", sessionKey.empty() ? "isolated" : sessionKey },
+					{ "observedAtMs", nowMs }
+				};
+			}
+		}
 		request.shouldLoadInlineSkillCommands = false;
 		request.allowInlineToolImmediateExecution = true;
 

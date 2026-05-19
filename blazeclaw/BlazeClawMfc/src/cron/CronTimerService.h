@@ -13,6 +13,9 @@ namespace blazeclaw::cron {
 	struct CronRuntimeExecutionAdapters {
 		CronRuntimeExecutionAdapter mainSession;
 		CronRuntimeExecutionAdapter isolatedSession;
+		// When true (production wiring), registered adapters are authoritative and
+		// simulation fallback runs only for explicit handled=false or unregistered lanes.
+		bool preferRuntimeExecution = false;
 	};
 
 	struct CronRecomputeOptions {

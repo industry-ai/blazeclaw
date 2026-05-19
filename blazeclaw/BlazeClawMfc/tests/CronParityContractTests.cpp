@@ -5049,6 +5049,143 @@ TEST_CASE("Cron timer explicit handled=false keeps agentTurn timeout fallback", 
 	REQUIRE(runs[0].value("timedOut", false));
 }
 
+TEST_CASE(
+	"Cron timer preferRuntimeExecution rejects missing adapter result without simulation",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-production-missing") {
+				return std::nullopt;
+			}
+			return std::nullopt;
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-production-missing" },
+			{ "name", "production runtime missing" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
+	REQUIRE_FALSE(runs[0].contains("usage"));
+}
+
+TEST_CASE(
+	"Cron timer preferRuntimeExecution keeps explicit handled=false simulation fallback",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-production-handled-false") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", false },
+				{ "status", "ok" },
+				{ "summary", "explicit-unhandled-production" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-production-handled-false" },
+			{ "name", "production explicit handled false" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "fallback text" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "explicit-unhandled-production");
+	REQUIRE(runs[0].contains("usage"));
+	REQUIRE(runs[0]["usage"].value("promptTokens", 0) >= 1);
+}
+
+TEST_CASE(
+	"Cron timer preferRuntimeExecution uses runtime usage not synthetic tokens",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t adapterNowMs)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-production-usage") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "production-runtime-usage" },
+				{ "sessionId", "isolated" },
+				{ "usage", {
+					{ "promptTokens", 99 },
+					{ "completionTokens", 7 },
+					{ "totalTokens", 106 }
+				} },
+				{ "observedAtMs", adapterNowMs }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-production-usage" },
+			{ "name", "production runtime usage" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "this message would synthesize many tokens if simulated" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("summary", std::string()) == "production-runtime-usage");
+	REQUIRE(runs[0]["usage"].value("promptTokens", 0) == 99);
+	REQUIRE(runs[0]["usage"].value("completionTokens", 0) == 7);
+	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 106);
+}
+
 TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter reports busy", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

@@ -1206,13 +1206,17 @@ namespace blazeclaw::cron {
 			}
 
 			const CronRuntimeExecutionAdapter* runtimeAdapter = nullptr;
+			bool runtimeAdapterRegistered = false;
 			if (payloadKind == "systemevent") {
 				runtimeAdapter = &adapters.mainSession;
+				runtimeAdapterRegistered = static_cast<bool>(adapters.mainSession);
 			}
 			else if (payloadKind == "agentturn") {
 				runtimeAdapter = &adapters.isolatedSession;
+				runtimeAdapterRegistered = static_cast<bool>(adapters.isolatedSession);
 			}
-			if (runtimeAdapter != nullptr && static_cast<bool>(*runtimeAdapter)) {
+			bool explicitRuntimeHandledFalse = false;
+			if (runtimeAdapter != nullptr && runtimeAdapterRegistered) {
 				const std::optional<CronJson> runtimeResult =
 					(*runtimeAdapter)(job, nowMs);
 				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
@@ -1224,6 +1228,8 @@ namespace blazeclaw::cron {
 					if (runtimeNode.contains("handled") &&
 						runtimeNode["handled"].is_boolean()) {
 						runtimeHandled = runtimeNode["handled"].get<bool>();
+						explicitRuntimeHandledFalse =
+							hasExplicitHandledFlag && !runtimeHandled;
 					}
 					else {
 						const bool hasExplicitRuntimeOutcome =
@@ -1304,9 +1310,23 @@ namespace blazeclaw::cron {
 						}
 					}
 				}
+				else if (adapters.preferRuntimeExecution) {
+					runtimeHandled = true;
+					outcome.status = "error";
+					outcome.error = "cron runtime adapter returned no result";
+					outcome.errorCategory = "runtime_unavailable";
+					outcome.summary = "Cron runtime execution is unavailable";
+					outcome.retryable = true;
+				}
 			}
 
-			if (!runtimeHandled && payloadKind == "systemevent") {
+			const bool allowSimulationFallback =
+				!runtimeHandled &&
+				(!adapters.preferRuntimeExecution ||
+					!runtimeAdapterRegistered ||
+					explicitRuntimeHandledFalse);
+
+			if (allowSimulationFallback && payloadKind == "systemevent") {
 				const std::string text =
 					TrimCopy(payload.value("text", std::string()));
 				if (text.empty()) {
@@ -1328,7 +1348,7 @@ namespace blazeclaw::cron {
 					outcome.usageAvailable = true;
 				}
 			}
-			if (!runtimeHandled && payloadKind == "agentturn") {
+			if (allowSimulationFallback && payloadKind == "agentturn") {
 				const std::string message =
 					TrimCopy(payload.value("message", std::string()));
 				if (message.empty()) {
