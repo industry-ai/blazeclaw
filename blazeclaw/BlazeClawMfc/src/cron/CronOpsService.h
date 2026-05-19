@@ -31,6 +31,13 @@ namespace blazeclaw::cron {
 			ScheduleNotificationHook requestHeartbeatNow;
 		};
 
+		using CronRealtimeEventHook =
+			std::function<void(const CronRealtimeEvent& event)>;
+
+		struct CronRealtimeEventHooks {
+			CronRealtimeEventHook onEvent;
+		};
+
 		CronOpsService();
 		~CronOpsService();
 
@@ -46,6 +53,8 @@ namespace blazeclaw::cron {
 		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
 		void SetTaskLedgerHooks(TaskLedgerHooks hooks);
 		void SetScheduleNotificationHooks(ScheduleNotificationHooks hooks);
+		void SetSchedulerConfig(CronSchedulerConfig config);
+		void SetRealtimeEventHooks(CronRealtimeEventHooks hooks);
 		void EnqueueDeferredWakeRequest(const CronJson& wakeParams);
 
 		void StartBackgroundScheduler();
@@ -76,6 +85,8 @@ namespace blazeclaw::cron {
 		std::uint64_t m_manualRunCounter = 0;
 		TaskLedgerHooks m_taskLedgerHooks;
 		ScheduleNotificationHooks m_scheduleNotificationHooks;
+		CronSchedulerConfig m_schedulerConfig;
+		CronRealtimeEventHooks m_realtimeEventHooks;
 		std::mutex m_deferredWakeMutex;
 		std::deque<CronJson> m_deferredWakeRequests;
 
@@ -120,6 +131,14 @@ namespace blazeclaw::cron {
 		void FlushScheduleNotifications(
 			std::vector<CronScheduleNotificationEvent>& notifications);
 		void ProcessDeferredWakeRequests();
+		void EmitCronRealtimeEvent(const CronRealtimeEvent& event);
+		CronRealtimeEvent BuildFinishedRealtimeEvent(
+			const CronJson& job,
+			const CronJson& runEntry) const;
+		bool IsMissedStartupJobLocked(const CronJson& job, std::int64_t nowMs) const;
+		void RunStartupCatchupPlanLocked(
+			std::int64_t nowMs,
+			std::vector<CronScheduleNotificationEvent>* notifications);
 		void EmitTaskLedgerCreateRunningHook(const CronJson& runEntry);
 		void EmitTaskLedgerTerminalHook(const CronJson& runEntry);
 	};

@@ -24,9 +24,14 @@ namespace {
 	using blazeclaw::cron::CronJson;
 	using blazeclaw::cron::CronNormalize;
 	using blazeclaw::cron::CronOpsService;
+	using blazeclaw::cron::CronPumpOptions;
+	using blazeclaw::cron::CronSchedulerConfig;
+	using blazeclaw::cron::CronRealtimeEvent;
 	using blazeclaw::cron::CronScheduleNotificationEvent;
 	using blazeclaw::cron::CronStoreService;
 	using blazeclaw::cron::CronTimerService;
+	using blazeclaw::cron::kCronMinRefireGapMs;
+	using blazeclaw::cron::kCronStuckRunMs;
 	using blazeclaw::cron::kWakeModeNextHeartbeat;
 	using blazeclaw::gateway::GatewayHost;
 	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
@@ -3644,6 +3649,204 @@ TEST_CASE(
 	(void)ops.Status(CronJson::object());
 	REQUIRE(systemEvents.size() == 1);
 	REQUIRE(heartbeatWakes.size() == 1);
+}
+
+TEST_CASE(
+	"Cron timer clears stuck runningAtMs during schedule recompute",
+	"[cron][timer][wp-d]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-stuck-running" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state",
+				{
+					{ "runningAtMs", nowMs - kCronStuckRunMs - 1'000 },
+					{ "nextRunAtMs", nowMs - 1'000 }
+				} }
+		}
+	});
+
+	const bool changed = timer.RecomputeSchedules(jobs, nowMs);
+	REQUIRE(changed);
+	REQUIRE(jobs[0]["state"]["runningAtMs"].is_null());
+}
+
+TEST_CASE(
+	"Cron timer enforces minimum refire gap for cron-expression schedules",
+	"[cron][timer][wp-d]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-min-refire" },
+			{ "enabled", true },
+			{ "schedule",
+				{
+					{ "kind", "cron" },
+					{ "expr", "* * * * *" }
+				} },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].contains("nextRunAtMs"));
+	REQUIRE(jobs[0]["state"]["nextRunAtMs"].is_number_integer());
+	REQUIRE(
+		jobs[0]["state"]["nextRunAtMs"].get<std::int64_t>() >=
+		nowMs + kCronMinRefireGapMs);
+}
+
+TEST_CASE(
+	"Cron timer respects maxExecutionsPerPump batch limit",
+	"[cron][timer][wp-d]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-batch-a" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "a" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		},
+		{
+			{ "id", "job-batch-b" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "b" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 2 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	CronPumpOptions pumpOptions;
+	pumpOptions.maxExecutionsPerPump = 1;
+	const std::size_t executed = timer.PumpDueRuns(
+		jobs,
+		runs,
+		nowMs,
+		false,
+		pumpOptions);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+}
+
+TEST_CASE(
+	"Cron ops emits realtime lifecycle events for add and finished runs",
+	"[cron][timer][wp-d]") {
+	CronOpsService ops;
+	std::vector<CronRealtimeEvent> events;
+
+	CronOpsService::CronRealtimeEventHooks hooks;
+	hooks.onEvent = [&events](const CronRealtimeEvent& event) {
+		events.push_back(event);
+	};
+	ops.SetRealtimeEventHooks(std::move(hooks));
+
+	const CronJson added = ops.Add({
+		{ "name", "wp-d realtime" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	bool sawAdded = false;
+	for (const CronRealtimeEvent& event : events) {
+		if (event.action == "added" && event.jobId == jobId) {
+			sawAdded = true;
+		}
+	}
+	REQUIRE(sawAdded);
+
+	events.clear();
+	(void)ops.Status(CronJson::object());
+
+	bool sawStarted = false;
+	bool sawFinished = false;
+	for (const CronRealtimeEvent& event : events) {
+		if (event.jobId != jobId) {
+			continue;
+		}
+		if (event.action == "started") {
+			sawStarted = true;
+			REQUIRE(event.runAtMs.has_value());
+		}
+		if (event.action == "finished") {
+			sawFinished = true;
+			REQUIRE_FALSE(event.status.empty());
+		}
+	}
+	REQUIRE(sawStarted);
+	REQUIRE(sawFinished);
+}
+
+TEST_CASE(
+	"Cron ops startup catchup defers excess missed jobs with staggered nextRunAtMs",
+	"[cron][timer][wp-d]") {
+	CronOpsService ops;
+	CronSchedulerConfig config;
+	config.maxMissedJobsPerRestart = 1;
+	config.missedJobStaggerMs = 5'000;
+	ops.SetSchedulerConfig(config);
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const CronJson immediate = ops.Add({
+		{ "name", "catchup immediate" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "now" } } }
+	});
+	const CronJson deferredJob = ops.Add({
+		{ "name", "catchup deferred" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "later" } } }
+	});
+	const std::string immediateId = immediate.value("id", std::string());
+	const std::string deferredId = deferredJob.value("id", std::string());
+	REQUIRE_FALSE(immediateId.empty());
+	REQUIRE_FALSE(deferredId.empty());
+
+	(void)ops.Update({
+		{ "id", immediateId },
+		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 60'000 } } } } } }
+	});
+	(void)ops.Update({
+		{ "id", deferredId },
+		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 120'000 } } } } } }
+	});
+
+	const CronJson list = ops.List(CronJson::object());
+	REQUIRE(list.contains("jobs"));
+	const CronJson& jobs = list["jobs"];
+	REQUIRE(jobs.is_array());
+	REQUIRE(jobs.size() == 2);
+
+	std::int64_t deferredNextRunAtMs = 0;
+	for (const auto& job : jobs) {
+		if (job.value("id", std::string()) != deferredId) {
+			continue;
+		}
+		REQUIRE(job.contains("state"));
+		REQUIRE(job["state"].contains("nextRunAtMs"));
+		REQUIRE(job["state"]["nextRunAtMs"].is_number_integer());
+		deferredNextRunAtMs = job["state"]["nextRunAtMs"].get<std::int64_t>();
+	}
+	REQUIRE(deferredNextRunAtMs >= nowMs + config.missedJobStaggerMs);
 }
 
 TEST_CASE("Cron timer clears schedule auto-disable notification signaling after successful recompute", "[cron][timer]") {

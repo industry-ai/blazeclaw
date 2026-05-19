@@ -21,6 +21,9 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] std::string BuildChatEventFrame(
 			const std::string& eventPayloadObjectJson,
 			std::uint64_t seq) const;
+		[[nodiscard]] std::string BuildCronEventFrame(
+			const std::string& cronPayloadObjectJson,
+			std::uint64_t seq) const;
 	};
 
 } // namespace blazeclaw::gateway

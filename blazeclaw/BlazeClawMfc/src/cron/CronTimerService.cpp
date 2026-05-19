@@ -807,6 +807,43 @@ namespace blazeclaw::cron {
 			return TryReadInt64Field(job["state"], "nextRunAtMs");
 		}
 
+		bool HasScheduledNextRunAtMs(const std::optional<std::int64_t>& nextRunAtMs) {
+			return nextRunAtMs.has_value() && nextRunAtMs.value() > 0;
+		}
+
+		bool NormalizeJobTickState(CronJson& job, const std::int64_t nowMs) {
+			bool changed = false;
+			CronJson& state = EnsureStateObject(job);
+			if (!job.value("enabled", true)) {
+				if (state.contains("nextRunAtMs") && !state["nextRunAtMs"].is_null()) {
+					state["nextRunAtMs"] = nullptr;
+					changed = true;
+				}
+				if (TryReadInt64Field(state, "runningAtMs").has_value()) {
+					state["runningAtMs"] = nullptr;
+					changed = true;
+				}
+				return changed;
+			}
+
+			const auto runningAtMs = TryReadInt64Field(state, "runningAtMs");
+			if (runningAtMs.has_value() &&
+				nowMs - runningAtMs.value() > kCronStuckRunMs) {
+				state["runningAtMs"] = nullptr;
+				changed = true;
+			}
+
+			return changed;
+		}
+
+		std::string ReadScheduleKind(const CronJson& job) {
+			if (!job.contains("schedule") || !job["schedule"].is_object()) {
+				return std::string();
+			}
+
+			return ToLowerCopy(TrimCopy(job["schedule"].value("kind", std::string())));
+		}
+
 		bool IsBestEffortDelivery(const CronJson& job) {
 			if (!job.contains("delivery") || !job["delivery"].is_object()) {
 				return false;
@@ -2021,6 +2058,10 @@ namespace blazeclaw::cron {
 		bool changed = false;
 		for (auto& job : jobs) {
 			CronJson& state = EnsureStateObject(job);
+			if (NormalizeJobTickState(job, nowMs)) {
+				changed = true;
+			}
+
 			const std::string jobId = TrimCopy(job.value("id", std::string()));
 			const std::string jobName = TrimCopy(job.value("name", std::string()));
 			const std::string scheduleAutoDisableContextKey =
@@ -2028,7 +2069,26 @@ namespace blazeclaw::cron {
 				":auto-disabled";
 			const auto currentNextRunAtMs = TryReadInt64Field(state, "nextRunAtMs");
 			const bool hasRunningMarker = TryReadInt64Field(state, "runningAtMs").has_value();
-			if (opts.preserveDueSlots &&
+			if (opts.maintenanceOnly) {
+				if (!HasScheduledNextRunAtMs(currentNextRunAtMs)) {
+					// Recompute missing schedules below.
+				}
+				else if (opts.recomputeExpired &&
+					currentNextRunAtMs.value() <= nowMs &&
+					!hasRunningMarker) {
+					const auto lastRunAtMs = TryReadInt64Field(state, "lastRunAtMs");
+					const bool alreadyExecutedSlot =
+						lastRunAtMs.has_value() &&
+						lastRunAtMs.value() >= currentNextRunAtMs.value();
+					if (!alreadyExecutedSlot) {
+						continue;
+					}
+				}
+				else {
+					continue;
+				}
+			}
+			else if (opts.preserveDueSlots &&
 				currentNextRunAtMs.has_value() &&
 				currentNextRunAtMs.value() > 0 &&
 				currentNextRunAtMs.value() <= nowMs &&
@@ -2218,9 +2278,16 @@ namespace blazeclaw::cron {
 		CronJson& jobs,
 		CronJson& runs,
 		const std::int64_t nowMs,
-		const bool forceRunDue) const {
+		const bool forceRunDue,
+		const CronPumpOptions& pumpOptions,
+		const CronPumpCallbacks* pumpCallbacks) const {
 		std::size_t executed = 0;
 		for (auto it = jobs.begin(); it != jobs.end();) {
+			if (pumpOptions.maxExecutionsPerPump > 0 &&
+				executed >= pumpOptions.maxExecutionsPerPump) {
+				break;
+			}
+
 			if (!(*it).is_object() || !(*it).value("enabled", true)) {
 				++it;
 				continue;
@@ -2228,6 +2295,12 @@ namespace blazeclaw::cron {
 
 			const std::string id = (*it).value("id", std::string());
 			if (id.empty()) {
+				++it;
+				continue;
+			}
+
+			CronJson& state = EnsureStateObject(*it);
+			if (TryReadInt64Field(state, "runningAtMs").has_value()) {
 				++it;
 				continue;
 			}
@@ -2243,7 +2316,11 @@ namespace blazeclaw::cron {
 				continue;
 			}
 
-			CronJson& state = EnsureStateObject(*it);
+			if (pumpCallbacks != nullptr &&
+				static_cast<bool>(pumpCallbacks->onStarted)) {
+				pumpCallbacks->onStarted(*it, nowMs);
+			}
+
 			const RunOutcome outcome =
 				EvaluateRunOutcome(*it, nowMs, m_runtimeAdapters);
 			state["runningAtMs"] = nowMs;
@@ -2575,6 +2652,12 @@ namespace blazeclaw::cron {
 
 			if (!deleteAfterRun && !scheduledRetry) {
 				nextAfterRun = ComputeNextRunAtMs(*it, nowMs);
+				if (nextAfterRun.has_value() && ReadScheduleKind(*it) == "cron") {
+					const std::int64_t minNext = nowMs + kCronMinRefireGapMs;
+					if (nextAfterRun.value() < minNext) {
+						nextAfterRun = minNext;
+					}
+				}
 				state["nextRunAtMs"] =
 					nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr);
 				(*it)["updatedAtMs"] = nowMs;
@@ -2699,6 +2782,11 @@ namespace blazeclaw::cron {
 				{ "jobName", jobName },
 				{ "runId", runId }
 			});
+			if (pumpCallbacks != nullptr &&
+				static_cast<bool>(pumpCallbacks->onFinished) &&
+				!runs.empty()) {
+				pumpCallbacks->onFinished(*it, runs.back());
+			}
 			++executed;
 
 			if (deleteAfterRun && !scheduledRetry) {

@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (Phase BC WP-A: production runtime gating landed; closure sequence WP-A baseline done → WP-B next; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
+Generated: 2026-05-19 (Phase BE WP-D: scheduler hardening + gateway `cron` realtime events landed; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
 
 ## Scope
 
@@ -44,9 +44,11 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 **WP-C baseline landed:** schedule auto-disable `enqueueSystemEvent` + deferred `next-heartbeat` wake via production hooks.
 
-**Next:** **WP-B** outbound delivery → **WP-D** → **WP-E** → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
+**WP-D baseline landed:** `maxConcurrentRuns` pump cap, MIN_REFIRE gap, stuck `runningAtMs` recovery, startup catch-up stagger, gateway `"cron"` realtime events (`added`/`updated`/`removed`/`started`/`finished`).
 
-Parity tests in source: **206+** `TEST_CASE`s in `CronParityContractTests.cpp` (full `[cron]` rerun required for sign-off).
+**Next:** **WP-B** outbound delivery → **WP-E** (run-log layout) → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
+
+Parity tests in source: **211+** `TEST_CASE`s in `CronParityContractTests.cpp` (full `[cron]` rerun required for sign-off).
 
 ## Capability Matrix (reconciled 2026-05-19)
 
@@ -62,7 +64,9 @@ Parity tests in source: **206+** `TEST_CASE`s in `CronParityContractTests.cpp` (
 | One-shot re-arm behavior | Defensive `at` handling with legacy compatibility | `at` supported with last-run guard semantics | Medium |
 | Maintenance recompute semantics | Maintenance recompute preserves due slots | `preserveDueSlots` wired for read refresh vs execution sync | Low-Medium |
 | Schedule error isolation | Auto-disable + user notification | `scheduleErrorCount` auto-disable after 3 errors; production hooks deliver `[cron]` system event + deferred `next-heartbeat` wake at threshold (WP-C); IANA/cron syntax breadth still open | Low-Medium |
-| Startup catch-up behavior | Explicit missed-job planning and recovery controls | Bounded startup catch-up loop present | Medium |
+| Startup catch-up behavior | Explicit missed-job planning and recovery controls | Bounded startup catch-up with `maxMissedJobsPerRestart` + stagger; `at` one-shot completion guard (WP-D) | Low-Medium |
+| Gateway cron realtime events | `broadcast("cron", evt)` lifecycle frames | `CronRealtimeEvent` hooks + `GatewayHost::BroadcastCronRealtimeEvent` (WP-D) | Low-Medium |
+| Scheduler execution bounds | `maxConcurrentRuns`, MIN_REFIRE, stuck-run watchdog | Per-pump cap, `kCronMinRefireGapMs`, `kCronStuckRunMs` recovery (WP-D); synchronous batch not parallel workers | Low-Medium |
 | Delivery + failure destination | Full transport execution | Metadata + suppression + opt-in webhook WinHTTP dispatch | Medium |
 | Failure alerts | Full policy behavior | Threshold/cooldown/suppression landed; recurring carry-forward depth open | Medium |
 | Run ledger / task-ledger hooks | Integrated shared ledger transitions | Hook contracts + emission in ops with production wiring and timing metadata projection; deeper retry/cooldown/consumer depth remains | Medium |

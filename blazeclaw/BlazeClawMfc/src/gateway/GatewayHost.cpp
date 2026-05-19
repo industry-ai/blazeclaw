@@ -3236,10 +3236,23 @@ namespace blazeclaw::gateway {
 			};
 		cron::GetCronOpsService().SetScheduleNotificationHooks(std::move(scheduleHooks));
 
+		cron::CronSchedulerConfig schedulerConfig;
+		schedulerConfig.maxConcurrentRuns = 1;
+		schedulerConfig.missedJobStaggerMs = cron::kCronDefaultMissedJobStaggerMs;
+		schedulerConfig.maxMissedJobsPerRestart = cron::kCronDefaultMaxMissedJobsPerRestart;
+		cron::GetCronOpsService().SetSchedulerConfig(schedulerConfig);
+
+		cron::CronOpsService::CronRealtimeEventHooks realtimeHooks;
+		realtimeHooks.onEvent =
+			[this](const cron::CronRealtimeEvent& event) {
+				BroadcastCronRealtimeEvent(event);
+			};
+		cron::GetCronOpsService().SetRealtimeEventHooks(std::move(realtimeHooks));
+
 		m_cronProductionWired = true;
 		EmitTelemetryEvent(
 			"gateway.cron.production_integration.wired",
-			"{\"runtimeAdapters\":true,\"taskLedgerHooks\":true,\"scheduleNotificationHooks\":true}");
+			"{\"runtimeAdapters\":true,\"taskLedgerHooks\":true,\"scheduleNotificationHooks\":true,\"schedulerHardening\":true,\"realtimeEvents\":true}");
 	}
 
 	bool GatewayHost::IsCronChatSessionBusy(const std::string& sessionKey) const {
@@ -3514,6 +3527,23 @@ namespace blazeclaw::gateway {
 			cron_production::BuildCronTaskDeltaEntry(cronPayload, entries.size(), terminal));
 		if (!m_taskDeltaRepository.Upsert(runId, entries)) {
 			return;
+		}
+	}
+
+	void GatewayHost::BroadcastCronRealtimeEvent(const cron::CronRealtimeEvent& event) {
+		if (!m_transport.IsRunning()) {
+			return;
+		}
+
+		const cron::CronJson payload = cron::CronRealtimeEventToJson(event);
+		std::string broadcastError;
+		m_transport.BroadcastOutboundFrame(
+			m_eventFanoutService.BuildCronEventFrame(payload.dump(), ++m_cronPushEventSeq),
+			broadcastError);
+		if (!broadcastError.empty()) {
+			EmitTelemetryEvent(
+				"gateway.cron.realtime.broadcast_error",
+				std::string("{\"error\":") + JsonString(broadcastError) + "}");
 		}
 	}
 

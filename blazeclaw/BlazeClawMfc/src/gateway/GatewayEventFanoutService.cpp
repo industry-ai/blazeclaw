@@ -90,4 +90,19 @@ namespace blazeclaw::gateway {
 			"chat");
 	}
 
+	std::string GatewayEventFanoutService::BuildCronEventFrame(
+		const std::string& cronPayloadObjectJson,
+		const std::uint64_t seq) const {
+		const std::string trimmed = json::Trim(cronPayloadObjectJson);
+		const std::string payload =
+			trimmed.empty() || trimmed.front() != '{'
+			? std::string("{}")
+			: trimmed;
+		return protocol::EncodeValidatedEvent(
+			"cron",
+			payload,
+			seq,
+			"cron");
+	}
+
 } // namespace blazeclaw::gateway

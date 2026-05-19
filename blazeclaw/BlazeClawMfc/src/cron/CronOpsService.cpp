@@ -534,7 +534,6 @@ namespace blazeclaw::cron {
 		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked(&flushScope.notifications());
 		const std::int64_t nowMs = UtcNowMs();
 
 		CronJson job = CronNormalize::NormalizeAddInput(params);
@@ -552,6 +551,10 @@ namespace blazeclaw::cron {
 
 		m_store.Jobs().push_back(job);
 		m_store.SaveJobs();
+		EmitCronRealtimeEvent(CronRealtimeEvent{
+			.jobId = job.value("id", std::string()),
+			.action = "added"
+		});
 		return job;
 	}
 
@@ -559,7 +562,6 @@ namespace blazeclaw::cron {
 		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked(&flushScope.notifications());
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -586,6 +588,10 @@ namespace blazeclaw::cron {
 		}
 
 		m_store.SaveJobs();
+		EmitCronRealtimeEvent(CronRealtimeEvent{
+			.jobId = id,
+			.action = "updated"
+		});
 		return *job;
 	}
 
@@ -593,7 +599,6 @@ namespace blazeclaw::cron {
 		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked(&flushScope.notifications());
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -613,6 +618,10 @@ namespace blazeclaw::cron {
 		const bool removed = m_store.Jobs().size() != before;
 		if (removed) {
 			m_store.SaveJobs();
+			EmitCronRealtimeEvent(CronRealtimeEvent{
+				.jobId = id,
+				.action = "removed"
+			});
 		}
 
 		return {
@@ -952,6 +961,196 @@ namespace blazeclaw::cron {
 		m_scheduleNotificationHooks = std::move(hooks);
 	}
 
+	void CronOpsService::SetSchedulerConfig(CronSchedulerConfig config) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if (config.maxConcurrentRuns < 1) {
+			config.maxConcurrentRuns = kCronDefaultMaxConcurrentRuns;
+		}
+		m_schedulerConfig = std::move(config);
+	}
+
+	void CronOpsService::SetRealtimeEventHooks(CronRealtimeEventHooks hooks) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_realtimeEventHooks = std::move(hooks);
+	}
+
+	void CronOpsService::EmitCronRealtimeEvent(const CronRealtimeEvent& event) {
+		if (event.jobId.empty() || event.action.empty()) {
+			return;
+		}
+
+		CronRealtimeEventHooks hooks;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			hooks = m_realtimeEventHooks;
+		}
+
+		if (!static_cast<bool>(hooks.onEvent)) {
+			return;
+		}
+
+		try {
+			hooks.onEvent(event);
+		}
+		catch (...) {
+		}
+	}
+
+	CronRealtimeEvent CronOpsService::BuildFinishedRealtimeEvent(
+		const CronJson& job,
+		const CronJson& runEntry) const {
+		CronRealtimeEvent event;
+		event.jobId = job.value("id", std::string());
+		event.action = "finished";
+		event.runAtMs = TryReadInt64Field(runEntry, "runAtMs").value_or(
+			TryReadInt64Field(runEntry, "ts").value_or(0));
+		event.durationMs = TryReadInt64Field(runEntry, "durationMs");
+		if (job.contains("state") && job["state"].is_object()) {
+			event.nextRunAtMs = TryReadInt64Field(job["state"], "nextRunAtMs");
+		}
+		if (runEntry.contains("status") && runEntry["status"].is_string()) {
+			event.status = runEntry["status"].get<std::string>();
+		}
+		if (runEntry.contains("error") && runEntry["error"].is_string()) {
+			event.error = runEntry["error"].get<std::string>();
+		}
+		if (runEntry.contains("summary") && runEntry["summary"].is_string()) {
+			event.summary = runEntry["summary"].get<std::string>();
+		}
+		if (runEntry.contains("delivered") && runEntry["delivered"].is_boolean()) {
+			event.delivered = runEntry["delivered"].get<bool>();
+		}
+		if (runEntry.contains("sessionId") && runEntry["sessionId"].is_string()) {
+			event.sessionId = runEntry["sessionId"].get<std::string>();
+		}
+		if (runEntry.contains("sessionKey") && runEntry["sessionKey"].is_string()) {
+			event.sessionKey = runEntry["sessionKey"].get<std::string>();
+		}
+		return event;
+	}
+
+	bool CronOpsService::IsMissedStartupJobLocked(
+		const CronJson& job,
+		const std::int64_t nowMs) const {
+		if (!job.is_object() || !job.value("enabled", true)) {
+			return false;
+		}
+		if (!job.contains("state") || !job["state"].is_object()) {
+			return false;
+		}
+		if (TryReadInt64Field(job["state"], "runningAtMs").has_value()) {
+			return false;
+		}
+
+		const auto nextRunAtMs = TryReadInt64Field(job["state"], "nextRunAtMs");
+		if (!nextRunAtMs.has_value() || nextRunAtMs.value() <= 0 || nextRunAtMs.value() > nowMs) {
+			return false;
+		}
+
+		std::string scheduleKind;
+		if (job.contains("schedule") && job["schedule"].is_object()) {
+			scheduleKind = ToLowerCopy(TrimCopy(job["schedule"].value("kind", std::string())));
+		}
+		if (scheduleKind == "at") {
+			const std::string lastStatus = ToLowerCopy(
+				TrimCopy(job["state"].value("lastStatus", std::string())));
+			if (!lastStatus.empty() && lastStatus != "error") {
+				return false;
+			}
+			const auto lastRunAtMs = TryReadInt64Field(job["state"], "lastRunAtMs");
+			if (lastStatus == "error" &&
+				nextRunAtMs.has_value() &&
+				lastRunAtMs.has_value() &&
+				nextRunAtMs.value() > lastRunAtMs.value()) {
+				return nowMs >= nextRunAtMs.value();
+			}
+			return lastStatus.empty();
+		}
+
+		return true;
+	}
+
+	void CronOpsService::RunStartupCatchupPlanLocked(
+		const std::int64_t nowMs,
+		std::vector<CronScheduleNotificationEvent>* notifications) {
+		CronRecomputeOptions normalizeOptions;
+		normalizeOptions.preserveDueSlots = true;
+		if (m_timer.RecomputeSchedules(
+			m_store.Jobs(),
+			nowMs,
+			normalizeOptions,
+			notifications)) {
+			m_store.SaveJobs();
+		}
+
+		std::vector<CronJson*> missed;
+		missed.reserve(m_store.Jobs().size());
+		for (auto& job : m_store.Jobs()) {
+			if (IsMissedStartupJobLocked(job, nowMs)) {
+				missed.push_back(&job);
+			}
+		}
+
+		if (missed.empty()) {
+			return;
+		}
+
+		std::sort(
+			missed.begin(),
+			missed.end(),
+			[](const CronJson* left, const CronJson* right) {
+				const auto leftNext = TryReadInt64Field(left->value("state", CronJson::object()), "nextRunAtMs")
+					.value_or(0);
+				const auto rightNext = TryReadInt64Field(right->value("state", CronJson::object()), "nextRunAtMs")
+					.value_or(0);
+				return leftNext < rightNext;
+			});
+
+		const std::size_t maxImmediate = (std::min)(
+			missed.size(),
+			m_schedulerConfig.maxMissedJobsPerRestart);
+		bool jobsChanged = false;
+
+		for (std::size_t index = 0; index < missed.size(); ++index) {
+			CronJson& job = *missed[index];
+			CronJson& state = job["state"];
+			if (index < maxImmediate) {
+				state["runningAtMs"] = nullptr;
+				state["lastError"] = nullptr;
+				continue;
+			}
+
+			const std::int64_t staggerMs = (std::max)(
+				static_cast<std::int64_t>(0),
+				m_schedulerConfig.missedJobStaggerMs);
+			const std::int64_t offset = staggerMs *
+				static_cast<std::int64_t>((index - maxImmediate) + 1);
+			state["nextRunAtMs"] = nowMs + offset;
+			state["runningAtMs"] = nullptr;
+			jobsChanged = true;
+		}
+
+		if (jobsChanged) {
+			m_store.SaveJobs();
+		}
+
+		if (maxImmediate > 0) {
+			SyncDueRunsLocked(nowMs, false, notifications);
+		}
+
+		CronRecomputeOptions maintenanceOptions;
+		maintenanceOptions.preserveDueSlots = true;
+		maintenanceOptions.maintenanceOnly = true;
+		maintenanceOptions.recomputeExpired = true;
+		if (m_timer.RecomputeSchedules(
+			m_store.Jobs(),
+			nowMs,
+			maintenanceOptions,
+			notifications)) {
+			m_store.SaveJobs();
+		}
+	}
+
 	void CronOpsService::EnqueueDeferredWakeRequest(const CronJson& wakeParams) {
 		std::lock_guard<std::mutex> lock(m_deferredWakeMutex);
 		m_deferredWakeRequests.push_back(wakeParams);
@@ -1023,7 +1222,7 @@ namespace blazeclaw::cron {
 		}
 
 		m_startupCatchupDone = true;
-		SyncDueRunsLocked(UtcNowMs(), false, notifications);
+		RunStartupCatchupPlanLocked(UtcNowMs(), notifications);
 	}
 
 	void CronOpsService::BackgroundSchedulerLoop() {
@@ -1049,10 +1248,13 @@ namespace blazeclaw::cron {
 			}
 
 			nowMs = UtcNowMs();
-			std::int64_t waitMs = 60'000;
+			std::int64_t waitMs = kCronMaxTimerDelayMs;
 			if (nextWakeAtMs > 0) {
 				waitMs = (std::max)(static_cast<std::int64_t>(1000), nextWakeAtMs - nowMs);
-				waitMs = (std::min)(waitMs, static_cast<std::int64_t>(60'000));
+				if (waitMs <= 0) {
+					waitMs = kCronMinRefireGapMs;
+				}
+				waitMs = (std::min)(waitMs, kCronMaxTimerDelayMs);
 			}
 
 			std::unique_lock<std::mutex> lock(m_backgroundMutex);
@@ -1444,11 +1646,45 @@ namespace blazeclaw::cron {
 		std::size_t executedTotal = 0;
 		std::size_t loops = 0;
 
+		CronPumpOptions pumpOptions;
+		pumpOptions.maxExecutionsPerPump = m_schedulerConfig.maxConcurrentRuns;
+		CronPumpCallbacks pumpCallbacks;
+		pumpCallbacks.onStarted =
+			[this](const CronJson& job, const std::int64_t runAtMs) {
+				CronRealtimeEvent event;
+				event.jobId = job.value("id", std::string());
+				event.action = "started";
+				event.runAtMs = runAtMs;
+				EmitCronRealtimeEvent(event);
+			};
+		pumpCallbacks.onFinished =
+			[this](const CronJson& job, const CronJson& runEntry) {
+				EmitCronRealtimeEvent(BuildFinishedRealtimeEvent(job, runEntry));
+			};
+
 		while (loops < m_maxCatchupRunsPerSync) {
 			const std::size_t runsBeforePump = m_store.Runs().size();
-			const std::size_t executed =
-				m_timer.PumpDueRuns(m_store.Jobs(), m_store.Runs(), nowMs, forceRunDue);
+			const std::size_t executed = m_timer.PumpDueRuns(
+				m_store.Jobs(),
+				m_store.Runs(),
+				nowMs,
+				forceRunDue,
+				pumpOptions,
+				&pumpCallbacks);
 			if (executed == 0) {
+				if (!forceRunDue) {
+					CronRecomputeOptions maintenanceOptions;
+					maintenanceOptions.preserveDueSlots = true;
+					maintenanceOptions.maintenanceOnly = true;
+					maintenanceOptions.recomputeExpired = true;
+					if (m_timer.RecomputeSchedules(
+						m_store.Jobs(),
+						nowMs,
+						maintenanceOptions,
+						notifications)) {
+						changed = true;
+					}
+				}
 				break;
 			}
 

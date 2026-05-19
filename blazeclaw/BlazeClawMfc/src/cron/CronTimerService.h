@@ -2,6 +2,7 @@
 
 #include "CronModels.h"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -21,6 +22,17 @@ namespace blazeclaw::cron {
 
 	struct CronRecomputeOptions {
 		bool preserveDueSlots = false;
+		bool maintenanceOnly = false;
+		bool recomputeExpired = false;
+	};
+
+	struct CronPumpOptions {
+		std::size_t maxExecutionsPerPump = 0;
+	};
+
+	struct CronPumpCallbacks {
+		std::function<void(const CronJson& job, std::int64_t runAtMs)> onStarted;
+		std::function<void(const CronJson& job, const CronJson& runEntry)> onFinished;
 	};
 
 	class CronTimerService {
@@ -43,7 +55,9 @@ namespace blazeclaw::cron {
 			CronJson& jobs,
 			CronJson& runs,
 			std::int64_t nowMs,
-			bool forceRunDue = false) const;
+			bool forceRunDue = false,
+			const CronPumpOptions& pumpOptions = {},
+			const CronPumpCallbacks* pumpCallbacks = nullptr) const;
 
 	private:
 		CronRuntimeExecutionAdapters m_runtimeAdapters;

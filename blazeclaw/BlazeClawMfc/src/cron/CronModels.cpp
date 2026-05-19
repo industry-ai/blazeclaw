@@ -90,4 +90,39 @@ namespace blazeclaw::cron {
 		return std::string("cron-run-") + std::to_string(nowMs) + "-" + std::to_string(current);
 	}
 
+	CronJson CronRealtimeEventToJson(const CronRealtimeEvent& event) {
+		CronJson payload = {
+			{ "jobId", event.jobId },
+			{ "action", event.action }
+		};
+		if (event.runAtMs.has_value()) {
+			payload["runAtMs"] = event.runAtMs.value();
+		}
+		if (event.durationMs.has_value()) {
+			payload["durationMs"] = event.durationMs.value();
+		}
+		if (event.nextRunAtMs.has_value()) {
+			payload["nextRunAtMs"] = event.nextRunAtMs.value();
+		}
+		if (!event.status.empty()) {
+			payload["status"] = event.status;
+		}
+		if (!event.error.empty()) {
+			payload["error"] = event.error;
+		}
+		if (!event.summary.empty()) {
+			payload["summary"] = event.summary;
+		}
+		if (event.delivered.has_value()) {
+			payload["delivered"] = event.delivered.value();
+		}
+		if (!event.sessionId.empty()) {
+			payload["sessionId"] = event.sessionId;
+		}
+		if (!event.sessionKey.empty()) {
+			payload["sessionKey"] = event.sessionKey;
+		}
+		return payload;
+	}
+
 } // namespace blazeclaw::cron

@@ -37,6 +37,7 @@
 
 namespace blazeclaw::cron {
 	struct CronScheduleNotificationEvent;
+	struct CronRealtimeEvent;
 }
 
 namespace blazeclaw::gateway {
@@ -746,6 +747,7 @@ namespace blazeclaw::gateway {
 		void HandleCronTaskLedgerFail(const nlohmann::json& payload);
 		void DispatchCronScheduleAutoDisableNotification(
 			const cron::CronScheduleNotificationEvent& event);
+		void BroadcastCronRealtimeEvent(const cron::CronRealtimeEvent& event);
 		void UpsertCronTaskLedgerEntry(const nlohmann::json& payload, bool terminal);
 		[[nodiscard]] bool IsCronChatSessionBusy(const std::string& sessionKey) const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
@@ -832,6 +834,7 @@ namespace blazeclaw::gateway {
 		TransportRecipientRegistry m_transportRecipientRegistry;
 		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
 		std::uint64_t m_chatPushEventSeq = 0;
+		std::uint64_t m_cronPushEventSeq = 0;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		std::size_t m_taskDeltasRetentionLimit = 64;
 		std::size_t m_taskDeltasMaxPayloadBytes = 1024 * 1024;
