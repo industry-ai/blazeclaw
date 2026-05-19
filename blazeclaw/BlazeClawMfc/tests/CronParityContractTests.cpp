@@ -3319,6 +3319,8 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 		{
 			{ "id", "job-cron-invalid-timezone" },
 			{ "name", "cron invalid timezone" },
+			{ "agentId", "agent-cron" },
+			{ "sessionKey", "agent:main:cron" },
 			{ "enabled", true },
 			{ "schedule",
 				{
@@ -3347,6 +3349,73 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 	REQUIRE(
 		jobs[0]["state"].value("scheduleAutoDisabledReason", std::string()) ==
 		"schedule_error_threshold");
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableNotificationContextKey",
+		std::string()) == "cron:job-cron-invalid-timezone:auto-disabled");
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableHeartbeatWakeRequested",
+		false));
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableHeartbeatWakeRequestedAtMs",
+		0LL) > 0);
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableHeartbeatWakeReason",
+		std::string()) == "cron:job-cron-invalid-timezone:auto-disabled");
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableNotificationAgentId",
+		std::string()) == "agent-cron");
+	REQUIRE(jobs[0]["state"].value(
+		"scheduleAutoDisableNotificationSessionKey",
+		std::string()) == "agent:main:cron");
+	REQUIRE(
+		jobs[0]["state"].value(
+			"scheduleAutoDisableNotificationText",
+			std::string()).find("auto-disabled") != std::string::npos);
+}
+
+TEST_CASE("Cron timer clears schedule auto-disable notification signaling after successful recompute", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-clear-auto-disable-signal" },
+			{ "name", "clear auto disable signal" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state",
+				{
+					{ "scheduleErrorCount", 3 },
+					{ "scheduleAutoDisabled", true },
+					{ "scheduleAutoDisabledAtMs", nowMs - 1000 },
+					{ "scheduleAutoDisabledReason", "schedule_error_threshold" },
+					{ "scheduleAutoDisableNotificationText", "stale" },
+					{ "scheduleAutoDisableNotificationContextKey", "cron:stale:auto-disabled" },
+					{ "scheduleAutoDisableNotificationAgentId", "agent-stale" },
+					{ "scheduleAutoDisableNotificationSessionKey", "session:stale" },
+					{ "scheduleAutoDisableHeartbeatWakeRequested", true },
+					{ "scheduleAutoDisableHeartbeatWakeRequestedAtMs", nowMs - 500 },
+					{ "scheduleAutoDisableHeartbeatWakeReason", "cron:stale:auto-disabled" }
+				} }
+		}
+	});
+
+	const bool changed = timer.RecomputeSchedules(jobs, nowMs);
+	REQUIRE(changed);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].is_object());
+	REQUIRE(jobs[0]["state"]["scheduleErrorCount"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisabled"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisabledAtMs"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisabledReason"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableNotificationText"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableNotificationContextKey"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableNotificationAgentId"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableNotificationSessionKey"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeRequested"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeRequestedAtMs"].is_null());
+	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeReason"].is_null());
 }
 
 TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {

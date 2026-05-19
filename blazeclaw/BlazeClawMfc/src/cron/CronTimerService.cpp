@@ -1936,6 +1936,11 @@ namespace blazeclaw::cron {
 		bool changed = false;
 		for (auto& job : jobs) {
 			CronJson& state = EnsureStateObject(job);
+			const std::string jobId = TrimCopy(job.value("id", std::string()));
+			const std::string jobName = TrimCopy(job.value("name", std::string()));
+			const std::string scheduleAutoDisableContextKey =
+				"cron:" + (jobId.empty() ? std::string("unknown") : jobId) +
+				":auto-disabled";
 			const auto currentNextRunAtMs = TryReadInt64Field(state, "nextRunAtMs");
 			const bool hasRunningMarker = TryReadInt64Field(state, "runningAtMs").has_value();
 			if (opts.preserveDueSlots &&
@@ -1972,6 +1977,41 @@ namespace blazeclaw::cron {
 					state["scheduleAutoDisabledReason"] = nullptr;
 					changed = true;
 				}
+				if (state.contains("scheduleAutoDisableNotificationText") &&
+					!state["scheduleAutoDisableNotificationText"].is_null()) {
+					state["scheduleAutoDisableNotificationText"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableNotificationContextKey") &&
+					!state["scheduleAutoDisableNotificationContextKey"].is_null()) {
+					state["scheduleAutoDisableNotificationContextKey"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableNotificationAgentId") &&
+					!state["scheduleAutoDisableNotificationAgentId"].is_null()) {
+					state["scheduleAutoDisableNotificationAgentId"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableNotificationSessionKey") &&
+					!state["scheduleAutoDisableNotificationSessionKey"].is_null()) {
+					state["scheduleAutoDisableNotificationSessionKey"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableHeartbeatWakeRequested") &&
+					!state["scheduleAutoDisableHeartbeatWakeRequested"].is_null()) {
+					state["scheduleAutoDisableHeartbeatWakeRequested"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableHeartbeatWakeRequestedAtMs") &&
+					!state["scheduleAutoDisableHeartbeatWakeRequestedAtMs"].is_null()) {
+					state["scheduleAutoDisableHeartbeatWakeRequestedAtMs"] = nullptr;
+					changed = true;
+				}
+				if (state.contains("scheduleAutoDisableHeartbeatWakeReason") &&
+					!state["scheduleAutoDisableHeartbeatWakeReason"].is_null()) {
+					state["scheduleAutoDisableHeartbeatWakeReason"] = nullptr;
+					changed = true;
+				}
 			}
 			catch (const std::exception& ex) {
 				const std::int64_t errorCount =
@@ -1981,6 +2021,30 @@ namespace blazeclaw::cron {
 				state["lastError"] = std::string("schedule error: ") + ex.what();
 				changed = true;
 				if (errorCount >= kMaxScheduleErrors) {
+					const std::string notifyName =
+						jobName.empty()
+						? (jobId.empty() ? std::string("(unknown cron job)") : jobId)
+						: jobName;
+					state["scheduleAutoDisableNotificationText"] =
+						"⚠️ Cron job \"" + notifyName +
+						"\" has been auto-disabled after " +
+						std::to_string(errorCount) +
+						" consecutive schedule errors. Last error: " +
+						std::string(ex.what());
+					state["scheduleAutoDisableNotificationContextKey"] =
+						scheduleAutoDisableContextKey;
+					state["scheduleAutoDisableNotificationAgentId"] =
+						job.contains("agentId")
+						? job["agentId"]
+						: CronJson(nullptr);
+					state["scheduleAutoDisableNotificationSessionKey"] =
+						job.contains("sessionKey")
+						? job["sessionKey"]
+						: CronJson(nullptr);
+					state["scheduleAutoDisableHeartbeatWakeRequested"] = true;
+					state["scheduleAutoDisableHeartbeatWakeRequestedAtMs"] = nowMs;
+					state["scheduleAutoDisableHeartbeatWakeReason"] =
+						scheduleAutoDisableContextKey;
 					state["scheduleAutoDisabled"] = true;
 					state["scheduleAutoDisabledAtMs"] = nowMs;
 					state["scheduleAutoDisabledReason"] = "schedule_error_threshold";
@@ -1995,6 +2059,29 @@ namespace blazeclaw::cron {
 				state["lastError"] = "schedule error: unknown";
 				changed = true;
 				if (errorCount >= kMaxScheduleErrors) {
+					const std::string notifyName =
+						jobName.empty()
+						? (jobId.empty() ? std::string("(unknown cron job)") : jobId)
+						: jobName;
+					state["scheduleAutoDisableNotificationText"] =
+						"⚠️ Cron job \"" + notifyName +
+						"\" has been auto-disabled after " +
+						std::to_string(errorCount) +
+						" consecutive schedule errors. Last error: unknown";
+					state["scheduleAutoDisableNotificationContextKey"] =
+						scheduleAutoDisableContextKey;
+					state["scheduleAutoDisableNotificationAgentId"] =
+						job.contains("agentId")
+						? job["agentId"]
+						: CronJson(nullptr);
+					state["scheduleAutoDisableNotificationSessionKey"] =
+						job.contains("sessionKey")
+						? job["sessionKey"]
+						: CronJson(nullptr);
+					state["scheduleAutoDisableHeartbeatWakeRequested"] = true;
+					state["scheduleAutoDisableHeartbeatWakeRequestedAtMs"] = nowMs;
+					state["scheduleAutoDisableHeartbeatWakeReason"] =
+						scheduleAutoDisableContextKey;
 					state["scheduleAutoDisabled"] = true;
 					state["scheduleAutoDisabledAtMs"] = nowMs;
 					state["scheduleAutoDisabledReason"] = "schedule_error_threshold";
