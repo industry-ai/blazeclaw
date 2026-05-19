@@ -3128,6 +3128,35 @@ TEST_CASE("Cron store loads envelope with legacy items/data array shapes", "[cro
 	std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("Cron store loads envelope with legacy kind-matched array keys", "[cron][store]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw-cron-store-legacy-kind-key-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "{\"version\":0,\"kind\":\"jobs\",\"jobs\":[{\"id\":\"job-kind-key\",\"name\":\"legacy\",\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"hi\"}}]}";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "{\"version\":0,\"kind\":\"runs\",\"runs\":[]}";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().is_array());
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-kind-key");
+
+	std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("Cron store loads envelope with legacy values shape", "[cron][store]") {
 	const std::filesystem::path root =
 		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-envelope-test";

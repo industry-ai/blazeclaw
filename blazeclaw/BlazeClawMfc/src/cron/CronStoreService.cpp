@@ -29,6 +29,12 @@ namespace blazeclaw::cron {
 				return parsed;
 			}
 			if (parsed.is_object()) {
+				const std::string kind =
+					parsed.contains("kind") && parsed["kind"].is_string()
+					? parsed["kind"].get<std::string>()
+					: std::string();
+				const std::string normalizedKind = ToLowerCopy(TrimCopy(kind));
+
 				const auto valuesIt = parsed.find("values");
 				if (valuesIt != parsed.end() && valuesIt->is_array()) {
 					return *valuesIt;
@@ -42,6 +48,13 @@ namespace blazeclaw::cron {
 				const auto dataIt = parsed.find("data");
 				if (dataIt != parsed.end() && dataIt->is_array()) {
 					return *dataIt;
+				}
+
+				if (normalizedKind == "jobs" || normalizedKind == "runs") {
+					const auto kindArrayIt = parsed.find(normalizedKind);
+					if (kindArrayIt != parsed.end() && kindArrayIt->is_array()) {
+						return *kindArrayIt;
+					}
 				}
 			}
 

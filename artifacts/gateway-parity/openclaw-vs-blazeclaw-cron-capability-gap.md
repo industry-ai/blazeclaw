@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AY Step 6-11/10 failure-alert retry-pending suppression policy increment, plus prior Phase AX/AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AZ Step 7-11/10 store legacy kind-key migration increment, plus prior Phase AY/AX/AW/AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
 
 ## Scope
 
@@ -126,6 +126,20 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 ## Changelog
 
 ### 2026-05-19
+
+- Added Phase AZ Step 7-11 note: `CronStoreService::ParseArrayPayload` now
+  accepts kind-matched legacy envelope array keys
+  (`kind=jobs` -> `jobs`, `kind=runs` -> `runs`) when
+  `values`/`items`/`data` aliases are absent.
+- Added store parity coverage note:
+  `Cron store loads envelope with legacy kind-matched array keys`.
+- Validation evidence updated for this tranche:
+  - `BlazeClawMfc.Tests.exe "[cron][store]"` passed
+	(21 assertions / 5 test cases),
+  - `BlazeClawMfc.Tests.exe "[cron][parity]"` passed
+	(91 assertions / 2 test cases),
+  - required build gate passed via
+	`msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 
 - Added Phase AY Step 6-11 note: `CronTimerService` now suppresses
   failure-alert triggering for retry-scheduled error lanes with explicit
