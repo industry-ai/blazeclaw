@@ -795,12 +795,81 @@ namespace blazeclaw::cron {
 			return true;
 		}
 
+		std::optional<int> TryResolveCronMonthAlias(const std::string& raw) {
+			const std::string token = ToLowerCopy(TrimCopy(raw));
+			if (token.empty()) {
+				return std::nullopt;
+			}
+
+			static const std::unordered_map<std::string, int> kMonthAliases = {
+				{ "jan", 1 }, { "january", 1 },
+				{ "feb", 2 }, { "february", 2 },
+				{ "mar", 3 }, { "march", 3 },
+				{ "apr", 4 }, { "april", 4 },
+				{ "may", 5 },
+				{ "jun", 6 }, { "june", 6 },
+				{ "jul", 7 }, { "july", 7 },
+				{ "aug", 8 }, { "august", 8 },
+				{ "sep", 9 }, { "sept", 9 }, { "september", 9 },
+				{ "oct", 10 }, { "october", 10 },
+				{ "nov", 11 }, { "november", 11 },
+				{ "dec", 12 }, { "december", 12 }
+			};
+
+			const auto it = kMonthAliases.find(token);
+			if (it == kMonthAliases.end()) {
+				return std::nullopt;
+			}
+
+			return it->second;
+		}
+
+		std::optional<int> TryResolveCronDayOfWeekAlias(const std::string& raw) {
+			const std::string token = ToLowerCopy(TrimCopy(raw));
+			if (token.empty()) {
+				return std::nullopt;
+			}
+
+			static const std::unordered_map<std::string, int> kDayAliases = {
+				{ "sun", 0 }, { "sunday", 0 },
+				{ "mon", 1 }, { "monday", 1 },
+				{ "tue", 2 }, { "tues", 2 }, { "tuesday", 2 },
+				{ "wed", 3 }, { "wednesday", 3 },
+				{ "thu", 4 }, { "thur", 4 }, { "thurs", 4 }, { "thursday", 4 },
+				{ "fri", 5 }, { "friday", 5 },
+				{ "sat", 6 }, { "saturday", 6 }
+			};
+
+			const auto it = kDayAliases.find(token);
+			if (it == kDayAliases.end()) {
+				return std::nullopt;
+			}
+
+			return it->second;
+		}
+
+		bool TryParseCronFieldValue(
+			const std::string& raw,
+			int& valueOut,
+			const std::function<std::optional<int>(const std::string&)>& aliasResolver) {
+			if (aliasResolver) {
+				const auto aliasValue = aliasResolver(raw);
+				if (aliasValue.has_value()) {
+					valueOut = aliasValue.value();
+					return true;
+				}
+			}
+
+			return TryParseStrictNonNegativeInt(raw, valueOut);
+		}
+
 		bool MatchCronTokenSegment(
 			const std::string& segmentRaw,
 			const int value,
 			const int minValue,
 			const int maxValue,
-			const bool normalizeSevenToZero) {
+			const bool normalizeSevenToZero,
+			const std::function<std::optional<int>(const std::string&)>& aliasResolver = {}) {
 			std::string segment = TrimCopy(segmentRaw);
 			if (segment.empty()) {
 				return false;
@@ -844,8 +913,8 @@ namespace blazeclaw::cron {
 
 					int parsedStart = 0;
 					int parsedEnd = 0;
-					if (!TryParseStrictNonNegativeInt(segment.substr(0, dashPos), parsedStart) ||
-						!TryParseStrictNonNegativeInt(segment.substr(dashPos + 1), parsedEnd)) {
+					if (!TryParseCronFieldValue(segment.substr(0, dashPos), parsedStart, aliasResolver) ||
+						!TryParseCronFieldValue(segment.substr(dashPos + 1), parsedEnd, aliasResolver)) {
 						return false;
 					}
 
@@ -854,7 +923,7 @@ namespace blazeclaw::cron {
 				}
 				else {
 					int parsedValue = 0;
-					if (!TryParseStrictNonNegativeInt(segment, parsedValue)) {
+					if (!TryParseCronFieldValue(segment, parsedValue, aliasResolver)) {
 						return false;
 					}
 
@@ -900,7 +969,8 @@ namespace blazeclaw::cron {
 			const int value,
 			const int minValue,
 			const int maxValue,
-			const bool normalizeSevenToZero) {
+			const bool normalizeSevenToZero,
+			const std::function<std::optional<int>(const std::string&)>& aliasResolver = {}) {
 			const std::string token = TrimCopy(tokenRaw);
 			if (token.empty()) {
 				return true;
@@ -921,7 +991,8 @@ namespace blazeclaw::cron {
 					value,
 					minValue,
 					maxValue,
-					normalizeSevenToZero);
+					normalizeSevenToZero,
+					aliasResolver);
 				if (matched) {
 					return true;
 				}
@@ -934,7 +1005,7 @@ namespace blazeclaw::cron {
 					const std::size_t dashPos = trimmed.find('-');
 					if (slashPos == std::string::npos && dashPos == std::string::npos) {
 						int parsedValue = 0;
-						if (TryParseStrictNonNegativeInt(trimmed, parsedValue)) {
+						if (TryParseCronFieldValue(trimmed, parsedValue, aliasResolver)) {
 							if (normalizeSevenToZero && parsedValue == 7) {
 								parsedValue = 0;
 							}
@@ -952,13 +1023,15 @@ namespace blazeclaw::cron {
 							minValue,
 							minValue,
 							maxValue,
-							normalizeSevenToZero) ||
+							normalizeSevenToZero,
+							aliasResolver) ||
 						MatchCronTokenSegment(
 							trimmed,
 							maxValue,
 							minValue,
 							maxValue,
-							normalizeSevenToZero);
+							normalizeSevenToZero,
+							aliasResolver);
 					if (!validSegment) {
 						return false;
 					}
@@ -969,7 +1042,23 @@ namespace blazeclaw::cron {
 		}
 
 		bool MatchCronDayOfWeekToken(const std::string& tokenRaw, const int dayOfWeek) {
-			return MatchCronFieldToken(tokenRaw, dayOfWeek, 0, 6, true);
+			return MatchCronFieldToken(
+				tokenRaw,
+				dayOfWeek,
+				0,
+				6,
+				true,
+				TryResolveCronDayOfWeekAlias);
+		}
+
+		bool MatchCronMonthToken(const std::string& tokenRaw, const int month) {
+			return MatchCronFieldToken(
+				tokenRaw,
+				month,
+				1,
+				12,
+				false,
+				TryResolveCronMonthAlias);
 		}
 
 		RunOutcome EvaluateRunOutcome(
@@ -1782,7 +1871,7 @@ namespace blazeclaw::cron {
 
 				if (MatchCronToken(parts[0], minute, 59) &&
 					MatchCronToken(parts[1], hour, 23) &&
-					MatchCronToken(monthToken, month, 12) &&
+					MatchCronMonthToken(monthToken, month) &&
 					dayMatch) {
 					std::int64_t candidate = candidateLocalMs - timezoneOffsetMs;
 					const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
