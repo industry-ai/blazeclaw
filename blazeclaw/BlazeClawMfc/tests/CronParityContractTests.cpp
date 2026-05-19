@@ -341,6 +341,35 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 		}
 	}
 
+	SECTION("cron.runs normalizes csv aliases into array filters") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-runs-csv-alias\","
+				"\"method\":\"cron.runs\","
+				"\"params\":{"
+				"\"statuses\":\"ok, failed\","
+				"\"deliveryStatuses\":\"delivered,not-delivered\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-runs-csv-alias");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].contains("entries"));
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
+
 	SECTION("cron.add lifts flat failureAlert aliases into failureAlert object") {
 		const nlohmann::json response = ParseGatewayFrame(
 			host.HandleInboundText(

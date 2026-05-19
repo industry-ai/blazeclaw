@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase V Step 8/10 wake strict-mode taxonomy canonicalization plus prior wake alias and cross-layer alignment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase W Step 8/10 cron.runs CSV alias canonicalization plus prior wake canonicalization and cross-layer alignment)
 
 ## Scope
 

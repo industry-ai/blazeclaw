@@ -113,6 +113,47 @@ namespace blazeclaw::gateway {
 				return node[key];
 			};
 
+			auto splitCsvValues = [](const std::string& raw) {
+				std::vector<std::string> values;
+				std::size_t start = 0;
+				while (start <= raw.size()) {
+					const std::size_t end = raw.find(',', start);
+					std::string token =
+						end == std::string::npos
+						? raw.substr(start)
+						: raw.substr(start, end - start);
+
+					token.erase(
+						token.begin(),
+						std::find_if(
+							token.begin(),
+							token.end(),
+							[](unsigned char ch) {
+								return !std::isspace(ch);
+							}));
+					token.erase(
+						std::find_if(
+							token.rbegin(),
+							token.rend(),
+							[](unsigned char ch) {
+								return !std::isspace(ch);
+							}).base(),
+						token.end());
+
+					if (!token.empty()) {
+						values.push_back(token);
+					}
+
+					if (end == std::string::npos) {
+						break;
+					}
+
+					start = end + 1;
+				}
+
+				return values;
+			};
+
 			if (method == "cron.add") {
 				if (params.contains("kind") ||
 					params.contains("everyMs") ||
@@ -501,17 +542,41 @@ namespace blazeclaw::gateway {
 
 				if (params.contains("statuses") && params["statuses"].is_string() &&
 					!params.contains("status")) {
-					params["status"] = params["statuses"];
-					params.erase("statuses");
-					changed = true;
+					const std::string rawStatuses = params["statuses"].get<std::string>();
+					const std::vector<std::string> parsedStatuses = splitCsvValues(rawStatuses);
+					if (parsedStatuses.size() > 1) {
+						params["statuses"] = Json::array();
+						for (const std::string& value : parsedStatuses) {
+							params["statuses"].push_back(value);
+						}
+						changed = true;
+					}
+					else if (parsedStatuses.size() == 1) {
+						params["status"] = parsedStatuses.front();
+						params.erase("statuses");
+						changed = true;
+					}
 				}
 
 				if (params.contains("deliveryStatuses") &&
 					params["deliveryStatuses"].is_string() &&
 					!params.contains("deliveryStatus")) {
-					params["deliveryStatus"] = params["deliveryStatuses"];
-					params.erase("deliveryStatuses");
-					changed = true;
+					const std::string rawDeliveryStatuses =
+						params["deliveryStatuses"].get<std::string>();
+					const std::vector<std::string> parsedDeliveryStatuses =
+						splitCsvValues(rawDeliveryStatuses);
+					if (parsedDeliveryStatuses.size() > 1) {
+						params["deliveryStatuses"] = Json::array();
+						for (const std::string& value : parsedDeliveryStatuses) {
+							params["deliveryStatuses"].push_back(value);
+						}
+						changed = true;
+					}
+					else if (parsedDeliveryStatuses.size() == 1) {
+						params["deliveryStatus"] = parsedDeliveryStatuses.front();
+						params.erase("deliveryStatuses");
+						changed = true;
+					}
 				}
 
 				if (params.value("scope", std::string()) == "job" &&
