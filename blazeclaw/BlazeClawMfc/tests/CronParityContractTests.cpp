@@ -1831,6 +1831,10 @@ TEST_CASE("Cron timer clears lastFailureAlertAtMs on successful run", "[cron][ti
 	REQUIRE(runs[0].value("status", std::string()) == "ok");
 	REQUIRE(jobs[0]["state"].value("consecutiveErrors", 1) == 0);
 	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertMode"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertTarget"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertChannel"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAccountId"].is_null());
 	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
 }
 
@@ -1856,6 +1860,10 @@ TEST_CASE("Cron timer clears lastFailureAlertAtMs on skipped run", "[cron][timer
 	REQUIRE(runs[0].value("status", std::string()) == "skipped");
 	REQUIRE(jobs[0]["state"].value("consecutiveErrors", 1) == 0);
 	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertMode"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertTarget"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertChannel"].is_null());
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAccountId"].is_null());
 	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
 }
 

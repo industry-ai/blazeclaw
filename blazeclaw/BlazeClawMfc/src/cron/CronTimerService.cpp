@@ -2460,6 +2460,10 @@ namespace blazeclaw::cron {
 				state["lastFailureAlertAtMs"] = CronJson(nullptr);
 				state["failureAlertSuppressed"] = false;
 				state["failureAlertSuppressedReason"] = nullptr;
+				state["lastFailureAlertMode"] = nullptr;
+				state["lastFailureAlertTarget"] = CronJson(nullptr);
+				state["lastFailureAlertChannel"] = nullptr;
+				state["lastFailureAlertAccountId"] = nullptr;
 			}
 
 			if (!deleteAfterRun && !scheduledRetry) {
