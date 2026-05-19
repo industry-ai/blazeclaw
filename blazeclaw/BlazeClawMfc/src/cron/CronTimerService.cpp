@@ -536,6 +536,9 @@ namespace blazeclaw::cron {
 			const CronJson& runtimeResult) {
 			bool projectedPrimaryTransportFields = false;
 			bool projectedFailureTransportFields = false;
+			bool hasDeliveredField = false;
+			bool hasDeliveryStatusField = false;
+			bool hasFailureDestinationStatusField = false;
 			if (runtimeResult.contains("status") && runtimeResult["status"].is_string()) {
 				outcome.status =
 					ToLowerCopy(TrimCopy(runtimeResult["status"].get<std::string>()));
@@ -592,11 +595,13 @@ namespace blazeclaw::cron {
 
 			if (runtimeResult.contains("delivered") && runtimeResult["delivered"].is_boolean()) {
 				outcome.delivered = runtimeResult["delivered"].get<bool>();
+				hasDeliveredField = true;
 				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryStatus") && runtimeResult["deliveryStatus"].is_string()) {
 				outcome.deliveryStatus = ToLowerCopy(
 					TrimCopy(runtimeResult["deliveryStatus"].get<std::string>()));
+				hasDeliveryStatusField = true;
 				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryMode") && runtimeResult["deliveryMode"].is_string()) {
@@ -638,6 +643,7 @@ namespace blazeclaw::cron {
 				runtimeResult["failureDestinationStatus"].is_string()) {
 				outcome.failureDestinationStatus = ToLowerCopy(
 					TrimCopy(runtimeResult["failureDestinationStatus"].get<std::string>()));
+				hasFailureDestinationStatusField = true;
 				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationMode") &&
@@ -695,6 +701,42 @@ namespace blazeclaw::cron {
 			outcome.runtimeProjectedFailureDestinationTransport = projectedFailureTransportFields;
 			outcome.runtimeProjectedTransport =
 				projectedPrimaryTransportFields || projectedFailureTransportFields;
+
+			if (projectedPrimaryTransportFields) {
+				if (hasDeliveryStatusField) {
+					if (!hasDeliveredField) {
+						outcome.delivered = outcome.deliveryStatus == "delivered";
+					}
+				}
+				else {
+					if (hasDeliveredField) {
+						if (outcome.delivered) {
+							outcome.deliveryStatus = "delivered";
+						}
+						else if (outcome.deliveryAttempted) {
+							outcome.deliveryStatus = "not-delivered";
+						}
+						else if (!outcome.deliveryTarget.empty() ||
+							!outcome.deliveryMode.empty()) {
+							outcome.deliveryStatus = "unknown";
+						}
+					}
+					else if (outcome.deliveryAttempted ||
+						!outcome.deliveryTarget.empty() ||
+						!outcome.deliveryMode.empty()) {
+						outcome.deliveryStatus = "unknown";
+					}
+				}
+			}
+
+			if (projectedFailureTransportFields &&
+				!hasFailureDestinationStatusField) {
+				if (outcome.failureDestinationAttempted ||
+					!outcome.failureDestinationTarget.empty() ||
+					!outcome.failureDestinationMode.empty()) {
+					outcome.failureDestinationStatus = "unknown";
+				}
+			}
 
 			if (runtimeResult.contains("usage") && runtimeResult["usage"].is_object()) {
 				const CronJson& usage = runtimeResult["usage"];
