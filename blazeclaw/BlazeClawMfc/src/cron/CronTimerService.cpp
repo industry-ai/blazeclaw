@@ -773,45 +773,203 @@ namespace blazeclaw::cron {
 			return false;
 		}
 
-		bool MatchCronDayOfWeekToken(const std::string& tokenRaw, const int dayOfWeek) {
-			const std::string token = TrimCopy(tokenRaw);
-			if (token.empty() || token == "*") {
-				return true;
+		bool TryParseStrictNonNegativeInt(const std::string& raw, int& valueOut) {
+			const std::string token = TrimCopy(raw);
+			if (token.empty()) {
+				return false;
 			}
 
-			if (token.rfind("*/", 0) == 0) {
-				try {
-					const int step = std::stoi(token.substr(2));
-					return step > 0 && dayOfWeek % step == 0;
-				}
-				catch (...) {
+			for (const char ch : token) {
+				if (std::isdigit(static_cast<unsigned char>(ch)) == 0) {
 					return false;
 				}
 			}
 
+			try {
+				valueOut = std::stoi(token);
+			}
+			catch (...) {
+				return false;
+			}
+
+			return true;
+		}
+
+		bool MatchCronTokenSegment(
+			const std::string& segmentRaw,
+			const int value,
+			const int minValue,
+			const int maxValue,
+			const bool normalizeSevenToZero) {
+			std::string segment = TrimCopy(segmentRaw);
+			if (segment.empty()) {
+				return false;
+			}
+
+			int step = 1;
+			const std::size_t slashPos = segment.find('/');
+			if (slashPos != std::string::npos) {
+				if (segment.find('/', slashPos + 1) != std::string::npos) {
+					return false;
+				}
+
+				const std::string stepPart = TrimCopy(segment.substr(slashPos + 1));
+				if (!TryParseStrictNonNegativeInt(stepPart, step) || step <= 0) {
+					return false;
+				}
+
+				segment = TrimCopy(segment.substr(0, slashPos));
+				if (segment.empty()) {
+					return false;
+				}
+			}
+
+			auto normalizeValue = [&](int parsed) {
+				if (normalizeSevenToZero && parsed == 7) {
+					return 0;
+				}
+				return parsed;
+			};
+
+			const int normalizedCurrent = normalizeValue(value);
+			int rangeStart = minValue;
+			int rangeEnd = maxValue;
+
+			if (segment != "*") {
+				const std::size_t dashPos = segment.find('-');
+				if (dashPos != std::string::npos) {
+					if (segment.find('-', dashPos + 1) != std::string::npos) {
+						return false;
+					}
+
+					int parsedStart = 0;
+					int parsedEnd = 0;
+					if (!TryParseStrictNonNegativeInt(segment.substr(0, dashPos), parsedStart) ||
+						!TryParseStrictNonNegativeInt(segment.substr(dashPos + 1), parsedEnd)) {
+						return false;
+					}
+
+					rangeStart = normalizeValue(parsedStart);
+					rangeEnd = normalizeValue(parsedEnd);
+				}
+				else {
+					int parsedValue = 0;
+					if (!TryParseStrictNonNegativeInt(segment, parsedValue)) {
+						return false;
+					}
+
+					rangeStart = normalizeValue(parsedValue);
+					rangeEnd = rangeStart;
+				}
+			}
+
+			if (rangeStart < minValue ||
+				rangeStart > maxValue ||
+				rangeEnd < minValue ||
+				rangeEnd > maxValue) {
+				return false;
+			}
+
+			if (rangeStart <= rangeEnd) {
+				if (normalizedCurrent < rangeStart || normalizedCurrent > rangeEnd) {
+					return false;
+				}
+
+				return ((normalizedCurrent - rangeStart) % step) == 0;
+			}
+
+			const int span = maxValue - minValue + 1;
+			if (span <= 0) {
+				return false;
+			}
+
+			const int rotatedCurrent = normalizedCurrent >= rangeStart
+				? normalizedCurrent - rangeStart
+				: normalizedCurrent + span - rangeStart;
+			const int rotatedEnd = rangeEnd + span - rangeStart;
+
+			if (rotatedCurrent < 0 || rotatedCurrent > rotatedEnd) {
+				return false;
+			}
+
+			return (rotatedCurrent % step) == 0;
+		}
+
+		bool MatchCronFieldToken(
+			const std::string& tokenRaw,
+			const int value,
+			const int minValue,
+			const int maxValue,
+			const bool normalizeSevenToZero) {
+			const std::string token = TrimCopy(tokenRaw);
+			if (token.empty()) {
+				return true;
+			}
+
 			std::istringstream parts(token);
 			std::string item;
+			bool sawToken = false;
 			while (std::getline(parts, item, ',')) {
 				const std::string trimmed = TrimCopy(item);
 				if (trimmed.empty()) {
 					continue;
 				}
 
-				try {
-					int parsed = std::stoi(trimmed);
-					if (parsed == 7) {
-						parsed = 0;
-					}
-					if (parsed >= 0 && parsed <= 6 && parsed == dayOfWeek) {
-						return true;
+				sawToken = true;
+				const bool matched = MatchCronTokenSegment(
+					trimmed,
+					value,
+					minValue,
+					maxValue,
+					normalizeSevenToZero);
+				if (matched) {
+					return true;
+				}
+
+				const bool isWildcardSegment =
+					trimmed == "*" ||
+					(trimmed.rfind("*/", 0) == 0);
+				if (!isWildcardSegment) {
+					const std::size_t slashPos = trimmed.find('/');
+					const std::size_t dashPos = trimmed.find('-');
+					if (slashPos == std::string::npos && dashPos == std::string::npos) {
+						int parsedValue = 0;
+						if (TryParseStrictNonNegativeInt(trimmed, parsedValue)) {
+							if (normalizeSevenToZero && parsedValue == 7) {
+								parsedValue = 0;
+							}
+							if (parsedValue >= minValue && parsedValue <= maxValue) {
+								continue;
+							}
+						}
 					}
 				}
-				catch (...) {
-					return false;
+
+				if (!matched) {
+					const bool validSegment =
+						MatchCronTokenSegment(
+							trimmed,
+							minValue,
+							minValue,
+							maxValue,
+							normalizeSevenToZero) ||
+						MatchCronTokenSegment(
+							trimmed,
+							maxValue,
+							minValue,
+							maxValue,
+							normalizeSevenToZero);
+					if (!validSegment) {
+						return false;
+					}
 				}
 			}
 
-			return false;
+			return !sawToken ? true : false;
+		}
+
+		bool MatchCronDayOfWeekToken(const std::string& tokenRaw, const int dayOfWeek) {
+			return MatchCronFieldToken(tokenRaw, dayOfWeek, 0, 6, true);
 		}
 
 		RunOutcome EvaluateRunOutcome(
@@ -1476,41 +1634,7 @@ namespace blazeclaw::cron {
 		}
 
 		bool MatchCronToken(const std::string& tokenRaw, const int value, const int maxValue) {
-			const std::string token = TrimCopy(tokenRaw);
-			if (token.empty() || token == "*") {
-				return true;
-			}
-
-			if (token.rfind("*/", 0) == 0) {
-				try {
-					const int step = std::stoi(token.substr(2));
-					return step > 0 && value % step == 0;
-				}
-				catch (...) {
-					return false;
-				}
-			}
-
-			std::istringstream parts(token);
-			std::string item;
-			while (std::getline(parts, item, ',')) {
-				const std::string trimmed = TrimCopy(item);
-				if (trimmed.empty()) {
-					continue;
-				}
-
-				try {
-					const int parsed = std::stoi(trimmed);
-					if (parsed >= 0 && parsed <= maxValue && parsed == value) {
-						return true;
-					}
-				}
-				catch (...) {
-					return false;
-				}
-			}
-
-			return false;
+			return MatchCronFieldToken(tokenRaw, value, 0, maxValue, false);
 		}
 
 		std::int64_t ResolveStableCronOffsetMs(const CronJson& job, const std::int64_t staggerMs) {

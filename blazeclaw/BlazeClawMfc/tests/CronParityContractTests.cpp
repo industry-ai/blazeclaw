@@ -3170,6 +3170,54 @@ TEST_CASE("Cron timer computes cron expression with day-month-and-day-of-week fi
 	}
 }
 
+TEST_CASE("Cron timer computes cron expression with range and stepped-range fields", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	SECTION("hour range with minute step") {
+		CronJson job = {
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "10-20/5 9-17 * * *" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+
+		const std::time_t t =
+			static_cast<std::time_t>(nextRun.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_hour >= 9);
+		REQUIRE(tm.tm_hour <= 17);
+		REQUIRE(tm.tm_min >= 10);
+		REQUIRE(tm.tm_min <= 20);
+		REQUIRE(((tm.tm_min - 10) % 5) == 0);
+	}
+
+	SECTION("day-of-week wrapped range") {
+		CronJson job = {
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * 5-1" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+
+		const std::time_t t =
+			static_cast<std::time_t>(nextRun.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_hour == 9);
+		REQUIRE(tm.tm_min == 0);
+		const int wday = tm.tm_wday;
+		REQUIRE((wday == 5 || wday == 6 || wday == 0 || wday == 1));
+	}
+}
+
 TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone schedule errors", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
