@@ -88,6 +88,13 @@ namespace blazeclaw::cron {
 			return entry;
 		}
 
+		CronJson& EnsureStateObject(CronJson& job) {
+			if (!job.contains("state") || !job["state"].is_object()) {
+				job["state"] = CronJson::object();
+			}
+			return job["state"];
+		}
+
 		std::string ReadStringOrEmpty(const CronJson& value, const char* key) {
 			if (!value.contains(key) || value[key].is_null()) {
 				return {};
@@ -415,9 +422,15 @@ namespace blazeclaw::cron {
 	}
 
 	CronOpsService::CronOpsService()
-		: m_store(
+		: CronOpsService(
 			gateway::ResolveGatewayStateFilePath("cron.jobs.json"),
 			gateway::ResolveGatewayStateFilePath("cron.runs.json")) {
+	}
+
+	CronOpsService::CronOpsService(
+		std::filesystem::path jobsPath,
+		std::filesystem::path runsPath)
+		: m_store(std::move(jobsPath), std::move(runsPath)) {
 	}
 
 	CronOpsService::~CronOpsService() {
@@ -542,16 +555,11 @@ namespace blazeclaw::cron {
 		job["createdAtMs"] = nowMs;
 		job["updatedAtMs"] = nowMs;
 
-		job["state"]["nextRunAtMs"] =
-			m_timer.ComputeNextRunAtMs(job, nowMs).value_or(0);
-		if (job["state"]["nextRunAtMs"].is_number_integer() &&
-			job["state"]["nextRunAtMs"].get<std::int64_t>() <= 0) {
-			job["state"]["nextRunAtMs"] = nullptr;
-		}
+		ScheduleNextRunForJobLocked(job, nowMs);
 
 		m_store.Jobs().push_back(job);
 		m_store.SaveJobs();
-		EmitCronRealtimeEvent(CronRealtimeEvent{
+		EmitCronRealtimeEventLocked(CronRealtimeEvent{
 			.jobId = job.value("id", std::string()),
 			.action = "added"
 		});
@@ -576,19 +584,21 @@ namespace blazeclaw::cron {
 			throw std::invalid_argument("unknown cron job id");
 		}
 
-		CronNormalize::ApplyPatch(*job, params["patch"]);
+		const CronJson& patch = params["patch"];
+		CronNormalize::ApplyPatch(*job, patch);
 		const std::int64_t nowMs = UtcNowMs();
 		(*job)["updatedAtMs"] = nowMs;
-		(*job)["state"]["nextRunAtMs"] = (*job).value("enabled", true)
-			? CronJson(m_timer.ComputeNextRunAtMs(*job, nowMs).value_or(0))
-			: CronJson(nullptr);
-		if ((*job)["state"]["nextRunAtMs"].is_number_integer() &&
-			(*job)["state"]["nextRunAtMs"].get<std::int64_t>() <= 0) {
+		const bool patchTouchesSchedule = patch.contains("schedule");
+		const bool patchTouchesEnabled = patch.contains("enabled");
+		if (!(*job).value("enabled", true)) {
 			(*job)["state"]["nextRunAtMs"] = nullptr;
+		}
+		else if (patchTouchesSchedule || patchTouchesEnabled) {
+			ScheduleNextRunForJobLocked(*job, nowMs);
 		}
 
 		m_store.SaveJobs();
-		EmitCronRealtimeEvent(CronRealtimeEvent{
+		EmitCronRealtimeEventLocked(CronRealtimeEvent{
 			.jobId = id,
 			.action = "updated"
 		});
@@ -618,7 +628,7 @@ namespace blazeclaw::cron {
 		const bool removed = m_store.Jobs().size() != before;
 		if (removed) {
 			m_store.SaveJobs();
-			EmitCronRealtimeEvent(CronRealtimeEvent{
+			EmitCronRealtimeEventLocked(CronRealtimeEvent{
 				.jobId = id,
 				.action = "removed"
 			});
@@ -974,6 +984,22 @@ namespace blazeclaw::cron {
 		m_realtimeEventHooks = std::move(hooks);
 	}
 
+	void CronOpsService::EmitCronRealtimeEventLocked(const CronRealtimeEvent& event) {
+		if (event.jobId.empty() || event.action.empty()) {
+			return;
+		}
+
+		if (!static_cast<bool>(m_realtimeEventHooks.onEvent)) {
+			return;
+		}
+
+		try {
+			m_realtimeEventHooks.onEvent(event);
+		}
+		catch (...) {
+		}
+	}
+
 	void CronOpsService::EmitCronRealtimeEvent(const CronRealtimeEvent& event) {
 		if (event.jobId.empty() || event.action.empty()) {
 			return;
@@ -993,6 +1019,27 @@ namespace blazeclaw::cron {
 			hooks.onEvent(event);
 		}
 		catch (...) {
+		}
+	}
+
+	void CronOpsService::ScheduleNextRunForJobLocked(
+		CronJson& job,
+		const std::int64_t nowMs) {
+		CronJson& state = EnsureStateObject(job);
+		try {
+			const std::optional<std::int64_t> nextRunAtMs =
+				m_timer.ComputeNextRunAtMs(job, nowMs);
+			state["nextRunAtMs"] =
+				nextRunAtMs.has_value() ? CronJson(nextRunAtMs.value()) : CronJson(nullptr);
+			if (state["nextRunAtMs"].is_number_integer() &&
+				state["nextRunAtMs"].get<std::int64_t>() <= 0) {
+				state["nextRunAtMs"] = nullptr;
+			}
+		}
+		catch (const std::exception& ex) {
+			state["nextRunAtMs"] = nullptr;
+			state["scheduleErrorCount"] = 1;
+			state["lastError"] = std::string("schedule error: ") + ex.what();
 		}
 	}
 
@@ -1374,9 +1421,46 @@ namespace blazeclaw::cron {
 
 			const std::size_t runsBeforeDispatch = m_store.Runs().size();
 
-			(*job)["state"]["nextRunAtMs"] = nowMs;
+			CronJson& dispatchState = EnsureStateObject(*job);
+			dispatchState["runningAtMs"] = nullptr;
+			dispatchState["nextRunAtMs"] = nowMs;
 			jobsChanged = true;
-			SyncDueRunsLocked(nowMs, true, notifications);
+
+			CronPumpOptions pumpOptions;
+			pumpOptions.maxExecutionsPerPump =
+				std::max<std::size_t>(1, m_schedulerConfig.maxConcurrentRuns);
+			CronPumpCallbacks pumpCallbacks;
+			pumpCallbacks.onStarted =
+				[this](const CronJson& startedJob, const std::int64_t runAtMs) {
+					CronRealtimeEvent event;
+					event.jobId = startedJob.value("id", std::string());
+					event.action = "started";
+					event.runAtMs = runAtMs;
+					EmitCronRealtimeEventLocked(event);
+				};
+			pumpCallbacks.onFinished =
+				[this](const CronJson& finishedJob, const CronJson& runEntry) {
+					EmitCronRealtimeEventLocked(
+						BuildFinishedRealtimeEvent(finishedJob, runEntry));
+				};
+			if (m_timer.PumpDueRuns(
+				m_store.Jobs(),
+				m_store.Runs(),
+				nowMs,
+				true,
+				pumpOptions,
+				&pumpCallbacks) > 0) {
+				runsChanged = true;
+				CronRecomputeOptions recomputeOptions;
+				recomputeOptions.preserveDueSlots = false;
+				if (m_timer.RecomputeSchedules(
+					m_store.Jobs(),
+					nowMs,
+					recomputeOptions,
+					notifications)) {
+					jobsChanged = true;
+				}
+			}
 
 			const CronJson* finishedRun = nullptr;
 			for (std::size_t index = m_store.Runs().size(); index > runsBeforeDispatch; --index) {
@@ -1637,7 +1721,8 @@ namespace blazeclaw::cron {
 		const bool forceRunDue,
 		std::vector<CronScheduleNotificationEvent>* notifications) {
 		CronRecomputeOptions executionRecomputeOptions;
-		executionRecomputeOptions.preserveDueSlots = false;
+		// Keep slots that are already due so Wake/catchup can execute them on this pump.
+		executionRecomputeOptions.preserveDueSlots = true;
 		bool changed = m_timer.RecomputeSchedules(
 			m_store.Jobs(),
 			nowMs,
@@ -1655,11 +1740,11 @@ namespace blazeclaw::cron {
 				event.jobId = job.value("id", std::string());
 				event.action = "started";
 				event.runAtMs = runAtMs;
-				EmitCronRealtimeEvent(event);
+				EmitCronRealtimeEventLocked(event);
 			};
 		pumpCallbacks.onFinished =
 			[this](const CronJson& job, const CronJson& runEntry) {
-				EmitCronRealtimeEvent(BuildFinishedRealtimeEvent(job, runEntry));
+				EmitCronRealtimeEventLocked(BuildFinishedRealtimeEvent(job, runEntry));
 			};
 
 		while (loops < m_maxCatchupRunsPerSync) {

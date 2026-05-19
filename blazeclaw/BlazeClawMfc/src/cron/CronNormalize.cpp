@@ -1002,6 +1002,14 @@ namespace blazeclaw::cron {
 					: CronJson("main");
 			}
 		}
+		if (normalizedPatch.contains("state") && normalizedPatch["state"].is_object()) {
+			CronJson& state = EnsureStateObject(job);
+			for (auto it = normalizedPatch["state"].begin();
+				it != normalizedPatch["state"].end();
+				++it) {
+				state[it.key()] = it.value();
+			}
+		}
 	}
 
 	void CronNormalize::NormalizeLoadedJob(CronJson& job) {

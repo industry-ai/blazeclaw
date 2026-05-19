@@ -6,6 +6,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -39,6 +40,9 @@ namespace blazeclaw::cron {
 		};
 
 		CronOpsService();
+		CronOpsService(
+			std::filesystem::path jobsPath,
+			std::filesystem::path runsPath);
 		~CronOpsService();
 
 		CronJson Status(const CronJson& params);
@@ -132,6 +136,8 @@ namespace blazeclaw::cron {
 			std::vector<CronScheduleNotificationEvent>& notifications);
 		void ProcessDeferredWakeRequests();
 		void EmitCronRealtimeEvent(const CronRealtimeEvent& event);
+		void EmitCronRealtimeEventLocked(const CronRealtimeEvent& event);
+		void ScheduleNextRunForJobLocked(CronJson& job, std::int64_t nowMs);
 		CronRealtimeEvent BuildFinishedRealtimeEvent(
 			const CronJson& job,
 			const CronJson& runEntry) const;

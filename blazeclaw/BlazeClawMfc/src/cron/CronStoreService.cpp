@@ -2,10 +2,14 @@
 
 #include "CronStoreService.h"
 
+#include "CronJsonCompat.h"
 #include "CronNormalize.h"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <sstream>
+#include <unordered_map>
 
 namespace blazeclaw::cron {
 
@@ -22,40 +26,64 @@ namespace blazeclaw::cron {
 			};
 		}
 
-		CronJson ParseArrayPayload(std::istream& stream) {
-			CronJson parsed;
-			stream >> parsed;
+		CronJson ParseArrayPayload(
+			const CronJson& parsed,
+			const char* expectedKind) {
 			if (parsed.is_array()) {
 				return parsed;
 			}
-			if (parsed.is_object()) {
-				const std::string kind =
-					parsed.contains("kind") && parsed["kind"].is_string()
-					? parsed["kind"].get<std::string>()
-					: std::string();
-				const std::string normalizedKind = ToLowerCopy(TrimCopy(kind));
+			if (!parsed.is_object()) {
+				return CronJson::array();
+			}
 
-				const auto valuesIt = parsed.find("values");
-				if (valuesIt != parsed.end() && valuesIt->is_array()) {
-					return *valuesIt;
-				}
+			const std::string kind =
+				parsed.contains("kind") && parsed["kind"].is_string()
+				? parsed["kind"].get<std::string>()
+				: std::string();
+			const std::string normalizedKind = ToLowerCopy(TrimCopy(kind));
+			const std::string normalizedExpected =
+				ToLowerCopy(TrimCopy(expectedKind ? expectedKind : ""));
 
-				const auto itemsIt = parsed.find("items");
-				if (itemsIt != parsed.end() && itemsIt->is_array()) {
-					return *itemsIt;
-				}
+			const auto valuesIt = parsed.find("values");
+			if (valuesIt != parsed.end() && valuesIt->is_array()) {
+				return *valuesIt;
+			}
 
-				const auto dataIt = parsed.find("data");
-				if (dataIt != parsed.end() && dataIt->is_array()) {
-					return *dataIt;
-				}
+			const auto itemsIt = parsed.find("items");
+			if (itemsIt != parsed.end() && itemsIt->is_array()) {
+				return *itemsIt;
+			}
 
-				if (normalizedKind == "jobs" || normalizedKind == "runs") {
-					const auto kindArrayIt = parsed.find(normalizedKind);
-					if (kindArrayIt != parsed.end() && kindArrayIt->is_array()) {
-						return *kindArrayIt;
-					}
+			const auto dataIt = parsed.find("data");
+			if (dataIt != parsed.end() && dataIt->is_array()) {
+				return *dataIt;
+			}
+
+			if (!normalizedExpected.empty()) {
+				const auto expectedIt = parsed.find(normalizedExpected);
+				if (expectedIt != parsed.end() && expectedIt->is_array()) {
+					return *expectedIt;
 				}
+			}
+
+			if (normalizedKind == "jobs" || normalizedKind == "runs") {
+				const auto kindArrayIt = parsed.find(normalizedKind);
+				if (kindArrayIt != parsed.end() && kindArrayIt->is_array()) {
+					return *kindArrayIt;
+				}
+			}
+
+			// OpenClaw jobs.json shape: { "version": 1, "jobs": [...] } (no kind/values).
+			const auto jobsIt = parsed.find("jobs");
+			if (jobsIt != parsed.end() && jobsIt->is_array() &&
+				(normalizedExpected == "jobs" || normalizedExpected.empty())) {
+				return *jobsIt;
+			}
+
+			const auto runsIt = parsed.find("runs");
+			if (runsIt != parsed.end() && runsIt->is_array() &&
+				normalizedExpected == "runs") {
+				return *runsIt;
 			}
 
 			return CronJson::array();
@@ -71,13 +99,57 @@ namespace blazeclaw::cron {
 			}
 			return writeTime;
 		}
+
+		bool IsFinishedRunLogLine(const CronJson& entry) {
+			if (!entry.is_object()) {
+				return false;
+			}
+			const std::string action = ToLowerCopy(
+				TrimCopy(entry.value("action", std::string())));
+			if (action == "finished") {
+				return true;
+			}
+			return entry.contains("jobId") &&
+				(entry.contains("status") || entry.contains("runId") || entry.contains("ts"));
+		}
+
+	} // namespace
+
+	std::filesystem::path CronStoreService::ResolveRunsDir(
+		const std::filesystem::path& jobsPath) {
+		return jobsPath.parent_path() / "runs";
+	}
+
+	bool CronStoreService::IsSafeRunLogJobId(const std::string& jobId) {
+		const std::string trimmed = TrimCopy(jobId);
+		if (trimmed.empty()) {
+			return false;
+		}
+		return trimmed.find('/') == std::string::npos &&
+			trimmed.find('\\') == std::string::npos &&
+			trimmed.find('\0') == std::string::npos;
+	}
+
+	std::filesystem::path CronStoreService::ResolveRunLogPath(
+		const std::filesystem::path& jobsPath,
+		const std::string& jobId) {
+		const std::filesystem::path runsDir = ResolveRunsDir(jobsPath);
+		if (!IsSafeRunLogJobId(jobId)) {
+			throw std::invalid_argument("invalid cron run log job id");
+		}
+		const std::filesystem::path resolved = runsDir / (TrimCopy(jobId) + ".jsonl");
+		if (resolved.parent_path() != runsDir) {
+			throw std::invalid_argument("invalid cron run log job id");
+		}
+		return resolved;
 	}
 
 	CronStoreService::CronStoreService(
 		std::filesystem::path jobsPath,
 		std::filesystem::path runsPath)
 		: m_jobsPath(std::move(jobsPath)),
-		m_runsPath(std::move(runsPath)) {
+		m_runsPath(std::move(runsPath)),
+		m_runsDir(ResolveRunsDir(m_jobsPath)) {
 	}
 
 	void CronStoreService::EnsureLoaded(bool forceReload) {
@@ -85,18 +157,24 @@ namespace blazeclaw::cron {
 			ReadLastWriteTime(m_jobsPath);
 		const std::filesystem::file_time_type currentRunsWriteTime =
 			ReadLastWriteTime(m_runsPath);
+		const std::filesystem::file_time_type currentRunsDirWriteTime =
+			ReadRunsDirWriteTime(m_runsDir);
 
 		if (m_loaded && !forceReload &&
 			currentJobsWriteTime == m_jobsLastWriteTime &&
-			currentRunsWriteTime == m_runsLastWriteTime) {
+			currentRunsWriteTime == m_runsLastWriteTime &&
+			currentRunsDirWriteTime == m_runsDirLastWriteTime) {
 			return;
 		}
 
 		std::error_code ec;
 		std::filesystem::create_directories(m_jobsPath.parent_path(), ec);
+		std::filesystem::create_directories(m_runsDir, ec);
 
-		m_jobs = LoadArrayFile(m_jobsPath);
-		m_runs = LoadArrayFile(m_runsPath);
+		m_jobs = LoadArrayFile(m_jobsPath, "jobs");
+		const CronJson aggregateRuns = LoadArrayFile(m_runsPath, "runs");
+		const CronJson jsonlRuns = LoadRunsFromJsonlDir(m_runsDir);
+		m_runs = MergeRunEntries(aggregateRuns, jsonlRuns);
 		for (auto& job : m_jobs) {
 			CronNormalize::NormalizeLoadedJob(job);
 		}
@@ -104,6 +182,8 @@ namespace blazeclaw::cron {
 		m_loaded = true;
 		m_jobsLastWriteTime = currentJobsWriteTime;
 		m_runsLastWriteTime = currentRunsWriteTime;
+		m_runsDirLastWriteTime = currentRunsDirWriteTime;
+		m_runsPersistedCount = m_runs.size();
 	}
 
 	CronJson& CronStoreService::Jobs() {
@@ -118,17 +198,209 @@ namespace blazeclaw::cron {
 		return m_jobsPath;
 	}
 
+	const std::filesystem::path& CronStoreService::RunsPath() const noexcept {
+		return m_runsPath;
+	}
+
+	const std::filesystem::path& CronStoreService::RunsDir() const noexcept {
+		return m_runsDir;
+	}
+
 	void CronStoreService::SaveJobs() {
 		SaveArrayFile(m_jobsPath, m_jobs);
 		m_jobsLastWriteTime = ReadLastWriteTime(m_jobsPath);
 	}
 
 	void CronStoreService::SaveRuns() {
+		MigrateLegacyRunsToJsonlIfNeeded();
+
+		for (std::size_t index = m_runsPersistedCount; index < m_runs.size(); ++index) {
+			AppendRunEntryToJobLog(m_runs[index]);
+		}
+		m_runsPersistedCount = m_runs.size();
+
 		SaveArrayFile(m_runsPath, m_runs);
 		m_runsLastWriteTime = ReadLastWriteTime(m_runsPath);
+		m_runsDirLastWriteTime = ReadRunsDirWriteTime(m_runsDir);
 	}
 
-	CronJson CronStoreService::LoadArrayFile(const std::filesystem::path& path) {
+	std::string CronStoreService::BuildRunDedupeKey(const CronJson& runEntry) {
+		if (!runEntry.is_object()) {
+			return {};
+		}
+		const std::string runId = TrimCopy(runEntry.value("runId", std::string()));
+		if (!runId.empty()) {
+			return "runId:" + runId;
+		}
+		const std::string jobId = TrimCopy(runEntry.value("jobId", std::string()));
+		const std::int64_t ts = runEntry.value("ts", static_cast<std::int64_t>(0));
+		const std::string status = TrimCopy(runEntry.value("status", std::string()));
+		return "ts:" + jobId + ":" + std::to_string(ts) + ":" + status;
+	}
+
+	CronJson CronStoreService::MergeRunEntries(
+		const CronJson& aggregateRuns,
+		const CronJson& jsonlRuns) {
+		std::unordered_map<std::string, CronJson> merged;
+		auto ingest = [&merged](const CronJson& runs) {
+			if (!runs.is_array()) {
+				return;
+			}
+			for (const auto& entry : runs) {
+				if (!entry.is_object()) {
+					continue;
+				}
+				const std::string key = BuildRunDedupeKey(entry);
+				if (key.empty()) {
+					continue;
+				}
+				merged[key] = entry;
+			}
+		};
+
+		ingest(aggregateRuns);
+		ingest(jsonlRuns);
+
+		CronJson combined = CronJson::array();
+		combined.get_ref<CronJson::array_t&>().reserve(merged.size());
+		for (const auto& [key, entry] : merged) {
+			(void)key;
+			combined.push_back(entry);
+		}
+
+		std::sort(
+			combined.begin(),
+			combined.end(),
+			[](const CronJson& left, const CronJson& right) {
+				const std::int64_t leftTs = left.value("ts", static_cast<std::int64_t>(0));
+				const std::int64_t rightTs = right.value("ts", static_cast<std::int64_t>(0));
+				return leftTs > rightTs;
+			});
+		return combined;
+	}
+
+	CronJson CronStoreService::LoadRunsFromJsonlDir(
+		const std::filesystem::path& runsDir) {
+		CronJson runs = CronJson::array();
+		if (!std::filesystem::exists(runsDir)) {
+			return runs;
+		}
+
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(runsDir, ec)) {
+			if (ec || !entry.is_regular_file()) {
+				continue;
+			}
+			const std::string filename = entry.path().filename().string();
+			if (filename.size() < 6 ||
+				filename.compare(filename.size() - 6, 6, ".jsonl") != 0) {
+				continue;
+			}
+
+			std::ifstream stream(entry.path(), std::ios::binary);
+			if (!stream.is_open()) {
+				continue;
+			}
+
+			std::string line;
+			while (std::getline(stream, line)) {
+				const std::string trimmed = TrimCopy(line);
+				if (trimmed.empty()) {
+					continue;
+				}
+				try {
+					const CronJson parsed = ParseJsonWithJson5Fallback(trimmed);
+					if (parsed.is_discarded() || !IsFinishedRunLogLine(parsed)) {
+						continue;
+					}
+					runs.push_back(parsed);
+				}
+				catch (...) {
+				}
+			}
+		}
+
+		return runs;
+	}
+
+	void CronStoreService::MigrateLegacyRunsToJsonlIfNeeded() {
+		bool hasJsonl = false;
+		std::error_code ec;
+		if (std::filesystem::exists(m_runsDir)) {
+			for (const auto& entry : std::filesystem::directory_iterator(m_runsDir, ec)) {
+				if (ec || !entry.is_regular_file()) {
+					continue;
+				}
+				const std::string filename = entry.path().filename().string();
+				if (filename.size() >= 6 &&
+					filename.compare(filename.size() - 6, 6, ".jsonl") == 0) {
+					hasJsonl = true;
+					break;
+				}
+			}
+		}
+
+		if (hasJsonl || m_runs.empty()) {
+			return;
+		}
+
+		for (const auto& runEntry : m_runs) {
+			AppendRunEntryToJobLog(runEntry);
+		}
+		m_runsPersistedCount = m_runs.size();
+	}
+
+	void CronStoreService::AppendRunEntryToJobLog(const CronJson& runEntry) {
+		if (!runEntry.is_object()) {
+			return;
+		}
+
+		const std::string jobId = TrimCopy(runEntry.value("jobId", std::string()));
+		if (!IsSafeRunLogJobId(jobId)) {
+			return;
+		}
+
+		std::error_code ec;
+		const std::filesystem::path logPath = ResolveRunLogPath(m_jobsPath, jobId);
+		std::filesystem::create_directories(logPath.parent_path(), ec);
+
+		CronJson lineEntry = runEntry;
+		if (!lineEntry.contains("action") || !lineEntry["action"].is_string()) {
+			lineEntry["action"] = "finished";
+		}
+
+		std::ofstream stream(logPath, std::ios::binary | std::ios::app);
+		if (!stream.is_open()) {
+			return;
+		}
+		stream << lineEntry.dump() << '\n';
+	}
+
+	std::filesystem::file_time_type CronStoreService::ReadRunsDirWriteTime(
+		const std::filesystem::path& runsDir) {
+		std::filesystem::file_time_type latest{};
+		if (!std::filesystem::exists(runsDir)) {
+			return latest;
+		}
+
+		std::error_code ec;
+		latest = ReadLastWriteTime(runsDir);
+		for (const auto& entry : std::filesystem::directory_iterator(runsDir, ec)) {
+			if (ec || !entry.is_regular_file()) {
+				continue;
+			}
+			const std::filesystem::file_time_type candidate =
+				entry.last_write_time(ec);
+			if (!ec && candidate > latest) {
+				latest = candidate;
+			}
+		}
+		return latest;
+	}
+
+	CronJson CronStoreService::LoadArrayFile(
+		const std::filesystem::path& path,
+		const char* expectedKind) {
 		if (!std::filesystem::exists(path)) {
 			return CronJson::array();
 		}
@@ -139,20 +411,27 @@ namespace blazeclaw::cron {
 		}
 
 		try {
-			return ParseArrayPayload(stream);
+			const CronJson parsed = ParseJsonStreamWithJson5Fallback(stream);
+			if (IsUsableJsonDocument(parsed)) {
+				return ParseArrayPayload(parsed, expectedKind);
+			}
 		}
 		catch (...) {
-			const std::filesystem::path backupPath = path.string() + ".bak";
-			std::ifstream backup(backupPath, std::ios::binary);
-			if (!backup.is_open()) {
-				return CronJson::array();
-			}
+		}
 
-			try {
-				return ParseArrayPayload(backup);
+		const std::filesystem::path backupPath = path.string() + ".bak";
+		std::ifstream backup(backupPath, std::ios::binary);
+		if (!backup.is_open()) {
+			return CronJson::array();
+		}
+
+		try {
+			const CronJson parsed = ParseJsonStreamWithJson5Fallback(backup);
+			if (IsUsableJsonDocument(parsed)) {
+				return ParseArrayPayload(parsed, expectedKind);
 			}
-			catch (...) {
-			}
+		}
+		catch (...) {
 		}
 
 		return CronJson::array();

@@ -1892,7 +1892,7 @@ namespace blazeclaw::cron {
 			}
 
 			const std::int64_t anchorMs = ResolveEveryAnchorMs(schedule, job);
-			if (anchorMs >= nowMs) {
+			if (anchorMs > nowMs) {
 				return anchorMs;
 			}
 
@@ -2772,16 +2772,16 @@ namespace blazeclaw::cron {
 				{ "sessionId", effectiveSessionId.empty() ? CronJson(nullptr) : CronJson(effectiveSessionId) },
 				{ "model", outcome.model.empty() ? CronJson(nullptr) : CronJson(outcome.model) },
 				{ "provider", outcome.provider.empty() ? CronJson(nullptr) : CronJson(outcome.provider) },
-				{ "usage", outcome.usageAvailable
-					? CronJson({
-						{ "promptTokens", outcome.usagePromptTokens },
-						{ "completionTokens", outcome.usageCompletionTokens },
-						{ "totalTokens", outcome.usageTotalTokens }
-					})
-					: CronJson(nullptr) },
 				{ "jobName", jobName },
 				{ "runId", runId }
 			});
+			if (outcome.usageAvailable) {
+				runs.back()["usage"] = CronJson({
+					{ "promptTokens", outcome.usagePromptTokens },
+					{ "completionTokens", outcome.usageCompletionTokens },
+					{ "totalTokens", outcome.usageTotalTokens }
+				});
+			}
 			if (pumpCallbacks != nullptr &&
 				static_cast<bool>(pumpCallbacks->onFinished) &&
 				!runs.empty()) {

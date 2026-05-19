@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (Phase BE WP-D: scheduler hardening + gateway `cron` realtime events landed; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
+Generated: 2026-05-19 (Phase BF WP-E: JSON5 store + per-job jsonl run logs landed; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
 
 ## Scope
 
@@ -70,7 +70,8 @@ Parity tests in source: **211+** `TEST_CASE`s in `CronParityContractTests.cpp` (
 | Delivery + failure destination | Full transport execution | Metadata + suppression + opt-in webhook WinHTTP dispatch | Medium |
 | Failure alerts | Full policy behavior | Threshold/cooldown/suppression landed; recurring carry-forward depth open | Medium |
 | Run ledger / task-ledger hooks | Integrated shared ledger transitions | Hook contracts + emission in ops with production wiring and timing metadata projection; deeper retry/cooldown/consumer depth remains | Medium |
-| Store reload discipline | mtime-aware reload + recovery policy | mtime reload, force-reload, `.bak` fallback landed | Low-Medium |
+| Store reload discipline | mtime-aware reload + recovery policy | mtime reload, force-reload, `.bak` fallback, JSON5 parse fallback (WP-E) | Low |
+| Run log layout | per-job `runs/<jobId>.jsonl` append + prune | per-job jsonl append/load/merge + legacy aggregate mirror (WP-E); prune depth open | Low-Medium |
 
 ## Highest-Impact Parity Gaps and Suggestions
 

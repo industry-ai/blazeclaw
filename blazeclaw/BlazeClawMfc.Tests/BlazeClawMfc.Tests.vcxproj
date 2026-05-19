@@ -122,6 +122,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronModels.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronJsonCompat.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronNormalize.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronStoreService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronTimerService.cpp" />

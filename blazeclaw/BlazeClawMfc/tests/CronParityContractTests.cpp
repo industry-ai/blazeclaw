@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "../src/cron/CronJsonCompat.h"
 #include "../src/cron/CronModels.h"
 #include "../src/cron/CronNormalize.h"
 #include "../src/cron/CronOpsService.h"
@@ -15,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -22,6 +24,8 @@
 
 namespace {
 	using blazeclaw::cron::CronJson;
+	using blazeclaw::cron::IsUsableJsonDocument;
+	using blazeclaw::cron::ParseJsonWithJson5Fallback;
 	using blazeclaw::cron::CronNormalize;
 	using blazeclaw::cron::CronOpsService;
 	using blazeclaw::cron::CronPumpOptions;
@@ -42,6 +46,30 @@ namespace {
 	nlohmann::json ParseGatewayFrame(const std::string& frameJson) {
 		return nlohmann::json::parse(frameJson);
 	}
+
+	struct IsolatedCronOpsFixture {
+		std::filesystem::path root;
+		std::optional<CronOpsService> service;
+
+		explicit IsolatedCronOpsFixture(const char* label)
+			: root(
+				std::filesystem::temp_directory_path() /
+				("blazeclaw-cron-ops-" + std::string(label))) {
+			std::error_code ec;
+			std::filesystem::remove_all(root, ec);
+			std::filesystem::create_directories(root, ec);
+			service.emplace(root / "cron.jobs.json", root / "cron.runs.json");
+		}
+
+		~IsolatedCronOpsFixture() {
+			std::error_code ec;
+			std::filesystem::remove_all(root, ec);
+		}
+
+		CronOpsService& ops() {
+			return *service;
+		}
+	};
 
 TEST_CASE("Cron runs response validator rejects non-boolean heartbeat fallback marker", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
@@ -3321,6 +3349,208 @@ TEST_CASE("Cron store falls back to backup when primary file is corrupted", "[cr
 	std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("Cron store loads JSON5 jobs file with comments and trailing commas", "[cron][store][wp-e]") {
+	const std::string json5Jobs = R"json5({
+  /* legacy comment */
+  "version": 1,
+  "kind": "jobs",
+  "values": [
+    {
+      "id": "job-json5",
+      "name": "json5",
+      "enabled": true,
+      "schedule": { "kind": "every", "everyMs": 60000 },
+      "payload": { "kind": "systemEvent", "text": "hi" },
+    },
+  ],
+})json5";
+	const CronJson parsed = ParseJsonWithJson5Fallback(json5Jobs);
+	REQUIRE(IsUsableJsonDocument(parsed));
+	REQUIRE(parsed["values"].is_array());
+	REQUIRE(parsed["values"].size() == 1);
+
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-json5-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << json5Jobs;
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().is_array());
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-json5");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store loads OpenClaw jobs envelope without kind/values keys", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-openclaw-jobs-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << R"({"version":1,"jobs":[{"id":"job-openclaw","name":"oc","enabled":true,"schedule":{"kind":"every","everyMs":60000},"payload":{"kind":"systemEvent","text":"hi"}}]})";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-openclaw");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store merges per-job jsonl run logs with legacy aggregate", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-jsonl-merge-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root / "runs", ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[]";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << R"({"version":1,"kind":"runs","values":[{"jobId":"job-a","runId":"run-aggregate","ts":1000,"status":"ok","action":"finished"}]})";
+	}
+	{
+		std::ofstream jsonl(root / "runs" / "job-a.jsonl", std::ios::binary | std::ios::trunc);
+		jsonl << R"({"jobId":"job-a","runId":"run-jsonl","ts":2000,"status":"ok","action":"finished"})" << '\n';
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Runs().size() == 2);
+
+	bool sawAggregate = false;
+	bool sawJsonl = false;
+	for (const auto& entry : store.Runs()) {
+		const std::string runId = entry.value("runId", std::string());
+		if (runId == "run-aggregate") {
+			sawAggregate = true;
+		}
+		if (runId == "run-jsonl") {
+			sawJsonl = true;
+		}
+	}
+	REQUIRE(sawAggregate);
+	REQUIRE(sawJsonl);
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store appends new runs to per-job jsonl on save", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-jsonl-append-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[]";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	store.Runs().push_back({
+		{ "jobId", "job-append" },
+		{ "runId", "run-new" },
+		{ "ts", 42 },
+		{ "status", "ok" },
+		{ "action", "finished" }
+	});
+	store.SaveRuns();
+
+	const std::filesystem::path jsonlPath =
+		CronStoreService::ResolveRunLogPath(jobsPath, "job-append");
+	REQUIRE(std::filesystem::exists(jsonlPath));
+
+	std::ifstream jsonl(jsonlPath, std::ios::binary);
+	REQUIRE(jsonl.is_open());
+	std::string line;
+	REQUIRE(std::getline(jsonl, line));
+	REQUIRE(line.find("run-new") != std::string::npos);
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store migrates legacy aggregate runs into per-job jsonl files", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-jsonl-migrate-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[]";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << R"([{"jobId":"job-migrate","runId":"run-migrate","ts":99,"status":"ok","action":"finished"}])";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Runs().size() == 1);
+	store.SaveRuns();
+
+	const std::filesystem::path jsonlPath =
+		CronStoreService::ResolveRunLogPath(jobsPath, "job-migrate");
+	REQUIRE(std::filesystem::exists(jsonlPath));
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store rejects unsafe per-job run log ids", "[cron][store][wp-e]") {
+	const std::filesystem::path jobsPath =
+		std::filesystem::temp_directory_path() / "cron.jobs.json";
+	REQUIRE_FALSE(CronStoreService::IsSafeRunLogJobId(""));
+	REQUIRE_FALSE(CronStoreService::IsSafeRunLogJobId("../escape"));
+	REQUIRE_THROWS_AS(
+		CronStoreService::ResolveRunLogPath(jobsPath, "../escape"),
+		std::invalid_argument);
+}
+
 TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000; // stable fixture timestamp
@@ -3593,7 +3823,8 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 TEST_CASE(
 	"Cron ops flushes schedule auto-disable notification hooks at threshold",
 	"[cron][timer][wp-c]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("schedule-auto-disable-notify");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronScheduleNotificationEvent> systemEvents;
 	std::vector<CronScheduleNotificationEvent> heartbeatWakes;
 
@@ -3746,7 +3977,8 @@ TEST_CASE(
 TEST_CASE(
 	"Cron ops emits realtime lifecycle events for add and finished runs",
 	"[cron][timer][wp-d]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("realtime-lifecycle-events");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronRealtimeEvent> events;
 
 	CronOpsService::CronRealtimeEventHooks hooks;
@@ -3755,6 +3987,7 @@ TEST_CASE(
 	};
 	ops.SetRealtimeEventHooks(std::move(hooks));
 
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
 	const CronJson added = ops.Add({
 		{ "name", "wp-d realtime" },
 		{ "enabled", true },
@@ -3763,6 +3996,10 @@ TEST_CASE(
 	});
 	const std::string jobId = added.value("id", std::string());
 	REQUIRE_FALSE(jobId.empty());
+	(void)ops.Update({
+		{ "id", jobId },
+		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 1 } } } } }
+	});
 
 	bool sawAdded = false;
 	for (const CronRealtimeEvent& event : events) {
@@ -3773,7 +4010,7 @@ TEST_CASE(
 	REQUIRE(sawAdded);
 
 	events.clear();
-	(void)ops.Status(CronJson::object());
+	(void)ops.Wake({ { "mode", "now" }, { "text", "run" } });
 
 	bool sawStarted = false;
 	bool sawFinished = false;
@@ -3797,7 +4034,8 @@ TEST_CASE(
 TEST_CASE(
 	"Cron ops startup catchup defers excess missed jobs with staggered nextRunAtMs",
 	"[cron][timer][wp-d]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("startup-catchup-stagger");
+	CronOpsService& ops = fixture.ops();
 	CronSchedulerConfig config;
 	config.maxMissedJobsPerRestart = 1;
 	config.missedJobStaggerMs = 5'000;
@@ -3821,14 +4059,16 @@ TEST_CASE(
 	REQUIRE_FALSE(immediateId.empty());
 	REQUIRE_FALSE(deferredId.empty());
 
-	(void)ops.Update({
+	const CronJson immediatePatch = {
 		{ "id", immediateId },
-		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 60'000 } } } } } }
-	});
-	(void)ops.Update({
+		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 60'000 } } } } }
+	};
+	const CronJson deferredPatch = {
 		{ "id", deferredId },
-		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 120'000 } } } } } }
-	});
+		{ "patch", { { "state", { { "nextRunAtMs", nowMs - 120'000 } } } } }
+	};
+	(void)ops.Update(immediatePatch);
+	(void)ops.Update(deferredPatch);
 
 	const CronJson list = ops.List(CronJson::object());
 	REQUIRE(list.contains("jobs"));
@@ -4145,7 +4385,8 @@ TEST_CASE("Cron runs validator accepts manual lifecycle status filter in single 
 }
 
 TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadata", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("manual-terminal-metadata");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> failedPayloads;
 
 	CronOpsService::TaskLedgerHooks hooks;
@@ -6128,7 +6369,8 @@ TEST_CASE("Cron timer suppresses webhook failure destination when primary route 
 }
 
 TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("scheduled-terminal-hooks");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> runningPayloads;
 	std::vector<CronJson> completedPayloads;
 	std::vector<CronJson> failedPayloads;
@@ -6173,7 +6415,8 @@ TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron
 }
 
 TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("manual-terminal-fail-hook");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> runningPayloads;
 	std::vector<CronJson> completedPayloads;
 	std::vector<CronJson> failedPayloads;
@@ -6225,7 +6468,8 @@ TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[
 }
 
 TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due terminal edge", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("manual-not-due-edge");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> completedPayloads;
 	std::vector<CronJson> failedPayloads;
 
@@ -6276,7 +6520,8 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 }
 
 TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job terminal edge", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("manual-unknown-job-edge");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> completedPayloads;
 	std::vector<CronJson> failedPayloads;
 
