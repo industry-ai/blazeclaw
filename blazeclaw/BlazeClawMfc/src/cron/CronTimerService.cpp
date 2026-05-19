@@ -2481,9 +2481,15 @@ namespace blazeclaw::cron {
 							lastAlertAtMs <= 0 ||
 							(nowMs - lastAlertAtMs) >= cooldownMs;
 						if (consecutiveErrors >= alertAfter && cooldownOpen) {
-							failureAlertTriggered = true;
-							failureAlertAtMs = nowMs;
-							state["lastFailureAlertAtMs"] = nowMs;
+							if (scheduledRetry) {
+								state["failureAlertSuppressed"] = true;
+								state["failureAlertSuppressedReason"] = "retry_pending";
+							}
+							else {
+								failureAlertTriggered = true;
+								failureAlertAtMs = nowMs;
+								state["lastFailureAlertAtMs"] = nowMs;
+							}
 						}
 						else if (consecutiveErrors < alertAfter) {
 							state["failureAlertSuppressed"] = true;

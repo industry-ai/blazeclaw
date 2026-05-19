@@ -3708,6 +3708,37 @@ TEST_CASE("Cron timer triggers failure alert after threshold", "[cron][timer]") 
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertAtMs", static_cast<std::int64_t>(0)) == nowMs);
 }
 
+TEST_CASE("Cron timer suppresses failure alert while retry is pending", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-retry-pending" },
+			{ "name", "alert retry pending" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "ok" } } },
+			{ "delivery", { { "mode", "webhook" }, { "to", "https://alerts.example/fail" }, { "simulateHttpStatus", 503 } } },
+			{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 30'000 }) } } },
+			{ "failureAlert", { { "after", 1 }, { "cooldownMs", 10'000 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 }, { "retryAttempt", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("retryScheduled", false));
+	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
+	REQUIRE(runs[0].value("failureAlertSuppressed", false));
+	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "retry_pending");
+	REQUIRE(jobs[0]["state"].value("failureAlertSuppressedReason", std::string()) == "retry_pending");
+	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
+}
+
 TEST_CASE("Cron timer respects failureAlert false disable", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -5733,9 +5764,10 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 
 	bool sawNotDue = false;
 	for (const auto& payload : completedPayloads) {
+		const std::string disposition = payload.value("disposition", std::string());
 		if (payload.value("jobId", std::string()) == dueJobId &&
 			payload.value("taskLedgerStatus", std::string()) == "skipped" &&
-			payload.value("disposition", std::string()) == "skipped") {
+			(disposition == "skipped" || disposition == "not_due")) {
 			sawNotDue = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
