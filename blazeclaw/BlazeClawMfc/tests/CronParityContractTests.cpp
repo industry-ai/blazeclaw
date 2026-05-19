@@ -4029,6 +4029,93 @@ TEST_CASE("Cron timer infers runtime handled for agentTurn outcome without handl
 	REQUIRE(runs[0].value("sessionKey", std::string()) == "runtime-inferred");
 }
 
+TEST_CASE("Cron timer explicit handled=false keeps systemEvent simulation fallback", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-handled-false-main") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", false },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-explicit-unhandled" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-handled-false-main" },
+			{ "name", "runtime explicit handled false main" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "fallback text" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-explicit-unhandled");
+	REQUIRE(runs[0].value("sessionId", std::string()) == "main");
+	REQUIRE(runs[0].contains("usage"));
+	REQUIRE(runs[0]["usage"].is_object());
+	REQUIRE(runs[0]["usage"].value("promptTokens", 0) >= 1);
+}
+
+TEST_CASE("Cron timer explicit handled=false keeps agentTurn timeout fallback", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-handled-false-agent") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", false },
+				{ "status", "ok" },
+				{ "summary", "runtime-agent-explicit-unhandled" },
+				{ "sessionId", "isolated" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-handled-false-agent" },
+			{ "name", "runtime explicit handled false agent" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" }, { "timeoutSeconds", 1 } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "timeout");
+	REQUIRE(runs[0].value("timedOut", false));
+}
+
 TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter reports busy", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

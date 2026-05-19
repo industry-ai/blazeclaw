@@ -909,6 +909,9 @@ namespace blazeclaw::cron {
 				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
 					const CronJson& runtimeNode = runtimeResult.value();
 					ApplyRuntimeExecutionResult(outcome, runtimeResult.value());
+					const bool hasExplicitHandledFlag =
+						runtimeNode.contains("handled") &&
+						runtimeNode["handled"].is_boolean();
 					if (runtimeNode.contains("handled") &&
 						runtimeNode["handled"].is_boolean()) {
 						runtimeHandled = runtimeNode["handled"].get<bool>();
@@ -923,6 +926,11 @@ namespace blazeclaw::cron {
 						if (hasExplicitRuntimeOutcome) {
 							runtimeHandled = true;
 						}
+					}
+
+					if (hasExplicitHandledFlag &&
+						!runtimeHandled) {
+						outcome.skipDeliverySimulation = false;
 					}
 
 					if (runtimeHandled &&
