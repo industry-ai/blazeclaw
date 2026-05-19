@@ -354,6 +354,11 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (reason == "queued" && runState == "terminal") {
+				SetIssue(issue, "schema_invalid_response", errorMessage);
+				return false;
+			}
+
 			double queuedAtMs = 0.0;
 			if (!TryReadTopLevelNumberField(payload, "queuedAtMs", queuedAtMs) ||
 				std::floor(queuedAtMs) != queuedAtMs ||
@@ -404,6 +409,29 @@ namespace blazeclaw::gateway::protocol {
 			if (action == "finished" && (status == "queued" || status == "running")) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;
+			}
+
+			if (HasFieldToken(payload, "taskLedgerPhase")) {
+				std::string phase;
+				if (!TryReadTopLevelStringField(payload, "taskLedgerPhase", phase)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "queued" && phase != "queued") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "started" && phase != "active") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "finished" && phase != "terminal") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
 			}
 
 			if (HasFieldToken(payload, "taskLedgerPhase") &&

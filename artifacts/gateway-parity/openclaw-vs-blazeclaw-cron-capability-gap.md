@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AU Step 2-3/10 runtime-projected transport status-inference increment, Phase AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-19 (reconciled against current BlazeClaw cron sources with Phase AW Step 9-10/10 response lifecycle consistency strictness and integration negative-path increment, plus prior Phase AV/AU/AT/AS/AR/AQ/AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
 
 ## Scope
 
@@ -34,7 +34,7 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 1. **Runtime execution fidelity** — production startup now wires runtime adapters via `GatewayHost::WireCronProductionIntegration()`, heartbeat busy-lane runtime outcomes now suppress delivery/failure-destination transport simulation attempts, explicit adapter `handled=false` outcomes preserve simulation-fallback intent instead of being overridden by implicit handled inference, latest transport handling applies independent primary/failure lane simulation bypass for partial runtime-projected transport outcomes, runtime transport projection now infers explicit status defaults (`deliveryStatus` / `failureDestinationStatus`) when adapters omit status fields, webhook failure-destination suppression resolves primary route fallback from `delivery.url` alias when runtime-projected primary transport omits explicit `deliveryTarget`, announce suppression account-equivalence prefers runtime-projected primary `deliveryAccountId` with config fallback, announce suppression target-equivalence now resolves primary-target fallback from runtime/session context when explicit announce target is omitted, webhook same-target suppression infers primary mode as webhook when runtime projects an HTTP/HTTPS primary target without explicit `deliveryMode`, failure-destination routing/suppression infers webhook mode from HTTP/HTTPS `failureDestination.url` when explicit `failureDestination.mode` is omitted, normalization persists these url-alias inferences as both `delivery.mode=webhook` and `failureDestination.mode=webhook`, runtime projection canonicalization infers omitted runtime `deliveryMode` / `failureDestinationMode` as `webhook` from HTTP/HTTPS projected targets, patch-path normalization infers omitted `delivery.mode` / nested `failureDestination.mode` as `webhook` from HTTP/HTTPS url aliases, Step 4 task-ledger terminal hook payload projection carries both primary and failure-destination transport observability metadata (including attempt/http/error and route fields) in manual linkage lanes, Step 5 schedule computation now treats invalid non-empty timezone offsets as explicit schedule errors for deterministic `scheduleErrorCount` auto-disable behavior with persisted `scheduleAutoDisabled*` plus `scheduleAutoDisableNotification*`/`scheduleAutoDisableHeartbeatWake*` signaling metadata, and Step 6 recovery lanes now clear stale failure-alert route snapshots on non-error outcomes so recurring carry-forward state does not leak stale mode/target/channel/account metadata; non-adapter lanes still retain simulation fallback and OpenClaw execution-core depth remains higher.
 2. **Transport execution** — announce paths and default webhook policy still lag OpenClaw; opt-in WinHTTP dispatch exists for webhooks.
-3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is landed, and immediate manual terminal edges (`already_running`/`not_due`) now emit terminal hooks in `cron.run`; broader retry/cooldown/consumer depth remains open.
+3. **Shared task-ledger transition depth** — production hook wiring is active, create-running payload phasing emits active/running non-terminal semantics, hook payload timing metadata projection (`queuedAtMs`/`startedAtMs`/`endedAtMs`) is landed, immediate manual terminal edges (`already_running`/`not_due`) emit terminal hooks in `cron.run`, and latest Step 4 integration coverage now validates carry-forward of runtime-projected inferred transport statuses (`deliveryStatus=unknown` / `failureDestinationStatus=unknown`) through terminal hook payloads; broader retry/cooldown/consumer depth remains open.
 4. **Gateway normalization flow** — `cron.add`/`cron.update` normalize inside `CronOpsService` after gateway request validation, and `GatewayHost::HandleInboundText` now applies pre-validator canonicalization for legacy/flat payloads across `cron.add`/`cron.update`/`cron.run`/`cron.runs`/`wake`; latest increments deepen `cron.update` flat schedule/payload/delivery alias lifting into nested patch structure, canonicalize flat `failureAlert*` aliases into nested `failureAlert` objects for add/update patch paths, canonicalize legacy wake-mode alias values to strict `next-heartbeat`, canonicalize trimmed/case-variant strict wake `mode` values to canonical taxonomy before validation, and canonicalize singular `cron.runs` CSV aliases (`status`, `deliveryStatus`) into plural array filters for multi-value forms. Remaining gap is broader tool-surface action depth, not absence of gateway normalization bridge.
 5. **Tool-surface parity** — WebView shaping (`agents-controller.js`) covers much of `cron-tool.ts` ergonomics; dedicated agent cron tool adapter and CLI/controller/bootstrap parity remain open.
 
@@ -124,6 +124,25 @@ See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7 for the full ordered p
 Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 
 ## Changelog
+
+### 2026-05-19
+
+- Added Phase AW Step 9-10 note: response validator strictness now rejects
+  `cron.run` queued-reason terminal-state drift
+  (`reason=queued` with `runState=terminal`) and enforces
+  `cron.runs` action-to-task-ledger phase alignment when
+  `taskLedgerPhase` is present (`queued->queued`, `started->active`,
+  `finished->terminal`).
+- Added schema response negative-path parity coverage notes for:
+  - `Cron run response validator rejects queued reason with terminal runState`,
+  - `Cron runs response validator rejects inconsistent action to task-ledger phase semantics`.
+- Validation evidence updated for this tranche:
+  - `BlazeClawMfc.Tests.exe "[cron][response][schema]"` passed
+	(66 assertions / 28 test cases),
+  - `BlazeClawMfc.Tests.exe "[cron][ops]"` passed
+	(169 assertions / 16 test cases),
+  - required build gate passed via
+	`msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 
 ### 2026-05-18
 

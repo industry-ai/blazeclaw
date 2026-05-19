@@ -871,6 +871,21 @@ TEST_CASE("Cron run response validator enforces required fields", "[cron][schema
 	REQUIRE(issue.code == "schema_invalid_response");
 }
 
+TEST_CASE("Cron run response validator rejects queued reason with terminal runState", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-run-queued-reason-terminal-state",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":false,\"started\":false,\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\",\"queuedAtMs\":1700000000000,\"runState\":\"terminal\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.run", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
+}
+
 TEST_CASE("Cron run response validator rejects active state with non-queued reason", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -1131,6 +1146,49 @@ TEST_CASE("Cron runs response validator enforces entries contract", "[cron][sche
 	};
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
 	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE("Cron runs response validator rejects inconsistent action to task-ledger phase semantics", "[cron][schema][response]") {
+	SchemaValidationIssue issue{};
+
+	SECTION("queued action requires queued phase") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-queued-action-active-phase",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"queued\",\"status\":\"queued\",\"taskLedgerPhase\":\"active\",\"taskLedgerTerminal\":false}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+
+	SECTION("started action requires active phase") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-started-action-queued-phase",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"started\",\"status\":\"running\",\"taskLedgerPhase\":\"queued\",\"taskLedgerTerminal\":false}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+
+	SECTION("finished action requires terminal phase") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-finished-action-active-phase",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"ok\",\"taskLedgerPhase\":\"active\",\"taskLedgerTerminal\":false}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
 }
 
 TEST_CASE("Cron runs response validator rejects inconsistent action status semantics", "[cron][schema][response]") {
@@ -5572,7 +5630,10 @@ TEST_CASE("Cron ops emits task-ledger fail hook for manual terminal failure", "[
 
 	REQUIRE_FALSE(runningPayloads.empty());
 	REQUIRE_FALSE(failedPayloads.empty());
-	REQUIRE(completedPayloads.empty());
+	const std::string failedRunId = failedPayloads.back().value("runId", std::string());
+	for (const CronJson& completedPayload : completedPayloads) {
+		REQUIRE(completedPayload.value("runId", std::string()) != failedRunId);
+	}
 	REQUIRE(failedPayloads.back().value("runtime", std::string()) == "cron");
 	REQUIRE(failedPayloads.back().value("terminal", false));
 	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "failed");
@@ -6120,6 +6181,124 @@ TEST_CASE("Cron ops integrates heartbeat-busy runtime retryAfter override into t
 		failedPayloads.back().value("endedAtMs", static_cast<std::int64_t>(0)) == 3500);
 	REQUIRE(failedPayloads.back().value("deliveryStatus", std::string()) == "not-requested");
 	REQUIRE(failedPayloads.back().value("failureDestinationStatus", std::string()) == "not-requested");
+}
+
+TEST_CASE("Cron ops integrates runtime projected delivery unknown status into terminal hook payload", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops runtime delivery unknown projection") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "ops-runtime-delivery-unknown" },
+				{ "sessionId", "main" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/unknown" },
+				{ "deliveryAttempted", true }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops runtime delivery unknown projection" },
+		{ "sessionTarget", "main" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+		{ "delivery", { { "mode", "webhook" }, { "to", "https://fallback.example/config" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(completedPayloads.empty());
+	const CronJson& payload = completedPayloads.back();
+	REQUIRE(payload.value("taskLedgerStatus", std::string()) == "ok");
+	REQUIRE(payload.value("disposition", std::string()) == "dispatched");
+	REQUIRE(payload.value("deliveryStatus", std::string()) == "unknown");
+	REQUIRE(payload.value("deliveryTarget", std::string()) == "https://runtime.example/unknown");
+	REQUIRE(payload.value("summary", std::string()) == "ops-runtime-delivery-unknown");
+}
+
+TEST_CASE("Cron ops integrates runtime projected failure destination unknown status into terminal hook payload", "[cron][ops]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops runtime failure destination unknown projection") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "ops-runtime-failure-destination-unknown" },
+				{ "error", "runtime transport error" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "isolated" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/primary" },
+				{ "deliveryAttempted", true },
+				{ "failureDestinationMode", "webhook" },
+				{ "failureDestinationTarget", "https://runtime.example/failure" },
+				{ "failureDestinationAttempted", true }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops runtime failure destination unknown projection" },
+		{ "sessionTarget", "isolated" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://config.example/primary" },
+			{ "failureDestination", {
+				{ "mode", "webhook" },
+				{ "to", "https://config.example/failure" }
+			} }
+		} },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	const CronJson& payload = failedPayloads.back();
+	REQUIRE(payload.value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(payload.value("disposition", std::string()) == "not_delivered");
+	REQUIRE(payload.value("failureDestinationStatus", std::string()) == "unknown");
+	REQUIRE(payload.value("failureDestinationTarget", std::string()) == "https://runtime.example/failure");
+	REQUIRE(payload.value("summary", std::string()) == "ops-runtime-failure-destination-unknown");
 }
 
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
