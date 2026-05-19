@@ -4453,6 +4453,127 @@ TEST_CASE("Cron timer infers failure-destination bypass when runtime projects te
 	REQUIRE(runs[0].value("summary", std::string()) == "runtime-isolated-delivery-failed");
 }
 
+TEST_CASE("Cron timer preserves failure-destination simulation when runtime projects primary transport only", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-partial-primary-only") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-primary-only-projected" },
+				{ "error", "runtime primary delivery failed" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "isolated" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryMode", "webhook" },
+				{ "deliveryTarget", "https://runtime.example/primary-only" },
+				{ "deliveryAttempted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-partial-primary-only" },
+			{ "name", "runtime partial primary only" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "to", "https://primary.example/fail" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "https://failure.example/fallback" },
+					{ "simulateHttpStatus", 201 }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "https://runtime.example/primary-only");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationHttpStatus", 0) == 201);
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://failure.example/fallback");
+}
+
+TEST_CASE("Cron timer preserves primary delivery simulation when runtime projects failure destination only", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-partial-failure-only") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-failure-only-projected" },
+				{ "error", "runtime primary failure projected" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "isolated" },
+				{ "failureDestinationStatus", "delivered" },
+				{ "failureDestinationMode", "webhook" },
+				{ "failureDestinationTarget", "https://runtime.example/failure-only" },
+				{ "failureDestinationAttempted", true },
+				{ "failureDestinationHttpStatus", 202 }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-partial-failure-only" },
+			{ "name", "runtime partial failure only" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "go" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "to", "https://primary.example/ok" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "https://failure.example/unused" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("deliveryTarget", std::string()) == "https://primary.example/ok");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://runtime.example/failure-only");
+	REQUIRE(runs[0].value("failureDestinationHttpStatus", 0) == 202);
+}
+
 TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron][ops]") {
 	CronOpsService ops;
 	std::vector<CronJson> runningPayloads;

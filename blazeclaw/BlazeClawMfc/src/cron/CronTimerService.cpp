@@ -477,7 +477,11 @@ namespace blazeclaw::cron {
 			bool timedOut = false;
 			bool aborted = false;
 			bool skipDeliverySimulation = false;
+			bool skipPrimaryDeliverySimulation = false;
+			bool skipFailureDestinationSimulation = false;
 			bool runtimeProjectedTransport = false;
+			bool runtimeProjectedPrimaryTransport = false;
+			bool runtimeProjectedFailureDestinationTransport = false;
 			bool hasRetryDelayOverride = false;
 			std::int64_t retryDelayOverrideMs = 0;
 		};
@@ -530,7 +534,8 @@ namespace blazeclaw::cron {
 		void ApplyRuntimeExecutionResult(
 			RunOutcome& outcome,
 			const CronJson& runtimeResult) {
-			bool projectedTransportFields = false;
+			bool projectedPrimaryTransportFields = false;
+			bool projectedFailureTransportFields = false;
 			if (runtimeResult.contains("status") && runtimeResult["status"].is_string()) {
 				outcome.status =
 					ToLowerCopy(TrimCopy(runtimeResult["status"].get<std::string>()));
@@ -587,39 +592,39 @@ namespace blazeclaw::cron {
 
 			if (runtimeResult.contains("delivered") && runtimeResult["delivered"].is_boolean()) {
 				outcome.delivered = runtimeResult["delivered"].get<bool>();
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryStatus") && runtimeResult["deliveryStatus"].is_string()) {
 				outcome.deliveryStatus = ToLowerCopy(
 					TrimCopy(runtimeResult["deliveryStatus"].get<std::string>()));
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryMode") && runtimeResult["deliveryMode"].is_string()) {
 				outcome.deliveryMode = ToLowerCopy(
 					TrimCopy(runtimeResult["deliveryMode"].get<std::string>()));
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryTarget") && runtimeResult["deliveryTarget"].is_string()) {
 				outcome.deliveryTarget = TrimCopy(runtimeResult["deliveryTarget"].get<std::string>());
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryChannel") && runtimeResult["deliveryChannel"].is_string()) {
 				outcome.deliveryChannel = TrimCopy(runtimeResult["deliveryChannel"].get<std::string>());
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryAccountId") && runtimeResult["deliveryAccountId"].is_string()) {
 				outcome.deliveryAccountId = TrimCopy(runtimeResult["deliveryAccountId"].get<std::string>());
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryAttempted") && runtimeResult["deliveryAttempted"].is_boolean()) {
 				outcome.deliveryAttempted = runtimeResult["deliveryAttempted"].get<bool>();
-				projectedTransportFields = true;
+				projectedPrimaryTransportFields = true;
 			}
 			if (runtimeResult.contains("deliveryHttpStatus")) {
 				const auto maybeStatus = TryReadInt64Field(runtimeResult, "deliveryHttpStatus");
 				if (maybeStatus.has_value()) {
 					outcome.deliveryHttpStatus = maybeStatus.value();
-					projectedTransportFields = true;
+					projectedPrimaryTransportFields = true;
 				}
 			}
 
@@ -627,54 +632,57 @@ namespace blazeclaw::cron {
 				runtimeResult["failureDestinationStatus"].is_string()) {
 				outcome.failureDestinationStatus = ToLowerCopy(
 					TrimCopy(runtimeResult["failureDestinationStatus"].get<std::string>()));
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationMode") &&
 				runtimeResult["failureDestinationMode"].is_string()) {
 				outcome.failureDestinationMode = ToLowerCopy(
 					TrimCopy(runtimeResult["failureDestinationMode"].get<std::string>()));
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationTarget") &&
 				runtimeResult["failureDestinationTarget"].is_string()) {
 				outcome.failureDestinationTarget =
 					TrimCopy(runtimeResult["failureDestinationTarget"].get<std::string>());
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationChannel") &&
 				runtimeResult["failureDestinationChannel"].is_string()) {
 				outcome.failureDestinationChannel =
 					TrimCopy(runtimeResult["failureDestinationChannel"].get<std::string>());
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationAccountId") &&
 				runtimeResult["failureDestinationAccountId"].is_string()) {
 				outcome.failureDestinationAccountId =
 					TrimCopy(runtimeResult["failureDestinationAccountId"].get<std::string>());
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationAttempted") &&
 				runtimeResult["failureDestinationAttempted"].is_boolean()) {
 				outcome.failureDestinationAttempted =
 					runtimeResult["failureDestinationAttempted"].get<bool>();
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationHttpStatus")) {
 				const auto maybeFailureStatus =
 					TryReadInt64Field(runtimeResult, "failureDestinationHttpStatus");
 				if (maybeFailureStatus.has_value()) {
 					outcome.failureDestinationHttpStatus = maybeFailureStatus.value();
-					projectedTransportFields = true;
+					projectedFailureTransportFields = true;
 				}
 			}
 			if (runtimeResult.contains("failureDestinationError") &&
 				runtimeResult["failureDestinationError"].is_string()) {
 				outcome.failureDestinationError =
 					TrimCopy(runtimeResult["failureDestinationError"].get<std::string>());
-				projectedTransportFields = true;
+				projectedFailureTransportFields = true;
 			}
 
-			outcome.runtimeProjectedTransport = projectedTransportFields;
+			outcome.runtimeProjectedPrimaryTransport = projectedPrimaryTransportFields;
+			outcome.runtimeProjectedFailureDestinationTransport = projectedFailureTransportFields;
+			outcome.runtimeProjectedTransport =
+				projectedPrimaryTransportFields || projectedFailureTransportFields;
 
 			if (runtimeResult.contains("usage") && runtimeResult["usage"].is_object()) {
 				const CronJson& usage = runtimeResult["usage"];
@@ -928,15 +936,26 @@ namespace blazeclaw::cron {
 						}
 					}
 
-					if (hasExplicitHandledFlag &&
-						!runtimeHandled) {
-						outcome.skipDeliverySimulation = false;
-					}
-
 					if (runtimeHandled &&
 						!runtimeNode.contains("skipDelivery") &&
 						outcome.runtimeProjectedTransport) {
-						outcome.skipDeliverySimulation = true;
+						if (outcome.runtimeProjectedPrimaryTransport &&
+							outcome.runtimeProjectedFailureDestinationTransport) {
+							outcome.skipDeliverySimulation = true;
+						}
+						else {
+							outcome.skipPrimaryDeliverySimulation =
+								outcome.runtimeProjectedPrimaryTransport;
+							outcome.skipFailureDestinationSimulation =
+								outcome.runtimeProjectedFailureDestinationTransport;
+						}
+					}
+
+					if (hasExplicitHandledFlag &&
+						!runtimeHandled) {
+						outcome.skipPrimaryDeliverySimulation = false;
+						outcome.skipFailureDestinationSimulation = false;
+						outcome.skipDeliverySimulation = false;
 					}
 
 					const bool heartbeatBusy =
@@ -1059,10 +1078,19 @@ namespace blazeclaw::cron {
 				outcome.failureDestinationError.clear();
 			}
 
+			const bool skipPrimaryDeliverySimulation =
+				runtimeHandled &&
+				(outcome.skipDeliverySimulation ||
+					outcome.skipPrimaryDeliverySimulation);
+			const bool skipFailureDestinationSimulation =
+				runtimeHandled &&
+				(outcome.skipDeliverySimulation ||
+					outcome.skipFailureDestinationSimulation);
+
 			if (!heartbeatBusyDeliverySuppressed &&
-				!(runtimeHandled && outcome.skipDeliverySimulation) &&
 				job.contains("delivery") &&
-				job["delivery"].is_object()) {
+				job["delivery"].is_object() &&
+				(!skipPrimaryDeliverySimulation || !skipFailureDestinationSimulation)) {
 				const CronJson& delivery = job["delivery"];
 				const bool simulateTransientFailure =
 					delivery.contains("simulateTransientFailure") &&
@@ -1070,18 +1098,21 @@ namespace blazeclaw::cron {
 					delivery["simulateTransientFailure"].get<bool>();
 				const std::string mode = ToLowerCopy(
 					TrimCopy(delivery.value("mode", std::string("announce"))));
-				outcome.deliveryMode = mode;
-				outcome.deliveryTarget = TrimCopy(delivery.value("to", std::string()));
-				outcome.deliveryChannel = TrimCopy(delivery.value("channel", std::string("last")));
-				if (outcome.deliveryChannel.empty()) {
-					outcome.deliveryChannel = "last";
-				}
-				outcome.deliveryAccountId = TrimCopy(delivery.value("accountId", std::string()));
-				if (mode == "none") {
-					outcome.deliveryStatus = "not-requested";
-					outcome.delivered = false;
-				}
-				else if (mode == "announce") {
+				if (!skipPrimaryDeliverySimulation) {
+					outcome.deliveryMode = mode;
+					outcome.deliveryTarget = TrimCopy(delivery.value("to", std::string()));
+					outcome.deliveryChannel = TrimCopy(
+						delivery.value("channel", std::string("last")));
+					if (outcome.deliveryChannel.empty()) {
+						outcome.deliveryChannel = "last";
+					}
+					outcome.deliveryAccountId = TrimCopy(
+						delivery.value("accountId", std::string()));
+					if (mode == "none") {
+						outcome.deliveryStatus = "not-requested";
+						outcome.delivered = false;
+					}
+					else if (mode == "announce") {
 					outcome.deliveryAttempted = true;
 					if (outcome.deliveryTarget.empty()) {
 						outcome.deliveryTarget = outcome.sessionId.empty()
@@ -1113,8 +1144,8 @@ namespace blazeclaw::cron {
 						outcome.deliveryStatus = "delivered";
 						outcome.delivered = true;
 					}
-				}
-				else if (mode == "webhook") {
+					}
+					else if (mode == "webhook") {
 					outcome.deliveryAttempted = true;
 					std::string to =
 						TrimCopy(delivery.value("to", std::string()));
@@ -1172,17 +1203,19 @@ namespace blazeclaw::cron {
 						outcome.summary = "Webhook delivery target is invalid";
 						outcome.retryable = false;
 					}
-				}
-				else {
+					}
+					else {
 					outcome.status = "error";
 					outcome.deliveryStatus = "not-delivered";
 					outcome.error = "unsupported delivery mode";
 					outcome.errorCategory = "delivery_mode_invalid";
 					outcome.summary = "Delivery mode is invalid";
 					outcome.retryable = false;
+					}
 				}
 
-				if (outcome.status == "error" &&
+				if (!skipFailureDestinationSimulation &&
+					outcome.status == "error" &&
 					delivery.contains("failureDestination") &&
 					delivery["failureDestination"].is_object()) {
 					const CronJson& failureDestination = delivery["failureDestination"];
@@ -1193,7 +1226,10 @@ namespace blazeclaw::cron {
 					}
 					outcome.failureDestinationMode = failureMode;
 
-					const std::string primaryMode = mode;
+					const std::string primaryMode =
+						!outcome.deliveryMode.empty()
+						? outcome.deliveryMode
+						: mode;
 					const std::string primaryTo = !outcome.deliveryTarget.empty()
 						? outcome.deliveryTarget
 						: TrimCopy(delivery.value("to", std::string()));
