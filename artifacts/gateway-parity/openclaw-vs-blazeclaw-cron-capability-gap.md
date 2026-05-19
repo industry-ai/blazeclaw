@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase AP Step 5/10 cron matcher named-alias breadth increment, Phase AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
+Generated: 2026-05-18 (reconciled against current BlazeClaw cron sources with Phase AQ Step 5/10 cron matcher question-mark wildcard breadth increment, Phase AP/AO/AN/AM/AL/AK/AJ/AI/AH/AG/AF/AE/AD/AC/AB/AA/Z/Y/X/W/V/U gateway/runtime normalization and cross-layer alignment)
 
 ## Scope
 
@@ -130,7 +130,7 @@ Parity tests: `blazeclaw/BlazeClawMfc/tests/CronParityContractTests.cpp`
 - Reconciled capability matrix with current `CronTimerService` / `CronOpsService` / `CronStoreService` behavior.
 - Added Phase K docs-sync note: remaining-gap priority sequence and tranche wording aligned with `blazeclaw/docs/cron-parity-gap-and-port-plan.md` and companion docs.
 - Reconciled production wiring status: adapters/hooks are registered from `GatewayHost` startup, with remaining work moved to execution-depth parity.
-- Updated schedule/maintenance rows (`tz`, stagger, `preserveDueSlots`, `scheduleErrorCount` auto-disable), and added Step 5 matcher breadth notes for range/stepped-range token support plus named month/weekday alias support (including alias ranges).
+- Updated schedule/maintenance rows (`tz`, stagger, `preserveDueSlots`, `scheduleErrorCount` auto-disable), and added Step 5 matcher breadth notes for range/stepped-range token support, named month/weekday alias support (including alias ranges), and question-mark wildcard semantics in day-field lanes.
 - Pointed authoritative plan to `blazeclaw/docs/cron-parity-gap-and-port-plan.md`.
 - Added Phase G Step 4 note: `CronOpsService::Run` now emits terminal task-ledger hooks for immediate manual `already_running` and `not_due` transitions, with targeted ops parity coverage for `not_due` terminal-edge completion-hook emission.
 - Added Phase H Step 6 note: failure-alert recurring error-branch evaluation now clears stale route snapshot state (`lastFailureAlertTarget` plus mode/channel/account snapshots) in disabled suppression lanes, with targeted timer parity coverage.

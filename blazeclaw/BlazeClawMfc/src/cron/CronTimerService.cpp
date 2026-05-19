@@ -757,7 +757,7 @@ namespace blazeclaw::cron {
 
 		bool IsWildcardCronToken(const std::string& tokenRaw) {
 			const std::string token = TrimCopy(tokenRaw);
-			if (token.empty() || token == "*") {
+			if (token.empty() || token == "*" || token == "?") {
 				return true;
 			}
 
@@ -904,7 +904,7 @@ namespace blazeclaw::cron {
 			int rangeStart = minValue;
 			int rangeEnd = maxValue;
 
-			if (segment != "*") {
+			if (segment != "*" && segment != "?") {
 				const std::size_t dashPos = segment.find('-');
 				if (dashPos != std::string::npos) {
 					if (segment.find('-', dashPos + 1) != std::string::npos) {

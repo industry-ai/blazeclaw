@@ -3265,6 +3265,52 @@ TEST_CASE("Cron timer computes cron expression with named month and weekday alia
 	}
 }
 
+TEST_CASE("Cron timer computes cron expression with question-mark wildcard in day fields", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	SECTION("day-of-month question wildcard") {
+		CronJson job = {
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "0 9 ? * mon" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+
+		const std::time_t t =
+			static_cast<std::time_t>(nextRun.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_hour == 9);
+		REQUIRE(tm.tm_min == 0);
+		REQUIRE(tm.tm_wday == 1);
+	}
+
+	SECTION("day-of-week question wildcard") {
+		CronJson job = {
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "0 9 1 jan ?" } } },
+			{ "state", CronJson::object() }
+		};
+
+		const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+
+		const std::time_t t =
+			static_cast<std::time_t>(nextRun.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_hour == 9);
+		REQUIRE(tm.tm_min == 0);
+		REQUIRE(tm.tm_mday == 1);
+		REQUIRE((tm.tm_mon + 1) == 1);
+	}
+}
+
 TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone schedule errors", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
