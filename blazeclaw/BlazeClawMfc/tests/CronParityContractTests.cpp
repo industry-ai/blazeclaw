@@ -4537,6 +4537,153 @@ TEST_CASE("Cron timer falls back failureAlert announce channel/account to delive
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertAccountId", std::string()) == "acc-delivery");
 }
 
+TEST_CASE("Cron timer records failure-alert webhook dispatch status metadata", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	SECTION("Failure-alert webhook success projection is recorded when alert is triggered") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-failure-alert-http-204" },
+				{ "name", "failure alert webhook http success" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+				{ "failureAlert",
+					{
+						{ "after", 1 },
+						{ "cooldownMs", 0 },
+						{ "mode", "webhook" },
+						{ "to", "https://alerts.example/failure" },
+						{ "simulateHttpStatus", 204 }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("failureAlertTriggered", false));
+		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "delivered");
+		REQUIRE(runs[0].value("failureAlertAttempted", false));
+		REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 204);
+		REQUIRE(runs[0]["failureAlertError"].is_null());
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "delivered");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", false));
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertHttpStatus", static_cast<std::int64_t>(0)) == 204);
+		REQUIRE(jobs[0]["state"]["lastFailureAlertError"].is_null());
+	}
+
+	SECTION("Failure-alert webhook simulated HTTP status is projected") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-failure-alert-http-502" },
+				{ "name", "failure alert webhook http status" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+				{ "failureAlert",
+					{
+						{ "after", 1 },
+						{ "cooldownMs", 0 },
+						{ "mode", "webhook" },
+						{ "to", "https://alerts.example/failure" },
+						{ "simulateHttpStatus", 502 }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("failureAlertTriggered", false));
+		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE(runs[0].value("failureAlertAttempted", false));
+		REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 502);
+		REQUIRE(
+			runs[0].value("failureAlertError", std::string()) ==
+			"failure alert webhook returned HTTP 502");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", false));
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertHttpStatus", static_cast<std::int64_t>(0)) == 502);
+	}
+
+	SECTION("Failure-alert webhook transport dispatch failure is recorded") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-failure-alert-transport-dispatch-fail" },
+				{ "name", "failure alert transport dispatch fail" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
+				{ "failureAlert",
+					{
+						{ "after", 1 },
+						{ "cooldownMs", 0 },
+						{ "mode", "webhook" },
+						{ "to", "http:///" },
+						{ "transportDispatch", true }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("failureAlertTriggered", false));
+		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE(runs[0].value("failureAlertAttempted", true) == false);
+		REQUIRE(
+			runs[0].value("failureAlertError", std::string()) ==
+			"failed to parse webhook URL");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", true) == false);
+		REQUIRE(jobs[0]["state"]["lastFailureAlertHttpStatus"].is_null());
+	}
+
+	SECTION("Failure-alert announce unresolved target is surfaced when triggered") {
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-failure-alert-announce-unresolved" },
+				{ "name", "failure alert announce unresolved" },
+				{ "enabled", true },
+				{ "sessionTarget", "isolated" },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "agentTurn" }, { "message", "ping" }, { "timeoutSeconds", 1 } } },
+				{ "failureAlert",
+					{
+						{ "after", 1 },
+						{ "cooldownMs", 0 },
+						{ "mode", "announce" }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("failureAlertTriggered", false));
+		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE_FALSE(runs[0].value("failureAlertAttempted", true));
+		REQUIRE(runs[0].value("failureAlertError", std::string()) == "announce failure alert target is unresolved");
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
+		REQUIRE_FALSE(jobs[0]["state"].value("lastFailureAlertAttempted", true));
+		REQUIRE(jobs[0]["state"]["lastFailureAlertHttpStatus"].is_null());
+		REQUIRE(jobs[0]["state"].value("lastFailureAlertError", std::string()) == "announce failure alert target is unresolved");
+	}
+}
+
 TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -5085,7 +5232,8 @@ TEST_CASE(
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
-	REQUIRE_FALSE(runs[0].contains("usage"));
+	REQUIRE(runs[0].contains("usage"));
+	REQUIRE(runs[0]["usage"].is_null());
 }
 
 TEST_CASE(

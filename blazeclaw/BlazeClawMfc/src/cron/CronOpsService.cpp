@@ -382,6 +382,18 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("failureAlertAtMs")) {
 				payload["failureAlertAtMs"] = runEntry["failureAlertAtMs"];
 			}
+			if (runEntry.contains("failureAlertStatus")) {
+				payload["failureAlertStatus"] = runEntry["failureAlertStatus"];
+			}
+			if (runEntry.contains("failureAlertAttempted")) {
+				payload["failureAlertAttempted"] = runEntry["failureAlertAttempted"];
+			}
+			if (runEntry.contains("failureAlertHttpStatus")) {
+				payload["failureAlertHttpStatus"] = runEntry["failureAlertHttpStatus"];
+			}
+			if (runEntry.contains("failureAlertError")) {
+				payload["failureAlertError"] = runEntry["failureAlertError"];
+			}
 
 			return payload;
 		}
@@ -1312,6 +1324,22 @@ namespace blazeclaw::cron {
 				terminal["failureAlertAtMs"] =
 					finishedRun->contains("failureAlertAtMs")
 					? (*finishedRun)["failureAlertAtMs"]
+					: CronJson(nullptr);
+				terminal["failureAlertStatus"] =
+					finishedRun->contains("failureAlertStatus")
+					? (*finishedRun)["failureAlertStatus"]
+					: CronJson(nullptr);
+				terminal["failureAlertAttempted"] =
+					finishedRun->contains("failureAlertAttempted")
+					? (*finishedRun)["failureAlertAttempted"]
+					: CronJson(false);
+				terminal["failureAlertHttpStatus"] =
+					finishedRun->contains("failureAlertHttpStatus")
+					? (*finishedRun)["failureAlertHttpStatus"]
+					: CronJson(nullptr);
+				terminal["failureAlertError"] =
+					finishedRun->contains("failureAlertError")
+					? (*finishedRun)["failureAlertError"]
 					: CronJson(nullptr);
 				terminal["taskLedgerDisposition"] = mappedDisposition;
 				terminal["taskLedgerTerminal"] = true;

@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (Phase BC WP-A: production runtime gating landed; closure sequence WP-A baseline done → WP-B next; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
+Generated: 2026-05-19 (Phase BD WP-B: failure-alert outbound dispatch status projection increment landed; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
 
 ## Scope
 
@@ -41,6 +41,8 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 ## Closure sequence (Phase BC, 2026-05-19)
 
 **WP-A baseline landed:** `preferRuntimeExecution`, wake-now busy-wait, `runtime_unavailable` gating.
+
+**WP-B increment landed (this tranche):** triggered failure-alert execution now projects outbound dispatch status metadata for announce/webhook lanes (`failureAlertStatus`, `failureAlertAttempted`, `failureAlertHttpStatus`, `failureAlertError`) including simulated HTTP and transport-dispatch result handling.
 
 **Next:** **WP-B** outbound delivery → **WP-C** → **WP-D** → **WP-E** → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
 
