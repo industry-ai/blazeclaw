@@ -485,6 +485,238 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		bool ValidateCronScheduleObjectFields(
+			const std::string& scheduleJson,
+			const std::string& methodName,
+			const std::string& fieldPrefix,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds scheduleKinds;
+			if (!TryParseTopLevelObjectFieldKinds(scheduleJson, scheduleKinds)) {
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `" + methodName + "` has invalid `" + fieldPrefix + "` object shape.");
+				return false;
+			}
+
+			auto requireScheduleFieldKind = [&](const char* fieldName,
+				JsonFieldKind expected,
+				const char* typeLabel) {
+				const auto it = scheduleKinds.find(fieldName);
+				if (it == scheduleKinds.end()) {
+					return true;
+				}
+				if (it->second == expected) {
+					return true;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_type",
+					"Method `" + methodName + "` expects `" + fieldPrefix +
+					"." + std::string(fieldName) + "` to be " + typeLabel + ".");
+				return false;
+			};
+
+			if (!requireScheduleFieldKind("kind", JsonFieldKind::String, "a string") ||
+				!requireScheduleFieldKind("everyMs", JsonFieldKind::Number, "numeric") ||
+				!requireScheduleFieldKind("at", JsonFieldKind::String, "a string") ||
+				!requireScheduleFieldKind("atMs", JsonFieldKind::Number, "numeric") ||
+				!requireScheduleFieldKind("expr", JsonFieldKind::String, "a string") ||
+				!requireScheduleFieldKind("cron", JsonFieldKind::String, "a string") ||
+				!requireScheduleFieldKind("staggerMs", JsonFieldKind::Number, "numeric") ||
+				!requireScheduleFieldKind("tz", JsonFieldKind::String, "a string") ||
+				!requireScheduleFieldKind("anchorMs", JsonFieldKind::Number, "numeric")) {
+				return false;
+			}
+
+			std::string scheduleKind = "at";
+			if (scheduleKinds.find("kind") != scheduleKinds.end()) {
+				std::string rawKind;
+				if (TryReadTopLevelStringField(scheduleJson, "kind", rawKind)) {
+					scheduleKind = Trim(rawKind);
+				}
+			}
+
+			if (scheduleKind != "at" &&
+				scheduleKind != "every" &&
+				scheduleKind != "cron") {
+				SetIssue(
+					issue,
+					"schema_invalid_value",
+					"Method `" + methodName +
+					"` requires `" + fieldPrefix +
+					".kind` to be one of: `at`, `every`, `cron`.");
+				return false;
+			}
+
+			auto readIntegralNumber = [&](const char* fieldName,
+				double& valueOut,
+				bool& presentOut) {
+				presentOut = false;
+				if (scheduleKinds.find(fieldName) == scheduleKinds.end()) {
+					return true;
+				}
+
+				if (!TryReadTopLevelNumberField(scheduleJson, fieldName, valueOut)) {
+					return true;
+				}
+
+				presentOut = true;
+				if (std::floor(valueOut) != valueOut) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						"." + std::string(fieldName) + "` to be an integer.");
+					return false;
+				}
+
+				return true;
+			};
+
+			if (scheduleKind == "every") {
+				if (scheduleKinds.find("everyMs") == scheduleKinds.end()) {
+					SetIssue(
+						issue,
+						"schema_missing_field",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						".everyMs` when `" + fieldPrefix + ".kind` is `every`.");
+					return false;
+				}
+
+				double everyMs = 0.0;
+				bool everyMsPresent = false;
+				if (!readIntegralNumber("everyMs", everyMs, everyMsPresent)) {
+					return false;
+				}
+
+				if (everyMsPresent && everyMs < 1000.0) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						".everyMs` to be greater than or equal to 1000.");
+					return false;
+				}
+			}
+
+			if (scheduleKind == "at") {
+				if (scheduleKinds.find("at") == scheduleKinds.end() &&
+					scheduleKinds.find("atMs") == scheduleKinds.end()) {
+					SetIssue(
+						issue,
+						"schema_missing_field",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						".at` or `" + fieldPrefix + ".atMs` when `" +
+						fieldPrefix + ".kind` is `at`.");
+					return false;
+				}
+
+				double atMs = 0.0;
+				bool atMsPresent = false;
+				if (!readIntegralNumber("atMs", atMs, atMsPresent)) {
+					return false;
+				}
+			}
+
+			if (scheduleKind == "cron") {
+				if (scheduleKinds.find("expr") == scheduleKinds.end() &&
+					scheduleKinds.find("cron") == scheduleKinds.end()) {
+					SetIssue(
+						issue,
+						"schema_missing_field",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						".expr` or `" + fieldPrefix + ".cron` when `" +
+						fieldPrefix + ".kind` is `cron`.");
+					return false;
+				}
+
+				double staggerMs = 0.0;
+				bool staggerMsPresent = false;
+				if (!readIntegralNumber("staggerMs", staggerMs, staggerMsPresent)) {
+					return false;
+				}
+
+				if (staggerMsPresent && staggerMs < 0.0) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `" + methodName +
+						"` requires `" + fieldPrefix +
+						".staggerMs` to be greater than or equal to 0.");
+					return false;
+				}
+			}
+
+			double anchorMs = 0.0;
+			bool anchorMsPresent = false;
+			if (!readIntegralNumber("anchorMs", anchorMs, anchorMsPresent)) {
+				return false;
+			}
+
+			for (const auto& [field, _] : scheduleKinds) {
+				if (ContainsFieldName(
+					{ "kind", "everyMs", "at", "atMs", "expr", "cron", "staggerMs", "tz", "anchorMs" },
+					field)) {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `" + methodName + "` does not allow `" +
+					fieldPrefix + "." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateCronScheduleFieldFromParamsJson(
+			const std::string& paramsJson,
+			const std::string& tokenFieldName,
+			const std::string& methodName,
+			const std::string& fieldPrefix,
+			SchemaValidationIssue& issue) {
+			std::size_t scheduleTokenPos = 0;
+			if (!ContainsFieldToken(paramsJson, tokenFieldName, scheduleTokenPos)) {
+				return true;
+			}
+
+			std::size_t scheduleValuePos = paramsJson.find(':', scheduleTokenPos);
+			if (scheduleValuePos == std::string::npos) {
+				return true;
+			}
+
+			scheduleValuePos = SkipWhitespace(paramsJson, scheduleValuePos + 1);
+			if (scheduleValuePos >= paramsJson.size() || paramsJson[scheduleValuePos] != '{') {
+				return true;
+			}
+
+			std::size_t scheduleCursor = scheduleValuePos;
+			if (!TryConsumeBalancedComposite(paramsJson, scheduleCursor, '{', '}')) {
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `" + methodName + "` has invalid `" + fieldPrefix + "` JSON shape.");
+				return false;
+			}
+
+			const std::string scheduleJson =
+				paramsJson.substr(scheduleValuePos, scheduleCursor - scheduleValuePos);
+			return ValidateCronScheduleObjectFields(
+				scheduleJson,
+				methodName,
+				fieldPrefix,
+				issue);
+		}
+
 		bool ValidateOptionalSessionListParams(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1246,6 +1478,18 @@ namespace blazeclaw::gateway::protocol {
 				}
 			}
 
+			if (request.paramsJson.has_value() &&
+				fieldKinds.find("schedule") != fieldKinds.end()) {
+				if (!ValidateCronScheduleFieldFromParamsJson(
+					request.paramsJson.value(),
+					"schedule",
+					"cron.add",
+					"params.schedule",
+					issue)) {
+					return false;
+				}
+			}
+
 			for (const auto& [field, _] : fieldKinds) {
 				if (ContainsFieldName(
 					{ "name", "description", "enabled", "schedule", "payload", "wakeMode", "sessionTarget", "deleteAfterRun", "delivery", "agentId", "sessionKey", "retry", "failureAlert", "message", "text", "model", "fallbacks", "toolsAllow", "thinking", "timeoutSeconds", "lightContext", "allowUnsafeExternalContent" },
@@ -1349,6 +1593,25 @@ namespace blazeclaw::gateway::protocol {
 									"schema_invalid_type",
 									"Method `cron.update` expects `params.patch.failureAlert` to be an object or boolean.");
 								return false;
+							}
+
+							if (patchKinds.find("schedule") != patchKinds.end()) {
+								if (patchKinds.find("schedule")->second != JsonFieldKind::Object) {
+									SetIssue(
+										issue,
+										"schema_invalid_type",
+										"Method `cron.update` expects `params.patch.schedule` to be an object.");
+									return false;
+								}
+
+								if (!ValidateCronScheduleFieldFromParamsJson(
+									patchJson,
+									"schedule",
+									"cron.update",
+									"params.patch.schedule",
+									issue)) {
+									return false;
+								}
 							}
 
 							if (patchFailureAlertIt != patchKinds.end() &&

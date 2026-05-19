@@ -125,6 +125,92 @@ TEST_CASE("Cron add validator accepts nullable identity fields and flattened pay
 	REQUIRE(issue.code.empty());
 }
 
+TEST_CASE("Cron add validator enforces nested schedule kind constraints", "[cron][schema]") {
+	SECTION("rejects every schedule when everyMs is missing") {
+		const RequestFrame request{
+			.id = "cron-add-schedule-every-missing-everyms",
+			.method = "cron.add",
+			.paramsJson = std::string(
+				"{\"schedule\":{\"kind\":\"every\"},\"message\":\"nightly ping\"}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code == "schema_missing_field");
+		REQUIRE(issue.message.find("params.schedule.everyMs") != std::string::npos);
+	}
+
+	SECTION("rejects cron schedule when expr and cron aliases are both missing") {
+		const RequestFrame request{
+			.id = "cron-add-schedule-cron-missing-expr",
+			.method = "cron.add",
+			.paramsJson = std::string(
+				"{\"schedule\":{\"kind\":\"cron\"},\"text\":\"heartbeat\"}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code == "schema_missing_field");
+		REQUIRE(issue.message.find("params.schedule.expr") != std::string::npos);
+	}
+
+	SECTION("accepts cron schedule with expr and tz") {
+		const RequestFrame request{
+			.id = "cron-add-schedule-cron-with-tz",
+			.method = "cron.add",
+			.paramsJson = std::string(
+				"{\"schedule\":{\"kind\":\"cron\",\"expr\":\"*/5 * * * *\",\"tz\":\"+08:00\"},\"text\":\"heartbeat\"}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code.empty());
+	}
+}
+
+TEST_CASE("Cron update validator enforces nested patch schedule constraints", "[cron][schema]") {
+	SECTION("rejects non-object schedule patch") {
+		const RequestFrame request{
+			.id = "cron-update-schedule-not-object",
+			.method = "cron.update",
+			.paramsJson = std::string(
+				"{\"id\":\"cron-1\",\"patch\":{\"schedule\":\"every\"}}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code == "schema_invalid_type");
+		REQUIRE(issue.message.find("params.patch.schedule") != std::string::npos);
+	}
+
+	SECTION("rejects cron patch with negative staggerMs") {
+		const RequestFrame request{
+			.id = "cron-update-schedule-negative-stagger",
+			.method = "cron.update",
+			.paramsJson = std::string(
+				"{\"id\":\"cron-1\",\"patch\":{\"schedule\":{\"kind\":\"cron\",\"expr\":\"*/10 * * * *\",\"staggerMs\":-1}}}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code == "schema_invalid_value");
+		REQUIRE(issue.message.find("params.patch.schedule.staggerMs") != std::string::npos);
+	}
+
+	SECTION("accepts at patch with atMs integer") {
+		const RequestFrame request{
+			.id = "cron-update-schedule-at-atms",
+			.method = "cron.update",
+			.paramsJson = std::string(
+				"{\"id\":\"cron-1\",\"patch\":{\"schedule\":{\"kind\":\"at\",\"atMs\":1700000000000}}}")
+		};
+
+		SchemaValidationIssue issue{};
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+		REQUIRE(issue.code.empty());
+	}
+}
+
 TEST_CASE("Cron runs validator rejects mixed status and statuses filters", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "runs-status-and-statuses-mixed",
