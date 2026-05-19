@@ -267,6 +267,21 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("deliveryTarget")) {
 				payload["deliveryTarget"] = runEntry["deliveryTarget"];
 			}
+			if (runEntry.contains("deliveryAttempted")) {
+				payload["deliveryAttempted"] = runEntry["deliveryAttempted"];
+			}
+			if (runEntry.contains("deliveryHttpStatus")) {
+				payload["deliveryHttpStatus"] = runEntry["deliveryHttpStatus"];
+			}
+			if (runEntry.contains("deliveryError")) {
+				payload["deliveryError"] = runEntry["deliveryError"];
+			}
+			if (runEntry.contains("deliveryChannel")) {
+				payload["deliveryChannel"] = runEntry["deliveryChannel"];
+			}
+			if (runEntry.contains("deliveryAccountId")) {
+				payload["deliveryAccountId"] = runEntry["deliveryAccountId"];
+			}
 			if (runEntry.contains("failureDestinationStatus")) {
 				payload["failureDestinationStatus"] = runEntry["failureDestinationStatus"];
 			}
@@ -275,6 +290,14 @@ namespace blazeclaw::cron {
 			}
 			if (runEntry.contains("failureDestinationTarget")) {
 				payload["failureDestinationTarget"] = runEntry["failureDestinationTarget"];
+			}
+			if (runEntry.contains("failureDestinationAttempted")) {
+				payload["failureDestinationAttempted"] =
+					runEntry["failureDestinationAttempted"];
+			}
+			if (runEntry.contains("failureDestinationHttpStatus")) {
+				payload["failureDestinationHttpStatus"] =
+					runEntry["failureDestinationHttpStatus"];
 			}
 			if (runEntry.contains("failureDestinationChannel")) {
 				payload["failureDestinationChannel"] =
@@ -1141,6 +1164,26 @@ namespace blazeclaw::cron {
 					finishedRun->contains("deliveryTarget")
 					? (*finishedRun)["deliveryTarget"]
 					: CronJson(nullptr);
+				terminal["deliveryAttempted"] =
+					finishedRun->contains("deliveryAttempted")
+					? (*finishedRun)["deliveryAttempted"]
+					: CronJson(false);
+				terminal["deliveryHttpStatus"] =
+					finishedRun->contains("deliveryHttpStatus")
+					? (*finishedRun)["deliveryHttpStatus"]
+					: CronJson(nullptr);
+				terminal["deliveryError"] =
+					finishedRun->contains("deliveryError")
+					? (*finishedRun)["deliveryError"]
+					: CronJson(nullptr);
+				terminal["deliveryChannel"] =
+					finishedRun->contains("deliveryChannel")
+					? (*finishedRun)["deliveryChannel"]
+					: CronJson(nullptr);
+				terminal["deliveryAccountId"] =
+					finishedRun->contains("deliveryAccountId")
+					? (*finishedRun)["deliveryAccountId"]
+					: CronJson(nullptr);
 				terminal["failureDestinationStatus"] =
 					finishedRun->contains("failureDestinationStatus")
 					? (*finishedRun)["failureDestinationStatus"]
@@ -1152,6 +1195,14 @@ namespace blazeclaw::cron {
 				terminal["failureDestinationTarget"] =
 					finishedRun->contains("failureDestinationTarget")
 					? (*finishedRun)["failureDestinationTarget"]
+					: CronJson(nullptr);
+				terminal["failureDestinationAttempted"] =
+					finishedRun->contains("failureDestinationAttempted")
+					? (*finishedRun)["failureDestinationAttempted"]
+					: CronJson(false);
+				terminal["failureDestinationHttpStatus"] =
+					finishedRun->contains("failureDestinationHttpStatus")
+					? (*finishedRun)["failureDestinationHttpStatus"]
 					: CronJson(nullptr);
 				terminal["failureDestinationChannel"] =
 					finishedRun->contains("failureDestinationChannel")

@@ -608,6 +608,12 @@ namespace blazeclaw::cron {
 				outcome.deliveryTarget = TrimCopy(runtimeResult["deliveryTarget"].get<std::string>());
 				projectedPrimaryTransportFields = true;
 			}
+			if (outcome.deliveryMode.empty() &&
+				!outcome.deliveryTarget.empty() &&
+				StartsWithHttpScheme(outcome.deliveryTarget)) {
+				outcome.deliveryMode = "webhook";
+				projectedPrimaryTransportFields = true;
+			}
 			if (runtimeResult.contains("deliveryChannel") && runtimeResult["deliveryChannel"].is_string()) {
 				outcome.deliveryChannel = TrimCopy(runtimeResult["deliveryChannel"].get<std::string>());
 				projectedPrimaryTransportFields = true;
@@ -644,6 +650,12 @@ namespace blazeclaw::cron {
 				runtimeResult["failureDestinationTarget"].is_string()) {
 				outcome.failureDestinationTarget =
 					TrimCopy(runtimeResult["failureDestinationTarget"].get<std::string>());
+				projectedFailureTransportFields = true;
+			}
+			if (outcome.failureDestinationMode.empty() &&
+				!outcome.failureDestinationTarget.empty() &&
+				StartsWithHttpScheme(outcome.failureDestinationTarget)) {
+				outcome.failureDestinationMode = "webhook";
 				projectedFailureTransportFields = true;
 			}
 			if (runtimeResult.contains("failureDestinationChannel") &&
@@ -1219,17 +1231,27 @@ namespace blazeclaw::cron {
 					delivery.contains("failureDestination") &&
 					delivery["failureDestination"].is_object()) {
 					const CronJson& failureDestination = delivery["failureDestination"];
+					const bool failureHasExplicitMode =
+						failureDestination.contains("mode") &&
+						failureDestination["mode"].is_string() &&
+						!TrimCopy(failureDestination["mode"].get<std::string>()).empty();
 					std::string failureMode = ToLowerCopy(
 						TrimCopy(failureDestination.value("mode", std::string("announce"))));
 					if (failureMode != "announce" && failureMode != "webhook") {
 						failureMode = "announce";
 					}
-					outcome.failureDestinationMode = failureMode;
 
 					const std::string primaryMode =
 						!outcome.deliveryMode.empty()
 						? outcome.deliveryMode
 						: mode;
+					std::string resolvedPrimaryMode = primaryMode;
+					if (resolvedPrimaryMode != "webhook" &&
+						outcome.deliveryMode.empty() &&
+						!outcome.deliveryTarget.empty() &&
+						StartsWithHttpScheme(outcome.deliveryTarget)) {
+						resolvedPrimaryMode = "webhook";
+					}
 					std::string primaryTo = !outcome.deliveryTarget.empty()
 						? outcome.deliveryTarget
 						: TrimCopy(delivery.value("to", std::string()));
@@ -1243,7 +1265,7 @@ namespace blazeclaw::cron {
 					}
 					if (primaryTo.empty() &&
 						!primaryHasExplicitTo &&
-						primaryMode == "announce") {
+						resolvedPrimaryMode == "announce") {
 						primaryTo = outcome.sessionId.empty()
 							? (sessionTarget == "main"
 								? std::string("main")
@@ -1269,6 +1291,13 @@ namespace blazeclaw::cron {
 						failureDestination["url"].is_string()) {
 						failureTo = TrimCopy(failureDestination["url"].get<std::string>());
 					}
+					if (failureMode != "webhook" &&
+						!failureHasExplicitMode &&
+						!failureTo.empty() &&
+						StartsWithHttpScheme(failureTo)) {
+						failureMode = "webhook";
+					}
+					outcome.failureDestinationMode = failureMode;
 					const std::string resolvedFailureTo =
 						(failureMode == "announce" &&
 							!failureHasExplicitTo &&
@@ -1297,16 +1326,16 @@ namespace blazeclaw::cron {
 
 					const bool sameWebhookTarget =
 						failureMode == "webhook" &&
-						primaryMode == "webhook" &&
+						resolvedPrimaryMode == "webhook" &&
 						CanonicalizeDeliveryRouteTargetForCompare(
 							failureMode,
 							resolvedFailureTo) ==
 						CanonicalizeDeliveryRouteTargetForCompare(
-							primaryMode,
+							resolvedPrimaryMode,
 							primaryTo);
 					const bool sameAnnounceTarget =
 						failureMode == "announce" &&
-						primaryMode != "none" &&
+						resolvedPrimaryMode != "none" &&
 						!primaryTo.empty() &&
 						resolvedFailureTo == primaryTo &&
 						normalizedFailureChannel == normalizedPrimaryChannel &&
@@ -1591,6 +1620,12 @@ namespace blazeclaw::cron {
 
 			const auto timezoneOffsetMinutes =
 				ParseTimezoneOffsetMinutes(schedule.value("tz", std::string()));
+			if (!timezoneOffsetMinutes.has_value() &&
+				schedule.contains("tz") &&
+				schedule["tz"].is_string() &&
+				!TrimCopy(schedule["tz"].get<std::string>()).empty()) {
+				throw std::invalid_argument("invalid cron timezone offset");
+			}
 			const std::int64_t timezoneOffsetMs =
 				static_cast<std::int64_t>(timezoneOffsetMinutes.value_or(0)) * 60 * 1000;
 			std::int64_t localNowMs = nowMs + timezoneOffsetMs;

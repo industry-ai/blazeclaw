@@ -168,6 +168,44 @@ TEST_CASE("Cron normalize add builds payload from flattened fields", "[cron][nor
 	REQUIRE_FALSE(normalized.contains("model"));
 }
 
+TEST_CASE("Cron normalize infers webhook failureDestination mode from url alias when omitted", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://example.test/primary" },
+			{ "failureDestination", {
+				{ "url", "https://example.test/failure" }
+			} }
+		} }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("delivery"));
+	REQUIRE(normalized["delivery"].is_object());
+	REQUIRE(normalized["delivery"].contains("failureDestination"));
+	REQUIRE(normalized["delivery"]["failureDestination"].is_object());
+	REQUIRE(
+		normalized["delivery"]["failureDestination"].value("mode", std::string()) ==
+		"webhook");
+}
+
+TEST_CASE("Cron normalize infers webhook delivery mode from url alias when omitted", "[cron][normalize]") {
+	const CronJson params = {
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", {
+			{ "url", "https://example.test/primary" }
+		} }
+	};
+
+	const CronJson normalized = CronNormalize::NormalizeAddInput(params);
+	REQUIRE(normalized.contains("delivery"));
+	REQUIRE(normalized["delivery"].is_object());
+	REQUIRE(normalized["delivery"].value("mode", std::string()) == "webhook");
+}
+
 TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat cron.add params", "[cron][gateway][normalize]") {
 	GatewayHost host;
 
@@ -1382,6 +1420,156 @@ TEST_CASE("Cron timer marks announce failure destination unresolved when fallbac
 		"failure destination matches primary delivery target");
 }
 
+TEST_CASE("Cron timer suppresses webhook failure destination when runtime projects http target without delivery mode", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-http-target-without-mode") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-http-target-without-mode" },
+				{ "error", "runtime delivery failure" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "main" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryTarget", "https://runtime.example/mode-inferred" },
+				{ "deliveryAttempted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-http-target-without-mode" },
+			{ "name", "runtime http target without delivery mode" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", {
+				{ "mode", "announce" },
+				{ "to", "room-1" },
+				{ "failureDestination", {
+					{ "mode", "webhook" },
+					{ "to", "https://runtime.example/mode-inferred" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "suppressed");
+	REQUIRE(
+		runs[0].value("failureDestinationError", std::string()) ==
+		"failure destination matches primary delivery target");
+}
+
+TEST_CASE("Cron timer infers webhook failure destination mode from url alias when mode is omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-destination-url-mode-inferred" },
+			{ "name", "failure destination url mode inferred" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "to", "bad-target" },
+				{ "failureDestination", {
+					{ "url", "https://example.test/failure" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureDestinationTarget", std::string()) == "https://example.test/failure");
+}
+
+TEST_CASE("Cron timer infers runtime projected webhook modes from HTTP targets when runtime mode fields are omitted", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-http-targets-mode-inferred") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-http-targets-mode-inferred" },
+				{ "error", "runtime delivery failure" },
+				{ "errorCategory", "network" },
+				{ "retryable", false },
+				{ "sessionId", "main" },
+				{ "deliveryStatus", "not-delivered" },
+				{ "deliveryTarget", "https://runtime.example/primary" },
+				{ "deliveryAttempted", true },
+				{ "failureDestinationStatus", "not-delivered" },
+				{ "failureDestinationTarget", "https://runtime.example/failure" },
+				{ "failureDestinationAttempted", true }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-http-targets-mode-inferred" },
+			{ "name", "runtime http targets mode inferred" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery", {
+				{ "mode", "announce" },
+				{ "to", "room-1" },
+				{ "failureDestination", {
+					{ "mode", "announce" },
+					{ "to", "ops-room" }
+				} }
+			} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("deliveryMode", std::string()) == "webhook");
+	REQUIRE(runs[0].value("failureDestinationMode", std::string()) == "webhook");
+}
+
 TEST_CASE("Cron timer suppresses announce failure destination when runtime primary target falls back to session context", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -2126,6 +2314,43 @@ TEST_CASE("Cron patch resolves sessionTarget current using persisted sessionKey 
 	REQUIRE(job.value("sessionTarget", std::string()) == "session:agent:main:persisted");
 }
 
+TEST_CASE("Cron patch normalize infers webhook modes from url aliases when mode is omitted", "[cron][normalize]") {
+	CronJson job = {
+		{ "id", "cron-patch-delivery-mode-infer" },
+		{ "name", "patch delivery mode infer" },
+		{ "delivery", {
+			{ "mode", "announce" },
+			{ "to", "room-1" },
+			{ "failureDestination", {
+				{ "mode", "announce" },
+				{ "to", "ops-room" }
+			} }
+		} },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "ping" } } },
+		{ "state", CronJson::object() }
+	};
+
+	const CronJson patch = {
+		{ "delivery", {
+			{ "url", "https://example.test/patch-primary" },
+			{ "failureDestination", {
+				{ "url", "https://example.test/patch-failure" }
+			} }
+		} }
+	};
+
+	CronNormalize::ApplyPatch(job, patch);
+	REQUIRE(job.contains("delivery"));
+	REQUIRE(job["delivery"].is_object());
+	REQUIRE(job["delivery"].value("mode", std::string()) == "webhook");
+	REQUIRE(job["delivery"].contains("failureDestination"));
+	REQUIRE(job["delivery"]["failureDestination"].is_object());
+	REQUIRE(
+		job["delivery"]["failureDestination"].value("mode", std::string()) ==
+		"webhook");
+}
+
 TEST_CASE("Cron normalize loaded job resolves sessionTarget current using persisted sessionKey", "[cron][normalize]") {
 	CronJson job = {
 		{ "id", "cron-loaded-1" },
@@ -2859,6 +3084,39 @@ TEST_CASE("Cron timer computes cron expression with day-month-and-day-of-week fi
 	}
 }
 
+TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone schedule errors", "[cron][timer]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-cron-invalid-timezone" },
+			{ "name", "cron invalid timezone" },
+			{ "enabled", true },
+			{ "schedule",
+				{
+					{ "kind", "cron" },
+					{ "expr", "* * * * *" },
+					{ "tz", "Mars/Phobos" }
+				} },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", CronJson::object() }
+		}
+	});
+
+	for (int i = 0; i < 3; ++i) {
+		timer.RecomputeSchedules(jobs, nowMs + (i * 1'000));
+	}
+
+	REQUIRE(jobs[0].value("enabled", true) == false);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].is_object());
+	REQUIRE(jobs[0]["state"].value("scheduleErrorCount", 0) >= 3);
+	REQUIRE(
+		jobs[0]["state"].value("lastError", std::string()).find("schedule error") !=
+		std::string::npos);
+}
+
 TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -3125,8 +3383,17 @@ TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadat
 	REQUIRE(payload.contains("failureAlertSuppressed"));
 	REQUIRE(payload.contains("failureAlertMode"));
 	REQUIRE(payload.contains("failureAlertTarget"));
+	REQUIRE(payload.contains("deliveryMode"));
+	REQUIRE(payload.contains("deliveryTarget"));
+	REQUIRE(payload.contains("deliveryAttempted"));
+	REQUIRE(payload.contains("deliveryHttpStatus"));
+	REQUIRE(payload.contains("deliveryError"));
+	REQUIRE(payload.contains("deliveryChannel"));
+	REQUIRE(payload.contains("deliveryAccountId"));
 	REQUIRE(payload.contains("failureDestinationStatus"));
 	REQUIRE(payload.contains("failureDestinationMode"));
+	REQUIRE(payload.contains("failureDestinationAttempted"));
+	REQUIRE(payload.contains("failureDestinationHttpStatus"));
 	REQUIRE(payload.contains("failureDestinationChannel"));
 	REQUIRE(payload.contains("failureDestinationAccountId"));
 	REQUIRE(payload.contains("failureDestinationError"));

@@ -472,9 +472,25 @@ namespace blazeclaw::cron {
 			}
 
 			CronJson& delivery = root[key];
+			const bool modeProvided =
+				delivery.contains("mode") &&
+				delivery["mode"].is_string() &&
+				!TrimCopy(delivery["mode"].get<std::string>()).empty();
 			std::string mode = ToLowerCopy(TrimCopy(delivery.value("mode", std::string())));
 			if (mode != "none" && mode != "announce" && mode != "webhook") {
 				mode = "announce";
+			}
+
+			if (mode != "webhook" &&
+				!modeProvided &&
+				delivery.contains("url") &&
+				delivery["url"].is_string()) {
+				const std::string url = TrimCopy(delivery["url"].get<std::string>());
+				const std::string lowered = ToLowerCopy(url);
+				if (lowered.rfind("http://", 0) == 0 ||
+					lowered.rfind("https://", 0) == 0) {
+					mode = "webhook";
+				}
 			}
 			delivery["mode"] = mode;
 
@@ -514,10 +530,27 @@ namespace blazeclaw::cron {
 
 			if (delivery.contains("failureDestination") && delivery["failureDestination"].is_object()) {
 				CronJson& failureDestination = delivery["failureDestination"];
+				const bool failureModeProvided =
+					failureDestination.contains("mode") &&
+					failureDestination["mode"].is_string() &&
+					!TrimCopy(failureDestination["mode"].get<std::string>()).empty();
 				std::string failureMode = ToLowerCopy(
 					TrimCopy(failureDestination.value("mode", std::string("announce"))));
 				if (failureMode != "announce" && failureMode != "webhook") {
 					failureMode = "announce";
+				}
+
+				if (failureMode != "webhook" &&
+					!failureModeProvided &&
+					failureDestination.contains("url") &&
+					failureDestination["url"].is_string()) {
+					const std::string url =
+						TrimCopy(failureDestination["url"].get<std::string>());
+					const std::string lowered = ToLowerCopy(url);
+					if (lowered.rfind("http://", 0) == 0 ||
+						lowered.rfind("https://", 0) == 0) {
+						failureMode = "webhook";
+					}
 				}
 				failureDestination["mode"] = failureMode;
 
