@@ -16,6 +16,14 @@ namespace blazeclaw::cron {
 	inline constexpr std::int64_t kCronWakeNowBusyMaxWaitMs = 120'000;
 	inline constexpr std::int64_t kCronWakeNowBusyRetryDelayMs = 250;
 
+	struct CronScheduleNotificationEvent {
+		std::string text;
+		std::string agentId;
+		std::string sessionKey;
+		std::string contextKey;
+		std::string heartbeatWakeReason;
+	};
+
 	std::int64_t UtcNowMs();
 	std::string ToLowerCopy(const std::string& value);
 	std::string TrimCopy(const std::string& value);

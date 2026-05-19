@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap Report
 
-Generated: 2026-05-19 (Phase BD WP-B: failure-alert outbound dispatch status projection increment landed; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
+Generated: 2026-05-19 (Phase BC WP-A: production runtime gating landed; closure sequence WP-A baseline done → WP-B next; see `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1)
 
 ## Scope
 
@@ -42,11 +42,11 @@ Main parity gaps are in **execution fidelity** and **cross-layer depth**, not en
 
 **WP-A baseline landed:** `preferRuntimeExecution`, wake-now busy-wait, `runtime_unavailable` gating.
 
-**WP-B increment landed (this tranche):** triggered failure-alert execution now projects outbound dispatch status metadata for announce/webhook lanes (`failureAlertStatus`, `failureAlertAttempted`, `failureAlertHttpStatus`, `failureAlertError`) including simulated HTTP and transport-dispatch result handling.
+**WP-C baseline landed:** schedule auto-disable `enqueueSystemEvent` + deferred `next-heartbeat` wake via production hooks.
 
-**Next:** **WP-B** outbound delivery → **WP-C** → **WP-D** → **WP-E** → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
+**Next:** **WP-B** outbound delivery → **WP-D** → **WP-E** → **Step 4** → **WP-F**. See `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.1.
 
-Parity tests in source: **205+** `TEST_CASE`s in `CronParityContractTests.cpp` (full `[cron]` rerun required for sign-off).
+Parity tests in source: **206+** `TEST_CASE`s in `CronParityContractTests.cpp` (full `[cron]` rerun required for sign-off).
 
 ## Capability Matrix (reconciled 2026-05-19)
 
@@ -61,7 +61,7 @@ Parity tests in source: **205+** `TEST_CASE`s in `CronParityContractTests.cpp` (
 | Stable stagger behavior | Per-job stable offset hash for stagger windows | `ResolveStableCronOffsetMs` (job-id hash) landed | Low-Medium |
 | One-shot re-arm behavior | Defensive `at` handling with legacy compatibility | `at` supported with last-run guard semantics | Medium |
 | Maintenance recompute semantics | Maintenance recompute preserves due slots | `preserveDueSlots` wired for read refresh vs execution sync | Low-Medium |
-| Schedule error isolation | Auto-disable + user notification | `scheduleErrorCount` auto-disable after 3 errors with persisted `scheduleAutoDisabled*` plus notification/wake signaling metadata; runtime delivery path still lighter | Medium |
+| Schedule error isolation | Auto-disable + user notification | `scheduleErrorCount` auto-disable after 3 errors; production hooks deliver `[cron]` system event + deferred `next-heartbeat` wake at threshold (WP-C); IANA/cron syntax breadth still open | Low-Medium |
 | Startup catch-up behavior | Explicit missed-job planning and recovery controls | Bounded startup catch-up loop present | Medium |
 | Delivery + failure destination | Full transport execution | Metadata + suppression + opt-in webhook WinHTTP dispatch | Medium |
 | Failure alerts | Full policy behavior | Threshold/cooldown/suppression landed; recurring carry-forward depth open | Medium |
@@ -95,7 +95,7 @@ Parity tests in source: **205+** `TEST_CASE`s in `CronParityContractTests.cpp` (
 
 **Gap**
 
-- BlazeClaw cron matcher now includes 5-field depth (minute/hour/day-of-month/month/day-of-week), and schedule auto-disable threshold paths now persist `scheduleAutoDisabled*` plus `scheduleAutoDisableNotification*`/`scheduleAutoDisableHeartbeatWake*` signaling metadata; broader OpenClaw cron syntax/timezone semantics and runtime auto-disable user-notification delivery workflow still lag.
+- BlazeClaw cron matcher now includes 5-field depth (minute/hour/day-of-month/month/day-of-week), schedule auto-disable threshold paths persist `scheduleAutoDisabled*` signaling metadata, and WP-C production hooks now deliver user-visible notification + deferred heartbeat wake at threshold; broader OpenClaw cron syntax/IANA timezone semantics still lag.
 
 **Suggestion**
 

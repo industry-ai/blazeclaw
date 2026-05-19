@@ -9,6 +9,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 namespace blazeclaw::cron {
 
@@ -20,6 +21,14 @@ namespace blazeclaw::cron {
 			TaskLedgerHook createRunningTaskRun;
 			TaskLedgerHook completeTaskRunByRunId;
 			TaskLedgerHook failTaskRunByRunId;
+		};
+
+		using ScheduleNotificationHook =
+			std::function<void(const CronScheduleNotificationEvent& event)>;
+
+		struct ScheduleNotificationHooks {
+			ScheduleNotificationHook enqueueSystemEvent;
+			ScheduleNotificationHook requestHeartbeatNow;
 		};
 
 		CronOpsService();
@@ -36,6 +45,8 @@ namespace blazeclaw::cron {
 
 		void SetRuntimeExecutionAdapters(CronRuntimeExecutionAdapters adapters);
 		void SetTaskLedgerHooks(TaskLedgerHooks hooks);
+		void SetScheduleNotificationHooks(ScheduleNotificationHooks hooks);
+		void EnqueueDeferredWakeRequest(const CronJson& wakeParams);
 
 		void StartBackgroundScheduler();
 		void StopBackgroundScheduler();
@@ -64,6 +75,26 @@ namespace blazeclaw::cron {
 		std::deque<ManualRunRequest> m_manualRunQueue;
 		std::uint64_t m_manualRunCounter = 0;
 		TaskLedgerHooks m_taskLedgerHooks;
+		ScheduleNotificationHooks m_scheduleNotificationHooks;
+		std::mutex m_deferredWakeMutex;
+		std::deque<CronJson> m_deferredWakeRequests;
+
+		class ScheduleNotificationFlushScope {
+		public:
+			explicit ScheduleNotificationFlushScope(CronOpsService& ops);
+
+			ScheduleNotificationFlushScope(const ScheduleNotificationFlushScope&) = delete;
+			ScheduleNotificationFlushScope& operator=(
+				const ScheduleNotificationFlushScope&) = delete;
+
+			std::vector<CronScheduleNotificationEvent>& notifications();
+
+			~ScheduleNotificationFlushScope();
+
+		private:
+			CronOpsService& m_ops;
+			std::vector<CronScheduleNotificationEvent> m_notifications;
+		};
 
 		static std::size_t ClampLimit(
 			const CronJson& value,
@@ -73,11 +104,22 @@ namespace blazeclaw::cron {
 
 		CronJson* FindJobByIdLocked(const std::string& id);
 		void EnsureLoadedLocked();
-		void RunStartupCatchupLocked();
+		void RunStartupCatchupLocked(
+			std::vector<CronScheduleNotificationEvent>* notifications = nullptr);
 		void BackgroundSchedulerLoop();
-		void ProcessManualRunQueueLocked(std::int64_t nowMs);
-		void RefreshSchedulesOnlyLocked(std::int64_t nowMs);
-		void SyncDueRunsLocked(std::int64_t nowMs, bool forceRunDue = false);
+		void ProcessManualRunQueueLocked(
+			std::int64_t nowMs,
+			std::vector<CronScheduleNotificationEvent>* notifications = nullptr);
+		void RefreshSchedulesOnlyLocked(
+			std::int64_t nowMs,
+			std::vector<CronScheduleNotificationEvent>* notifications = nullptr);
+		void SyncDueRunsLocked(
+			std::int64_t nowMs,
+			bool forceRunDue = false,
+			std::vector<CronScheduleNotificationEvent>* notifications = nullptr);
+		void FlushScheduleNotifications(
+			std::vector<CronScheduleNotificationEvent>& notifications);
+		void ProcessDeferredWakeRequests();
 		void EmitTaskLedgerCreateRunningHook(const CronJson& runEntry);
 		void EmitTaskLedgerTerminalHook(const CronJson& runEntry);
 	};

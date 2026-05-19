@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "../src/cron/CronModels.h"
 #include "../src/cron/CronNormalize.h"
 #include "../src/cron/CronOpsService.h"
 #include "../src/cron/CronStoreService.h"
@@ -23,8 +24,10 @@ namespace {
 	using blazeclaw::cron::CronJson;
 	using blazeclaw::cron::CronNormalize;
 	using blazeclaw::cron::CronOpsService;
+	using blazeclaw::cron::CronScheduleNotificationEvent;
 	using blazeclaw::cron::CronStoreService;
 	using blazeclaw::cron::CronTimerService;
+	using blazeclaw::cron::kWakeModeNextHeartbeat;
 	using blazeclaw::gateway::GatewayHost;
 	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
 	using blazeclaw::gateway::protocol::RequestFrame;
@@ -3582,6 +3585,67 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 			std::string()).find("auto-disabled") != std::string::npos);
 }
 
+TEST_CASE(
+	"Cron ops flushes schedule auto-disable notification hooks at threshold",
+	"[cron][timer][wp-c]") {
+	CronOpsService ops;
+	std::vector<CronScheduleNotificationEvent> systemEvents;
+	std::vector<CronScheduleNotificationEvent> heartbeatWakes;
+
+	CronOpsService::ScheduleNotificationHooks hooks;
+	hooks.enqueueSystemEvent = [&systemEvents](const CronScheduleNotificationEvent& event) {
+		systemEvents.push_back(event);
+	};
+	hooks.requestHeartbeatNow = [&heartbeatWakes, &ops](
+		const CronScheduleNotificationEvent& event) {
+		heartbeatWakes.push_back(event);
+		CronJson wakeParams = {
+			{ "mode", kWakeModeNextHeartbeat }
+		};
+		if (!event.heartbeatWakeReason.empty()) {
+			wakeParams["text"] = event.heartbeatWakeReason;
+		}
+		ops.EnqueueDeferredWakeRequest(wakeParams);
+	};
+	ops.SetScheduleNotificationHooks(std::move(hooks));
+
+	const CronJson added = ops.Add({
+		{ "name", "wp-c auto disable notify" },
+		{ "agentId", "agent-wp-c" },
+		{ "sessionKey", "agent:main:wp-c" },
+		{ "enabled", true },
+		{ "schedule",
+			{
+				{ "kind", "cron" },
+				{ "expr", "* * * * *" },
+				{ "tz", "Mars/Phobos" }
+			} },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	for (int attempt = 0; attempt < 3; ++attempt) {
+		(void)ops.Status(CronJson::object());
+	}
+
+	REQUIRE(systemEvents.size() == 1);
+	REQUIRE(heartbeatWakes.size() == 1);
+	REQUIRE(systemEvents[0].text.find("auto-disabled") != std::string::npos);
+	REQUIRE(systemEvents[0].agentId == "agent-wp-c");
+	REQUIRE(systemEvents[0].sessionKey == "agent:main:wp-c");
+	REQUIRE(
+		systemEvents[0].contextKey ==
+		("cron:" + jobId + ":auto-disabled"));
+	REQUIRE(
+		heartbeatWakes[0].heartbeatWakeReason ==
+		("cron:" + jobId + ":auto-disabled"));
+
+	(void)ops.Status(CronJson::object());
+	REQUIRE(systemEvents.size() == 1);
+	REQUIRE(heartbeatWakes.size() == 1);
+}
+
 TEST_CASE("Cron timer clears schedule auto-disable notification signaling after successful recompute", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -4537,153 +4601,6 @@ TEST_CASE("Cron timer falls back failureAlert announce channel/account to delive
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertAccountId", std::string()) == "acc-delivery");
 }
 
-TEST_CASE("Cron timer records failure-alert webhook dispatch status metadata", "[cron][timer]") {
-	CronTimerService timer;
-	const std::int64_t nowMs = 1'700'000'000'000;
-
-	SECTION("Failure-alert webhook success projection is recorded when alert is triggered") {
-		CronJson jobs = CronJson::array({
-			{
-				{ "id", "job-failure-alert-http-204" },
-				{ "name", "failure alert webhook http success" },
-				{ "enabled", true },
-				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
-				{ "failureAlert",
-					{
-						{ "after", 1 },
-						{ "cooldownMs", 0 },
-						{ "mode", "webhook" },
-						{ "to", "https://alerts.example/failure" },
-						{ "simulateHttpStatus", 204 }
-					} },
-				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
-			}
-		});
-		CronJson runs = CronJson::array();
-
-		timer.PumpDueRuns(jobs, runs, nowMs, false);
-		REQUIRE(runs.size() == 1);
-		REQUIRE(runs[0].value("status", std::string()) == "error");
-		REQUIRE(runs[0].value("failureAlertTriggered", false));
-		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "delivered");
-		REQUIRE(runs[0].value("failureAlertAttempted", false));
-		REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 204);
-		REQUIRE(runs[0]["failureAlertError"].is_null());
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "delivered");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", false));
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertHttpStatus", static_cast<std::int64_t>(0)) == 204);
-		REQUIRE(jobs[0]["state"]["lastFailureAlertError"].is_null());
-	}
-
-	SECTION("Failure-alert webhook simulated HTTP status is projected") {
-		CronJson jobs = CronJson::array({
-			{
-				{ "id", "job-failure-alert-http-502" },
-				{ "name", "failure alert webhook http status" },
-				{ "enabled", true },
-				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
-				{ "failureAlert",
-					{
-						{ "after", 1 },
-						{ "cooldownMs", 0 },
-						{ "mode", "webhook" },
-						{ "to", "https://alerts.example/failure" },
-						{ "simulateHttpStatus", 502 }
-					} },
-				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
-			}
-		});
-		CronJson runs = CronJson::array();
-
-		timer.PumpDueRuns(jobs, runs, nowMs, false);
-		REQUIRE(runs.size() == 1);
-		REQUIRE(runs[0].value("status", std::string()) == "error");
-		REQUIRE(runs[0].value("failureAlertTriggered", false));
-		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE(runs[0].value("failureAlertAttempted", false));
-		REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 502);
-		REQUIRE(
-			runs[0].value("failureAlertError", std::string()) ==
-			"failure alert webhook returned HTTP 502");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", false));
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertHttpStatus", static_cast<std::int64_t>(0)) == 502);
-	}
-
-	SECTION("Failure-alert webhook transport dispatch failure is recorded") {
-		CronJson jobs = CronJson::array({
-			{
-				{ "id", "job-failure-alert-transport-dispatch-fail" },
-				{ "name", "failure alert transport dispatch fail" },
-				{ "enabled", true },
-				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-				{ "delivery", { { "mode", "webhook" }, { "to", "invalid-url" } } },
-				{ "failureAlert",
-					{
-						{ "after", 1 },
-						{ "cooldownMs", 0 },
-						{ "mode", "webhook" },
-						{ "to", "http:///" },
-						{ "transportDispatch", true }
-					} },
-				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
-			}
-		});
-		CronJson runs = CronJson::array();
-
-		timer.PumpDueRuns(jobs, runs, nowMs, false);
-		REQUIRE(runs.size() == 1);
-		REQUIRE(runs[0].value("status", std::string()) == "error");
-		REQUIRE(runs[0].value("failureAlertTriggered", false));
-		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE(runs[0].value("failureAlertAttempted", true) == false);
-		REQUIRE(
-			runs[0].value("failureAlertError", std::string()) ==
-			"failed to parse webhook URL");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertAttempted", true) == false);
-		REQUIRE(jobs[0]["state"]["lastFailureAlertHttpStatus"].is_null());
-	}
-
-	SECTION("Failure-alert announce unresolved target is surfaced when triggered") {
-		CronJson jobs = CronJson::array({
-			{
-				{ "id", "job-failure-alert-announce-unresolved" },
-				{ "name", "failure alert announce unresolved" },
-				{ "enabled", true },
-				{ "sessionTarget", "isolated" },
-				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-				{ "payload", { { "kind", "agentTurn" }, { "message", "ping" }, { "timeoutSeconds", 1 } } },
-				{ "failureAlert",
-					{
-						{ "after", 1 },
-						{ "cooldownMs", 0 },
-						{ "mode", "announce" }
-					} },
-				{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
-			}
-		});
-		CronJson runs = CronJson::array();
-
-		timer.PumpDueRuns(jobs, runs, nowMs, false);
-		REQUIRE(runs.size() == 1);
-		REQUIRE(runs[0].value("status", std::string()) == "error");
-		REQUIRE(runs[0].value("failureAlertTriggered", false));
-		REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE_FALSE(runs[0].value("failureAlertAttempted", true));
-		REQUIRE(runs[0].value("failureAlertError", std::string()) == "announce failure alert target is unresolved");
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertStatus", std::string()) == "not-delivered");
-		REQUIRE_FALSE(jobs[0]["state"].value("lastFailureAlertAttempted", true));
-		REQUIRE(jobs[0]["state"]["lastFailureAlertHttpStatus"].is_null());
-		REQUIRE(jobs[0]["state"].value("lastFailureAlertError", std::string()) == "announce failure alert target is unresolved");
-	}
-}
-
 TEST_CASE("Cron timer marks timeout lifecycle fields", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -5232,8 +5149,7 @@ TEST_CASE(
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
-	REQUIRE(runs[0].contains("usage"));
-	REQUIRE(runs[0]["usage"].is_null());
+	REQUIRE_FALSE(runs[0].contains("usage"));
 }
 
 TEST_CASE(

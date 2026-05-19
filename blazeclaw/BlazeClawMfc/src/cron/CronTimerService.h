@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <optional>
+#include <vector>
 
 namespace blazeclaw::cron {
 
@@ -33,7 +34,8 @@ namespace blazeclaw::cron {
 		bool RecomputeSchedules(
 			CronJson& jobs,
 			std::int64_t nowMs,
-			const CronRecomputeOptions& opts = {}) const;
+			const CronRecomputeOptions& opts = {},
+			std::vector<CronScheduleNotificationEvent>* notifications = nullptr) const;
 
 		std::int64_t ComputeNextWakeAtMs(const CronJson& jobs) const;
 

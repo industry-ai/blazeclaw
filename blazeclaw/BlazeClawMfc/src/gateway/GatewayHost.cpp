@@ -3219,10 +3219,27 @@ namespace blazeclaw::gateway {
 			};
 		cron::GetCronOpsService().SetTaskLedgerHooks(std::move(hooks));
 
+		cron::CronOpsService::ScheduleNotificationHooks scheduleHooks;
+		scheduleHooks.enqueueSystemEvent =
+			[this](const cron::CronScheduleNotificationEvent& event) {
+				DispatchCronScheduleAutoDisableNotification(event);
+			};
+		scheduleHooks.requestHeartbeatNow =
+			[](const cron::CronScheduleNotificationEvent& event) {
+				cron::CronJson wakeParams = {
+					{ "mode", cron::kWakeModeNextHeartbeat }
+				};
+				if (!event.heartbeatWakeReason.empty()) {
+					wakeParams["text"] = event.heartbeatWakeReason;
+				}
+				cron::GetCronOpsService().EnqueueDeferredWakeRequest(wakeParams);
+			};
+		cron::GetCronOpsService().SetScheduleNotificationHooks(std::move(scheduleHooks));
+
 		m_cronProductionWired = true;
 		EmitTelemetryEvent(
 			"gateway.cron.production_integration.wired",
-			"{\"runtimeAdapters\":true,\"taskLedgerHooks\":true}");
+			"{\"runtimeAdapters\":true,\"taskLedgerHooks\":true,\"scheduleNotificationHooks\":true}");
 	}
 
 	bool GatewayHost::IsCronChatSessionBusy(const std::string& sessionKey) const {
@@ -3497,6 +3514,36 @@ namespace blazeclaw::gateway {
 			cron_production::BuildCronTaskDeltaEntry(cronPayload, entries.size(), terminal));
 		if (!m_taskDeltaRepository.Upsert(runId, entries)) {
 			return;
+		}
+	}
+
+	void GatewayHost::DispatchCronScheduleAutoDisableNotification(
+		const cron::CronScheduleNotificationEvent& event) {
+		if (event.text.empty() || !m_chatRuntimeCallback) {
+			return;
+		}
+
+		std::string sessionKey = cron::TrimCopy(event.sessionKey);
+		if (sessionKey.empty() && !event.agentId.empty()) {
+			sessionKey = event.agentId;
+		}
+		if (sessionKey.empty()) {
+			sessionKey = "main";
+		}
+
+		ChatRuntimeRequest request;
+		request.runId =
+			"cron-schedule-auto-disable-" + std::to_string(cron::UtcNowMs());
+		request.sessionKey = sessionKey;
+		request.message = "[cron] " + event.text;
+		request.bodyForCommands = event.text;
+		request.bodyForAgent = request.message;
+		request.shouldLoadInlineSkillCommands = false;
+		request.allowInlineToolImmediateExecution = false;
+
+		{
+			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
+			(void)m_chatRuntimeCallback(request);
 		}
 	}
 

@@ -27,6 +27,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ProgramDataBaseFileName>$(IntDir)%(Filename).pdb</ProgramDataBaseFileName>
       <AdditionalOptions>/bigobj /utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->
       <PreprocessorDefinitions>NOMINMAX;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>

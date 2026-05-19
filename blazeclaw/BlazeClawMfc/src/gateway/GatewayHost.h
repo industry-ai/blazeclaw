@@ -35,6 +35,10 @@
 
 #include <unordered_set>
 
+namespace blazeclaw::cron {
+	struct CronScheduleNotificationEvent;
+}
+
 namespace blazeclaw::gateway {
 
 	struct SkillsCatalogGatewayEntry {
@@ -740,6 +744,8 @@ namespace blazeclaw::gateway {
 		void HandleCronTaskLedgerCreateRunning(const nlohmann::json& payload);
 		void HandleCronTaskLedgerComplete(const nlohmann::json& payload);
 		void HandleCronTaskLedgerFail(const nlohmann::json& payload);
+		void DispatchCronScheduleAutoDisableNotification(
+			const cron::CronScheduleNotificationEvent& event);
 		void UpsertCronTaskLedgerEntry(const nlohmann::json& payload, bool terminal);
 		[[nodiscard]] bool IsCronChatSessionBusy(const std::string& sessionKey) const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);

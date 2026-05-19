@@ -9,6 +9,21 @@
 #include <unordered_set>
 
 namespace blazeclaw::cron {
+	CronOpsService::ScheduleNotificationFlushScope::ScheduleNotificationFlushScope(
+		CronOpsService& ops)
+		: m_ops(ops) {
+	}
+
+	std::vector<CronScheduleNotificationEvent>&
+	CronOpsService::ScheduleNotificationFlushScope::notifications() {
+		return m_notifications;
+	}
+
+	CronOpsService::ScheduleNotificationFlushScope::~ScheduleNotificationFlushScope() {
+		m_ops.FlushScheduleNotifications(m_notifications);
+		m_ops.ProcessDeferredWakeRequests();
+	}
+
 	namespace {
 			inline constexpr const char* kTaskLedgerStatusOk = "ok";
 			inline constexpr const char* kTaskLedgerStatusFailed = "failed";
@@ -411,11 +426,12 @@ namespace blazeclaw::cron {
 
 	CronJson CronOpsService::Status(const CronJson& params) {
 		(void)params;
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		RunStartupCatchupLocked(&flushScope.notifications());
 		const std::int64_t nowMs = UtcNowMs();
-		RefreshSchedulesOnlyLocked(nowMs);
+		RefreshSchedulesOnlyLocked(nowMs, &flushScope.notifications());
 		const std::int64_t nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
 		return {
 			{ "enabled", true },
@@ -426,10 +442,11 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::List(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
-		RefreshSchedulesOnlyLocked(UtcNowMs());
+		RunStartupCatchupLocked(&flushScope.notifications());
+		RefreshSchedulesOnlyLocked(UtcNowMs(), &flushScope.notifications());
 
 		const std::size_t requestedLimit =
 			ClampLimit(params.value("limit", 20), 1, 200, 20);
@@ -514,9 +531,10 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::Add(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		RunStartupCatchupLocked(&flushScope.notifications());
 		const std::int64_t nowMs = UtcNowMs();
 
 		CronJson job = CronNormalize::NormalizeAddInput(params);
@@ -538,9 +556,10 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::Update(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		RunStartupCatchupLocked(&flushScope.notifications());
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -571,9 +590,10 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::Remove(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		RunStartupCatchupLocked(&flushScope.notifications());
 
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
@@ -602,11 +622,12 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::Run(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		RunStartupCatchupLocked(&flushScope.notifications());
 		const std::int64_t nowMs = UtcNowMs();
-		ProcessManualRunQueueLocked(nowMs);
+		ProcessManualRunQueueLocked(nowMs, &flushScope.notifications());
 		const std::string id = CronNormalize::ResolveCronId(params);
 		if (id.empty()) {
 			throw std::invalid_argument("missing `id` or `jobId`");
@@ -739,10 +760,11 @@ namespace blazeclaw::cron {
 	}
 
 	CronJson CronOpsService::Runs(const CronJson& params) {
+		ScheduleNotificationFlushScope flushScope(*this);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
-		RefreshSchedulesOnlyLocked(UtcNowMs());
+		RunStartupCatchupLocked(&flushScope.notifications());
+		RefreshSchedulesOnlyLocked(UtcNowMs(), &flushScope.notifications());
 
 		const std::size_t requestedLimit =
 			ClampLimit(params.value("limit", 20), 1, 200, 20);
@@ -891,16 +913,19 @@ namespace blazeclaw::cron {
 			throw std::invalid_argument("`mode` must be `now` or `next-heartbeat`");
 		}
 
-		std::lock_guard<std::mutex> lock(m_mutex);
-		EnsureLoadedLocked();
-		RunStartupCatchupLocked();
+		ScheduleNotificationFlushScope flushScope(*this);
 		const std::int64_t nowMs = UtcNowMs();
-		if (mode == kWakeModeNow) {
-			ProcessManualRunQueueLocked(nowMs);
-			SyncDueRunsLocked(nowMs, false);
-		}
-		else {
-			RefreshSchedulesOnlyLocked(nowMs);
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			EnsureLoadedLocked();
+			RunStartupCatchupLocked(&flushScope.notifications());
+			if (mode == kWakeModeNow) {
+				ProcessManualRunQueueLocked(nowMs, &flushScope.notifications());
+				SyncDueRunsLocked(nowMs, false, &flushScope.notifications());
+			}
+			else {
+				RefreshSchedulesOnlyLocked(nowMs, &flushScope.notifications());
+			}
 		}
 
 		return {
@@ -920,6 +945,16 @@ namespace blazeclaw::cron {
 	void CronOpsService::SetTaskLedgerHooks(TaskLedgerHooks hooks) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_taskLedgerHooks = std::move(hooks);
+	}
+
+	void CronOpsService::SetScheduleNotificationHooks(ScheduleNotificationHooks hooks) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_scheduleNotificationHooks = std::move(hooks);
+	}
+
+	void CronOpsService::EnqueueDeferredWakeRequest(const CronJson& wakeParams) {
+		std::lock_guard<std::mutex> lock(m_deferredWakeMutex);
+		m_deferredWakeRequests.push_back(wakeParams);
 	}
 
 	void CronOpsService::StartBackgroundScheduler() {
@@ -981,13 +1016,14 @@ namespace blazeclaw::cron {
 		}
 	}
 
-	void CronOpsService::RunStartupCatchupLocked() {
+	void CronOpsService::RunStartupCatchupLocked(
+		std::vector<CronScheduleNotificationEvent>* notifications) {
 		if (m_startupCatchupDone) {
 			return;
 		}
 
 		m_startupCatchupDone = true;
-		SyncDueRunsLocked(UtcNowMs(), false);
+		SyncDueRunsLocked(UtcNowMs(), false, notifications);
 	}
 
 	void CronOpsService::BackgroundSchedulerLoop() {
@@ -1002,12 +1038,13 @@ namespace blazeclaw::cron {
 			std::int64_t nowMs = UtcNowMs();
 			std::int64_t nextWakeAtMs = 0;
 
+			ScheduleNotificationFlushScope flushScope(*this);
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				EnsureLoadedLocked();
-				RunStartupCatchupLocked();
-				ProcessManualRunQueueLocked(nowMs);
-				SyncDueRunsLocked(nowMs, false);
+				RunStartupCatchupLocked(&flushScope.notifications());
+				ProcessManualRunQueueLocked(nowMs, &flushScope.notifications());
+				SyncDueRunsLocked(nowMs, false, &flushScope.notifications());
 				nextWakeAtMs = m_timer.ComputeNextWakeAtMs(m_store.Jobs());
 			}
 
@@ -1031,7 +1068,9 @@ namespace blazeclaw::cron {
 		}
 	}
 
-	void CronOpsService::ProcessManualRunQueueLocked(const std::int64_t nowMs) {
+	void CronOpsService::ProcessManualRunQueueLocked(
+		const std::int64_t nowMs,
+		std::vector<CronScheduleNotificationEvent>* notifications) {
 		if (m_manualRunQueue.empty()) {
 			return;
 		}
@@ -1135,7 +1174,7 @@ namespace blazeclaw::cron {
 
 			(*job)["state"]["nextRunAtMs"] = nowMs;
 			jobsChanged = true;
-			SyncDueRunsLocked(nowMs, true);
+			SyncDueRunsLocked(nowMs, true, notifications);
 
 			const CronJson* finishedRun = nullptr;
 			for (std::size_t index = m_store.Runs().size(); index > runsBeforeDispatch; --index) {
@@ -1375,13 +1414,16 @@ namespace blazeclaw::cron {
 		}
 	}
 
-	void CronOpsService::RefreshSchedulesOnlyLocked(const std::int64_t nowMs) {
+	void CronOpsService::RefreshSchedulesOnlyLocked(
+		const std::int64_t nowMs,
+		std::vector<CronScheduleNotificationEvent>* notifications) {
 		CronRecomputeOptions recomputeOptions;
 		recomputeOptions.preserveDueSlots = true;
 		const bool changed = m_timer.RecomputeSchedules(
 			m_store.Jobs(),
 			nowMs,
-			recomputeOptions);
+			recomputeOptions,
+			notifications);
 		if (changed) {
 			m_store.SaveJobs();
 		}
@@ -1390,13 +1432,15 @@ namespace blazeclaw::cron {
 
 	void CronOpsService::SyncDueRunsLocked(
 		const std::int64_t nowMs,
-		const bool forceRunDue) {
+		const bool forceRunDue,
+		std::vector<CronScheduleNotificationEvent>* notifications) {
 		CronRecomputeOptions executionRecomputeOptions;
 		executionRecomputeOptions.preserveDueSlots = false;
 		bool changed = m_timer.RecomputeSchedules(
 			m_store.Jobs(),
 			nowMs,
-			executionRecomputeOptions);
+			executionRecomputeOptions,
+			notifications);
 		std::size_t executedTotal = 0;
 		std::size_t loops = 0;
 
@@ -1424,7 +1468,8 @@ namespace blazeclaw::cron {
 			m_timer.RecomputeSchedules(
 				m_store.Jobs(),
 				nowMs,
-				executionRecomputeOptions);
+				executionRecomputeOptions,
+				notifications);
 			++loops;
 		}
 
@@ -1436,6 +1481,54 @@ namespace blazeclaw::cron {
 		}
 
 		m_lastSyncAtMs = nowMs;
+	}
+
+	void CronOpsService::FlushScheduleNotifications(
+		std::vector<CronScheduleNotificationEvent>& notifications) {
+		if (notifications.empty()) {
+			return;
+		}
+
+		ScheduleNotificationHooks hooks;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			hooks = m_scheduleNotificationHooks;
+		}
+
+		for (const CronScheduleNotificationEvent& event : notifications) {
+			if (static_cast<bool>(hooks.enqueueSystemEvent)) {
+				try {
+					hooks.enqueueSystemEvent(event);
+				}
+				catch (...) {
+				}
+			}
+			if (static_cast<bool>(hooks.requestHeartbeatNow)) {
+				try {
+					hooks.requestHeartbeatNow(event);
+				}
+				catch (...) {
+				}
+			}
+		}
+
+		notifications.clear();
+	}
+
+	void CronOpsService::ProcessDeferredWakeRequests() {
+		std::deque<CronJson> pending;
+		{
+			std::lock_guard<std::mutex> lock(m_deferredWakeMutex);
+			pending.swap(m_deferredWakeRequests);
+		}
+
+		for (const CronJson& wakeParams : pending) {
+			try {
+				(void)Wake(wakeParams);
+			}
+			catch (...) {
+			}
+		}
 	}
 
 	void CronOpsService::EmitTaskLedgerCreateRunningHook(const CronJson& runEntry) {
