@@ -3398,6 +3398,24 @@ namespace blazeclaw::gateway {
 		request.message = "[cron] " + text;
 		request.bodyForCommands = text;
 		request.bodyForAgent = request.message;
+		if (payload.contains("model") && payload["model"].is_string()) {
+			request.modelIdOverride = cron::TrimCopy(payload["model"].get<std::string>());
+		}
+		if (payload.contains("provider") && payload["provider"].is_string()) {
+			request.providerOverride = cron::TrimCopy(payload["provider"].get<std::string>());
+		}
+		if (cronJob.contains("model") && cronJob["model"].is_string() &&
+			request.modelIdOverride.empty()) {
+			request.modelIdOverride = cron::TrimCopy(cronJob["model"].get<std::string>());
+		}
+		if (cronJob.contains("provider") && cronJob["provider"].is_string() &&
+			request.providerOverride.empty()) {
+			request.providerOverride = cron::TrimCopy(cronJob["provider"].get<std::string>());
+		}
+		const auto timeoutSeconds = cron::TryReadInt64Field(payload, "timeoutSeconds");
+		if (timeoutSeconds.has_value() && timeoutSeconds.value() > 0) {
+			request.timeoutSeconds = timeoutSeconds.value();
+		}
 		request.shouldLoadInlineSkillCommands = false;
 		request.allowInlineToolImmediateExecution = false;
 
@@ -3414,6 +3432,12 @@ namespace blazeclaw::gateway {
 
 		mapped.value()["sessionKey"] = sessionKey;
 		mapped.value()["sessionId"] = "main";
+		if (!request.modelIdOverride.empty()) {
+			mapped.value()["model"] = request.modelIdOverride;
+		}
+		if (!request.providerOverride.empty()) {
+			mapped.value()["provider"] = request.providerOverride;
+		}
 		return mapped;
 	}
 

@@ -18,6 +18,7 @@ namespace blazeclaw::cron {
 	namespace {
 		inline constexpr std::int64_t kCronStoreVersion = 1;
 		inline constexpr std::size_t kDefaultMaxRunLogLinesPerJob = 2000;
+		inline constexpr std::size_t kDefaultMaxRunLogBytesPerJob = 0;
 
 		std::size_t ResolveMaxRunLogLinesPerJob() {
 			char* value = nullptr;
@@ -47,6 +48,34 @@ namespace blazeclaw::cron {
 			}
 		}
 
+		std::size_t ResolveMaxRunLogBytesPerJob() {
+			char* value = nullptr;
+			size_t valueLength = 0;
+			if (_dupenv_s(
+				&value,
+				&valueLength,
+				"BLAZECLAW_CRON_RUN_LOG_MAX_BYTES") != 0 || value == nullptr) {
+				return kDefaultMaxRunLogBytesPerJob;
+			}
+
+			const std::string trimmed = TrimCopy(value);
+			free(value);
+			if (trimmed.empty()) {
+				return kDefaultMaxRunLogBytesPerJob;
+			}
+
+			try {
+				const long long parsed = std::stoll(trimmed);
+				if (parsed <= 0) {
+					return 0;
+				}
+				return static_cast<std::size_t>(parsed);
+			}
+			catch (...) {
+				return kDefaultMaxRunLogBytesPerJob;
+			}
+		}
+
 		void PruneRunLogFileToMaxLines(
 			const std::filesystem::path& logPath,
 			const std::size_t maxLines) {
@@ -72,6 +101,47 @@ namespace blazeclaw::cron {
 
 			if (lineCount <= maxLines) {
 				return;
+			}
+
+			std::ofstream writeStream(logPath, std::ios::binary | std::ios::trunc);
+			if (!writeStream.is_open()) {
+				return;
+			}
+
+			for (const std::string& keptLine : tail) {
+				writeStream << keptLine << '\n';
+			}
+		}
+
+		void PruneRunLogFileToMaxBytes(
+			const std::filesystem::path& logPath,
+			const std::size_t maxBytes) {
+			if (maxBytes == 0 || !std::filesystem::exists(logPath)) {
+				return;
+			}
+
+			std::ifstream readStream(logPath, std::ios::binary);
+			if (!readStream.is_open()) {
+				return;
+			}
+
+			std::deque<std::string> tail;
+			std::size_t keptBytes = 0;
+			std::string line;
+			while (std::getline(readStream, line)) {
+				const std::size_t lineBytes = line.size() + 1;
+				if (lineBytes > maxBytes) {
+					tail.clear();
+					keptBytes = 0;
+					continue;
+				}
+
+				tail.push_back(line);
+				keptBytes += lineBytes;
+				while (!tail.empty() && keptBytes > maxBytes) {
+					keptBytes -= tail.front().size() + 1;
+					tail.pop_front();
+				}
 			}
 
 			std::ofstream writeStream(logPath, std::ios::binary | std::ios::trunc);
@@ -445,6 +515,7 @@ namespace blazeclaw::cron {
 		stream.flush();
 
 		PruneRunLogFileToMaxLines(logPath, ResolveMaxRunLogLinesPerJob());
+		PruneRunLogFileToMaxBytes(logPath, ResolveMaxRunLogBytesPerJob());
 	}
 
 	std::filesystem::file_time_type CronStoreService::ReadRunsDirWriteTime(

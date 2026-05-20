@@ -495,6 +495,10 @@ namespace blazeclaw::cron {
 			std::int64_t failureDestinationHttpStatus = 0;
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
+			std::string failureAlertStatus = "not-requested";
+			bool failureAlertAttempted = false;
+			std::int64_t failureAlertHttpStatus = 0;
+			std::string failureAlertError;
 			std::string errorCategory;
 			bool timedOut = false;
 			bool aborted = false;
@@ -2355,7 +2359,7 @@ namespace blazeclaw::cron {
 				pumpCallbacks->onStarted(*it, nowMs);
 			}
 
-			const RunOutcome outcome =
+			RunOutcome outcome =
 				EvaluateRunOutcome(*it, nowMs, m_runtimeAdapters);
 			state["runningAtMs"] = nowMs;
 			state["startedAtMs"] = nowMs;
@@ -2630,6 +2634,11 @@ namespace blazeclaw::cron {
 						!StartsWithHttpScheme(failureAlertTarget)) {
 						state["failureAlertSuppressed"] = true;
 						state["failureAlertSuppressedReason"] = "invalid_webhook_target";
+						outcome.failureAlertStatus = "suppressed";
+						outcome.failureAlertAttempted = false;
+						outcome.failureAlertHttpStatus = 0;
+						outcome.failureAlertError =
+							"invalid failure alert webhook target";
 						state["lastFailureAlertAtMs"] = CronJson(nullptr);
 						state["lastFailureAlertMode"] = failureAlertMode;
 						state["lastFailureAlertTarget"] = failureAlertTarget.empty()
@@ -2654,20 +2663,96 @@ namespace blazeclaw::cron {
 							if (scheduledRetry) {
 								state["failureAlertSuppressed"] = true;
 								state["failureAlertSuppressedReason"] = "retry_pending";
+								outcome.failureAlertStatus = "suppressed";
+								outcome.failureAlertAttempted = false;
+								outcome.failureAlertHttpStatus = 0;
+								outcome.failureAlertError = "failure alert retry pending";
 							}
 							else {
 								failureAlertTriggered = true;
 								failureAlertAtMs = nowMs;
 								state["lastFailureAlertAtMs"] = nowMs;
+								outcome.failureAlertAttempted = true;
+								if (failureAlertMode == kFailureAlertModeWebhook) {
+									const auto simulatedFailureAlertHttpStatus =
+										TryReadInt64Field((*it)["failureAlert"], "simulateHttpStatus");
+									const bool transportDispatch =
+										IsTransportDispatchEnabled((*it)["failureAlert"]);
+									if (simulatedFailureAlertHttpStatus.has_value()) {
+										outcome.failureAlertHttpStatus =
+											simulatedFailureAlertHttpStatus.value();
+										if (simulatedFailureAlertHttpStatus.value() >= 200 &&
+											simulatedFailureAlertHttpStatus.value() < 300) {
+											outcome.failureAlertStatus = "delivered";
+											outcome.failureAlertError.clear();
+										}
+										else {
+											outcome.failureAlertStatus = "not-delivered";
+											outcome.failureAlertError =
+												"failure alert webhook returned HTTP " +
+												std::to_string(simulatedFailureAlertHttpStatus.value());
+										}
+									}
+									else if (transportDispatch && StartsWithHttpScheme(failureAlertTarget)) {
+										const WebhookDispatchResult dispatch =
+											DispatchWebhookPostWinHttp(failureAlertTarget);
+										outcome.failureAlertAttempted = dispatch.attempted;
+										if (dispatch.httpStatus.has_value()) {
+											outcome.failureAlertHttpStatus = dispatch.httpStatus.value();
+											if (dispatch.httpStatus.value() >= 200 &&
+												dispatch.httpStatus.value() < 300) {
+												outcome.failureAlertStatus = "delivered";
+												outcome.failureAlertError.clear();
+											}
+											else {
+												outcome.failureAlertStatus = "not-delivered";
+												outcome.failureAlertError =
+													"failure alert webhook returned HTTP " +
+													std::to_string(dispatch.httpStatus.value());
+											}
+										}
+										else {
+											outcome.failureAlertStatus = "not-delivered";
+											outcome.failureAlertHttpStatus = 0;
+											outcome.failureAlertError = dispatch.error.empty()
+												? std::string("failure alert webhook transport dispatch failed")
+												: dispatch.error;
+										}
+									}
+									else if (StartsWithHttpScheme(failureAlertTarget)) {
+										outcome.failureAlertStatus = "delivered";
+										outcome.failureAlertHttpStatus = 0;
+										outcome.failureAlertError.clear();
+									}
+									else {
+										outcome.failureAlertStatus = "not-delivered";
+										outcome.failureAlertHttpStatus = 0;
+										outcome.failureAlertError =
+											"invalid failure alert webhook target";
+									}
+								}
+								else {
+									outcome.failureAlertStatus = "delivered";
+									outcome.failureAlertHttpStatus = 0;
+									outcome.failureAlertError.clear();
+								}
 							}
 						}
 						else if (consecutiveErrors < alertAfter) {
 							state["failureAlertSuppressed"] = true;
 							state["failureAlertSuppressedReason"] = "threshold_not_met";
+							outcome.failureAlertStatus = "suppressed";
+							outcome.failureAlertAttempted = false;
+							outcome.failureAlertHttpStatus = 0;
+							outcome.failureAlertError = "failure alert threshold not met";
 						}
 						else if (!cooldownOpen) {
 							state["failureAlertSuppressed"] = true;
 							state["failureAlertSuppressedReason"] = "cooldown_active";
+							outcome.failureAlertStatus = "suppressed";
+							outcome.failureAlertAttempted = false;
+							outcome.failureAlertHttpStatus = 0;
+							outcome.failureAlertError = "failure alert cooldown active";
 						}
 					}
 				}
@@ -2780,6 +2865,16 @@ namespace blazeclaw::cron {
 					? CronJson(nullptr)
 					: CronJson(failureAlertAccountIdSnapshot) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
+				{ "failureAlertStatus", outcome.failureAlertStatus.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureAlertStatus) },
+				{ "failureAlertAttempted", outcome.failureAlertAttempted },
+				{ "failureAlertHttpStatus", outcome.failureAlertHttpStatus > 0
+					? CronJson(outcome.failureAlertHttpStatus)
+					: CronJson(nullptr) },
+				{ "failureAlertError", outcome.failureAlertError.empty()
+					? CronJson(nullptr)
+					: CronJson(outcome.failureAlertError) },
 				{ "heartbeatBusyAttempts", heartbeatBusyAttemptsSnapshot },
 				{ "heartbeatFallbackWakeRequested", heartbeatFallbackWakeRequestedSnapshot },
 				{ "heartbeatFallbackWakeRequestedAtMs",

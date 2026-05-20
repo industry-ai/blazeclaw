@@ -2280,6 +2280,47 @@ TEST_CASE("Cron timer failureAlert webhook mode falls back target to delivery ur
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/delivery-alias");
 }
 
+TEST_CASE("Cron timer emits failureAlert webhook transport metadata", "[cron][timer][wp-b]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-alert-webhook-transport-metadata" },
+			{ "name", "alert webhook transport metadata" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/delivery" },
+					{ "simulateTransientFailure", true }
+				} },
+			{ "failureAlert",
+				{
+					{ "after", 1 },
+					{ "cooldownMs", 0 },
+					{ "mode", "webhook" },
+					{ "to", "https://alerts.example/notify" },
+					{ "transportDispatch", true },
+					{ "simulateHttpStatus", 202 }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("failureAlertTriggered", false));
+	REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "delivered");
+	REQUIRE(runs[0].value("failureAlertAttempted", false));
+	REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 202);
+	REQUIRE(runs[0]["failureAlertError"].is_null());
+}
+
 TEST_CASE("Cron timer failureAlert cooldown opens when alert route changes", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -3752,6 +3793,7 @@ TEST_CASE("Cron store prunes per-job jsonl run logs to bounded tail", "[cron][st
 	}
 
 	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "2");
+	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "");
 
 	CronStoreService store(jobsPath, runsPath);
 	store.EnsureLoaded();
@@ -3796,6 +3838,78 @@ TEST_CASE("Cron store prunes per-job jsonl run logs to bounded tail", "[cron][st
 	REQUIRE(lines[1].find("run-3") != std::string::npos);
 
 	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "");
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store prunes per-job jsonl run logs by byte budget", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw-cron-store-jsonl-prune-bytes-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << "[]";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "[]";
+	}
+
+	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "");
+	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "120");
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	store.Runs().push_back({
+		{ "jobId", "job-prune-bytes" },
+		{ "runId", "run-1" },
+		{ "ts", 1 },
+		{ "status", "ok" },
+		{ "action", "finished" },
+		{ "summary", "entry-one" }
+	});
+	store.Runs().push_back({
+		{ "jobId", "job-prune-bytes" },
+		{ "runId", "run-2" },
+		{ "ts", 2 },
+		{ "status", "ok" },
+		{ "action", "finished" },
+		{ "summary", "entry-two" }
+	});
+	store.Runs().push_back({
+		{ "jobId", "job-prune-bytes" },
+		{ "runId", "run-3" },
+		{ "ts", 3 },
+		{ "status", "ok" },
+		{ "action", "finished" },
+		{ "summary", "entry-three" }
+	});
+	store.SaveRuns();
+
+	const std::filesystem::path jsonlPath =
+		CronStoreService::ResolveRunLogPath(jobsPath, "job-prune-bytes");
+	REQUIRE(std::filesystem::exists(jsonlPath));
+
+	std::ifstream jsonl(jsonlPath, std::ios::binary);
+	REQUIRE(jsonl.is_open());
+	std::vector<std::string> lines;
+	std::string line;
+	while (std::getline(jsonl, line)) {
+		if (!line.empty()) {
+			lines.push_back(line);
+		}
+	}
+
+	REQUIRE(lines.size() == 1);
+	REQUIRE(lines[0].find("run-3") != std::string::npos);
+
+	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "");
 	std::filesystem::remove_all(root, ec);
 }
 
