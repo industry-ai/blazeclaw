@@ -3079,6 +3079,24 @@ namespace blazeclaw::gateway {
 			};
 		}
 
+		std::string ResolveCronPayloadKind(const CronJson& payload) {
+			std::string payloadKind =
+				cron::ToLowerCopy(cron::TrimCopy(payload.value("kind", std::string())));
+			if (!payloadKind.empty()) {
+				return payloadKind;
+			}
+
+			if (payload.contains("message") && payload["message"].is_string()) {
+				return "agentturn";
+			}
+
+			if (payload.contains("text") && payload["text"].is_string()) {
+				return "systemevent";
+			}
+
+			return std::string();
+		}
+
 		std::optional<CronJson> MapChatRuntimeResultToCron(const ChatRuntimeResult& result) {
 			CronJson response = CronJson::object();
 			response["handled"] = true;
@@ -3294,8 +3312,7 @@ namespace blazeclaw::gateway {
 		}
 
 		const CronJson& payload = cronJob["payload"];
-		const std::string payloadKind =
-			cron::ToLowerCopy(cron::TrimCopy(payload.value("kind", std::string())));
+		const std::string payloadKind = cron_production::ResolveCronPayloadKind(payload);
 		if (payloadKind != "systemevent") {
 			return std::nullopt;
 		}
@@ -3454,8 +3471,7 @@ namespace blazeclaw::gateway {
 		}
 
 		const CronJson& payload = cronJob["payload"];
-		const std::string payloadKind =
-			cron::ToLowerCopy(cron::TrimCopy(payload.value("kind", std::string())));
+		const std::string payloadKind = cron_production::ResolveCronPayloadKind(payload);
 		if (payloadKind != "agentturn") {
 			return std::nullopt;
 		}

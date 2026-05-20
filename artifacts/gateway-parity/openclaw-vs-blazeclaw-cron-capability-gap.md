@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BK build-unblock + transport-default policy follow-up docs-sync)
+Last refreshed: 2026-05-20 (Phase BM WP-A production busy/retry/fallback E2E permutation expansion + docs-sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -14,7 +14,7 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
 
 | Package | Focus | Status |
 | --- | --- | --- |
-| WP-A | Production runtime execution default | **Baseline landed**; chat-pipeline model routing + live E2E open |
+| WP-A | Production runtime execution default | **Baseline landed**; chat-pipeline model routing landed, omitted-kind runtime callback routing parity landed, and production GatewayHost busy/retry/fallback handler-stack E2E permutations landed; deeper isolated-agent breadth still open |
 | WP-B | Outbound announce/webhook/failure-alert dispatch | **In Progress**; default webhook transport-dispatch policy now carries to primary + failure-destination lanes when per-job flags are omitted |
 | WP-C | Auto-disable notification delivery | **Baseline landed**; IANA/cron syntax open |
 | WP-D | Scheduler hardening + realtime events | **Baseline landed** |
@@ -41,5 +41,5 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
 
 ```powershell
 msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
-Note: current `BlazeClawMfc.Tests.exe --list-tests` output contains no discoverable `[cron]` tags in this workspace build; cron validation is presently tracked via source-backed parity inventory plus required solution build gate.
+BlazeClawMfc.Tests.exe "[cron]"
 ```

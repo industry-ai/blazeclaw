@@ -7814,6 +7814,115 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Cron gateway production wiring infers runtime payload kind when kind field is omitted",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-runtime-kind-inference");
+	GatewayHost& host = fixture.gateway();
+	std::vector<GatewayHost::ChatRuntimeRequest> capturedRequests;
+
+	host.SetChatRuntimeCallback(
+		[&capturedRequests](const GatewayHost::ChatRuntimeRequest& request) {
+			capturedRequests.push_back(request);
+			const std::string runtimeSummary =
+				request.message == "runtime inferred agent turn"
+				? std::string("runtime-kind-inference-agent-ok")
+				: std::string("runtime-kind-inference-system-ok");
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = runtimeSummary,
+				.modelId = request.modelIdOverride.empty()
+					? std::string("default-model")
+					: request.modelIdOverride,
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame addSystemEventNoKind = RouteGatewayCron(
+		host,
+		"wpf-cron-add-systemevent-no-kind",
+		"cron.add",
+		std::string("{\"name\":\"wp-a runtime kind inference system event\",\"enabled\":true,") +
+		"\"sessionTarget\":\"main\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"text\":\"runtime inferred system event\",\"model\":\"gpt-4o-mini\"}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(addSystemEventNoKind.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", addSystemEventNoKind));
+
+	const ResponseFrame addAgentTurnNoKind = RouteGatewayCron(
+		host,
+		"wpf-cron-add-agentturn-no-kind",
+		"cron.add",
+		std::string("{\"name\":\"wp-a runtime kind inference agent turn\",\"enabled\":true,") +
+		"\"sessionTarget\":\"isolated\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"message\":\"runtime inferred agent turn\",\"provider\":\"azure-openai\"}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(addAgentTurnNoKind.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", addAgentTurnNoKind));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-runtime-kind-inference",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"execute inferred kinds\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	REQUIRE(capturedRequests.size() >= 2);
+	bool sawSystemEventMessage = false;
+	bool sawAgentTurnMessage = false;
+	for (const auto& request : capturedRequests) {
+		if (request.message == "[cron] runtime inferred system event") {
+			sawSystemEventMessage = true;
+			REQUIRE(request.bodyForCommands == "runtime inferred system event");
+			REQUIRE(request.bodyForAgent == "[cron] runtime inferred system event");
+		}
+		if (request.message == "runtime inferred agent turn") {
+			sawAgentTurnMessage = true;
+			REQUIRE(request.bodyForCommands == "runtime inferred agent turn");
+			REQUIRE(request.bodyForAgent == "runtime inferred agent turn");
+		}
+	}
+	REQUIRE(sawSystemEventMessage);
+	REQUIRE(sawAgentTurnMessage);
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-runtime-kind-inference",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawSystemEventTerminal = false;
+	bool sawAgentTurnTerminal = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+
+		const std::string summary = entry.value("summary", std::string());
+		if (summary == "runtime-kind-inference-system-ok") {
+			sawSystemEventTerminal = true;
+		}
+		if (summary == "runtime-kind-inference-agent-ok") {
+			sawAgentTurnTerminal = true;
+		}
+	}
+	REQUIRE(sawSystemEventTerminal);
+	REQUIRE(sawAgentTurnTerminal);
+}
+
+TEST_CASE(
 	"Cron gateway production wiring dispatches failure-alert notification callbacks",
 	"[cron][gateway][wp-f][wp-b]") {
 	GatewayCronProductionFixture fixture("production-failure-alert-callback");
@@ -7861,6 +7970,168 @@ TEST_CASE(
 	REQUIRE(failureAlertDispatchCount >= 1);
 	REQUIRE(lastFailureAlertRequest.has_value());
 	REQUIRE(lastFailureAlertRequest->message.find("[cron][failure-alert]") != std::string::npos);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring schedules retry when main-session lane is busy",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-busy-retry");
+	GatewayHost& host = fixture.gateway();
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "runtime-ok",
+				.modelId = "default-model",
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-busy-retry-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a busy retry\",\"enabled\":true,") +
+		"\"sessionTarget\":\"main\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"busy retry\",\"heartbeatBusyMaxAttempts\":3,\"heartbeatBusyDelayMs\":1200}," +
+		"\"retry\":{\"maxAttempts\":3,\"backoffMs\":[9999]}," +
+		"\"delivery\":{\"mode\":\"none\"}}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", true);
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-busy-retry-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"busy retry wake\"}"));
+	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", false);
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-busy-retry-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawBusyRetry = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("summary", std::string()) != "Main heartbeat busy; retry scheduled") {
+			continue;
+		}
+		if (entry.value("errorCategory", std::string()) != "heartbeat_busy") {
+			continue;
+		}
+		if (!entry.value("retryScheduled", false)) {
+			continue;
+		}
+		if (!entry.contains("retryScheduledAtMs") || entry["retryScheduledAtMs"].is_null()) {
+			continue;
+		}
+		sawBusyRetry = true;
+		break;
+	}
+	REQUIRE(sawBusyRetry);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring marks fallback wake for recurring main-session busy lane",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-busy-fallback");
+	GatewayHost& host = fixture.gateway();
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "runtime-ok",
+				.modelId = "default-model",
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-busy-fallback-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a busy fallback\",\"enabled\":true,") +
+		"\"sessionTarget\":\"main\"," +
+		"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"busy fallback\",\"heartbeatBusyMaxAttempts\":1,\"heartbeatBusyDelayMs\":1}," +
+		"\"retry\":{\"maxAttempts\":0}," +
+		"\"delivery\":{\"mode\":\"none\"}}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const CronJson addedPayload = CronJson::parse(cronAdd.payloadJson.value());
+	const std::string cronId = addedPayload.value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame cronUpdate = RouteGatewayCron(
+		host,
+		"wpa-busy-fallback-update",
+		"cron.update",
+		std::string("{\"id\":\"") + cronId +
+		"\",\"patch\":{\"state\":{\"nextRunAtMs\":" +
+		std::to_string(nowMs - 1) +
+		",\"heartbeatBusyAttempts\":1}}}");
+	REQUIRE(cronUpdate.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.update", cronUpdate));
+
+	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", true);
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-busy-fallback-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"busy fallback wake\"}"));
+	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", false);
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-busy-fallback-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawBusyFallback = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("errorCategory", std::string()) != "heartbeat_busy_fallback") {
+			continue;
+		}
+		if (!entry.value("heartbeatFallbackWakeRequested", false)) {
+			continue;
+		}
+		if (!entry.contains("heartbeatFallbackWakeRequestedAtMs") ||
+			entry["heartbeatFallbackWakeRequestedAtMs"].is_null()) {
+			continue;
+		}
+		sawBusyFallback = true;
+		break;
+	}
+	REQUIRE(sawBusyFallback);
 }
 
 TEST_CASE(

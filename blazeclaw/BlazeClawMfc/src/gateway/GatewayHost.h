@@ -46,6 +46,10 @@ namespace blazeclaw::gateway {
 
 	namespace test_hooks {
 		void WireCronProductionIntegrationForTest(GatewayHost& host);
+		void SetCronSessionBusyForTest(
+			GatewayHost& host,
+			const std::string& sessionKey,
+			bool busy);
 	}
 
 	struct SkillsCatalogGatewayEntry {
@@ -621,6 +625,10 @@ namespace blazeclaw::gateway {
 	private:
 		friend class GatewayHostEx;
 		friend void test_hooks::WireCronProductionIntegrationForTest(GatewayHost& host);
+		friend void test_hooks::SetCronSessionBusyForTest(
+			GatewayHost& host,
+			const std::string& sessionKey,
+			bool busy);
 		friend struct handlers::event_catalog_query::EventCatalogQueryHandlers;
 		friend struct handlers::registry_introspection::RegistryIntrospectionHandlers;
 		friend struct handlers::agent_session_mutation::AgentSessionMutationHandlers;
