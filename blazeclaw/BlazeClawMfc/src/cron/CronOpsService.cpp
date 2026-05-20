@@ -85,6 +85,12 @@ namespace blazeclaw::cron {
 				entry["taskLedgerPhase"] = "terminal";
 			}
 			entry["taskLedgerStatus"] = status;
+			if (action == "finished") {
+				entry["taskLedgerTerminal"] = true;
+			}
+			else if (action == "queued" || action == "started") {
+				entry["taskLedgerTerminal"] = false;
+			}
 		entry["retryAttempt"] = 0;
 		entry["retryScheduled"] = false;
 		entry["retryScheduledAtMs"] = CronJson(nullptr);

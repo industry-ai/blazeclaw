@@ -4943,6 +4943,60 @@ TEST_CASE("Cron runs validator accepts manual lifecycle status filter in single 
 	REQUIRE(issue.code.empty());
 }
 
+
+TEST_CASE(
+	"Cron ops queued manual run terminal hook projects retry schedule metadata",
+	"[cron][ops][p4]") {
+	IsolatedCronOpsFixture fixture("queued-manual-retry-metadata");
+	CronOpsService& ops = fixture.ops();
+	std::vector<CronJson> failedPayloads;
+	std::vector<CronJson> runningPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.createRunningTaskRun = [&runningPayloads](const CronJson& payload) {
+		runningPayloads.push_back(payload);
+	};
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "queued manual retry metadata" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+		{ "delivery", {
+			{ "mode", "webhook" },
+			{ "to", "https://example.test/hook" },
+			{ "simulateHttpStatus", 503 }
+		} },
+		{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
+		{ "deleteAfterRun", true }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	const std::string queuedRunId =
+		ops.Run({ { "id", jobId }, { "mode", "force" } }).value("runId", std::string());
+	REQUIRE_FALSE(queuedRunId.empty());
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(runningPayloads.empty());
+	REQUIRE(runningPayloads.back().value("taskLedgerStatus", std::string()) == "running");
+	REQUIRE_FALSE(failedPayloads.empty());
+	const CronJson& payload = failedPayloads.back();
+	REQUIRE(payload.value("runId", std::string()) == queuedRunId);
+	REQUIRE(payload.value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(payload.value("retryScheduled", false));
+	REQUIRE(payload.value("retryAttempt", 0) >= 1);
+	REQUIRE(payload.contains("retryScheduledAtMs"));
+	REQUIRE_FALSE(payload["retryScheduledAtMs"].is_null());
+	REQUIRE(payload.contains("deliveryMode"));
+	REQUIRE(payload.contains("deliveryHttpStatus"));
+	REQUIRE(payload.contains("failureAlertTriggered"));
+}
 TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadata", "[cron][ops]") {
 	IsolatedCronOpsFixture fixture("manual-terminal-metadata");
 	CronOpsService& ops = fixture.ops();
@@ -7101,7 +7155,7 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 			sawNotDue = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
-			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.value("terminal", true));
 			REQUIRE(payload.contains("queuedAtMs"));
 			REQUIRE(payload.contains("retryAttempt"));
 			REQUIRE(payload.contains("retryScheduled"));
@@ -7163,7 +7217,7 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 			sawUnknownJob = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
-			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.value("terminal", true));
 			REQUIRE(payload.value("taskLedgerDisposition", std::string()) == "unknown_job");
 			REQUIRE(payload.contains("queuedAtMs"));
 			REQUIRE(payload.contains("retryAttempt"));
@@ -7747,6 +7801,73 @@ TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
 }
 
+
+TEST_CASE(
+	"Cron gateway production wiring projects task ledger fields in cron.runs",
+	"[cron][gateway][wp-f][p4]") {
+	GatewayCronProductionFixture fixture("production-task-ledger-runs");
+	GatewayHost& host = fixture.gateway();
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-task-ledger",
+		"cron.add",
+		std::string(
+			"{\"name\":\"wp-f task ledger\",\"enabled\":true,"
+			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
+			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"task ledger\"},"
+			"\"delivery\":{\"mode\":\"none\"}}"));
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const std::string cronId =
+		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame cronRun = RouteGatewayCron(
+		host,
+		"wpf-cron-run-task-ledger",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+	REQUIRE(cronRun.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
+	const CronJson runEnvelope = CronJson::parse(cronRun.payloadJson.value());
+	REQUIRE(runEnvelope.value("runState", std::string()) == "queued");
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-task-ledger",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"execute task ledger\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-task-ledger",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload["entries"].is_array());
+	REQUIRE_FALSE(runsPayload["entries"].empty());
+
+	bool sawTerminalLifecycle = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		sawTerminalLifecycle = true;
+		REQUIRE(entry.contains("taskLedgerDisposition"));
+		REQUIRE(entry.contains("taskLedgerPhase"));
+		REQUIRE(entry.contains("lifecycleState"));
+	}
+	REQUIRE(sawTerminalLifecycle);
+}
 TEST_CASE(
 	"Cron gateway production wiring routes add run runs and wake through handler stack",
 	"[cron][gateway][wp-f]") {
