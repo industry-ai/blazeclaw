@@ -4612,6 +4612,42 @@ TEST_CASE(
 	REQUIRE(deferredNextRunAtMs >= nowMs + config.missedJobStaggerMs);
 }
 
+TEST_CASE(
+	"Cron ops background scheduler wakes promptly after add mutation",
+	"[cron][timer][wp-d]") {
+	IsolatedCronOpsFixture fixture("background-wake-add");
+	CronOpsService& ops = fixture.ops();
+
+	ops.StartBackgroundScheduler();
+	std::size_t finishedCount = 0;
+	CronOpsService::CronRealtimeEventHooks hooks;
+	hooks.onEvent = [&finishedCount](const CronRealtimeEvent& event) {
+		if (event.action == "finished") {
+			++finishedCount;
+		}
+	};
+	ops.SetRealtimeEventHooks(std::move(hooks));
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const CronJson added = ops.Add({
+		{ "name", "background wake add" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "at" }, { "atMs", nowMs - 1 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "run" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE_FALSE(added.value("id", std::string()).empty());
+
+	const auto deadline = std::chrono::steady_clock::now() +
+		std::chrono::milliseconds(750);
+	while (finishedCount == 0 && std::chrono::steady_clock::now() < deadline) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	ops.StopBackgroundScheduler();
+	REQUIRE(finishedCount >= 1);
+}
+
 TEST_CASE("Cron timer clears schedule auto-disable notification signaling after successful recompute", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

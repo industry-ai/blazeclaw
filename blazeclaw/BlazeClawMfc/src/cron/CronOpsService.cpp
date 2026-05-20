@@ -546,6 +546,7 @@ namespace blazeclaw::cron {
 
 	CronJson CronOpsService::Add(const CronJson& params) {
 		ScheduleNotificationFlushScope flushScope(*this);
+		bool shouldNotifyBackground = false;
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 		const std::int64_t nowMs = UtcNowMs();
@@ -560,15 +561,20 @@ namespace blazeclaw::cron {
 
 		m_store.Jobs().push_back(job);
 		m_store.SaveJobs();
+		shouldNotifyBackground = m_backgroundStarted;
 		EmitCronRealtimeEventLocked(CronRealtimeEvent{
 			.jobId = job.value("id", std::string()),
 			.action = "added"
 		});
+		if (shouldNotifyBackground) {
+			m_backgroundCv.notify_all();
+		}
 		return job;
 	}
 
 	CronJson CronOpsService::Update(const CronJson& params) {
 		ScheduleNotificationFlushScope flushScope(*this);
+		bool shouldNotifyBackground = false;
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 
@@ -599,15 +605,20 @@ namespace blazeclaw::cron {
 		}
 
 		m_store.SaveJobs();
+		shouldNotifyBackground = m_backgroundStarted;
 		EmitCronRealtimeEventLocked(CronRealtimeEvent{
 			.jobId = id,
 			.action = "updated"
 		});
+		if (shouldNotifyBackground) {
+			m_backgroundCv.notify_all();
+		}
 		return *job;
 	}
 
 	CronJson CronOpsService::Remove(const CronJson& params) {
 		ScheduleNotificationFlushScope flushScope(*this);
+		bool shouldNotifyBackground = false;
 		std::lock_guard<std::mutex> lock(m_mutex);
 		EnsureLoadedLocked();
 
@@ -629,10 +640,14 @@ namespace blazeclaw::cron {
 		const bool removed = m_store.Jobs().size() != before;
 		if (removed) {
 			m_store.SaveJobs();
+			shouldNotifyBackground = m_backgroundStarted;
 			EmitCronRealtimeEventLocked(CronRealtimeEvent{
 				.jobId = id,
 				.action = "removed"
 			});
+			if (shouldNotifyBackground) {
+				m_backgroundCv.notify_all();
+			}
 		}
 
 		return {

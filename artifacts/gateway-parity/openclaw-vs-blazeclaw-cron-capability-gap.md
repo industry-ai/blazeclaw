@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BR P2/WP-C schedule breadth + production auto-disable gateway E2E)
+Last refreshed: 2026-05-20 (Phase BS P0/P1/P2 verification + P3/WP-D scheduler wake responsiveness)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -25,7 +25,7 @@ execution priorities from §5 are now landed; remaining effort is P3+ breadth.
 | WP-A | Production runtime execution default | **P0 complete** |
 | WP-B | Outbound announce/webhook/failure-alert dispatch | **P1 complete** |
 | WP-C | Auto-disable + schedule syntax breadth | **P2 complete** |
-| WP-D | Scheduler hardening + realtime events | **Baseline landed** |
+| WP-D | Scheduler hardening + realtime events | **Active** (baseline landed + mutation-wake responsiveness follow-up) |
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **Baseline landed** |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
 
@@ -41,7 +41,8 @@ execution priorities from §5 are now landed; remaining effort is P3+ breadth.
 
 ```powershell
 msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
-BlazeClawMfc.Tests.exe "[cron]"
+BlazeClawMfc.Tests.exe "[cron]"   # currently blocked in workspace by 4 pre-existing unrelated WP-B/WP-C failures
 BlazeClawMfc.Tests.exe "[cron][timer][wp-c]"
 BlazeClawMfc.Tests.exe "[cron][gateway][wp-f][wp-c]"
+BlazeClawMfc.Tests.exe "[cron][timer][wp-d]"
 ```
