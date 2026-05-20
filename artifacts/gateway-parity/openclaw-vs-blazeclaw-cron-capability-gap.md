@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BM WP-A production busy/retry/fallback E2E permutation expansion + docs-sync)
+Last refreshed: 2026-05-20 (Phase BN WP-A..WP-F execution baseline + WP-B announce delivery dispatch)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -14,27 +14,29 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
 
 | Package | Focus | Status |
 | --- | --- | --- |
-| WP-A | Production runtime execution default | **Baseline landed**; chat-pipeline model routing landed, omitted-kind runtime callback routing parity landed, and production GatewayHost busy/retry/fallback handler-stack E2E permutations landed; deeper isolated-agent breadth still open |
-| WP-B | Outbound announce/webhook/failure-alert dispatch | **In Progress**; default webhook transport-dispatch policy now carries to primary + failure-destination lanes when per-job flags are omitted |
-| WP-C | Auto-disable notification delivery | **Baseline landed**; IANA/cron syntax open |
-| WP-D | Scheduler hardening + realtime events | **Baseline landed** |
-| WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **Baseline landed**; prune/doctor/chmod open |
-| WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed**; callback-backed E2E lanes landed, broader permutation matrix remains |
+| WP-A | Production runtime execution default | **Baseline landed**; isolated-agent module depth open |
+| WP-B | Outbound announce/webhook/failure-alert dispatch | **Baseline landed**; channel-plugin outbound depth open |
+| WP-C | Auto-disable notification delivery | **Baseline landed**; IANA/cron syntax breadth open |
+| WP-D | Scheduler hardening + realtime events | **Baseline landed**; parallel/missed-slot depth open |
+| WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **Baseline landed**; doctor/chmod depth open |
+| WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed**; CLI/dashboard parity deferred |
 
-## WP-F landed evidence (Phase BG)
+## WP-F / WP-B landed evidence
 
 - `GatewayProtocolSchemaValidator.Response`: manual-edge `taskLedgerDisposition`
   taxonomy (`already_running`, `not_due`, `missing_terminal_run`).
 - `CronOpsServiceTestHooks`: isolated on-disk cron store for gateway tests.
 - `GatewayHost::WireCronProductionIntegration`: handler-stack E2E for
   `cron.add` → `cron.run` (force) → `wake` → `cron.runs` with schema validation.
+- Chat-runtime callback E2E: runtime overrides, failure-alert dispatch, announce
+  delivery dispatch (`[cron][gateway][wp-f][wp-b]`).
 - Tests: `[cron][gateway][wp-f]` in `BlazeClawMfc/tests/CronParityContractTests.cpp`.
 
 ## Remaining high-impact gaps
 
-- Broader production E2E permutation matrix (busy/retry/cooldown/manual-edge combinations).
-- WP-B outbound delivery dispatch depth (Steps 3, 6).
-- WP-E jsonl prune / doctor repair / secure file-mode parity.
+- OpenClaw isolated-agent module parity (skills snapshot, subagent followup).
+- Dedicated channel/outbound plugin routing for announce delivery (beyond chat-runtime callbacks).
+- WP-E doctor repair / secure file-mode parity.
 - OpenClaw CLI/dashboard controller parity (deferred unless product requires MFC CLI).
 
 ## Validation
@@ -42,4 +44,6 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
 ```powershell
 msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 BlazeClawMfc.Tests.exe "[cron]"
+BlazeClawMfc.Tests.exe "[cron][gateway][wp-f]"
+BlazeClawMfc.Tests.exe "[cron][gateway][wp-f][wp-b]"
 ```

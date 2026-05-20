@@ -3573,6 +3573,7 @@ namespace blazeclaw::gateway {
 		}
 
 		if (terminal) {
+			DispatchCronAnnounceDeliveryNotification(payload);
 			DispatchCronFailureAlertNotification(payload);
 		}
 	}
@@ -3672,6 +3673,73 @@ namespace blazeclaw::gateway {
 
 		ChatRuntimeRequest request;
 		request.runId = "cron-failure-alert-" + std::to_string(cron::UtcNowMs());
+		request.sessionKey = sessionKey;
+		request.message = text;
+		request.bodyForCommands = text;
+		request.bodyForAgent = text;
+		request.shouldLoadInlineSkillCommands = false;
+		request.allowInlineToolImmediateExecution = false;
+
+		try {
+			(void)m_chatRuntimeCallback(request);
+		}
+		catch (...) {
+		}
+	}
+
+	void GatewayHost::DispatchCronAnnounceDeliveryNotification(
+		const nlohmann::json& payload) {
+		const cron::CronJson& cronPayload = payload;
+		if (!m_chatRuntimeCallback) {
+			return;
+		}
+
+		const std::string deliveryMode =
+			cron::ToLowerCopy(cron_production::ReadStringField(cronPayload, "deliveryMode"));
+		if (deliveryMode != "announce") {
+			return;
+		}
+
+		const std::string deliveryStatus =
+			cron::ToLowerCopy(cron_production::ReadStringField(cronPayload, "deliveryStatus"));
+		if (deliveryStatus != "delivered") {
+			return;
+		}
+
+		std::string sessionKey = cron::TrimCopy(
+			cron_production::ReadStringField(cronPayload, "sessionKey"));
+		const std::string deliveryTarget =
+			cron_production::ReadStringField(cronPayload, "deliveryTarget");
+		if (sessionKey.empty() && !deliveryTarget.empty()) {
+			sessionKey = cron::TrimCopy(deliveryTarget);
+		}
+		if (sessionKey.empty()) {
+			sessionKey = "main";
+		}
+
+		const std::string jobId =
+			cron_production::ReadStringField(cronPayload, "jobId");
+		const std::string channel =
+			cron_production::ReadStringField(cronPayload, "deliveryChannel");
+		const std::string summary =
+			cron_production::ReadStringField(cronPayload, "summary");
+
+		std::string text = "[cron][announce]";
+		if (!jobId.empty()) {
+			text += " job=" + jobId;
+		}
+		if (!deliveryTarget.empty()) {
+			text += " target=" + deliveryTarget;
+		}
+		if (!channel.empty()) {
+			text += " channel=" + channel;
+		}
+		if (!summary.empty()) {
+			text += " summary=" + summary;
+		}
+
+		ChatRuntimeRequest request;
+		request.runId = "cron-announce-" + std::to_string(cron::UtcNowMs());
 		request.sessionKey = sessionKey;
 		request.message = text;
 		request.bodyForCommands = text;

@@ -7922,6 +7922,54 @@ TEST_CASE(
 	REQUIRE(sawAgentTurnTerminal);
 }
 
+
+TEST_CASE(
+	"Cron gateway production wiring dispatches announce delivery notification callbacks",
+	"[cron][gateway][wp-f][wp-b]") {
+	GatewayCronProductionFixture fixture("production-announce-delivery-callback");
+	GatewayHost& host = fixture.gateway();
+	std::size_t announceDispatchCount = 0;
+	std::optional<GatewayHost::ChatRuntimeRequest> lastAnnounceRequest;
+
+	host.SetChatRuntimeCallback(
+		[&announceDispatchCount, &lastAnnounceRequest](
+			const GatewayHost::ChatRuntimeRequest& request) {
+			if (request.runId.rfind("cron-announce-", 0) == 0) {
+				++announceDispatchCount;
+				lastAnnounceRequest = request;
+			}
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "announce-ok",
+				.modelId = "announce-model",
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-announce-delivery",
+		"cron.add",
+		std::string("{\"name\":\"wp-f announce delivery callback\",\"enabled\":true,") +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"announce delivery\"}," +
+		"\"delivery\":{\"mode\":\"announce\",\"to\":\"main\",\"channel\":\"last\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-announce-delivery",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"execute announce delivery\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	REQUIRE(announceDispatchCount >= 1);
+	REQUIRE(lastAnnounceRequest.has_value());
+	REQUIRE(lastAnnounceRequest->message.find("[cron][announce]") != std::string::npos);
+}
 TEST_CASE(
 	"Cron gateway production wiring dispatches failure-alert notification callbacks",
 	"[cron][gateway][wp-f][wp-b]") {
