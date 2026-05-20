@@ -5247,6 +5247,7 @@ TEST_CASE("Cron timer records failure destination webhook HTTP status", "[cron][
 TEST_CASE("Cron timer transport dispatch classifies webhook transport failures", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
+	::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
 
 	SECTION("Primary webhook transport dispatch failure is retryable network error") {
 		CronJson jobs = CronJson::array({
@@ -5309,6 +5310,39 @@ TEST_CASE("Cron timer transport dispatch classifies webhook transport failures",
 			"failed to parse webhook URL");
 		REQUIRE(runs[0].value("failureDestinationAttempted", true) == false);
 	}
+
+	SECTION("Default webhook transport dispatch policy applies when per-job flag is omitted") {
+		::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "true");
+
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-webhook-default-transport-dispatch-fail" },
+				{ "name", "webhook default transport dispatch fail" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery",
+					{
+						{ "mode", "webhook" },
+						{ "to", "http:///" }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
+		REQUIRE(runs[0].value("errorCategory", std::string()) == "network");
+		REQUIRE(runs[0].value("deliveryAttempted", true) == false);
+		REQUIRE(runs[0].value("summary", std::string()) == "Webhook delivery transport dispatch failed");
+
+		::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
+	}
+
+	::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
 }
 
 TEST_CASE("Cron timer marks announce failure destination empty target as not-delivered", "[cron][timer]") {
@@ -7704,12 +7738,18 @@ TEST_CASE(
 				++failureAlertDispatchCount;
 			}
 			capturedRequest = request;
+			const bool isCronRuntimeRun =
+				request.runId.rfind("cron-run-", 0) == 0 ||
+				request.runId.rfind("cron-", 0) == 0;
 			return GatewayHost::ChatRuntimeResult{
 				.ok = true,
 				.assistantText = "runtime-ok",
 				.modelId = request.modelIdOverride.empty()
 					? std::string("default-model")
 					: request.modelIdOverride,
+				.retryAfterMs = isCronRuntimeRun
+					? std::optional<std::int64_t>(1234)
+					: std::nullopt,
 			};
 		});
 
@@ -7742,6 +7782,34 @@ TEST_CASE(
 	REQUIRE(capturedRequest->modelIdOverride == "gpt-4o-mini");
 	REQUIRE(capturedRequest->providerOverride == "azure-openai");
 	REQUIRE(capturedRequest->timeoutSeconds == 5);
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-runtime-callback",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+	bool sawRuntimeRetryAfterHint = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("summary", std::string()) != "runtime-ok") {
+			continue;
+		}
+		if (!entry.contains("retryScheduledAtMs") || entry["retryScheduledAtMs"].is_null()) {
+			continue;
+		}
+		sawRuntimeRetryAfterHint = true;
+		break;
+	}
+	REQUIRE(sawRuntimeRetryAfterHint);
 	REQUIRE(failureAlertDispatchCount == 0);
 }
 

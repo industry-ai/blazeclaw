@@ -304,6 +304,7 @@ namespace blazeclaw::gateway {
 			std::string modelId;
 			std::string errorCode;
 			std::string errorMessage;
+			std::optional<std::int64_t> retryAfterMs;
 		};
 
 		struct SpeechRecognitionRuntimeStatus {

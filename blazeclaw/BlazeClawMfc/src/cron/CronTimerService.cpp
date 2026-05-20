@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <cstdlib>
 #include <functional>
 #include <sstream>
 #include <unordered_map>
@@ -211,6 +212,48 @@ namespace blazeclaw::cron {
 			return node.contains("transportDispatch") &&
 				node["transportDispatch"].is_boolean() &&
 				node["transportDispatch"].get<bool>();
+		}
+
+		bool ResolveWebhookTransportDispatchEnabled(
+			const CronJson& node,
+			const bool defaultEnabled) {
+			if (node.contains("transportDispatch") &&
+				node["transportDispatch"].is_boolean()) {
+				return node["transportDispatch"].get<bool>();
+			}
+
+			return defaultEnabled;
+		}
+
+		bool ResolveDefaultWebhookTransportDispatchEnabled() {
+			constexpr const char* envName =
+				"BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH";
+			const DWORD requiredLength =
+				GetEnvironmentVariableA(envName, nullptr, 0);
+			if (requiredLength == 0) {
+				return false;
+			}
+
+			std::string raw;
+			raw.resize(static_cast<std::size_t>(requiredLength));
+			const DWORD valueLength = GetEnvironmentVariableA(
+				envName,
+				raw.data(),
+				requiredLength);
+			if (valueLength == 0) {
+				return false;
+			}
+
+			raw.resize(static_cast<std::size_t>(valueLength));
+			const std::string value = ToLowerCopy(TrimCopy(raw));
+			if (value.empty()) {
+				return false;
+			}
+
+			return value == "1" ||
+				value == "true" ||
+				value == "yes" ||
+				value == "on";
 		}
 
 		std::wstring Utf8ToWide(const std::string& value) {
@@ -1471,6 +1514,9 @@ namespace blazeclaw::cron {
 				(outcome.skipDeliverySimulation ||
 					outcome.skipFailureDestinationSimulation);
 
+			const bool defaultWebhookTransportDispatchEnabled =
+				ResolveDefaultWebhookTransportDispatchEnabled();
+
 			if (!heartbeatBusyDeliverySuppressed &&
 				job.contains("delivery") &&
 				job["delivery"].is_object() &&
@@ -1539,7 +1585,9 @@ namespace blazeclaw::cron {
 						to = TrimCopy(delivery["url"].get<std::string>());
 					}
 					outcome.deliveryTarget = to;
-					const bool transportDispatch = IsTransportDispatchEnabled(delivery);
+					const bool transportDispatch = ResolveWebhookTransportDispatchEnabled(
+						delivery,
+						defaultWebhookTransportDispatchEnabled);
 					const auto simulatedHttpStatus =
 						TryReadInt64Field(delivery, "simulateHttpStatus");
 					if (simulateTransientFailure) {
@@ -1723,7 +1771,9 @@ namespace blazeclaw::cron {
 					if (failureMode == "webhook") {
 						outcome.failureDestinationAttempted = true;
 						const bool failureTransportDispatch =
-							IsTransportDispatchEnabled(failureDestination);
+							ResolveWebhookTransportDispatchEnabled(
+								failureDestination,
+								defaultWebhookTransportDispatchEnabled);
 						const auto failureDestinationHttpStatus =
 							TryReadInt64Field(failureDestination, "simulateHttpStatus");
 						if (failureDestinationHttpStatus.has_value()) {
@@ -2361,6 +2411,8 @@ namespace blazeclaw::cron {
 
 			RunOutcome outcome =
 				EvaluateRunOutcome(*it, nowMs, m_runtimeAdapters);
+			const bool defaultWebhookTransportDispatchEnabled =
+				ResolveDefaultWebhookTransportDispatchEnabled();
 			state["runningAtMs"] = nowMs;
 			state["startedAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
@@ -2677,7 +2729,9 @@ namespace blazeclaw::cron {
 									const auto simulatedFailureAlertHttpStatus =
 										TryReadInt64Field((*it)["failureAlert"], "simulateHttpStatus");
 									const bool transportDispatch =
-										IsTransportDispatchEnabled((*it)["failureAlert"]);
+										ResolveWebhookTransportDispatchEnabled(
+											(*it)["failureAlert"],
+											defaultWebhookTransportDispatchEnabled);
 									if (simulatedFailureAlertHttpStatus.has_value()) {
 										outcome.failureAlertHttpStatus =
 											simulatedFailureAlertHttpStatus.value();
@@ -2799,6 +2853,16 @@ namespace blazeclaw::cron {
 				? CronJson(heartbeatFallbackWakeRequestedAtMsSnapshot.value())
 				: CronJson(nullptr);
 
+			const std::optional<std::int64_t> projectedRetryScheduledAtMs =
+				scheduledRetry && nextAfterRun.has_value()
+				? nextAfterRun
+				: (outcome.hasRetryDelayOverride
+					? std::optional<std::int64_t>(
+						nowMs + (std::max)(
+							static_cast<std::int64_t>(0),
+							outcome.retryDelayOverrideMs))
+					: std::nullopt);
+
 			runs.push_back({
 				{ "ts", nowMs },
 				{ "jobId", id },
@@ -2883,7 +2947,7 @@ namespace blazeclaw::cron {
 					: CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
-				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
+				{ "retryScheduledAtMs", projectedRetryScheduledAtMs.has_value() ? CronJson(projectedRetryScheduledAtMs.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
 				{ "timedOut", outcome.timedOut },
 				{ "aborted", outcome.aborted },

@@ -3083,6 +3083,9 @@ namespace blazeclaw::gateway {
 			CronJson response = CronJson::object();
 			response["handled"] = true;
 			response["observedAtMs"] = cron::UtcNowMs();
+			if (result.retryAfterMs.has_value() && result.retryAfterMs.value() >= 0) {
+				response["retryAfterMs"] = result.retryAfterMs.value();
+			}
 
 			if (result.ok) {
 				response["status"] = "ok";
