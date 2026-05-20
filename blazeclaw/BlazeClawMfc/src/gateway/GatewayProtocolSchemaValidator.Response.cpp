@@ -95,6 +95,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "deliveryStatus") &&
+				!IsFieldNull(payload, "deliveryStatus") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"deliveryStatus",
@@ -105,6 +106,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "taskLedgerPhase") &&
+				!IsFieldNull(payload, "taskLedgerPhase") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"taskLedgerPhase",
@@ -115,6 +117,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "mode") &&
+				!IsFieldNull(payload, "mode") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"mode",
@@ -125,6 +128,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "runState") &&
+				!IsFieldNull(payload, "runState") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"runState",
@@ -135,6 +139,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "action") &&
+				!IsFieldNull(payload, "action") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"action",
@@ -145,6 +150,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "failureDestinationStatus") &&
+				!IsFieldNull(payload, "failureDestinationStatus") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"failureDestinationStatus",
@@ -155,6 +161,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "failureDestinationMode") &&
+				!IsFieldNull(payload, "failureDestinationMode") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"failureDestinationMode",
@@ -165,6 +172,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "failureAlertMode") &&
+				!IsFieldNull(payload, "failureAlertMode") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"failureAlertMode",
@@ -175,6 +183,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "taskLedgerStatus") &&
+				!IsFieldNull(payload, "taskLedgerStatus") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"taskLedgerStatus",
@@ -185,6 +194,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			if (HasFieldToken(payload, "taskLedgerDisposition") &&
+				!IsFieldNull(payload, "taskLedgerDisposition") &&
 				!ValidateTopLevelEnumStringField(
 					payload,
 					"taskLedgerDisposition",

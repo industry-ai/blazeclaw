@@ -43,7 +43,9 @@ TEST_CASE("P2 parity methods: classic agent aliases are routable", "[gateway][pa
 	const auto wake = Route(host, "p2-wake", "wake");
 	REQUIRE(wake.ok);
 	REQUIRE(wake.payloadJson.has_value());
-	REQUIRE(wake.payloadJson.value().find("\"wake\":true") != std::string::npos);
+	REQUIRE(wake.payloadJson.value().find("\"ok\":true") != std::string::npos);
+	REQUIRE(wake.payloadJson.value().find("\"mode\":\"now\"") != std::string::npos);
+	REQUIRE(wake.payloadJson.value().find("\"requestedAtMs\"") != std::string::npos);
 }
 
 TEST_CASE("P2 parity methods: heartbeat and system aliases are routable", "[gateway][parity][p2]")

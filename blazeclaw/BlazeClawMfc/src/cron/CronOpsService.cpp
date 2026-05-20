@@ -5,6 +5,7 @@
 #include "../gateway/GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <unordered_set>
 
@@ -1902,9 +1903,38 @@ namespace blazeclaw::cron {
 		}
 	}
 
-	CronOpsService& GetCronOpsService() {
-		static CronOpsService service;
-		return service;
+	namespace {
+		std::unique_ptr<CronOpsService>& CronOpsServiceSlot() {
+			static std::unique_ptr<CronOpsService> service;
+			return service;
+		}
 	}
+
+	CronOpsService& GetCronOpsService() {
+		if (!CronOpsServiceSlot()) {
+			CronOpsServiceSlot() = std::make_unique<CronOpsService>();
+		}
+		return *CronOpsServiceSlot();
+	}
+
+	namespace test_hooks {
+		void ResetCronOpsServiceForTest() {
+			if (!CronOpsServiceSlot()) {
+				return;
+			}
+
+			CronOpsServiceSlot()->StopBackgroundScheduler();
+			CronOpsServiceSlot().reset();
+		}
+
+		void ConfigureCronOpsServiceForTest(
+			std::filesystem::path jobsPath,
+			std::filesystem::path runsPath) {
+			ResetCronOpsServiceForTest();
+			CronOpsServiceSlot() = std::make_unique<CronOpsService>(
+				std::move(jobsPath),
+				std::move(runsPath));
+		}
+	} // namespace test_hooks
 
 } // namespace blazeclaw::cron

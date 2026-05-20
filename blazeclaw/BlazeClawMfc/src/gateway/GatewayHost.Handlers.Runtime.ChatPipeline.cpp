@@ -89,14 +89,6 @@ namespace blazeclaw::gateway {
 					forwarded.method = "chat.send";
 					return host.RuntimeContext().dispatcher->Dispatch(forwarded);
 				});
-			host.RuntimeContext().dispatcher->Register(
-				"wake",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"accepted\":true,\"wake\":true}");
-				});
-
 			struct SessionCompactionBranchRecord {
 				std::string branchId;
 				std::string sessionId;

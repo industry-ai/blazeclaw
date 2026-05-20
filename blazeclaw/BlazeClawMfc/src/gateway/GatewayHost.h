@@ -42,6 +42,12 @@ namespace blazeclaw::cron {
 
 namespace blazeclaw::gateway {
 
+	class GatewayHost;
+
+	namespace test_hooks {
+		void WireCronProductionIntegrationForTest(GatewayHost& host);
+	}
+
 	struct SkillsCatalogGatewayEntry {
 		std::string name;
 		std::string skillKey;
@@ -613,6 +619,7 @@ namespace blazeclaw::gateway {
 
 	private:
 		friend class GatewayHostEx;
+		friend void test_hooks::WireCronProductionIntegrationForTest(GatewayHost& host);
 		friend struct handlers::event_catalog_query::EventCatalogQueryHandlers;
 		friend struct handlers::registry_introspection::RegistryIntrospectionHandlers;
 		friend struct handlers::agent_session_mutation::AgentSessionMutationHandlers;

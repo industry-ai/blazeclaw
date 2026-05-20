@@ -4,16 +4,20 @@
 #include "../src/cron/CronModels.h"
 #include "../src/cron/CronNormalize.h"
 #include "../src/cron/CronOpsService.h"
+#include "../src/cron/CronOpsServiceTestHooks.h"
 #include "../src/cron/CronStoreService.h"
 #include "../src/cron/CronTimerService.h"
 #include "../src/gateway/GatewayHost.h"
 #include "../src/gateway/GatewayProtocolSchemaValidator.h"
+#include "../src/gateway/GatewayTestHooks.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <ctime>
 #include <filesystem>
+#include <memory>
+#include <stdexcept>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -68,6 +72,129 @@ namespace {
 
 		CronOpsService& ops() {
 			return *service;
+		}
+	};
+
+	blazeclaw::gateway::protocol::ResponseFrame RouteGatewayCron(
+		GatewayHost& host,
+		const std::string& id,
+		const std::string& method,
+		std::optional<std::string> paramsJson = std::nullopt) {
+		return host.RouteRequest(
+			RequestFrame{
+				.id = id,
+				.method = method,
+				.paramsJson = std::move(paramsJson),
+			});
+	}
+
+	bool ValidateGatewayCronRunsResponse(const ResponseFrame& response) {
+		if (!response.ok || !response.payloadJson.has_value()) {
+			return false;
+		}
+
+		const CronJson payload = CronJson::parse(response.payloadJson.value());
+		if (!payload.is_object() || !payload.contains("entries") ||
+			!payload["entries"].is_array()) {
+			return false;
+		}
+
+		SchemaValidationIssue issue{};
+		for (const auto& entry : payload["entries"]) {
+			const CronJson wrapped = {
+				{ "entries", CronJson::array({ entry }) },
+				{ "total", 1 },
+				{ "limit", 1 },
+				{ "offset", 0 },
+				{ "nextOffset", nullptr },
+				{ "hasMore", false }
+			};
+			const ResponseFrame singleEntryResponse{
+				.id = response.id,
+				.ok = true,
+				.payloadJson = wrapped.dump(),
+				.error = std::nullopt,
+			};
+			if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+				"cron.runs",
+				singleEntryResponse,
+				issue) ||
+				!issue.code.empty()) {
+				return false;
+			}
+		}
+
+		const CronJson envelopeOnly = {
+			{ "entries", CronJson::array() },
+			{ "total", payload.value("total", static_cast<std::int64_t>(0)) },
+			{ "limit", payload.value("limit", static_cast<std::int64_t>(0)) },
+			{ "offset", payload.value("offset", static_cast<std::int64_t>(0)) },
+			{ "nextOffset", payload.contains("nextOffset") ? payload["nextOffset"] : CronJson(nullptr) },
+			{ "hasMore", payload.value("hasMore", false) }
+		};
+		const ResponseFrame envelopeResponse{
+			.id = response.id,
+			.ok = true,
+			.payloadJson = envelopeOnly.dump(),
+			.error = std::nullopt,
+		};
+		issue = {};
+		return GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"cron.runs",
+			envelopeResponse,
+			issue) &&
+			issue.code.empty();
+	}
+
+	bool ValidateGatewayCronResponse(
+		const std::string& method,
+		const ResponseFrame& response) {
+		if (!response.ok || !response.payloadJson.has_value()) {
+			return false;
+		}
+
+		if (method == "cron.runs") {
+			return ValidateGatewayCronRunsResponse(response);
+		}
+
+		SchemaValidationIssue issue{};
+		return GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			method,
+			response,
+			issue) &&
+			issue.code.empty();
+	}
+
+	struct GatewayCronProductionFixture {
+		std::filesystem::path root;
+		std::unique_ptr<GatewayHost> host;
+
+		explicit GatewayCronProductionFixture(const char* label)
+			: root(
+				std::filesystem::temp_directory_path() /
+				("blazeclaw-cron-gw-" + std::string(label))) {
+			std::error_code ec;
+			std::filesystem::remove_all(root, ec);
+			std::filesystem::create_directories(root, ec);
+			blazeclaw::cron::test_hooks::ConfigureCronOpsServiceForTest(
+				root / "cron.jobs.json",
+				root / "cron.runs.json");
+			host = std::make_unique<GatewayHost>();
+			if (!host->StartLocalDispatchOnly()) {
+				throw std::runtime_error("failed to start gateway local dispatch");
+			}
+			blazeclaw::gateway::test_hooks::WireCronProductionIntegrationForTest(*host);
+		}
+
+		~GatewayCronProductionFixture() {
+			host.reset();
+			blazeclaw::cron::test_hooks::ResetCronOpsServiceForTest();
+			std::error_code ec;
+			std::filesystem::remove_all(root, ec);
+		}
+
+		GatewayHost& gateway() {
+			return *host;
 		}
 	};
 
@@ -1376,6 +1503,59 @@ TEST_CASE("Cron runs response validator accepts expanded taskLedgerDisposition t
 			.ok = true,
 			.payloadJson = std::string(
 				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"unknown_job\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("already_running disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-already-running",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"already_running\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("not_due disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-not-due",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"skipped\",\"taskLedgerDisposition\":\"not_due\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("missing_terminal_run disposition") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-disposition-missing-terminal-run",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"failed\",\"taskLedgerDisposition\":\"missing_terminal_run\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("null optional transport enum fields") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-null-optional-enums",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"error\",\"deliveryStatus\":\"not-requested\","
+				"\"failureDestinationMode\":null,\"failureAlertMode\":null,"
+				"\"taskLedgerPhase\":\"terminal\",\"taskLedgerStatus\":\"error\","
+				"\"taskLedgerDisposition\":\"scheduled\",\"taskLedgerTerminal\":true}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
 			.error = std::nullopt,
 		};
 
@@ -6576,7 +6756,8 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 }
 
 TEST_CASE("Cron ops includes failure-destination suppression metadata in terminal fail hook", "[cron][ops]") {
-	CronOpsService ops;
+	IsolatedCronOpsFixture fixture("failure-destination-suppression");
+	CronOpsService& ops = fixture.ops();
 	std::vector<CronJson> failedPayloads;
 	std::vector<CronJson> completedPayloads;
 
@@ -7137,4 +7318,155 @@ TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring routes add run runs and wake through handler stack",
+	"[cron][gateway][wp-f]") {
+	GatewayCronProductionFixture fixture("production-add-run-wake");
+	GatewayHost& host = fixture.gateway();
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add",
+		"cron.add",
+		std::string(
+			"{\"name\":\"wp-f gateway job\",\"enabled\":true,"
+			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
+			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"gateway production\"},"
+			"\"delivery\":{\"mode\":\"none\"}}"));
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const CronJson cronAdded = CronJson::parse(cronAdd.payloadJson.value());
+	REQUIRE(cronAdded.contains("id"));
+	const std::string cronId = cronAdded.value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame cronRun = RouteGatewayCron(
+		host,
+		"wpf-cron-run",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+	REQUIRE(cronRun.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
+	const CronJson runEnvelope = CronJson::parse(cronRun.payloadJson.value());
+	REQUIRE(runEnvelope.value("enqueued", false));
+	REQUIRE(runEnvelope.value("reason", std::string()) == "queued");
+	REQUIRE(runEnvelope.value("runState", std::string()) == "queued");
+	const std::string queuedRunId = runEnvelope.value("runId", std::string());
+	REQUIRE_FALSE(queuedRunId.empty());
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-now",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"wp-f production wake\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+	REQUIRE_FALSE(runsPayload["entries"].empty());
+
+	bool sawQueuedLifecycle = false;
+	bool sawTerminalLifecycle = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("runId", std::string()) == queuedRunId) {
+			if (entry.value("lifecycleState", std::string()) == "queued") {
+				sawQueuedLifecycle = true;
+			}
+		}
+		if (entry.value("action", std::string()) == "finished") {
+			sawTerminalLifecycle = true;
+		}
+	}
+	REQUIRE(sawQueuedLifecycle);
+	REQUIRE(sawTerminalLifecycle);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring executes due at job on wake and validates run response",
+	"[cron][gateway][wp-f]") {
+	GatewayCronProductionFixture fixture("production-at-wake");
+	GatewayHost& host = fixture.gateway();
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-at",
+		"cron.add",
+		std::string("{\"name\":\"wp-f at job\",\"enabled\":true,") +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"at wake\"},"
+		"\"delivery\":{\"mode\":\"none\"},\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const std::string cronId =
+		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-at",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"execute due at\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-at",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawFinished = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) == "finished") {
+			sawFinished = true;
+			REQUIRE(entry.contains("status"));
+		}
+	}
+	REQUIRE(sawFinished);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring rejects invalid cron.run response after handler stack",
+	"[cron][gateway][wp-f][schema]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame invalidRun{
+		.id = "wpf-cron-run-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"ok\":true,\"runId\":\"manual:cron-1:1:1\",\"enqueued\":false,\"started\":false,"
+			"\"reason\":\"queued\",\"cronId\":\"cron-1\",\"mode\":\"force\","
+			"\"queuedAtMs\":1700000000000,\"runState\":\"terminal\"}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+		"cron.run",
+		invalidRun,
+		issue));
+	REQUIRE(issue.code == "schema_invalid_response");
 }
