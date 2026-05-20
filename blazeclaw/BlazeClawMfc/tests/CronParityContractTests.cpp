@@ -4792,6 +4792,99 @@ TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadat
 	REQUIRE(payload.contains("heartbeatFallbackWakeRequestedAtMs"));
 }
 
+TEST_CASE(
+	"Cron timer projects runtime execution provenance into state and run logs",
+	"[cron][timer][p0][p4]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-provenance") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-provenance" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-provenance" },
+			{ "name", "runtime provenance" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "runtime lane" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(jobs.size() == 1);
+
+	REQUIRE(runs[0].value("runtimeExecutionPath", std::string()) == "runtime");
+	REQUIRE(runs[0].value("runtimeAdapterRegistered", false));
+	REQUIRE(runs[0].value("runtimeAdapterInvoked", false));
+	REQUIRE(runs[0].value("runtimeHandled", false));
+	REQUIRE_FALSE(runs[0].value("simulationFallbackUsed", true));
+
+	REQUIRE(jobs[0]["state"].value("lastRuntimeExecutionPath", std::string()) == "runtime");
+	REQUIRE(jobs[0]["state"].value("lastRuntimeAdapterRegistered", false));
+	REQUIRE(jobs[0]["state"].value("lastRuntimeAdapterInvoked", false));
+	REQUIRE(jobs[0]["state"].value("lastRuntimeHandled", false));
+	REQUIRE_FALSE(jobs[0]["state"].value("lastSimulationFallbackUsed", true));
+}
+
+TEST_CASE(
+	"Cron ops terminal hook projects runtime execution provenance metadata",
+	"[cron][ops][p0][p4]") {
+	IsolatedCronOpsFixture fixture("runtime-provenance-terminal-hook");
+	CronOpsService& ops = fixture.ops();
+	std::vector<CronJson> completedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId =
+		[&completedPayloads](const CronJson& payload) {
+			completedPayloads.push_back(payload);
+		};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "runtime provenance hook" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "runtime provenance hook" } } },
+		{ "deleteAfterRun", true }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	CronJson run = ops.Run({ { "id", jobId }, { "mode", "force" } });
+	REQUIRE(run.value("enqueued", false));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "runtime provenance" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(completedPayloads.empty());
+	const CronJson& payload = completedPayloads.back();
+	REQUIRE(payload.value("runtimeExecutionPath", std::string()) == "simulation");
+	REQUIRE(payload.value("runtimeAdapterRegistered", true) == false);
+	REQUIRE(payload.value("runtimeAdapterInvoked", true) == false);
+	REQUIRE(payload.value("runtimeHandled", true) == false);
+	REQUIRE(payload.value("simulationFallbackUsed", false));
+}
+
 TEST_CASE("Cron run validator accepts id and mode force", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-valid-force",

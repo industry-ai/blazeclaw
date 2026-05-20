@@ -488,6 +488,11 @@ namespace blazeclaw::cron {
 			std::string status = "ok";
 			std::string summary;
 			std::string error;
+			std::string runtimeExecutionPath = "none";
+			bool runtimeAdapterRegistered = false;
+			bool runtimeAdapterInvoked = false;
+			bool runtimeHandled = false;
+			bool simulationFallbackUsed = false;
 			std::string sessionId;
 			std::string sessionKey;
 			std::string model;
@@ -1296,8 +1301,10 @@ namespace blazeclaw::cron {
 				runtimeAdapter = &adapters.isolatedSession;
 				runtimeAdapterRegistered = static_cast<bool>(adapters.isolatedSession);
 			}
+			outcome.runtimeAdapterRegistered = runtimeAdapterRegistered;
 			bool explicitRuntimeHandledFalse = false;
 			if (runtimeAdapter != nullptr && runtimeAdapterRegistered) {
+				outcome.runtimeAdapterInvoked = true;
 				const std::optional<CronJson> runtimeResult =
 					(*runtimeAdapter)(job, nowMs);
 				if (runtimeResult.has_value() && runtimeResult.value().is_object()) {
@@ -1406,8 +1413,10 @@ namespace blazeclaw::cron {
 				(!adapters.preferRuntimeExecution ||
 					!runtimeAdapterRegistered ||
 					explicitRuntimeHandledFalse);
+			outcome.runtimeHandled = runtimeHandled;
 
 			if (allowSimulationFallback && payloadKind == "systemevent") {
+				outcome.simulationFallbackUsed = true;
 				const std::string text =
 					TrimCopy(payload.value("text", std::string()));
 				if (text.empty()) {
@@ -1430,6 +1439,7 @@ namespace blazeclaw::cron {
 				}
 			}
 			if (allowSimulationFallback && payloadKind == "agentturn") {
+				outcome.simulationFallbackUsed = true;
 				const std::string message =
 					TrimCopy(payload.value("message", std::string()));
 				if (message.empty()) {
@@ -1466,6 +1476,16 @@ namespace blazeclaw::cron {
 			if (outcome.status == "ok" &&
 				!outcome.error.empty()) {
 				outcome.error.clear();
+			}
+
+			if (runtimeHandled) {
+				outcome.runtimeExecutionPath = "runtime";
+			}
+			else if (outcome.simulationFallbackUsed) {
+				outcome.runtimeExecutionPath = "simulation";
+			}
+			else {
+				outcome.runtimeExecutionPath = "none";
 			}
 
 			const bool heartbeatBusyDeliverySuppressed =
@@ -2422,6 +2442,11 @@ namespace blazeclaw::cron {
 			state["runningAtMs"] = nowMs;
 			state["startedAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
+			state["lastRuntimeExecutionPath"] = outcome.runtimeExecutionPath;
+			state["lastRuntimeAdapterRegistered"] = outcome.runtimeAdapterRegistered;
+			state["lastRuntimeAdapterInvoked"] = outcome.runtimeAdapterInvoked;
+			state["lastRuntimeHandled"] = outcome.runtimeHandled;
+			state["lastSimulationFallbackUsed"] = outcome.simulationFallbackUsed;
 			state["lastStatus"] = outcome.status;
 			state["lastRunStatus"] = outcome.status;
 			state["lastError"] = outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error);
@@ -2837,6 +2862,11 @@ namespace blazeclaw::cron {
 				{ "ts", nowMs },
 				{ "jobId", id },
 				{ "action", "finished" },
+				{ "runtimeExecutionPath", outcome.runtimeExecutionPath },
+				{ "runtimeAdapterRegistered", outcome.runtimeAdapterRegistered },
+				{ "runtimeAdapterInvoked", outcome.runtimeAdapterInvoked },
+				{ "runtimeHandled", outcome.runtimeHandled },
+				{ "simulationFallbackUsed", outcome.simulationFallbackUsed },
 				{ "lifecycleState", "terminal" },
 				{ "status", outcome.status },
 				{ "summary", outcome.summary },

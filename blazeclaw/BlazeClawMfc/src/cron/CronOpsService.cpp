@@ -292,6 +292,24 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("taskLedgerTerminal")) {
 				payload["taskLedgerTerminal"] = runEntry["taskLedgerTerminal"];
 			}
+			if (runEntry.contains("runtimeExecutionPath")) {
+				payload["runtimeExecutionPath"] = runEntry["runtimeExecutionPath"];
+			}
+			if (runEntry.contains("runtimeAdapterRegistered")) {
+				payload["runtimeAdapterRegistered"] =
+					runEntry["runtimeAdapterRegistered"];
+			}
+			if (runEntry.contains("runtimeAdapterInvoked")) {
+				payload["runtimeAdapterInvoked"] =
+					runEntry["runtimeAdapterInvoked"];
+			}
+			if (runEntry.contains("runtimeHandled")) {
+				payload["runtimeHandled"] = runEntry["runtimeHandled"];
+			}
+			if (runEntry.contains("simulationFallbackUsed")) {
+				payload["simulationFallbackUsed"] =
+					runEntry["simulationFallbackUsed"];
+			}
 		if (runEntry.contains("queuedAtMs")) {
 			payload["queuedAtMs"] = runEntry["queuedAtMs"];
 		}
@@ -1528,6 +1546,26 @@ namespace blazeclaw::cron {
 					finishedRun->contains("runId") ? (*finishedRun)["runId"] : CronJson(nullptr);
 				terminal["sourceStatus"] =
 					finishedRun->contains("status") ? (*finishedRun)["status"] : CronJson(nullptr);
+				terminal["runtimeExecutionPath"] =
+					finishedRun->contains("runtimeExecutionPath")
+					? (*finishedRun)["runtimeExecutionPath"]
+					: CronJson(nullptr);
+				terminal["runtimeAdapterRegistered"] =
+					finishedRun->contains("runtimeAdapterRegistered")
+					? (*finishedRun)["runtimeAdapterRegistered"]
+					: CronJson(nullptr);
+				terminal["runtimeAdapterInvoked"] =
+					finishedRun->contains("runtimeAdapterInvoked")
+					? (*finishedRun)["runtimeAdapterInvoked"]
+					: CronJson(nullptr);
+				terminal["runtimeHandled"] =
+					finishedRun->contains("runtimeHandled")
+					? (*finishedRun)["runtimeHandled"]
+					: CronJson(nullptr);
+				terminal["simulationFallbackUsed"] =
+					finishedRun->contains("simulationFallbackUsed")
+					? (*finishedRun)["simulationFallbackUsed"]
+					: CronJson(nullptr);
 				terminal["timedOut"] = finishedRun->value("timedOut", false);
 				terminal["aborted"] =
 					finishedRun->value("aborted", false) ||
