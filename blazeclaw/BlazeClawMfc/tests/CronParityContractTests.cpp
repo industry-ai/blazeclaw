@@ -521,6 +521,39 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat cron.add 
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 	}
+
+	SECTION("cron.add canonicalizes flat transport dispatch aliases to nested flags") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\"," 
+				"\"id\":\"cron-add-flat-transport-dispatch-aliases\"," 
+				"\"method\":\"cron.add\"," 
+				"\"params\":{"
+				"\"kind\":\"every\"," 
+				"\"everyMs\":60000,"
+				"\"text\":\"nightly ping\"," 
+				"\"deliveryMode\":\"webhook\"," 
+				"\"deliveryUrl\":\"https://example.test/delivery-url\"," 
+				"\"deliveryTransportDispatch\":true,"
+				"\"failureDestinationMode\":\"webhook\"," 
+				"\"failureDestinationUrl\":\"https://example.test/failure-url\"," 
+				"\"failureDestinationTransportDispatch\":true,"
+				"\"failureAlertMode\":\"webhook\"," 
+				"\"failureAlertUrl\":\"https://example.test/alert-url\"," 
+				"\"failureAlertTransportDispatch\":true"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-add-flat-transport-dispatch-aliases");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
 }
 
 TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/run/runs/wake params", "[cron][gateway][normalize]") {
@@ -570,6 +603,39 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 
 		REQUIRE(response.value("type", std::string()) == "res");
 		REQUIRE(response.value("id", std::string()) == "cron-update-flat-shape");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
+	SECTION("cron.update patch canonicalizes flat transport dispatch aliases to nested flags") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\"," 
+				"\"id\":\"cron-update-flat-transport-dispatch-aliases\"," 
+				"\"method\":\"cron.update\"," 
+				"\"params\":{"
+				"\"id\":\"cron-1\"," 
+				"\"patch\":{"
+				"\"deliveryMode\":\"webhook\"," 
+				"\"deliveryUrl\":\"https://example.test/update-delivery-url\"," 
+				"\"deliveryTransportDispatch\":true,"
+				"\"failureDestinationMode\":\"webhook\"," 
+				"\"failureDestinationUrl\":\"https://example.test/update-failure-url\"," 
+				"\"failureDestinationTransportDispatch\":true,"
+				"\"failureAlertMode\":\"webhook\"," 
+				"\"failureAlertUrl\":\"https://example.test/update-alert-url\"," 
+				"\"failureAlertTransportDispatch\":true"
+				"}"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-flat-transport-dispatch-aliases");
 		REQUIRE_FALSE(response.value("ok", true));
 		REQUIRE(response.contains("error"));
 		REQUIRE(response["error"].is_object());
@@ -7953,7 +8019,7 @@ TEST_CASE(
 		std::string("{\"name\":\"wp-f announce delivery callback\",\"enabled\":true,") +
 		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
 		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"announce delivery\"}," +
-		"\"delivery\":{\"mode\":\"announce\",\"to\":\"main\",\"channel\":\"last\"}," +
+		"\"delivery\":{\"mode\":\"announce\",\"to\":\"main\",\"channel\":\"last\",\"accountId\":\"announce-account\"}," +
 		"\"deleteAfterRun\":true}");
 	REQUIRE(cronAdd.ok);
 	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
@@ -7969,6 +8035,7 @@ TEST_CASE(
 	REQUIRE(announceDispatchCount >= 1);
 	REQUIRE(lastAnnounceRequest.has_value());
 	REQUIRE(lastAnnounceRequest->message.find("[cron][announce]") != std::string::npos);
+	REQUIRE(lastAnnounceRequest->message.find("accountId=") != std::string::npos);
 }
 TEST_CASE(
 	"Cron gateway production wiring dispatches failure-alert notification callbacks",
@@ -8002,7 +8069,7 @@ TEST_CASE(
 		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
 		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"runtime message\",\"timeoutSeconds\":1}," +
 		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"failureAlert\":{\"after\":1,\"cooldownMs\":0,\"mode\":\"announce\",\"to\":\"main\"}," +
+		"\"failureAlert\":{\"after\":1,\"cooldownMs\":0,\"mode\":\"announce\",\"to\":\"main\",\"accountId\":\"failure-alert-account\"}," +
 		"\"deleteAfterRun\":true}");
 	REQUIRE(cronAdd.ok);
 	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));

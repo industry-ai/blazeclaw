@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BN WP-A..WP-F execution baseline + WP-B announce delivery dispatch)
+Last refreshed: 2026-05-20 (Phase BO WP-B outbound transport alias + callback payload follow-up)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -30,6 +30,12 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
   `cron.add` → `cron.run` (force) → `wake` → `cron.runs` with schema validation.
 - Chat-runtime callback E2E: runtime overrides, failure-alert dispatch, announce
   delivery dispatch (`[cron][gateway][wp-f][wp-b]`).
+- Gateway pre-validator canonicalization now maps flat transport dispatch aliases
+  (`deliveryTransportDispatch`, `failureDestinationTransportDispatch`,
+  `failureAlertTransportDispatch`) into nested `transportDispatch` fields for
+  add/update compatibility payloads.
+- Announce callback payloads now project account metadata (`accountId=...`) when
+  terminal run read-model fields include `deliveryAccountId`.
 - Tests: `[cron][gateway][wp-f]` in `BlazeClawMfc/tests/CronParityContractTests.cpp`.
 
 ## Remaining high-impact gaps

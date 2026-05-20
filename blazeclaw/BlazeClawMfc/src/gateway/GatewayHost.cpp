@@ -200,12 +200,14 @@ namespace blazeclaw::gateway {
 				if (params.contains("deliveryMode") ||
 					params.contains("deliveryUrl") ||
 					params.contains("deliveryTo") ||
+					params.contains("deliveryTransportDispatch") ||
 					params.contains("deliveryChannel") ||
 					params.contains("deliveryAccountId") ||
 					params.contains("deliveryBestEffort") ||
 					params.contains("failureDestinationMode") ||
 					params.contains("failureDestinationUrl") ||
 					params.contains("failureDestinationTo") ||
+					params.contains("failureDestinationTransportDispatch") ||
 					params.contains("failureDestinationChannel") ||
 					params.contains("failureDestinationAccountId")) {
 					Json& delivery = ensureObjectField(params, "delivery");
@@ -249,10 +251,22 @@ namespace blazeclaw::gateway {
 						delivery.erase("deliveryBestEffort");
 						changed = true;
 					}
+					moveFieldIfPresent(params, delivery, "deliveryTransportDispatch");
+					if (delivery.contains("deliveryTransportDispatch") &&
+						!delivery.contains("transportDispatch")) {
+						delivery["transportDispatch"] = delivery["deliveryTransportDispatch"];
+						delivery.erase("deliveryTransportDispatch");
+						changed = true;
+					}
+					else if (delivery.contains("deliveryTransportDispatch")) {
+						delivery.erase("deliveryTransportDispatch");
+						changed = true;
+					}
 
 					if (params.contains("failureDestinationMode") ||
 						params.contains("failureDestinationUrl") ||
 						params.contains("failureDestinationTo") ||
+						params.contains("failureDestinationTransportDispatch") ||
 						params.contains("failureDestinationChannel") ||
 						params.contains("failureDestinationAccountId")) {
 						Json& failureDestination = ensureObjectField(delivery, "failureDestination");
@@ -295,6 +309,18 @@ namespace blazeclaw::gateway {
 							failureDestination.erase("failureDestinationAccountId");
 							changed = true;
 						}
+						moveFieldIfPresent(params, failureDestination, "failureDestinationTransportDispatch");
+						if (failureDestination.contains("failureDestinationTransportDispatch") &&
+							!failureDestination.contains("transportDispatch")) {
+							failureDestination["transportDispatch"] =
+								failureDestination["failureDestinationTransportDispatch"];
+							failureDestination.erase("failureDestinationTransportDispatch");
+							changed = true;
+						}
+						else if (failureDestination.contains("failureDestinationTransportDispatch")) {
+							failureDestination.erase("failureDestinationTransportDispatch");
+							changed = true;
+						}
 					}
 				}
 
@@ -303,6 +329,7 @@ namespace blazeclaw::gateway {
 					params.contains("failureAlertMode") ||
 					params.contains("failureAlertUrl") ||
 					params.contains("failureAlertTo") ||
+					params.contains("failureAlertTransportDispatch") ||
 					params.contains("failureAlertChannel") ||
 					params.contains("failureAlertAccountId")) {
 					Json& failureAlert = ensureObjectField(params, "failureAlert");
@@ -357,6 +384,17 @@ namespace blazeclaw::gateway {
 						!failureAlert.contains("accountId")) {
 						failureAlert["accountId"] = failureAlert["failureAlertAccountId"];
 						failureAlert.erase("failureAlertAccountId");
+						changed = true;
+					}
+					moveFieldIfPresent(params, failureAlert, "failureAlertTransportDispatch");
+					if (failureAlert.contains("failureAlertTransportDispatch") &&
+						!failureAlert.contains("transportDispatch")) {
+						failureAlert["transportDispatch"] = failureAlert["failureAlertTransportDispatch"];
+						failureAlert.erase("failureAlertTransportDispatch");
+						changed = true;
+					}
+					else if (failureAlert.contains("failureAlertTransportDispatch")) {
+						failureAlert.erase("failureAlertTransportDispatch");
 						changed = true;
 					}
 				}
@@ -435,12 +473,14 @@ namespace blazeclaw::gateway {
 					if (patch.contains("deliveryMode") ||
 						patch.contains("deliveryUrl") ||
 						patch.contains("deliveryTo") ||
+						patch.contains("deliveryTransportDispatch") ||
 						patch.contains("deliveryChannel") ||
 						patch.contains("deliveryAccountId") ||
 						patch.contains("deliveryBestEffort") ||
 						patch.contains("failureDestinationMode") ||
 						patch.contains("failureDestinationUrl") ||
 						patch.contains("failureDestinationTo") ||
+						patch.contains("failureDestinationTransportDispatch") ||
 						patch.contains("failureDestinationChannel") ||
 						patch.contains("failureDestinationAccountId")) {
 						Json& delivery = ensureObjectField(patch, "delivery");
@@ -484,10 +524,22 @@ namespace blazeclaw::gateway {
 							delivery.erase("deliveryBestEffort");
 							changed = true;
 						}
+						moveFieldIfPresent(patch, delivery, "deliveryTransportDispatch");
+						if (delivery.contains("deliveryTransportDispatch") &&
+							!delivery.contains("transportDispatch")) {
+							delivery["transportDispatch"] = delivery["deliveryTransportDispatch"];
+							delivery.erase("deliveryTransportDispatch");
+							changed = true;
+						}
+						else if (delivery.contains("deliveryTransportDispatch")) {
+							delivery.erase("deliveryTransportDispatch");
+							changed = true;
+						}
 
 						if (patch.contains("failureDestinationMode") ||
 							patch.contains("failureDestinationUrl") ||
 							patch.contains("failureDestinationTo") ||
+							patch.contains("failureDestinationTransportDispatch") ||
 							patch.contains("failureDestinationChannel") ||
 							patch.contains("failureDestinationAccountId")) {
 							Json& failureDestination = ensureObjectField(delivery, "failureDestination");
@@ -530,6 +582,18 @@ namespace blazeclaw::gateway {
 								failureDestination.erase("failureDestinationAccountId");
 								changed = true;
 							}
+							moveFieldIfPresent(patch, failureDestination, "failureDestinationTransportDispatch");
+							if (failureDestination.contains("failureDestinationTransportDispatch") &&
+								!failureDestination.contains("transportDispatch")) {
+								failureDestination["transportDispatch"] =
+									failureDestination["failureDestinationTransportDispatch"];
+								failureDestination.erase("failureDestinationTransportDispatch");
+								changed = true;
+							}
+							else if (failureDestination.contains("failureDestinationTransportDispatch")) {
+								failureDestination.erase("failureDestinationTransportDispatch");
+								changed = true;
+							}
 						}
 					}
 
@@ -538,6 +602,7 @@ namespace blazeclaw::gateway {
 						patch.contains("failureAlertMode") ||
 						patch.contains("failureAlertUrl") ||
 						patch.contains("failureAlertTo") ||
+						patch.contains("failureAlertTransportDispatch") ||
 						patch.contains("failureAlertChannel") ||
 						patch.contains("failureAlertAccountId")) {
 						Json& failureAlert = ensureObjectField(patch, "failureAlert");
@@ -592,6 +657,18 @@ namespace blazeclaw::gateway {
 							!failureAlert.contains("accountId")) {
 							failureAlert["accountId"] = failureAlert["failureAlertAccountId"];
 							failureAlert.erase("failureAlertAccountId");
+							changed = true;
+						}
+						moveFieldIfPresent(patch, failureAlert, "failureAlertTransportDispatch");
+						if (failureAlert.contains("failureAlertTransportDispatch") &&
+							!failureAlert.contains("transportDispatch")) {
+							failureAlert["transportDispatch"] =
+								failureAlert["failureAlertTransportDispatch"];
+							failureAlert.erase("failureAlertTransportDispatch");
+							changed = true;
+						}
+						else if (failureAlert.contains("failureAlertTransportDispatch")) {
+							failureAlert.erase("failureAlertTransportDispatch");
 							changed = true;
 						}
 					}
@@ -3721,6 +3798,8 @@ namespace blazeclaw::gateway {
 			cron_production::ReadStringField(cronPayload, "jobId");
 		const std::string channel =
 			cron_production::ReadStringField(cronPayload, "deliveryChannel");
+		const std::string accountId =
+			cron_production::ReadStringField(cronPayload, "deliveryAccountId");
 		const std::string summary =
 			cron_production::ReadStringField(cronPayload, "summary");
 
@@ -3733,6 +3812,9 @@ namespace blazeclaw::gateway {
 		}
 		if (!channel.empty()) {
 			text += " channel=" + channel;
+		}
+		if (!accountId.empty()) {
+			text += " accountId=" + accountId;
 		}
 		if (!summary.empty()) {
 			text += " summary=" + summary;

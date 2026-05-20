@@ -1408,7 +1408,8 @@ namespace blazeclaw::gateway::protocol {
 								!requireFailureAlertFieldKind("mode", JsonFieldKind::String, "a string") ||
 								!requireFailureAlertFieldKind("channel", JsonFieldKind::String, "a string") ||
 								!requireFailureAlertFieldKind("to", JsonFieldKind::String, "a string") ||
-								!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string")) {
+								!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string") ||
+								!requireFailureAlertFieldKind("transportDispatch", JsonFieldKind::Boolean, "a boolean")) {
 								return false;
 							}
 
@@ -1461,7 +1462,7 @@ namespace blazeclaw::gateway::protocol {
 
 							for (const auto& [field, _] : failureAlertKinds) {
 								if (ContainsFieldName(
-									{ "after", "channel", "to", "cooldownMs", "mode", "accountId" },
+									{ "after", "channel", "to", "cooldownMs", "mode", "accountId", "transportDispatch" },
 									field)) {
 									continue;
 								}
@@ -1656,7 +1657,8 @@ namespace blazeclaw::gateway::protocol {
 												!requireFailureAlertFieldKind("mode", JsonFieldKind::String, "a string") ||
 												!requireFailureAlertFieldKind("channel", JsonFieldKind::String, "a string") ||
 												!requireFailureAlertFieldKind("to", JsonFieldKind::String, "a string") ||
-												!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string")) {
+										!requireFailureAlertFieldKind("accountId", JsonFieldKind::String, "a string") ||
+										!requireFailureAlertFieldKind("transportDispatch", JsonFieldKind::Boolean, "a boolean")) {
 												return false;
 											}
 
@@ -1702,7 +1704,7 @@ namespace blazeclaw::gateway::protocol {
 											}
 
 											for (const auto& [field, _] : failureAlertKinds) {
-												if (ContainsFieldName({ "after", "channel", "to", "cooldownMs", "mode", "accountId" }, field)) {
+										if (ContainsFieldName({ "after", "channel", "to", "cooldownMs", "mode", "accountId", "transportDispatch" }, field)) {
 													continue;
 												}
 												SetIssue(
