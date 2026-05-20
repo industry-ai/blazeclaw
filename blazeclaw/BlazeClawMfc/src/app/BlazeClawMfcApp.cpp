@@ -13,6 +13,10 @@
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 
+#include "LoginDlg.h"
+#include "Client.h"
+#include "CNetwork_c.h"
+
 #include <filesystem>
 #include <Windows.h>
 
@@ -375,6 +379,37 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	//auto* frame = new CMainFrame();
 	//m_pMainWnd = frame;
 
+	try {
+		// Initialize network
+		CNetwork_c& network = CNetwork_c::Instance();
+		CClient& client = CClient::Instance();
+		client.Init(network);
+
+		// Try auto login
+		const std::string auto_login_result = client.AutoLogin();
+		if (auto_login_result == "SESSION_OK") {
+			// Auto login successful, no need to show login dialog
+		}
+		else {
+			// Auto login failed or not possible, show login dialog
+
+			// Show login dialog before creating main frame
+			CLoginDlg loginDlg;
+			INT_PTR nResult;
+			nResult = loginDlg.DoModal();
+			if (nResult != IDOK && nResult != IDC_BTN_REGIST)
+				return FALSE;
+		}
+	}
+	catch (const std::exception& ex) {
+		// If auto login fails with exception, show login dialog
+		CLoginDlg loginDlg;
+		INT_PTR nResult;
+		nResult = loginDlg.DoModal();
+		if (nResult != IDOK && nResult != IDC_BTN_REGIST)
+			return FALSE;
+	}
+
 	// create main MDI Frame window
 	CMainFrame* pMainFrame = new CMainFrame;
 	if (!pMainFrame || !pMainFrame->LoadFrame(IDR_MAINFRAME))
@@ -408,8 +443,9 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
 	AppendStartupConfigStatus(m_config);
-  AppendStartupLocalModelStatus(m_config, m_serviceManager);
+    AppendStartupLocalModelStatus(m_config, m_serviceManager);
 	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
+
 
 	return TRUE;
 }

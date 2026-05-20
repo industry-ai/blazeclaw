@@ -118,6 +118,8 @@
 #define IDD_TASK_DIALOG                 314
 #define IDD_SKILL_DIALOG                315
 #define IDD_LOG_DIALOG                  316
+#define IDD_QRCODE_LOGIN                317
+#define IDD_LOGIN_DIALOG                318
 #define IDC_STATIC_TITLE                1000
 #define IDC_STATIC_DESCRIPTION          1001
 #define IDC_GROUP_GATEWAY               1002
@@ -298,6 +300,8 @@
 #define IDC_BUTTON_TASK_ADVANCED        1175
 #define IDC_BUTTON_TASK_DELETE          1176
 #define IDC_EDIT1                       1177
+#define IDC_STATIC_QRCODE               1178
+#define IDC_STATIC_STATUS               1179
 #define ID_WRITE_PASTEASHYPERLINK       32770
 #define ID_EDIT_DOC                     32771
 #define ID_EDIT_OVERVIEW                32772
@@ -314,14 +318,20 @@
 #define ID_EDIT_SESSION                 32782
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
+#define IDC_PHONE_EDIT					32785
+#define IDC_CODE_EDIT					32786
+#define IDC_GET_CODE_BUTTON				32787
+#define IDC_LOGIN_BUTTON				32788
+#define IDC_BTN_REGIST				    32789
+#define IDC_QRCODE_LOGIN_BUTTON		    32790
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        317
-#define _APS_NEXT_COMMAND_VALUE         32785
-#define _APS_NEXT_CONTROL_VALUE         1178
+#define _APS_NEXT_RESOURCE_VALUE        320
+#define _APS_NEXT_COMMAND_VALUE         32786
+#define _APS_NEXT_CONTROL_VALUE         1180
 #define _APS_NEXT_SYMED_VALUE           317
 #endif
 #endif

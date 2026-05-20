@@ -94,6 +94,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\app\AIChatView.h" />
     <ClInclude Include="src\app\BlazeClawMFCApp.h" />
     <ClInclude Include="src\app\BlazeClawMFCDoc.h" />
     <ClInclude Include="src\app\BlazeClawMFCView.h" />
@@ -102,14 +103,27 @@
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\ClassView.h" />
+    <ClInclude Include="src\app\Client.h" />
+    <ClInclude Include="src\app\CNetwork_c.h" />
+    <ClInclude Include="src\app\Connection_c.h" />
     <ClInclude Include="src\app\FileView.h" />
     <ClInclude Include="src\app\framework.h" />
+    <ClInclude Include="src\app\IoData_c.h" />
+    <ClInclude Include="src\app\IoData_cFactory.h" />
+    <ClInclude Include="src\app\Logger.h" />
+    <ClInclude Include="src\app\LoginDlg.h" />
+    <ClInclude Include="src\app\LogSinks.h" />
     <ClInclude Include="src\app\MainFrame.h" />
     <ClInclude Include="src\app\OutputWnd.h" />
     <ClInclude Include="src\app\pch.h" />
     <ClInclude Include="src\app\PropertiesWnd.h" />
+    <ClInclude Include="src\app\qrcodegen.hpp" />
+    <ClInclude Include="src\app\QRCodeLoginDlg.h" />
+    <ClInclude Include="src\app\QRCodeLoginService.h" />
     <ClInclude Include="src\app\Resource.h" />
     <ClInclude Include="src\app\targetver.h" />
+    <ClInclude Include="src\app\TaskQueue.h" />
+    <ClInclude Include="src\app\TlsAuthClient.h" />
     <ClInclude Include="src\app\ViewTree.h" />
     <ClInclude Include="src\config\ConfigLoader.h" />
     <ClInclude Include="src\config\ConfigModels.h" />
@@ -160,6 +174,7 @@
     <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\app\AIChatView.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
@@ -168,7 +183,14 @@
     <ClCompile Include="src\app\ChatView.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />
     <ClCompile Include="src\app\ClassView.cpp" />
+    <ClCompile Include="src\app\Client.cpp" />
+    <ClCompile Include="src\app\CNetwork_c.cpp" />
+    <ClCompile Include="src\app\Connection_c.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
+    <ClCompile Include="src\app\IoData_cFactory.cpp" />
+    <ClCompile Include="src\app\Logger.cpp" />
+    <ClCompile Include="src\app\LoginDlg.cpp" />
+    <ClCompile Include="src\app\LogSinks.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp">
@@ -176,6 +198,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\app\PropertiesWnd.cpp" />
+    <ClCompile Include="src\app\qrcodegen.cpp" />
+    <ClCompile Include="src\app\QRCodeLoginDlg.cpp" />
+    <ClCompile Include="src\app\QRCodeLoginService.cpp" />
+    <ClCompile Include="src\app\TaskQueue.cpp" />
+    <ClCompile Include="src\app\TlsAuthClient.cpp" />
     <ClCompile Include="src\app\ViewTree.cpp" />
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
