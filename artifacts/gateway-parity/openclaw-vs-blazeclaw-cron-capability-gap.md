@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase CD Step 2-4 runtime execution provenance + terminal hook propagation increment + docs sync)
+Last refreshed: 2026-05-20 (Phase CE Step 5 schedule-expression strictness follow-up + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -14,6 +14,11 @@ through timer state/run snapshots and terminal task-ledger hooks. Remaining
 work is concentrated in P10+ breadth: execution/runtime permutations,
 hook-consumer side-effect depth, and tool-surface breadth (plus deferred CLI
 parity decision).
+
+Phase CE Step 5 follow-up also tightened cron schedule parity by enforcing
+deterministic cron expression field-count/token validation errors in
+`ComputeNextCron`, reducing silent invalid-expression fallback behavior and
+aligning schedule-error auto-disable semantics.
 
 ## Priority status (§5)
 
@@ -62,4 +67,4 @@ msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 ```
 
-Evidence (2026-05-20, Phase CD): `[p0][p4]` 22 assertions / 2 test cases, `[cron]` 1431 assertions / 225 test cases; required `msbuild` gate passed.
+Evidence (2026-05-20, Phase CE): `[cron][timer][step5]` 16 assertions / 2 test cases, `[cron]` 1447 assertions / 227 test cases; required `msbuild` gate passed.

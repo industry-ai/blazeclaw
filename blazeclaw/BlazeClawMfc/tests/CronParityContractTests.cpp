@@ -4162,6 +4162,84 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 }
 
 TEST_CASE(
+	"Cron timer auto-disables cron job after repeated invalid cron expression field-count errors",
+	"[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-cron-invalid-field-count" },
+			{ "name", "cron invalid field count" },
+			{ "enabled", true },
+			{ "schedule",
+				{
+					{ "kind", "cron" },
+					{ "expr", "* * *" }
+				} },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", CronJson::object() }
+		}
+	});
+
+	for (int i = 0; i < 3; ++i) {
+		timer.RecomputeSchedules(jobs, nowMs + (i * 1'000));
+	}
+
+	REQUIRE(jobs[0].value("enabled", true) == false);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].is_object());
+	REQUIRE(jobs[0]["state"].value("scheduleErrorCount", 0) >= 3);
+	REQUIRE(
+		jobs[0]["state"].value("lastError", std::string()).find("invalid cron expression field count") !=
+		std::string::npos);
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabled", false));
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabledAtMs", 0LL) > 0);
+	REQUIRE(
+		jobs[0]["state"].value("scheduleAutoDisabledReason", std::string()) ==
+		"schedule_error_threshold");
+}
+
+TEST_CASE(
+	"Cron timer auto-disables cron job after repeated invalid cron token errors",
+	"[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-cron-invalid-token" },
+			{ "name", "cron invalid token" },
+			{ "enabled", true },
+			{ "schedule",
+				{
+					{ "kind", "cron" },
+					{ "expr", "61 * * * *" }
+				} },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", CronJson::object() }
+		}
+	});
+
+	for (int i = 0; i < 3; ++i) {
+		timer.RecomputeSchedules(jobs, nowMs + (i * 1'000));
+	}
+
+	REQUIRE(jobs[0].value("enabled", true) == false);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].is_object());
+	REQUIRE(jobs[0]["state"].value("scheduleErrorCount", 0) >= 3);
+	REQUIRE(
+		jobs[0]["state"].value("lastError", std::string()).find("invalid cron minute field") !=
+		std::string::npos);
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabled", false));
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabledAtMs", 0LL) > 0);
+	REQUIRE(
+		jobs[0]["state"].value("scheduleAutoDisabledReason", std::string()) ==
+		"schedule_error_threshold");
+}
+
+TEST_CASE(
 	"Cron ops flushes schedule auto-disable notification hooks at threshold",
 	"[cron][timer][wp-c]") {
 	IsolatedCronOpsFixture fixture("schedule-auto-disable-notify");

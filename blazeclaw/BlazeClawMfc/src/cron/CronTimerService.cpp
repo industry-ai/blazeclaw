@@ -2037,8 +2037,8 @@ namespace blazeclaw::cron {
 			while (stream >> token) {
 				parts.push_back(token);
 			}
-			if (parts.size() < 2) {
-				return nowMs + kMinuteMs;
+			if (parts.size() != 5 && parts.size() != 6) {
+				throw std::invalid_argument("invalid cron expression field count");
 			}
 
 			const bool hasSecondsField = parts.size() >= 6;
@@ -2060,6 +2060,45 @@ namespace blazeclaw::cron {
 				hasSecondsField
 				? (parts.size() >= 6 ? parts[5] : std::string("*"))
 				: (parts.size() >= 5 ? parts[4] : std::string("*"));
+
+			auto HasAnyFieldMatch = [](
+				const std::string& tokenRaw,
+				const int minValue,
+				const int maxValue,
+				const bool normalizeSevenToZero,
+				const std::function<std::optional<int>(const std::string&)>& aliasResolver = nullptr) {
+				for (int value = minValue; value <= maxValue; ++value) {
+					if (MatchCronFieldToken(
+						tokenRaw,
+						value,
+						minValue,
+						maxValue,
+						normalizeSevenToZero,
+						aliasResolver)) {
+						return true;
+					}
+				}
+				return false;
+			};
+
+			if (hasSecondsField && !HasAnyFieldMatch(secondToken, 0, 59, false)) {
+				throw std::invalid_argument("invalid cron second field");
+			}
+			if (!HasAnyFieldMatch(minuteToken, 0, 59, false)) {
+				throw std::invalid_argument("invalid cron minute field");
+			}
+			if (!HasAnyFieldMatch(hourToken, 0, 23, false)) {
+				throw std::invalid_argument("invalid cron hour field");
+			}
+			if (!HasAnyFieldMatch(dayOfMonthToken, 1, 31, false)) {
+				throw std::invalid_argument("invalid cron day-of-month field");
+			}
+			if (!HasAnyFieldMatch(monthToken, 1, 12, false, TryResolveCronMonthAlias)) {
+				throw std::invalid_argument("invalid cron month field");
+			}
+			if (!HasAnyFieldMatch(dayOfWeekToken, 0, 6, true, TryResolveCronDayOfWeekAlias)) {
+				throw std::invalid_argument("invalid cron day-of-week field");
+			}
 
 			const auto timezoneOffsetMinutes =
 				ParseTimezoneOffsetMinutes(schedule.value("tz", std::string()));
