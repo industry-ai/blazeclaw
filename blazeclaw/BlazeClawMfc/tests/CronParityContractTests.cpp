@@ -4044,15 +4044,23 @@ TEST_CASE("Cron timer supports IANA Etc zero-offset timezone aliases", "[cron][t
 		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/Zulu" } } },
 		{ "state", CronJson::object() }
 	};
+	CronJson etcGmtZeroJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/GMT0" } } },
+		{ "state", CronJson::object() }
+	};
 
 	const auto nextUtc = timer.ComputeNextRunAtMs(utcJob, nowMs);
 	const auto nextEtcUtc = timer.ComputeNextRunAtMs(etcUtcJob, nowMs);
 	const auto nextEtcZulu = timer.ComputeNextRunAtMs(etcZuluJob, nowMs);
+	const auto nextEtcGmtZero = timer.ComputeNextRunAtMs(etcGmtZeroJob, nowMs);
 	REQUIRE(nextUtc.has_value());
 	REQUIRE(nextEtcUtc.has_value());
 	REQUIRE(nextEtcZulu.has_value());
+	REQUIRE(nextEtcGmtZero.has_value());
 	REQUIRE(nextUtc.value() == nextEtcUtc.value());
 	REQUIRE(nextUtc.value() == nextEtcZulu.value());
+	REQUIRE(nextUtc.value() == nextEtcGmtZero.value());
 }
 
 

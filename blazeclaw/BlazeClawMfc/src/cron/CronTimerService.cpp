@@ -1826,6 +1826,9 @@ namespace blazeclaw::cron {
 				if (suffix.empty()) {
 					return 0;
 				}
+				if (suffix == "0") {
+					return 0;
+				}
 				if (suffix[0] != '+' && suffix[0] != '-') {
 					return std::nullopt;
 				}
