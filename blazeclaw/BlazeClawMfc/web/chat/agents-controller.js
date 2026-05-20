@@ -335,6 +335,7 @@
                 payloadModel: "",
                 payloadThinking: "",
                 timeoutSeconds: "",
+                contextMessages: "",
                 deliveryMode: "none",
                 deliveryTo: "",
                 failureAlertMode: "inherit",
@@ -3137,6 +3138,19 @@
                 }
             }
 
+            const contextMessagesText = String(source.contextMessages || "").trim();
+            if (contextMessagesText) {
+                const parsedContextMessages = Number(contextMessagesText);
+                const integerContextMessages = Math.floor(parsedContextMessages);
+                if (!Number.isFinite(parsedContextMessages) ||
+                    integerContextMessages.toString() !== contextMessagesText ||
+                    integerContextMessages < 0 ||
+                    integerContextMessages > CRON_REMINDER_CONTEXT_MESSAGES_MAX) {
+                    errors.contextMessages =
+                        "Context messages must be an integer between 0 and 10.";
+                }
+            }
+
             if (String(source.deliveryMode || "none").trim() === "webhook") {
                 const deliveryTo = String(source.deliveryTo || "").trim();
                 if (!deliveryTo) {
@@ -3212,6 +3226,152 @@
             };
         }
 
+        const CRON_REMINDER_CONTEXT_MESSAGES_MAX = 10;
+        const CRON_REMINDER_CONTEXT_PER_MESSAGE_MAX = 220;
+        const CRON_REMINDER_CONTEXT_TOTAL_MAX = 700;
+        const CRON_REMINDER_CONTEXT_MARKER = "\n\nRecent context:\n";
+
+        function truncateCronReminderText(input, maxLen) {
+            const value = String(input || "");
+            if (value.length <= maxLen) {
+                return value;
+            }
+
+            const safeMax = Math.max(0, Number(maxLen) - 3);
+            return value.slice(0, safeMax).trimEnd() + "...";
+        }
+
+        function stripExistingCronReminderContext(text) {
+            const source = String(text || "");
+            const markerIndex = source.indexOf(CRON_REMINDER_CONTEXT_MARKER);
+            if (markerIndex < 0) {
+                return source;
+            }
+            return source.slice(0, markerIndex).trim();
+        }
+
+        function extractCronReminderMessageText(message) {
+            if (!message || typeof message !== "object") {
+                return "";
+            }
+
+            if (typeof message.text === "string") {
+                return String(message.text || "").trim();
+            }
+
+            if (Array.isArray(message.content)) {
+                const lines = [];
+                message.content.forEach(function (item) {
+                    if (!item || typeof item !== "object") {
+                        return;
+                    }
+                    const type = normalizeLowercaseStringOrEmpty(item.type);
+                    if (type === "text" && typeof item.text === "string") {
+                        const line = String(item.text || "").trim();
+                        if (line) {
+                            lines.push(line);
+                        }
+                    }
+                });
+                return lines.join("\n").trim();
+            }
+
+            return "";
+        }
+
+        function resolveCronReminderContextMessages(form) {
+            const raw = String(form && form.contextMessages || "").trim();
+            if (!raw) {
+                return 0;
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed)) {
+                return 0;
+            }
+
+            const integerValue = Math.floor(parsed);
+            if (integerValue <= 0) {
+                return 0;
+            }
+
+            return Math.min(CRON_REMINDER_CONTEXT_MESSAGES_MAX, integerValue);
+        }
+
+        async function buildCronReminderContextLines(contextMessages) {
+            const maxMessages = Math.min(
+                CRON_REMINDER_CONTEXT_MESSAGES_MAX,
+                Math.max(0, Math.floor(Number(contextMessages) || 0))
+            );
+            if (maxMessages <= 0 || !request) {
+                return [];
+            }
+
+            const resolvedSessionKey = String(state.sessionKey || "").trim();
+            if (!resolvedSessionKey) {
+                return [];
+            }
+
+            try {
+                const response = await request("chat.history", {
+                    sessionKey: resolvedSessionKey,
+                    limit: maxMessages,
+                });
+                const payload = response && response.payload
+                    ? response.payload
+                    : response;
+                const messages = payload && Array.isArray(payload.messages)
+                    ? payload.messages
+                    : Array.isArray(response && response.messages)
+                        ? response.messages
+                        : [];
+                const parsed = messages
+                    .map(function (message) {
+                        const role = normalizeLowercaseStringOrEmpty(message && message.role);
+                        if (role !== "user" && role !== "assistant") {
+                            return null;
+                        }
+                        const text = extractCronReminderMessageText(message);
+                        if (!text) {
+                            return null;
+                        }
+                        return {
+                            role,
+                            text,
+                        };
+                    })
+                    .filter(function (entry) {
+                        return Boolean(entry);
+                    });
+                const recent = parsed.slice(-maxMessages);
+                if (!recent.length) {
+                    return [];
+                }
+
+                const lines = [];
+                let total = 0;
+                recent.forEach(function (entry) {
+                    const label = entry.role === "user"
+                        ? "User"
+                        : "Assistant";
+                    const text = truncateCronReminderText(
+                        entry.text,
+                        CRON_REMINDER_CONTEXT_PER_MESSAGE_MAX
+                    );
+                    const line = "- " + label + ": " + text;
+                    total += line.length;
+                    if (total > CRON_REMINDER_CONTEXT_TOTAL_MAX) {
+                        return;
+                    }
+                    lines.push(line);
+                });
+
+                return lines;
+            } catch (_) {
+                return [];
+            }
+        }
+
         function buildCronPayload(form) {
             const payloadKind = String(form && form.payloadKind || "agentTurn").trim();
             if (payloadKind === "systemEvent") {
@@ -3246,6 +3406,34 @@
             if (timeout > 0) {
                 payload.timeoutSeconds = timeout;
             }
+            return payload;
+        }
+
+        async function buildCronPayloadWithToolParity(form) {
+            const payload = buildCronPayload(form);
+            if (!payload || payload.kind !== "systemEvent") {
+                return payload;
+            }
+
+            const contextMessages = resolveCronReminderContextMessages(form);
+            if (contextMessages <= 0) {
+                return payload;
+            }
+
+            const baseText = typeof payload.text === "string"
+                ? stripExistingCronReminderContext(payload.text)
+                : "";
+            if (!baseText.trim()) {
+                return payload;
+            }
+
+            const contextLines = await buildCronReminderContextLines(contextMessages);
+            if (!contextLines.length) {
+                payload.text = baseText;
+                return payload;
+            }
+
+            payload.text = baseText + CRON_REMINDER_CONTEXT_MARKER + contextLines.join("\n");
             return payload;
         }
 
@@ -3504,6 +3692,7 @@
                 payloadModel: "",
                 payloadThinking: "",
                 timeoutSeconds: "",
+                contextMessages: "",
                 deliveryMode: "none",
                 deliveryTo: "",
                 failureAlertMode: "inherit",
@@ -3560,6 +3749,9 @@
                 payloadThinking: String(payload.thinking || ""),
                 timeoutSeconds: Number.isFinite(Number(payload.timeoutSeconds))
                     ? String(Math.floor(Number(payload.timeoutSeconds)))
+                    : "",
+                contextMessages: fallback && typeof fallback.contextMessages === "string"
+                    ? fallback.contextMessages
                     : "",
                 deliveryMode: "none",
                 deliveryTo: "",
@@ -3659,7 +3851,7 @@
                     name: String(normalizedForm.name || "").trim(),
                     enabled: normalizedForm.enabled !== false,
                     schedule: buildCronSchedule(normalizedForm),
-                    payload: buildCronPayload(normalizedForm),
+                    payload: await buildCronPayloadWithToolParity(normalizedForm),
                     delivery: buildCronDelivery(normalizedForm),
                 };
 
@@ -3801,6 +3993,7 @@
                 payloadModel: true,
                 payloadThinking: true,
                 timeoutSeconds: true,
+                contextMessages: true,
                 deliveryMode: true,
                 deliveryTo: true,
                 failureAlertMode: true,
@@ -5728,6 +5921,163 @@
                 },
             });
             await savePending;
+
+            controller.updateCronFormField("name", "Morning digest");
+            controller.updateCronFormField("scheduleKind", "every");
+            controller.updateCronFormField("everyAmount", "30");
+            controller.updateCronFormField("payloadKind", "systemEvent");
+            controller.updateCronFormField("payloadText", "Summarize updates");
+            controller.updateCronFormField("contextMessages", "2");
+            const contextSavePending = controller.addOrUpdateCronJob();
+            const historyCall = harness.takeNextCall("chat.history");
+            assertRegression(historyCall.params && historyCall.params.sessionKey === "agent:main:default" && historyCall.params.limit === 2,
+                "cron add should request chat.history with current session key and contextMessages limit");
+            historyCall.deferred.resolve({
+                payload: {
+                    messages: [
+                        {
+                            role: "user",
+                            text: "Need a morning digest about open issues.",
+                        },
+                        {
+                            role: "assistant",
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "I will prepare the summary each run.",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            const contextAddCall = harness.takeNextCall("cron.add");
+            assertRegression(
+                contextAddCall.params &&
+                contextAddCall.params.payload &&
+                contextAddCall.params.payload.kind === "systemEvent" &&
+                typeof contextAddCall.params.payload.text === "string" &&
+                contextAddCall.params.payload.text.indexOf("Recent context:") >= 0 &&
+                contextAddCall.params.payload.text.indexOf("- User: Need a morning digest about open issues.") >= 0 &&
+                contextAddCall.params.payload.text.indexOf("- Assistant: I will prepare the summary each run.") >= 0,
+                "cron add should append bounded recent context lines to systemEvent payload text"
+            );
+            contextAddCall.deferred.resolve({
+                payload: {
+                    added: true,
+                    cronId: "cron-context",
+                },
+            });
+            const listAfterContextCall = harness.takeNextCall("cron.list");
+            listAfterContextCall.deferred.resolve({
+                payload: {
+                    jobs: [
+                        {
+                            id: "cron-main",
+                            name: "Main cron",
+                            enabled: true,
+                            schedule: {
+                                kind: "every",
+                                everyMs: 60000,
+                            },
+                            payload: {
+                                kind: "agentTurn",
+                                message: "Ping",
+                            },
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const statusAfterContextCall = harness.takeNextCall("cron.status");
+            statusAfterContextCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 321,
+                },
+            });
+            const runsAfterContextCall = harness.takeNextCall("cron.runs");
+            runsAfterContextCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await contextSavePending;
+
+            controller.updateCronFormField("name", "No context");
+            controller.updateCronFormField("payloadKind", "systemEvent");
+            controller.updateCronFormField("payloadText", "Do not inject context");
+            controller.updateCronFormField("contextMessages", "");
+            const noContextSavePending = controller.addOrUpdateCronJob();
+            const noContextAddCall = harness.takeNextCall("cron.add");
+            assertRegression(
+                noContextAddCall.params &&
+                noContextAddCall.params.payload &&
+                noContextAddCall.params.payload.kind === "systemEvent" &&
+                String(noContextAddCall.params.payload.text || "") === "Do not inject context",
+                "cron add should preserve systemEvent payload text when contextMessages is not set"
+            );
+            noContextAddCall.deferred.resolve({
+                payload: {
+                    added: true,
+                    cronId: "cron-no-context",
+                },
+            });
+            const listAfterNoContextCall = harness.takeNextCall("cron.list");
+            listAfterNoContextCall.deferred.resolve({
+                payload: {
+                    jobs: [
+                        {
+                            id: "cron-main",
+                            name: "Main cron",
+                            enabled: true,
+                            schedule: {
+                                kind: "every",
+                                everyMs: 60000,
+                            },
+                            payload: {
+                                kind: "agentTurn",
+                                message: "Ping",
+                            },
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const statusAfterNoContextCall = harness.takeNextCall("cron.status");
+            statusAfterNoContextCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 654,
+                },
+            });
+            const runsAfterNoContextCall = harness.takeNextCall("cron.runs");
+            runsAfterNoContextCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await noContextSavePending;
 
             assertRegression(state.agentFileSaveBusy === false &&
                 state.agentFileSaveStatus === "Saved" &&

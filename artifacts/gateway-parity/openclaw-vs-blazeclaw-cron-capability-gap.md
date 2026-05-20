@@ -1,15 +1,16 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase CB P10 tool-surface wake-action follow-up + P0-P9 closure verification)
+Last refreshed: 2026-05-20 (Phase CC P10 contextMessages tool-surface increment + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
 ## Summary
 
-BlazeClaw exposes the full cron/wake RPC surface at the gateway level. P0–P9
-execution priorities from §5 are now landed at baseline depth; P10 follow-up
-controller parity has started with wake-action routing/refresh behavior, while
-remaining effort is deeper tool breadth plus deferred CLI/controller parity.
+BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
+maintains strong baseline parity through P0–P9. Remaining work is concentrated
+in P10+ depth: execution/runtime breadth beyond fallback-heavy lanes,
+runtime/task-ledger cross-layer depth, and tool-surface breadth (plus deferred
+CLI parity decision).
 
 ## Priority status (§5)
 
@@ -25,7 +26,7 @@ remaining effort is deeper tool breadth plus deferred CLI/controller parity.
 | P7 | **Complete** (Residual schema strictness baseline) |
 | P8 | **Complete** (Production GatewayHost E2E baseline) |
 | P9 | **Complete** (Tool surface `jobId`/`id` alias + flat-shape guard baseline) |
-| P10+ | **Active** (wake-action follow-up landed; deferred CLI + deeper tool/hook-consumer parity remain) |
+| P10+ | **Active** (execution-depth + hook-consumer depth + tool-surface breadth; deferred CLI decision) |
 
 ## Work package status (2026-05-20)
 
@@ -38,27 +39,24 @@ remaining effort is deeper tool breadth plus deferred CLI/controller parity.
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **P6 complete** (baseline) |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
 | Step 4 | Task-ledger manual/queued terminal hooks + `cron.runs` projection | **P4 complete** (baseline) |
-| Step 8 | Tool-surface `jobId`/`id` aliases + flat recovery guard + wake action follow-up | **P9 baseline + P10 follow-up landed** |
+| Step 8 | Tool-surface `jobId`/`id` aliases + flat recovery guard + wake action + `contextMessages` shaping | **P9 baseline + P10 follow-ups landed** |
 | Step 9 | `lifecycleState`/`deliveryMode` taxonomy + projection consistency | **P7 complete** (baseline) |
 | Step 10 | Production GatewayHost E2E matrix | **P8 complete** (baseline) |
 
 ## Remaining high-impact gaps
 
-- OpenClaw isolated-agent module parity (WP-A breadth).
-- Dedicated channel/outbound plugin routing (WP-B breadth).
-- Full IANA timezone database parity (P5 breadth).
-- OpenClaw hook-consumer integration depth (beyond P8 baseline).
-- `contextMessages` on manual run and broader synthetic-job recovery depth.
-- OpenClaw CLI/dashboard controller parity (P10 deferred).
+- OpenClaw isolated-agent runtime behavior breadth parity (WP-A depth).
+- Cross-layer hook-consumer/runtime integration depth (task-ledger/retry/cooldown side-effects).
+- Broader synthetic-job recovery depth beyond landed `contextMessages` tool-surface shaping.
+- OpenClaw CLI/dashboard controller parity only if MFC CLI becomes product scope.
 
 ## Validation
 
-Validation rerun after Phase CB:
+Validation rerun after Phase CC:
 
 ```powershell
 msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
-E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][normalize]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 ```
 
-Evidence (2026-05-20, Phase CB): `[cron][gateway][normalize]` 132 assertions / 2 test cases; `[cron]` 1409 assertions / 223 test cases.
+Evidence (2026-05-20, Phase CC): `[cron]` 1574 assertions / 240 test cases; required `msbuild` gate passed.
