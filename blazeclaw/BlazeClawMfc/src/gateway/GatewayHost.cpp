@@ -3528,6 +3528,10 @@ namespace blazeclaw::gateway {
 		if (!m_taskDeltaRepository.Upsert(runId, entries)) {
 			return;
 		}
+
+		if (terminal) {
+			DispatchCronFailureAlertNotification(payload);
+		}
 	}
 
 	void GatewayHost::BroadcastCronRealtimeEvent(const cron::CronRealtimeEvent& event) {
@@ -3574,6 +3578,68 @@ namespace blazeclaw::gateway {
 		{
 			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
 			(void)m_chatRuntimeCallback(request);
+		}
+	}
+
+	void GatewayHost::DispatchCronFailureAlertNotification(
+		const nlohmann::json& payload) {
+		const cron::CronJson& cronPayload = payload;
+		if (!m_chatRuntimeCallback) {
+			return;
+		}
+		if (!cronPayload.contains("failureAlertTriggered") ||
+			!cronPayload["failureAlertTriggered"].is_boolean() ||
+			!cronPayload["failureAlertTriggered"].get<bool>()) {
+			return;
+		}
+
+		std::string sessionKey = cron::TrimCopy(
+			cron_production::ReadStringField(cronPayload, "sessionKey"));
+		if (sessionKey.empty()) {
+			sessionKey = "main";
+		}
+
+		const std::string jobId =
+			cron_production::ReadStringField(cronPayload, "jobId");
+		const std::string mode =
+			cron_production::ReadStringField(cronPayload, "failureAlertMode");
+		const std::string target =
+			cron_production::ReadStringField(cronPayload, "failureAlertTarget");
+		const std::string summary =
+			cron_production::ReadStringField(cronPayload, "summary");
+		const std::string error =
+			cron_production::ReadStringField(cronPayload, "error");
+
+		std::string text = "[cron][failure-alert]";
+		if (!jobId.empty()) {
+			text += " job=" + jobId;
+		}
+		if (!mode.empty()) {
+			text += " mode=" + mode;
+		}
+		if (!target.empty()) {
+			text += " target=" + target;
+		}
+		if (!summary.empty()) {
+			text += " summary=" + summary;
+		}
+		if (!error.empty()) {
+			text += " error=" + error;
+		}
+
+		ChatRuntimeRequest request;
+		request.runId = "cron-failure-alert-" + std::to_string(cron::UtcNowMs());
+		request.sessionKey = sessionKey;
+		request.message = text;
+		request.bodyForCommands = text;
+		request.bodyForAgent = text;
+		request.shouldLoadInlineSkillCommands = false;
+		request.allowInlineToolImmediateExecution = false;
+
+		try {
+			(void)m_chatRuntimeCallback(request);
+		}
+		catch (...) {
 		}
 	}
 

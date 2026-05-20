@@ -1749,6 +1749,18 @@ namespace blazeclaw::cron {
 			};
 
 		while (loops < m_maxCatchupRunsPerSync) {
+			std::unordered_set<std::string> jobIdsBeforePump;
+			jobIdsBeforePump.reserve(m_store.Jobs().size());
+			for (const auto& job : m_store.Jobs()) {
+				if (!job.is_object()) {
+					continue;
+				}
+				const std::string jobId = job.value("id", std::string());
+				if (!jobId.empty()) {
+					jobIdsBeforePump.insert(jobId);
+				}
+			}
+
 			const std::size_t runsBeforePump = m_store.Runs().size();
 			const std::size_t executed = m_timer.PumpDueRuns(
 				m_store.Jobs(),
@@ -1775,6 +1787,23 @@ namespace blazeclaw::cron {
 			}
 
 			if (!forceRunDue) {
+				for (const auto& job : m_store.Jobs()) {
+					if (!job.is_object()) {
+						continue;
+					}
+					const std::string jobId = job.value("id", std::string());
+					if (jobId.empty()) {
+						continue;
+					}
+					jobIdsBeforePump.erase(jobId);
+				}
+				for (const std::string& removedJobId : jobIdsBeforePump) {
+					EmitCronRealtimeEventLocked(CronRealtimeEvent{
+						.jobId = removedJobId,
+						.action = "removed"
+					});
+				}
+
 				for (std::size_t index = runsBeforePump; index < m_store.Runs().size(); ++index) {
 					const CronJson& runEntry = m_store.Runs()[index];
 					if (ToLowerCopy(ReadStringOrEmpty(runEntry, "action")) != "finished") {

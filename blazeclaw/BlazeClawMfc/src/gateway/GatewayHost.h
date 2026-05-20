@@ -754,6 +754,7 @@ namespace blazeclaw::gateway {
 		void HandleCronTaskLedgerFail(const nlohmann::json& payload);
 		void DispatchCronScheduleAutoDisableNotification(
 			const cron::CronScheduleNotificationEvent& event);
+		void DispatchCronFailureAlertNotification(const nlohmann::json& payload);
 		void BroadcastCronRealtimeEvent(const cron::CronRealtimeEvent& event);
 		void UpsertCronTaskLedgerEntry(const nlohmann::json& payload, bool terminal);
 		[[nodiscard]] bool IsCronChatSessionBusy(const std::string& sessionKey) const;

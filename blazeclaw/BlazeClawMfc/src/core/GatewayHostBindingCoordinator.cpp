@@ -455,6 +455,10 @@ namespace blazeclaw::core {
 		auto& orchestrator = manager.m_chatRuntimeOrchestrationCoordinator;
 		manager.m_gatewayHost.SetChatRuntimeCallback([&manager, &orchestrator](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+				const std::string requestProviderOverride =
+					ToLowerAscii(request.providerOverride);
+				const std::string requestModelOverride =
+					request.modelIdOverride;
 				const auto preparedChatRequest =
 					orchestrator.PrepareChatRequest(
 						request,
@@ -534,8 +538,14 @@ namespace blazeclaw::core {
 				CMgrMessage::Instance().PostOwnedToolStatusLine(
 					kMsgAppendToolStatusLine,
 					new CString(runtimeMessageWide.c_str()));
-				const std::string activeProvider = manager.m_activeChatProvider;
-				const std::string activeModel = manager.m_activeChatModel;
+				const std::string activeProvider =
+					requestProviderOverride.empty()
+					? manager.m_activeChatProvider
+					: requestProviderOverride;
+				const std::string activeModel =
+					requestModelOverride.empty()
+					? manager.m_activeChatModel
+					: requestModelOverride;
 				auto executeRequest = [&manager,
 					&orchestrator,
 					request,

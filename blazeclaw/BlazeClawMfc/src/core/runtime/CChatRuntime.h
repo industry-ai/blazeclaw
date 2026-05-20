@@ -83,6 +83,7 @@ namespace blazeclaw::core {
 		struct ChatRuntimeJob {
 			std::uint64_t enqueueSequence = 0;
 			std::uint64_t enqueuedAtMs = 0;
+			std::uint64_t executionTimeoutMs = 0;
 			JobLifecycleStatus status = JobLifecycleStatus::Queued;
 			blazeclaw::gateway::GatewayHost::ChatRuntimeRequest request;
 			std::string sessionId;

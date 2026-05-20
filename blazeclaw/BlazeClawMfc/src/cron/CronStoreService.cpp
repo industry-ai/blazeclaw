@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <deque>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
@@ -15,6 +17,72 @@ namespace blazeclaw::cron {
 
 	namespace {
 		inline constexpr std::int64_t kCronStoreVersion = 1;
+		inline constexpr std::size_t kDefaultMaxRunLogLinesPerJob = 2000;
+
+		std::size_t ResolveMaxRunLogLinesPerJob() {
+			char* value = nullptr;
+			size_t valueLength = 0;
+			if (_dupenv_s(
+				&value,
+				&valueLength,
+				"BLAZECLAW_CRON_RUN_LOG_MAX_LINES") != 0 || value == nullptr) {
+				return kDefaultMaxRunLogLinesPerJob;
+			}
+
+			const std::string trimmed = TrimCopy(value);
+			free(value);
+			if (trimmed.empty()) {
+				return kDefaultMaxRunLogLinesPerJob;
+			}
+
+			try {
+				const long long parsed = std::stoll(trimmed);
+				if (parsed <= 0) {
+					return 0;
+				}
+				return static_cast<std::size_t>(parsed);
+			}
+			catch (...) {
+				return kDefaultMaxRunLogLinesPerJob;
+			}
+		}
+
+		void PruneRunLogFileToMaxLines(
+			const std::filesystem::path& logPath,
+			const std::size_t maxLines) {
+			if (maxLines == 0 || !std::filesystem::exists(logPath)) {
+				return;
+			}
+
+			std::ifstream readStream(logPath, std::ios::binary);
+			if (!readStream.is_open()) {
+				return;
+			}
+
+			std::deque<std::string> tail;
+			std::size_t lineCount = 0;
+			std::string line;
+			while (std::getline(readStream, line)) {
+				++lineCount;
+				tail.push_back(line);
+				if (tail.size() > maxLines) {
+					tail.pop_front();
+				}
+			}
+
+			if (lineCount <= maxLines) {
+				return;
+			}
+
+			std::ofstream writeStream(logPath, std::ios::binary | std::ios::trunc);
+			if (!writeStream.is_open()) {
+				return;
+			}
+
+			for (const std::string& keptLine : tail) {
+				writeStream << keptLine << '\n';
+			}
+		}
 
 		CronJson BuildEnvelope(
 			const char* kind,
@@ -374,6 +442,9 @@ namespace blazeclaw::cron {
 			return;
 		}
 		stream << lineEntry.dump() << '\n';
+		stream.flush();
+
+		PruneRunLogFileToMaxLines(logPath, ResolveMaxRunLogLinesPerJob());
 	}
 
 	std::filesystem::file_time_type CronStoreService::ReadRunsDirWriteTime(

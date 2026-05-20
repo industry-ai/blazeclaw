@@ -133,6 +133,14 @@ namespace blazeclaw::core {
 			job->provider = request.provider;
 			job->model = request.model;
 			job->execute = std::move(request.execute);
+			if (request.request.timeoutSeconds > 0) {
+				const std::uint64_t timeoutSeconds =
+					static_cast<std::uint64_t>(request.request.timeoutSeconds);
+				job->executionTimeoutMs = timeoutSeconds * 1000;
+			}
+			else {
+				job->executionTimeoutMs = m_cfg.executionTimeoutMs;
+			}
 
 			m_queue.push_back(job);
 			m_jobsByRunId.insert_or_assign(request.request.runId, job);
@@ -152,9 +160,13 @@ namespace blazeclaw::core {
 		m_queueCv.notify_one();
 
 		std::unique_lock<std::mutex> completionLock(job->completionMutex);
+		const std::uint64_t effectiveExecutionTimeoutMs =
+			job->executionTimeoutMs > 0
+			? job->executionTimeoutMs
+			: m_cfg.executionTimeoutMs;
 		const auto waitBudget = std::chrono::milliseconds(
 			m_cfg.queueWaitTimeoutMs +
-			m_cfg.executionTimeoutMs +
+			effectiveExecutionTimeoutMs +
 			1000);
 		if (!job->completionCv.wait_for(completionLock, waitBudget, [job]()
 			{
@@ -362,9 +374,13 @@ namespace blazeclaw::core {
 				const std::uint64_t executeStartedAtMs = CurrentEpochMs();
 				result = job->execute();
 				const std::uint64_t executeCompletedAtMs = CurrentEpochMs();
+				const std::uint64_t effectiveExecutionTimeoutMs =
+					job->executionTimeoutMs > 0
+					? job->executionTimeoutMs
+					: m_cfg.executionTimeoutMs;
 				if (executeCompletedAtMs > executeStartedAtMs &&
 					(executeCompletedAtMs - executeStartedAtMs) >
-					m_cfg.executionTimeoutMs)
+					effectiveExecutionTimeoutMs)
 				{
 					result = BuildErrorResult(
 						job->model,

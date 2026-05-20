@@ -1791,6 +1791,40 @@ namespace blazeclaw::cron {
 				return 0;
 			}
 
+			if (tz.rfind("etc/gmt", 0) == 0) {
+				const std::string suffix = tz.substr(7);
+				if (suffix.empty()) {
+					return 0;
+				}
+				if (suffix[0] != '+' && suffix[0] != '-') {
+					return std::nullopt;
+				}
+
+				const int posixSign = suffix[0] == '+' ? -1 : 1;
+				const std::string hourPart = suffix.substr(1);
+				if (hourPart.empty() || hourPart.size() > 2) {
+					return std::nullopt;
+				}
+				for (const char ch : hourPart) {
+					if (std::isdigit(static_cast<unsigned char>(ch)) == 0) {
+						return std::nullopt;
+					}
+				}
+
+				int hours = 0;
+				try {
+					hours = std::stoi(hourPart);
+				}
+				catch (...) {
+					return std::nullopt;
+				}
+
+				if (hours < 0 || hours > 23) {
+					return std::nullopt;
+				}
+				return posixSign * hours * 60;
+			}
+
 			std::size_t offsetPos = std::string::npos;
 			if (tz.rfind("utc", 0) == 0 || tz.rfind("gmt", 0) == 0) {
 				offsetPos = 3;
