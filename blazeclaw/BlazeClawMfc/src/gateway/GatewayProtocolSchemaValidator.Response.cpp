@@ -219,6 +219,28 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (HasFieldToken(payload, "lifecycleState") &&
+				!IsFieldNull(payload, "lifecycleState") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"lifecycleState",
+					{ "queued", "active", "terminal" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
+			if (HasFieldToken(payload, "deliveryMode") &&
+				!IsFieldNull(payload, "deliveryMode") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"deliveryMode",
+					{ "none", "announce", "webhook" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
 			return true;
 		}
 
@@ -422,6 +444,29 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (HasFieldToken(payload, "lifecycleState")) {
+				std::string lifecycleState;
+				if (!TryReadTopLevelStringField(payload, "lifecycleState", lifecycleState)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "queued" && lifecycleState != "queued") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "started" && lifecycleState != "active") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (action == "finished" && lifecycleState != "terminal") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+			}
+
 			if (HasFieldToken(payload, "taskLedgerPhase")) {
 				std::string phase;
 				if (!TryReadTopLevelStringField(payload, "taskLedgerPhase", phase)) {
@@ -465,6 +510,57 @@ namespace blazeclaw::gateway::protocol {
 				}
 
 				if ((phase == "queued" || phase == "active") && terminal) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+			}
+
+			if (HasFieldToken(payload, "lifecycleState") &&
+				HasFieldToken(payload, "taskLedgerPhase")) {
+				std::string lifecycleState;
+				std::string phase;
+				if (!TryReadTopLevelStringField(payload, "lifecycleState", lifecycleState) ||
+					!TryReadTopLevelStringField(payload, "taskLedgerPhase", phase)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (lifecycleState == "queued" && phase != "queued") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (lifecycleState == "active" && phase != "active") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (lifecycleState == "terminal" && phase != "terminal") {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+			}
+
+			if (HasFieldToken(payload, "lifecycleState") &&
+				HasFieldToken(payload, "taskLedgerTerminal")) {
+				std::string lifecycleState;
+				if (!TryReadTopLevelStringField(payload, "lifecycleState", lifecycleState)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				bool terminal = false;
+				if (!TryReadTopLevelBooleanField(payload, "taskLedgerTerminal", terminal)) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if (lifecycleState == "terminal" && !terminal) {
+					SetIssue(issue, "schema_invalid_response", errorMessage);
+					return false;
+				}
+
+				if ((lifecycleState == "queued" || lifecycleState == "active") && terminal) {
 					SetIssue(issue, "schema_invalid_response", errorMessage);
 					return false;
 				}
@@ -625,11 +721,6 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldStringOrNull(payload, "failureAlertTarget") ||
 				!IsFieldStringOrNull(payload, "failureAlertChannel") ||
 				!IsFieldStringOrNull(payload, "failureAlertAccountId") ||
-				!IsFieldStringOrNull(payload, "failureAlertStatus") ||
-				(!IsFieldBoolean(payload, "failureAlertAttempted") &&
-					HasFieldToken(payload, "failureAlertAttempted")) ||
-				!IsFieldNumberOrNull(payload, "failureAlertHttpStatus") ||
-				!IsFieldStringOrNull(payload, "failureAlertError") ||
 				!IsFieldNumberOrNull(payload, "heartbeatBusyAttempts") ||
 				(!IsFieldBoolean(payload, "heartbeatFallbackWakeRequested") &&
 					HasFieldToken(payload, "heartbeatFallbackWakeRequested")) ||
@@ -638,6 +729,7 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldStringOrNull(payload, "taskLedgerPhase") ||
 				!IsFieldStringOrNull(payload, "taskLedgerStatus") ||
 				!IsFieldStringOrNull(payload, "taskLedgerDisposition") ||
+				!IsFieldStringOrNull(payload, "lifecycleState") ||
 				(!IsFieldBoolean(payload, "taskLedgerTerminal") && HasFieldToken(payload, "taskLedgerTerminal"))) {
 				SetIssue(issue, "schema_invalid_response", errorMessage);
 				return false;

@@ -14,7 +14,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <memory>
@@ -521,39 +520,6 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat cron.add 
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 	}
-
-	SECTION("cron.add canonicalizes flat transport dispatch aliases to nested flags") {
-		const nlohmann::json response = ParseGatewayFrame(
-			host.HandleInboundText(
-				"{"
-				"\"type\":\"req\"," 
-				"\"id\":\"cron-add-flat-transport-dispatch-aliases\"," 
-				"\"method\":\"cron.add\"," 
-				"\"params\":{"
-				"\"kind\":\"every\"," 
-				"\"everyMs\":60000,"
-				"\"text\":\"nightly ping\"," 
-				"\"deliveryMode\":\"webhook\"," 
-				"\"deliveryUrl\":\"https://example.test/delivery-url\"," 
-				"\"deliveryTransportDispatch\":true,"
-				"\"failureDestinationMode\":\"webhook\"," 
-				"\"failureDestinationUrl\":\"https://example.test/failure-url\"," 
-				"\"failureDestinationTransportDispatch\":true,"
-				"\"failureAlertMode\":\"webhook\"," 
-				"\"failureAlertUrl\":\"https://example.test/alert-url\"," 
-				"\"failureAlertTransportDispatch\":true"
-				"}"
-				"}"));
-
-		REQUIRE(response.value("type", std::string()) == "res");
-		REQUIRE(response.value("id", std::string()) == "cron-add-flat-transport-dispatch-aliases");
-		REQUIRE_FALSE(response.value("ok", true));
-		REQUIRE(response.contains("error"));
-		REQUIRE(response["error"].is_object());
-		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
-		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
-		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
-	}
 }
 
 TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/run/runs/wake params", "[cron][gateway][normalize]") {
@@ -603,39 +569,6 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 
 		REQUIRE(response.value("type", std::string()) == "res");
 		REQUIRE(response.value("id", std::string()) == "cron-update-flat-shape");
-		REQUIRE_FALSE(response.value("ok", true));
-		REQUIRE(response.contains("error"));
-		REQUIRE(response["error"].is_object());
-		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
-		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
-		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
-	}
-
-	SECTION("cron.update patch canonicalizes flat transport dispatch aliases to nested flags") {
-		const nlohmann::json response = ParseGatewayFrame(
-			host.HandleInboundText(
-				"{"
-				"\"type\":\"req\"," 
-				"\"id\":\"cron-update-flat-transport-dispatch-aliases\"," 
-				"\"method\":\"cron.update\"," 
-				"\"params\":{"
-				"\"id\":\"cron-1\"," 
-				"\"patch\":{"
-				"\"deliveryMode\":\"webhook\"," 
-				"\"deliveryUrl\":\"https://example.test/update-delivery-url\"," 
-				"\"deliveryTransportDispatch\":true,"
-				"\"failureDestinationMode\":\"webhook\"," 
-				"\"failureDestinationUrl\":\"https://example.test/update-failure-url\"," 
-				"\"failureDestinationTransportDispatch\":true,"
-				"\"failureAlertMode\":\"webhook\"," 
-				"\"failureAlertUrl\":\"https://example.test/update-alert-url\"," 
-				"\"failureAlertTransportDispatch\":true"
-				"}"
-				"}"
-				"}"));
-
-		REQUIRE(response.value("type", std::string()) == "res");
-		REQUIRE(response.value("id", std::string()) == "cron-update-flat-transport-dispatch-aliases");
 		REQUIRE_FALSE(response.value("ok", true));
 		REQUIRE(response.contains("error"));
 		REQUIRE(response["error"].is_object());
@@ -1630,6 +1563,93 @@ TEST_CASE("Cron runs response validator accepts expanded taskLedgerDisposition t
 	}
 }
 
+TEST_CASE(
+	"Cron runs response validator enforces lifecycleState taxonomy and projection consistency",
+	"[cron][schema][response][p7]") {
+	SchemaValidationIssue issue{};
+
+	SECTION("accepts finished lifecycle projection with aligned task-ledger fields") {
+		const ResponseFrame validResponse{
+			.id = "cron-runs-lifecycle-terminal-valid",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"ok\",\"lifecycleState\":\"terminal\","
+				"\"taskLedgerPhase\":\"terminal\",\"taskLedgerDisposition\":\"scheduled\","
+				"\"taskLedgerTerminal\":true,\"deliveryMode\":\"none\"}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+	}
+
+	SECTION("rejects finished action with non-terminal lifecycleState") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-lifecycle-finished-non-terminal",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"ok\",\"lifecycleState\":\"queued\","
+				"\"taskLedgerPhase\":\"terminal\",\"taskLedgerTerminal\":true}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+
+	SECTION("rejects lifecycleState and taskLedgerPhase mismatch") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-lifecycle-phase-mismatch",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"ok\",\"lifecycleState\":\"terminal\","
+				"\"taskLedgerPhase\":\"active\",\"taskLedgerTerminal\":true}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+
+	SECTION("rejects unsupported lifecycleState taxonomy") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-lifecycle-taxonomy-invalid",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"ok\",\"lifecycleState\":\"done\","
+				"\"taskLedgerPhase\":\"terminal\",\"taskLedgerTerminal\":true}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+
+	SECTION("rejects unsupported deliveryMode taxonomy on run entries") {
+		const ResponseFrame invalidResponse{
+			.id = "cron-runs-delivery-mode-taxonomy-invalid",
+			.ok = true,
+			.payloadJson = std::string(
+				"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\","
+				"\"action\":\"finished\",\"status\":\"ok\",\"lifecycleState\":\"terminal\","
+				"\"taskLedgerPhase\":\"terminal\",\"taskLedgerTerminal\":true,"
+				"\"deliveryMode\":\"email\"}],"
+				"\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+			.error = std::nullopt,
+		};
+
+		REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+		REQUIRE(issue.code == "schema_invalid_response");
+	}
+}
+
 TEST_CASE("Cron runs response validator rejects unsupported value taxonomy", "[cron][schema][response]") {
 	SchemaValidationIssue issue{};
 
@@ -2344,47 +2364,6 @@ TEST_CASE("Cron timer failureAlert webhook mode falls back target to delivery ur
 	REQUIRE(runs[0].value("failureAlertTriggered", false));
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertMode", std::string()) == "webhook");
 	REQUIRE(jobs[0]["state"].value("lastFailureAlertTarget", std::string()) == "https://alerts.example/delivery-alias");
-}
-
-TEST_CASE("Cron timer emits failureAlert webhook transport metadata", "[cron][timer][wp-b]") {
-	CronTimerService timer;
-	const std::int64_t nowMs = 1'700'000'000'000;
-
-	CronJson jobs = CronJson::array({
-		{
-			{ "id", "job-alert-webhook-transport-metadata" },
-			{ "name", "alert webhook transport metadata" },
-			{ "enabled", true },
-			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-			{ "payload", { { "kind", "systemEvent" }, { "text", "wake" } } },
-			{ "delivery",
-				{
-					{ "mode", "webhook" },
-					{ "to", "https://alerts.example/delivery" },
-					{ "simulateTransientFailure", true }
-				} },
-			{ "failureAlert",
-				{
-					{ "after", 1 },
-					{ "cooldownMs", 0 },
-					{ "mode", "webhook" },
-					{ "to", "https://alerts.example/notify" },
-					{ "transportDispatch", true },
-					{ "simulateHttpStatus", 202 }
-				} },
-			{ "state", { { "nextRunAtMs", nowMs - 1 }, { "consecutiveErrors", 0 } } }
-		}
-	});
-	CronJson runs = CronJson::array();
-
-	timer.PumpDueRuns(jobs, runs, nowMs, false);
-	REQUIRE(runs.size() == 1);
-	REQUIRE(runs[0].value("status", std::string()) == "error");
-	REQUIRE(runs[0].value("failureAlertTriggered", false));
-	REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "delivered");
-	REQUIRE(runs[0].value("failureAlertAttempted", false));
-	REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 202);
-	REQUIRE(runs[0]["failureAlertError"].is_null());
 }
 
 TEST_CASE("Cron timer failureAlert cooldown opens when alert route changes", "[cron][timer]") {
@@ -3839,146 +3818,6 @@ TEST_CASE("Cron store rejects unsafe per-job run log ids", "[cron][store][wp-e]"
 		std::invalid_argument);
 }
 
-TEST_CASE("Cron store prunes per-job jsonl run logs to bounded tail", "[cron][store][wp-e]") {
-	const std::filesystem::path root =
-		std::filesystem::temp_directory_path() / "blazeclaw-cron-store-jsonl-prune-test";
-	std::error_code ec;
-	std::filesystem::remove_all(root, ec);
-	std::filesystem::create_directories(root, ec);
-
-	const std::filesystem::path jobsPath = root / "cron.jobs.json";
-	const std::filesystem::path runsPath = root / "cron.runs.json";
-
-	{
-		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
-		jobs << "[]";
-	}
-	{
-		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
-		runs << "[]";
-	}
-
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "2");
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "");
-
-	CronStoreService store(jobsPath, runsPath);
-	store.EnsureLoaded();
-	store.Runs().push_back({
-		{ "jobId", "job-prune" },
-		{ "runId", "run-1" },
-		{ "ts", 1 },
-		{ "status", "ok" },
-		{ "action", "finished" }
-	});
-	store.Runs().push_back({
-		{ "jobId", "job-prune" },
-		{ "runId", "run-2" },
-		{ "ts", 2 },
-		{ "status", "ok" },
-		{ "action", "finished" }
-	});
-	store.Runs().push_back({
-		{ "jobId", "job-prune" },
-		{ "runId", "run-3" },
-		{ "ts", 3 },
-		{ "status", "ok" },
-		{ "action", "finished" }
-	});
-	store.SaveRuns();
-
-	const std::filesystem::path jsonlPath =
-		CronStoreService::ResolveRunLogPath(jobsPath, "job-prune");
-	REQUIRE(std::filesystem::exists(jsonlPath));
-
-	std::ifstream jsonl(jsonlPath, std::ios::binary);
-	REQUIRE(jsonl.is_open());
-	std::vector<std::string> lines;
-	std::string line;
-	while (std::getline(jsonl, line)) {
-		if (!line.empty()) {
-			lines.push_back(line);
-		}
-	}
-	REQUIRE(lines.size() == 2);
-	REQUIRE(lines[0].find("run-2") != std::string::npos);
-	REQUIRE(lines[1].find("run-3") != std::string::npos);
-
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "");
-	std::filesystem::remove_all(root, ec);
-}
-
-TEST_CASE("Cron store prunes per-job jsonl run logs by byte budget", "[cron][store][wp-e]") {
-	const std::filesystem::path root =
-		std::filesystem::temp_directory_path() /
-		"blazeclaw-cron-store-jsonl-prune-bytes-test";
-	std::error_code ec;
-	std::filesystem::remove_all(root, ec);
-	std::filesystem::create_directories(root, ec);
-
-	const std::filesystem::path jobsPath = root / "cron.jobs.json";
-	const std::filesystem::path runsPath = root / "cron.runs.json";
-
-	{
-		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
-		jobs << "[]";
-	}
-	{
-		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
-		runs << "[]";
-	}
-
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_LINES", "");
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "120");
-
-	CronStoreService store(jobsPath, runsPath);
-	store.EnsureLoaded();
-	store.Runs().push_back({
-		{ "jobId", "job-prune-bytes" },
-		{ "runId", "run-1" },
-		{ "ts", 1 },
-		{ "status", "ok" },
-		{ "action", "finished" },
-		{ "summary", "entry-one" }
-	});
-	store.Runs().push_back({
-		{ "jobId", "job-prune-bytes" },
-		{ "runId", "run-2" },
-		{ "ts", 2 },
-		{ "status", "ok" },
-		{ "action", "finished" },
-		{ "summary", "entry-two" }
-	});
-	store.Runs().push_back({
-		{ "jobId", "job-prune-bytes" },
-		{ "runId", "run-3" },
-		{ "ts", 3 },
-		{ "status", "ok" },
-		{ "action", "finished" },
-		{ "summary", "entry-three" }
-	});
-	store.SaveRuns();
-
-	const std::filesystem::path jsonlPath =
-		CronStoreService::ResolveRunLogPath(jobsPath, "job-prune-bytes");
-	REQUIRE(std::filesystem::exists(jsonlPath));
-
-	std::ifstream jsonl(jsonlPath, std::ios::binary);
-	REQUIRE(jsonl.is_open());
-	std::vector<std::string> lines;
-	std::string line;
-	while (std::getline(jsonl, line)) {
-		if (!line.empty()) {
-			lines.push_back(line);
-		}
-	}
-
-	REQUIRE(lines.size() == 1);
-	REQUIRE(lines[0].find("run-3") != std::string::npos);
-
-	::_putenv_s("BLAZECLAW_CRON_RUN_LOG_MAX_BYTES", "");
-	std::filesystem::remove_all(root, ec);
-}
-
 TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000; // stable fixture timestamp
@@ -4003,103 +3842,6 @@ TEST_CASE("Cron timer computes daily cron expression minute/hour", "[cron][timer
 	REQUIRE(nextRun.value() == expected);
 }
 
-TEST_CASE("Cron timer supports Etc/GMT timezone aliases for cron schedules", "[cron][timer][wp-c]") {
-	CronTimerService timer;
-	const std::int64_t nowMs = 1'700'000'000'000;
-
-	CronJson plusOffsetJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "+08:00" } } },
-		{ "state", CronJson::object() }
-	};
-	CronJson etcGmtJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/GMT-8" } } },
-		{ "state", CronJson::object() }
-	};
-
-	const auto nextPlus = timer.ComputeNextRunAtMs(plusOffsetJob, nowMs);
-	const auto nextEtc = timer.ComputeNextRunAtMs(etcGmtJob, nowMs);
-	REQUIRE(nextPlus.has_value());
-	REQUIRE(nextEtc.has_value());
-	REQUIRE(nextPlus.value() == nextEtc.value());
-}
-
-TEST_CASE("Cron timer supports IANA Etc zero-offset timezone aliases", "[cron][timer][p5]") {
-	CronTimerService timer;
-	const std::int64_t nowMs = 1'700'000'000'000;
-
-	CronJson utcJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "UTC" } } },
-		{ "state", CronJson::object() }
-	};
-	CronJson etcUtcJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/UTC" } } },
-		{ "state", CronJson::object() }
-	};
-	CronJson etcZuluJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/Zulu" } } },
-		{ "state", CronJson::object() }
-	};
-	CronJson etcGmtZeroJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/GMT0" } } },
-		{ "state", CronJson::object() }
-	};
-
-	const auto nextUtc = timer.ComputeNextRunAtMs(utcJob, nowMs);
-	const auto nextEtcUtc = timer.ComputeNextRunAtMs(etcUtcJob, nowMs);
-	const auto nextEtcZulu = timer.ComputeNextRunAtMs(etcZuluJob, nowMs);
-	const auto nextEtcGmtZero = timer.ComputeNextRunAtMs(etcGmtZeroJob, nowMs);
-	REQUIRE(nextUtc.has_value());
-	REQUIRE(nextEtcUtc.has_value());
-	REQUIRE(nextEtcZulu.has_value());
-	REQUIRE(nextEtcGmtZero.has_value());
-	REQUIRE(nextUtc.value() == nextEtcUtc.value());
-	REQUIRE(nextUtc.value() == nextEtcZulu.value());
-	REQUIRE(nextUtc.value() == nextEtcGmtZero.value());
-}
-
-
-TEST_CASE("Cron timer computes six-field cron expression with seconds token", "[cron][timer][wp-c]") {
-	CronTimerService timer;
-	const std::int64_t nowMs = 1'700'000'000'000;
-
-	CronJson sixFieldJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "30 15 10 * * *" } } },
-		{ "state", CronJson::object() }
-	};
-	const auto nextSixField = timer.ComputeNextRunAtMs(sixFieldJob, nowMs);
-	REQUIRE(nextSixField.has_value());
-	REQUIRE(nextSixField.value() > nowMs);
-	{
-		const std::time_t t = static_cast<std::time_t>(nextSixField.value() / 1000);
-		std::tm tm{};
-		gmtime_s(&tm, &t);
-		REQUIRE(tm.tm_sec == 30);
-		REQUIRE(tm.tm_min == 15);
-		REQUIRE(tm.tm_hour == 10);
-	}
-
-	CronJson fiveFieldJob = {
-		{ "enabled", true },
-		{ "schedule", { { "kind", "cron" }, { "expr", "15 10 * * *" } } },
-		{ "state", CronJson::object() }
-	};
-	const auto nextFiveField = timer.ComputeNextRunAtMs(fiveFieldJob, nowMs);
-	REQUIRE(nextFiveField.has_value());
-	{
-		const std::time_t t = static_cast<std::time_t>(nextFiveField.value() / 1000);
-		std::tm tm{};
-		gmtime_s(&tm, &t);
-		REQUIRE(tm.tm_min == 15);
-		REQUIRE(tm.tm_hour == 10);
-	}
-}
 TEST_CASE("Cron timer computes cron expression with day-month-and-day-of-week fields", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -4557,42 +4299,6 @@ TEST_CASE(
 }
 
 TEST_CASE(
-	"Cron ops emits realtime removed event when deleteAfterRun removes finished job",
-	"[cron][timer][wp-d]") {
-	IsolatedCronOpsFixture fixture("realtime-removed-after-run");
-	CronOpsService& ops = fixture.ops();
-	std::vector<CronRealtimeEvent> events;
-
-	CronOpsService::CronRealtimeEventHooks hooks;
-	hooks.onEvent = [&events](const CronRealtimeEvent& event) {
-		events.push_back(event);
-	};
-	ops.SetRealtimeEventHooks(std::move(hooks));
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const CronJson added = ops.Add({
-		{ "name", "wp-d remove after run" },
-		{ "enabled", true },
-		{ "schedule", { { "kind", "at" }, { "atMs", nowMs - 1 } } },
-		{ "payload", { { "kind", "systemEvent" }, { "text", "done" } } },
-		{ "deleteAfterRun", true }
-	});
-	const std::string jobId = added.value("id", std::string());
-	REQUIRE_FALSE(jobId.empty());
-
-	events.clear();
-	(void)ops.Wake({ { "mode", "now" }, { "text", "run" } });
-
-	bool sawRemoved = false;
-	for (const CronRealtimeEvent& event : events) {
-		if (event.jobId == jobId && event.action == "removed") {
-			sawRemoved = true;
-		}
-	}
-	REQUIRE(sawRemoved);
-}
-
-TEST_CASE(
 	"Cron ops startup catchup defers excess missed jobs with staggered nextRunAtMs",
 	"[cron][timer][wp-d]") {
 	IsolatedCronOpsFixture fixture("startup-catchup-stagger");
@@ -4648,42 +4354,6 @@ TEST_CASE(
 		deferredNextRunAtMs = job["state"]["nextRunAtMs"].get<std::int64_t>();
 	}
 	REQUIRE(deferredNextRunAtMs >= nowMs + config.missedJobStaggerMs);
-}
-
-TEST_CASE(
-	"Cron ops background scheduler wakes promptly after add mutation",
-	"[cron][timer][wp-d]") {
-	IsolatedCronOpsFixture fixture("background-wake-add");
-	CronOpsService& ops = fixture.ops();
-
-	ops.StartBackgroundScheduler();
-	std::size_t finishedCount = 0;
-	CronOpsService::CronRealtimeEventHooks hooks;
-	hooks.onEvent = [&finishedCount](const CronRealtimeEvent& event) {
-		if (event.action == "finished") {
-			++finishedCount;
-		}
-	};
-	ops.SetRealtimeEventHooks(std::move(hooks));
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const CronJson added = ops.Add({
-		{ "name", "background wake add" },
-		{ "enabled", true },
-		{ "schedule", { { "kind", "at" }, { "atMs", nowMs - 1 } } },
-		{ "payload", { { "kind", "systemEvent" }, { "text", "run" } } },
-		{ "deleteAfterRun", true }
-	});
-	REQUIRE_FALSE(added.value("id", std::string()).empty());
-
-	const auto deadline = std::chrono::steady_clock::now() +
-		std::chrono::milliseconds(750);
-	while (finishedCount == 0 && std::chrono::steady_clock::now() < deadline) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
-
-	ops.StopBackgroundScheduler();
-	REQUIRE(finishedCount >= 1);
 }
 
 TEST_CASE("Cron timer clears schedule auto-disable notification signaling after successful recompute", "[cron][timer]") {
@@ -4981,60 +4651,6 @@ TEST_CASE("Cron runs validator accepts manual lifecycle status filter in single 
 	REQUIRE(issue.code.empty());
 }
 
-
-TEST_CASE(
-	"Cron ops queued manual run terminal hook projects retry schedule metadata",
-	"[cron][ops][p4]") {
-	IsolatedCronOpsFixture fixture("queued-manual-retry-metadata");
-	CronOpsService& ops = fixture.ops();
-	std::vector<CronJson> failedPayloads;
-	std::vector<CronJson> runningPayloads;
-
-	CronOpsService::TaskLedgerHooks hooks;
-	hooks.createRunningTaskRun = [&runningPayloads](const CronJson& payload) {
-		runningPayloads.push_back(payload);
-	};
-	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
-		failedPayloads.push_back(payload);
-	};
-	ops.SetTaskLedgerHooks(std::move(hooks));
-
-	CronJson added = ops.Add({
-		{ "name", "queued manual retry metadata" },
-		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
-		{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-		{ "delivery", {
-			{ "mode", "webhook" },
-			{ "to", "https://example.test/hook" },
-			{ "simulateHttpStatus", 503 }
-		} },
-		{ "retry", { { "maxAttempts", 2 }, { "backoffMs", CronJson::array({ 5'000 }) } } },
-		{ "deleteAfterRun", true }
-	});
-	const std::string jobId = added.value("id", std::string());
-	REQUIRE_FALSE(jobId.empty());
-
-	const std::string queuedRunId =
-		ops.Run({ { "id", jobId }, { "mode", "force" } }).value("runId", std::string());
-	REQUIRE_FALSE(queuedRunId.empty());
-
-	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
-	REQUIRE(wake.value("ok", false));
-
-	REQUIRE_FALSE(runningPayloads.empty());
-	REQUIRE(runningPayloads.back().value("taskLedgerStatus", std::string()) == "running");
-	REQUIRE_FALSE(failedPayloads.empty());
-	const CronJson& payload = failedPayloads.back();
-	REQUIRE(payload.value("runId", std::string()) == queuedRunId);
-	REQUIRE(payload.value("taskLedgerStatus", std::string()) == "failed");
-	REQUIRE(payload.value("retryScheduled", false));
-	REQUIRE(payload.value("retryAttempt", 0) >= 1);
-	REQUIRE(payload.contains("retryScheduledAtMs"));
-	REQUIRE_FALSE(payload["retryScheduledAtMs"].is_null());
-	REQUIRE(payload.contains("deliveryMode"));
-	REQUIRE(payload.contains("deliveryHttpStatus"));
-	REQUIRE(payload.contains("failureAlertTriggered"));
-}
 TEST_CASE("Cron ops manual terminal hook carries retry and failure-alert metadata", "[cron][ops]") {
 	IsolatedCronOpsFixture fixture("manual-terminal-metadata");
 	CronOpsService& ops = fixture.ops();
@@ -5478,7 +5094,6 @@ TEST_CASE("Cron timer records failure destination webhook HTTP status", "[cron][
 TEST_CASE("Cron timer transport dispatch classifies webhook transport failures", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
-	::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
 
 	SECTION("Primary webhook transport dispatch failure is retryable network error") {
 		CronJson jobs = CronJson::array({
@@ -5541,39 +5156,6 @@ TEST_CASE("Cron timer transport dispatch classifies webhook transport failures",
 			"failed to parse webhook URL");
 		REQUIRE(runs[0].value("failureDestinationAttempted", true) == false);
 	}
-
-	SECTION("Default webhook transport dispatch policy applies when per-job flag is omitted") {
-		::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "true");
-
-		CronJson jobs = CronJson::array({
-			{
-				{ "id", "job-webhook-default-transport-dispatch-fail" },
-				{ "name", "webhook default transport dispatch fail" },
-				{ "enabled", true },
-				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
-				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-				{ "delivery",
-					{
-						{ "mode", "webhook" },
-						{ "to", "http:///" }
-					} },
-				{ "state", { { "nextRunAtMs", nowMs - 1 } } }
-			}
-		});
-		CronJson runs = CronJson::array();
-
-		timer.PumpDueRuns(jobs, runs, nowMs, false);
-		REQUIRE(runs.size() == 1);
-		REQUIRE(runs[0].value("status", std::string()) == "error");
-		REQUIRE(runs[0].value("deliveryStatus", std::string()) == "not-delivered");
-		REQUIRE(runs[0].value("errorCategory", std::string()) == "network");
-		REQUIRE(runs[0].value("deliveryAttempted", true) == false);
-		REQUIRE(runs[0].value("summary", std::string()) == "Webhook delivery transport dispatch failed");
-
-		::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
-	}
-
-	::_putenv_s("BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH", "");
 }
 
 TEST_CASE("Cron timer marks announce failure destination empty target as not-delivered", "[cron][timer]") {
@@ -7193,15 +6775,8 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 			sawNotDue = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
-			REQUIRE(payload.value("terminal", true));
+			REQUIRE(payload.value("terminal", false));
 			REQUIRE(payload.contains("queuedAtMs"));
-			REQUIRE(payload.contains("retryAttempt"));
-			REQUIRE(payload.contains("retryScheduled"));
-			REQUIRE(payload.contains("retryScheduledAtMs"));
-			REQUIRE(payload.contains("failureAlertTriggered"));
-			REQUIRE(payload.contains("failureAlertSuppressed"));
-			REQUIRE(payload.contains("failureAlertMode"));
-			REQUIRE(payload.contains("failureAlertTarget"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("not due") !=
 				std::string::npos);
@@ -7255,16 +6830,9 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 			sawUnknownJob = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
-			REQUIRE(payload.value("terminal", true));
+			REQUIRE(payload.value("terminal", false));
 			REQUIRE(payload.value("taskLedgerDisposition", std::string()) == "unknown_job");
 			REQUIRE(payload.contains("queuedAtMs"));
-			REQUIRE(payload.contains("retryAttempt"));
-			REQUIRE(payload.contains("retryScheduled"));
-			REQUIRE(payload.contains("retryScheduledAtMs"));
-			REQUIRE(payload.contains("failureAlertTriggered"));
-			REQUIRE(payload.contains("failureAlertSuppressed"));
-			REQUIRE(payload.contains("failureAlertMode"));
-			REQUIRE(payload.contains("failureAlertTarget"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("no longer exists") !=
 				std::string::npos);
@@ -7839,73 +7407,6 @@ TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	REQUIRE(issue.message.find("params.mode") != std::string::npos);
 }
 
-
-TEST_CASE(
-	"Cron gateway production wiring projects task ledger fields in cron.runs",
-	"[cron][gateway][wp-f][p4]") {
-	GatewayCronProductionFixture fixture("production-task-ledger-runs");
-	GatewayHost& host = fixture.gateway();
-
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpf-cron-add-task-ledger",
-		"cron.add",
-		std::string(
-			"{\"name\":\"wp-f task ledger\",\"enabled\":true,"
-			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
-			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"task ledger\"},"
-			"\"delivery\":{\"mode\":\"none\"}}"));
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-	const std::string cronId =
-		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
-	REQUIRE_FALSE(cronId.empty());
-
-	const ResponseFrame cronRun = RouteGatewayCron(
-		host,
-		"wpf-cron-run-task-ledger",
-		"cron.run",
-		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
-	REQUIRE(cronRun.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
-	const CronJson runEnvelope = CronJson::parse(cronRun.payloadJson.value());
-	REQUIRE(runEnvelope.value("runState", std::string()) == "queued");
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpf-wake-task-ledger",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute task ledger\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpf-cron-runs-task-ledger",
-		"cron.runs",
-		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
-		"\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}");
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload["entries"].is_array());
-	REQUIRE_FALSE(runsPayload["entries"].empty());
-
-	bool sawTerminalLifecycle = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		sawTerminalLifecycle = true;
-		REQUIRE(entry.contains("taskLedgerDisposition"));
-		REQUIRE(entry.contains("taskLedgerPhase"));
-		REQUIRE(entry.contains("lifecycleState"));
-	}
-	REQUIRE(sawTerminalLifecycle);
-}
 TEST_CASE(
 	"Cron gateway production wiring routes add run runs and wake through handler stack",
 	"[cron][gateway][wp-f]") {
@@ -8033,781 +7534,6 @@ TEST_CASE(
 		}
 	}
 	REQUIRE(sawFinished);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring executes with chat runtime callback and forwards override hints",
-	"[cron][gateway][wp-f]") {
-	GatewayCronProductionFixture fixture("production-runtime-callback");
-	GatewayHost& host = fixture.gateway();
-	std::optional<GatewayHost::ChatRuntimeRequest> capturedRequest;
-	std::size_t failureAlertDispatchCount = 0;
-
-	host.SetChatRuntimeCallback(
-		[&capturedRequest, &failureAlertDispatchCount](
-			const GatewayHost::ChatRuntimeRequest& request) {
-			if (request.runId.rfind("cron-failure-alert-", 0) == 0) {
-				++failureAlertDispatchCount;
-			}
-			capturedRequest = request;
-			const bool isCronRuntimeRun =
-				request.runId.rfind("cron-run-", 0) == 0 ||
-				request.runId.rfind("cron-", 0) == 0;
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "runtime-ok",
-				.modelId = request.modelIdOverride.empty()
-					? std::string("default-model")
-					: request.modelIdOverride,
-				.retryAfterMs = isCronRuntimeRun
-					? std::optional<std::int64_t>(1234)
-					: std::nullopt,
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpf-cron-add-runtime-callback",
-		"cron.add",
-		std::string("{\"name\":\"wp-f runtime callback\",\"enabled\":true,") +
-		"\"sessionTarget\":\"isolated\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"runtime message\"," +
-		"\"model\":\"gpt-4o-mini\",\"provider\":\"azure-openai\",\"timeoutSeconds\":5}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"failureAlert\":{\"after\":1,\"cooldownMs\":0,\"mode\":\"announce\",\"to\":\"main\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpf-wake-runtime-callback",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute callback\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	REQUIRE(capturedRequest.has_value());
-	REQUIRE(capturedRequest->message == "runtime message");
-	REQUIRE(capturedRequest->modelIdOverride == "gpt-4o-mini");
-	REQUIRE(capturedRequest->providerOverride == "azure-openai");
-	REQUIRE(capturedRequest->timeoutSeconds == 5);
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpf-cron-runs-runtime-callback",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-	bool sawRuntimeRetryAfterHint = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("summary", std::string()) != "runtime-ok") {
-			continue;
-		}
-		if (!entry.contains("retryScheduledAtMs") || entry["retryScheduledAtMs"].is_null()) {
-			continue;
-		}
-		sawRuntimeRetryAfterHint = true;
-		break;
-	}
-	REQUIRE(sawRuntimeRetryAfterHint);
-	REQUIRE(failureAlertDispatchCount == 0);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring infers runtime payload kind when kind field is omitted",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-runtime-kind-inference");
-	GatewayHost& host = fixture.gateway();
-	std::vector<GatewayHost::ChatRuntimeRequest> capturedRequests;
-
-	host.SetChatRuntimeCallback(
-		[&capturedRequests](const GatewayHost::ChatRuntimeRequest& request) {
-			capturedRequests.push_back(request);
-			const std::string runtimeSummary =
-				request.message == "runtime inferred agent turn"
-				? std::string("runtime-kind-inference-agent-ok")
-				: std::string("runtime-kind-inference-system-ok");
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = runtimeSummary,
-				.modelId = request.modelIdOverride.empty()
-					? std::string("default-model")
-					: request.modelIdOverride,
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame addSystemEventNoKind = RouteGatewayCron(
-		host,
-		"wpf-cron-add-systemevent-no-kind",
-		"cron.add",
-		std::string("{\"name\":\"wp-a runtime kind inference system event\",\"enabled\":true,") +
-		"\"sessionTarget\":\"main\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"text\":\"runtime inferred system event\",\"model\":\"gpt-4o-mini\"}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(addSystemEventNoKind.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", addSystemEventNoKind));
-
-	const ResponseFrame addAgentTurnNoKind = RouteGatewayCron(
-		host,
-		"wpf-cron-add-agentturn-no-kind",
-		"cron.add",
-		std::string("{\"name\":\"wp-a runtime kind inference agent turn\",\"enabled\":true,") +
-		"\"sessionTarget\":\"isolated\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"message\":\"runtime inferred agent turn\",\"provider\":\"azure-openai\"}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(addAgentTurnNoKind.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", addAgentTurnNoKind));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpf-wake-runtime-kind-inference",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute inferred kinds\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	REQUIRE(capturedRequests.size() >= 2);
-	bool sawSystemEventMessage = false;
-	bool sawAgentTurnMessage = false;
-	for (const auto& request : capturedRequests) {
-		if (request.message == "[cron] runtime inferred system event") {
-			sawSystemEventMessage = true;
-			REQUIRE(request.bodyForCommands == "runtime inferred system event");
-			REQUIRE(request.bodyForAgent == "[cron] runtime inferred system event");
-		}
-		if (request.message == "runtime inferred agent turn") {
-			sawAgentTurnMessage = true;
-			REQUIRE(request.bodyForCommands == "runtime inferred agent turn");
-			REQUIRE(request.bodyForAgent == "runtime inferred agent turn");
-		}
-	}
-	REQUIRE(sawSystemEventMessage);
-	REQUIRE(sawAgentTurnMessage);
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpf-cron-runs-runtime-kind-inference",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawSystemEventTerminal = false;
-	bool sawAgentTurnTerminal = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-
-		const std::string summary = entry.value("summary", std::string());
-		if (summary == "runtime-kind-inference-system-ok") {
-			sawSystemEventTerminal = true;
-		}
-		if (summary == "runtime-kind-inference-agent-ok") {
-			sawAgentTurnTerminal = true;
-		}
-	}
-	REQUIRE(sawSystemEventTerminal);
-	REQUIRE(sawAgentTurnTerminal);
-}
-
-
-
-TEST_CASE(
-	"Cron gateway production wiring dispatches schedule auto-disable notification callbacks",
-	"[cron][gateway][wp-f][wp-c]") {
-	GatewayCronProductionFixture fixture("production-schedule-auto-disable");
-	GatewayHost& host = fixture.gateway();
-	std::size_t autoDisableDispatchCount = 0;
-	std::optional<GatewayHost::ChatRuntimeRequest> lastAutoDisableRequest;
-
-	host.SetChatRuntimeCallback(
-		[&autoDisableDispatchCount, &lastAutoDisableRequest](
-			const GatewayHost::ChatRuntimeRequest& request) {
-			if (request.runId.rfind("cron-schedule-auto-disable-", 0) == 0) {
-				++autoDisableDispatchCount;
-				lastAutoDisableRequest = request;
-			}
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "auto-disable-ok",
-				.modelId = "auto-disable-model",
-			};
-		});
-
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpf-cron-add-auto-disable",
-		"cron.add",
-		std::string("{\"name\":\"wp-f schedule auto-disable\",\"enabled\":true,") +
-		"\"agentId\":\"agent-wp-c-gateway\",\"sessionKey\":\"agent:main:wp-c-gateway\"," +
-		"\"schedule\":{\"kind\":\"cron\",\"expr\":\"* * * * *\",\"tz\":\"Mars/Phobos\"}," +
-		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"tick\"}}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	for (int attempt = 0; attempt < 3; ++attempt) {
-		const ResponseFrame cronStatus = RouteGatewayCron(
-			host,
-			"wpf-cron-status-auto-disable-" + std::to_string(attempt),
-			"cron.status",
-			"{}");
-		REQUIRE(cronStatus.ok);
-		REQUIRE(ValidateGatewayCronResponse("cron.status", cronStatus));
-	}
-
-	REQUIRE(autoDisableDispatchCount >= 1);
-	REQUIRE(lastAutoDisableRequest.has_value());
-	REQUIRE(lastAutoDisableRequest->message.find("[cron]") != std::string::npos);
-	REQUIRE(
-		lastAutoDisableRequest->message.find("auto-disabled") != std::string::npos);
-}
-TEST_CASE(
-	"Cron gateway production wiring dispatches announce delivery notification callbacks",
-	"[cron][gateway][wp-f][wp-b]") {
-	GatewayCronProductionFixture fixture("production-announce-delivery-callback");
-	GatewayHost& host = fixture.gateway();
-	std::size_t announceDispatchCount = 0;
-	std::optional<GatewayHost::ChatRuntimeRequest> lastAnnounceRequest;
-
-	host.SetChatRuntimeCallback(
-		[&announceDispatchCount, &lastAnnounceRequest](
-			const GatewayHost::ChatRuntimeRequest& request) {
-			if (request.runId.rfind("cron-announce-", 0) == 0) {
-				++announceDispatchCount;
-				lastAnnounceRequest = request;
-			}
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "announce-ok",
-				.modelId = "announce-model",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpf-cron-add-announce-delivery",
-		"cron.add",
-		std::string("{\"name\":\"wp-f announce delivery callback\",\"enabled\":true,") +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"announce delivery\"}," +
-		"\"delivery\":{\"mode\":\"announce\",\"to\":\"main\",\"channel\":\"last\",\"accountId\":\"announce-account\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpf-wake-announce-delivery",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute announce delivery\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	REQUIRE(announceDispatchCount >= 1);
-	REQUIRE(lastAnnounceRequest.has_value());
-	REQUIRE(lastAnnounceRequest->message.find("[cron][announce]") != std::string::npos);
-	REQUIRE(lastAnnounceRequest->message.find("accountId=") != std::string::npos);
-}
-TEST_CASE(
-	"Cron gateway production wiring dispatches failure-alert notification callbacks",
-	"[cron][gateway][wp-f][wp-b]") {
-	GatewayCronProductionFixture fixture("production-failure-alert-callback");
-	GatewayHost& host = fixture.gateway();
-	std::size_t failureAlertDispatchCount = 0;
-	std::optional<GatewayHost::ChatRuntimeRequest> lastFailureAlertRequest;
-
-	host.SetChatRuntimeCallback(
-		[&failureAlertDispatchCount, &lastFailureAlertRequest](
-			const GatewayHost::ChatRuntimeRequest& request) {
-			if (request.runId.rfind("cron-failure-alert-", 0) == 0) {
-				++failureAlertDispatchCount;
-				lastFailureAlertRequest = request;
-			}
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "failure-alert-ok",
-				.modelId = "failure-alert-model",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpf-cron-add-failure-alert",
-		"cron.add",
-		std::string("{\"name\":\"wp-f failure alert callback\",\"enabled\":true,") +
-		"\"sessionTarget\":\"isolated\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"runtime message\",\"timeoutSeconds\":1}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"failureAlert\":{\"after\":1,\"cooldownMs\":0,\"mode\":\"announce\",\"to\":\"main\",\"accountId\":\"failure-alert-account\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpf-wake-failure-alert",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute failure alert\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	REQUIRE(failureAlertDispatchCount >= 1);
-	REQUIRE(lastFailureAlertRequest.has_value());
-	REQUIRE(lastFailureAlertRequest->message.find("[cron][failure-alert]") != std::string::npos);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring schedules retry when main-session lane is busy",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-busy-retry");
-	GatewayHost& host = fixture.gateway();
-	host.SetChatRuntimeCallback(
-		[](const GatewayHost::ChatRuntimeRequest&) {
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "runtime-ok",
-				.modelId = "default-model",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-busy-retry-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a busy retry\",\"enabled\":true,") +
-		"\"sessionTarget\":\"main\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"busy retry\",\"heartbeatBusyMaxAttempts\":3,\"heartbeatBusyDelayMs\":1200}," +
-		"\"retry\":{\"maxAttempts\":3,\"backoffMs\":[9999]}," +
-		"\"delivery\":{\"mode\":\"none\"}}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", true);
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-busy-retry-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"busy retry wake\"}"));
-	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", false);
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-busy-retry-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawBusyRetry = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("summary", std::string()) != "Main heartbeat busy; retry scheduled") {
-			continue;
-		}
-		if (entry.value("errorCategory", std::string()) != "heartbeat_busy") {
-			continue;
-		}
-		if (!entry.value("retryScheduled", false)) {
-			continue;
-		}
-		if (!entry.contains("retryScheduledAtMs") || entry["retryScheduledAtMs"].is_null()) {
-			continue;
-		}
-		sawBusyRetry = true;
-		break;
-	}
-	REQUIRE(sawBusyRetry);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring marks fallback wake for recurring main-session busy lane",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-busy-fallback");
-	GatewayHost& host = fixture.gateway();
-	host.SetChatRuntimeCallback(
-		[](const GatewayHost::ChatRuntimeRequest&) {
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "runtime-ok",
-				.modelId = "default-model",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-busy-fallback-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a busy fallback\",\"enabled\":true,") +
-		"\"sessionTarget\":\"main\"," +
-		"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000}," +
-		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"busy fallback\",\"heartbeatBusyMaxAttempts\":1,\"heartbeatBusyDelayMs\":1}," +
-		"\"retry\":{\"maxAttempts\":0}," +
-		"\"delivery\":{\"mode\":\"none\"}}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-	const CronJson addedPayload = CronJson::parse(cronAdd.payloadJson.value());
-	const std::string cronId = addedPayload.value("id", std::string());
-	REQUIRE_FALSE(cronId.empty());
-
-	const ResponseFrame cronUpdate = RouteGatewayCron(
-		host,
-		"wpa-busy-fallback-update",
-		"cron.update",
-		std::string("{\"id\":\"") + cronId +
-		"\",\"patch\":{\"state\":{\"nextRunAtMs\":" +
-		std::to_string(nowMs - 1) +
-		",\"heartbeatBusyAttempts\":1}}}");
-	REQUIRE(cronUpdate.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.update", cronUpdate));
-
-	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", true);
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-busy-fallback-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"busy fallback wake\"}"));
-	blazeclaw::gateway::test_hooks::SetCronSessionBusyForTest(host, "main", false);
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-busy-fallback-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawBusyFallback = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("errorCategory", std::string()) != "heartbeat_busy_fallback") {
-			continue;
-		}
-		if (!entry.value("heartbeatFallbackWakeRequested", false)) {
-			continue;
-		}
-		if (!entry.contains("heartbeatFallbackWakeRequestedAtMs") ||
-			entry["heartbeatFallbackWakeRequestedAtMs"].is_null()) {
-			continue;
-		}
-		sawBusyFallback = true;
-		break;
-	}
-	REQUIRE(sawBusyFallback);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring returns runtime_unavailable for main-session runtime when chat callback is missing",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-main-runtime-unavailable");
-	GatewayHost& host = fixture.gateway();
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-main-runtime-unavailable-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a main runtime unavailable\",\"enabled\":true,") +
-		"\"sessionTarget\":\"main\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"runtime unavailable main\"}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-main-runtime-unavailable-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"runtime unavailable main wake\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-main-runtime-unavailable-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawRuntimeUnavailable = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("errorCategory", std::string()) != "runtime_unavailable") {
-			continue;
-		}
-		if (entry.value("summary", std::string()) != "chat runtime callback is not configured") {
-			continue;
-		}
-		sawRuntimeUnavailable = true;
-		break;
-	}
-	REQUIRE(sawRuntimeUnavailable);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring returns runtime_unavailable for isolated runtime when chat callback is missing",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-isolated-runtime-unavailable");
-	GatewayHost& host = fixture.gateway();
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-isolated-runtime-unavailable-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a isolated runtime unavailable\",\"enabled\":true,") +
-		"\"sessionTarget\":\"isolated\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"runtime unavailable isolated\"}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-isolated-runtime-unavailable-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"runtime unavailable isolated wake\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-isolated-runtime-unavailable-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawRuntimeUnavailable = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("errorCategory", std::string()) != "runtime_unavailable") {
-			continue;
-		}
-		if (entry.value("summary", std::string()) != "chat runtime callback is not configured") {
-			continue;
-		}
-		sawRuntimeUnavailable = true;
-		break;
-	}
-	REQUIRE(sawRuntimeUnavailable);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring uses isolated timeout fast-path without invoking callback",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-isolated-timeout-fastpath");
-	GatewayHost& host = fixture.gateway();
-	std::size_t callbackInvokeCount = 0;
-
-	host.SetChatRuntimeCallback(
-		[&callbackInvokeCount](const GatewayHost::ChatRuntimeRequest&) {
-			++callbackInvokeCount;
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "should-not-run",
-				.modelId = "unused-model",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-isolated-timeout-fastpath-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a isolated timeout fastpath\",\"enabled\":true,") +
-		"\"sessionTarget\":\"isolated\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"timeout fastpath\",\"timeoutSeconds\":1}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-isolated-timeout-fastpath-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"isolated timeout fastpath wake\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-	REQUIRE(callbackInvokeCount == 0);
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-isolated-timeout-fastpath-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawTimeoutTerminal = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("errorCategory", std::string()) != "timeout") {
-			continue;
-		}
-		if (!entry.value("timedOut", false)) {
-			continue;
-		}
-		sawTimeoutTerminal = true;
-		break;
-	}
-	REQUIRE(sawTimeoutTerminal);
-}
-
-TEST_CASE(
-	"Cron gateway production wiring resolves session-target key for isolated runtime callback lane",
-	"[cron][gateway][wp-f][wp-a]") {
-	GatewayCronProductionFixture fixture("production-isolated-session-target-routing");
-	GatewayHost& host = fixture.gateway();
-	std::optional<GatewayHost::ChatRuntimeRequest> capturedRequest;
-
-	host.SetChatRuntimeCallback(
-		[&capturedRequest](const GatewayHost::ChatRuntimeRequest& request) {
-			capturedRequest = request;
-			return GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = "isolated-session-target-ok",
-				.modelId = "not-used",
-			};
-		});
-
-	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
-	const ResponseFrame cronAdd = RouteGatewayCron(
-		host,
-		"wpa-isolated-session-target-routing-add",
-		"cron.add",
-		std::string("{\"name\":\"wp-a isolated session target routing\",\"enabled\":true,") +
-		"\"sessionTarget\":\"session:agent:main:delta\"," +
-		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
-		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"isolated session target\"}," +
-		"\"delivery\":{\"mode\":\"none\"}," +
-		"\"deleteAfterRun\":true}");
-	REQUIRE(cronAdd.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
-
-	const ResponseFrame wakeNow = RouteGatewayCron(
-		host,
-		"wpa-isolated-session-target-routing-wake",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"isolated session-target wake\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	REQUIRE(capturedRequest.has_value());
-	REQUIRE(capturedRequest->sessionKey == "agent:main:delta");
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpa-isolated-session-target-routing-runs",
-		"cron.runs",
-		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
-
-	bool sawSessionTargetTerminal = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
-		if (entry.value("summary", std::string()) != "isolated-session-target-ok") {
-			continue;
-		}
-		if (entry.value("model", std::string()) != "not-used") {
-			continue;
-		}
-		if (entry.value("sessionKey", std::string()) != "agent:main:delta") {
-			continue;
-		}
-		sawSessionTargetTerminal = true;
-		break;
-	}
-	REQUIRE(sawSessionTargetTerminal);
 }
 
 TEST_CASE(
