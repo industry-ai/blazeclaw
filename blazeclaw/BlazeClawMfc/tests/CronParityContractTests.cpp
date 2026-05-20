@@ -4025,6 +4025,36 @@ TEST_CASE("Cron timer supports Etc/GMT timezone aliases for cron schedules", "[c
 	REQUIRE(nextPlus.value() == nextEtc.value());
 }
 
+TEST_CASE("Cron timer supports IANA Etc zero-offset timezone aliases", "[cron][timer][p5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson utcJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "UTC" } } },
+		{ "state", CronJson::object() }
+	};
+	CronJson etcUtcJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/UTC" } } },
+		{ "state", CronJson::object() }
+	};
+	CronJson etcZuluJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" }, { "tz", "Etc/Zulu" } } },
+		{ "state", CronJson::object() }
+	};
+
+	const auto nextUtc = timer.ComputeNextRunAtMs(utcJob, nowMs);
+	const auto nextEtcUtc = timer.ComputeNextRunAtMs(etcUtcJob, nowMs);
+	const auto nextEtcZulu = timer.ComputeNextRunAtMs(etcZuluJob, nowMs);
+	REQUIRE(nextUtc.has_value());
+	REQUIRE(nextEtcUtc.has_value());
+	REQUIRE(nextEtcZulu.has_value());
+	REQUIRE(nextUtc.value() == nextEtcUtc.value());
+	REQUIRE(nextUtc.value() == nextEtcZulu.value());
+}
+
 
 TEST_CASE("Cron timer computes six-field cron expression with seconds token", "[cron][timer][wp-c]") {
 	CronTimerService timer;

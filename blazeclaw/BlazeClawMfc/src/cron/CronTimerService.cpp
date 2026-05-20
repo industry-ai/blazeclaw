@@ -1813,6 +1813,14 @@ namespace blazeclaw::cron {
 				return 0;
 			}
 
+			if (tz == "etc/utc" ||
+				tz == "etc/uct" ||
+				tz == "etc/zulu" ||
+				tz == "etc/universal" ||
+				tz == "etc/greenwich") {
+				return 0;
+			}
+
 			if (tz.rfind("etc/gmt", 0) == 0) {
 				const std::string suffix = tz.substr(7);
 				if (suffix.empty()) {
@@ -2826,6 +2834,7 @@ namespace blazeclaw::cron {
 				{ "ts", nowMs },
 				{ "jobId", id },
 				{ "action", "finished" },
+				{ "lifecycleState", "terminal" },
 				{ "status", outcome.status },
 				{ "summary", outcome.summary },
 				{ "error", outcome.error.empty() ? CronJson(nullptr) : CronJson(outcome.error) },
