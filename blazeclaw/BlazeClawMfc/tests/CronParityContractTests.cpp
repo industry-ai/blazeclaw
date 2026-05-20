@@ -4025,6 +4025,43 @@ TEST_CASE("Cron timer supports Etc/GMT timezone aliases for cron schedules", "[c
 	REQUIRE(nextPlus.value() == nextEtc.value());
 }
 
+
+TEST_CASE("Cron timer computes six-field cron expression with seconds token", "[cron][timer][wp-c]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson sixFieldJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "30 15 10 * * *" } } },
+		{ "state", CronJson::object() }
+	};
+	const auto nextSixField = timer.ComputeNextRunAtMs(sixFieldJob, nowMs);
+	REQUIRE(nextSixField.has_value());
+	REQUIRE(nextSixField.value() > nowMs);
+	{
+		const std::time_t t = static_cast<std::time_t>(nextSixField.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_sec == 30);
+		REQUIRE(tm.tm_min == 15);
+		REQUIRE(tm.tm_hour == 10);
+	}
+
+	CronJson fiveFieldJob = {
+		{ "enabled", true },
+		{ "schedule", { { "kind", "cron" }, { "expr", "15 10 * * *" } } },
+		{ "state", CronJson::object() }
+	};
+	const auto nextFiveField = timer.ComputeNextRunAtMs(fiveFieldJob, nowMs);
+	REQUIRE(nextFiveField.has_value());
+	{
+		const std::time_t t = static_cast<std::time_t>(nextFiveField.value() / 1000);
+		std::tm tm{};
+		gmtime_s(&tm, &t);
+		REQUIRE(tm.tm_min == 15);
+		REQUIRE(tm.tm_hour == 10);
+	}
+}
 TEST_CASE("Cron timer computes cron expression with day-month-and-day-of-week fields", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -7989,6 +8026,56 @@ TEST_CASE(
 }
 
 
+
+TEST_CASE(
+	"Cron gateway production wiring dispatches schedule auto-disable notification callbacks",
+	"[cron][gateway][wp-f][wp-c]") {
+	GatewayCronProductionFixture fixture("production-schedule-auto-disable");
+	GatewayHost& host = fixture.gateway();
+	std::size_t autoDisableDispatchCount = 0;
+	std::optional<GatewayHost::ChatRuntimeRequest> lastAutoDisableRequest;
+
+	host.SetChatRuntimeCallback(
+		[&autoDisableDispatchCount, &lastAutoDisableRequest](
+			const GatewayHost::ChatRuntimeRequest& request) {
+			if (request.runId.rfind("cron-schedule-auto-disable-", 0) == 0) {
+				++autoDisableDispatchCount;
+				lastAutoDisableRequest = request;
+			}
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "auto-disable-ok",
+				.modelId = "auto-disable-model",
+			};
+		});
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-auto-disable",
+		"cron.add",
+		std::string("{\"name\":\"wp-f schedule auto-disable\",\"enabled\":true,") +
+		"\"agentId\":\"agent-wp-c-gateway\",\"sessionKey\":\"agent:main:wp-c-gateway\"," +
+		"\"schedule\":{\"kind\":\"cron\",\"expr\":\"* * * * *\",\"tz\":\"Mars/Phobos\"}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"tick\"}}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	for (int attempt = 0; attempt < 3; ++attempt) {
+		const ResponseFrame cronStatus = RouteGatewayCron(
+			host,
+			"wpf-cron-status-auto-disable-" + std::to_string(attempt),
+			"cron.status",
+			"{}");
+		REQUIRE(cronStatus.ok);
+		REQUIRE(ValidateGatewayCronResponse("cron.status", cronStatus));
+	}
+
+	REQUIRE(autoDisableDispatchCount >= 1);
+	REQUIRE(lastAutoDisableRequest.has_value());
+	REQUIRE(lastAutoDisableRequest->message.find("[cron]") != std::string::npos);
+	REQUIRE(
+		lastAutoDisableRequest->message.find("auto-disabled") != std::string::npos);
+}
 TEST_CASE(
 	"Cron gateway production wiring dispatches announce delivery notification callbacks",
 	"[cron][gateway][wp-f][wp-b]") {

@@ -5,7 +5,6 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
-#include <cstdlib>
 #include <functional>
 #include <sstream>
 #include <unordered_map>
@@ -17,6 +16,7 @@
 #pragma comment(lib, "Winhttp.lib")
 
 namespace {
+	constexpr std::int64_t kSecondMs = 1'000;
 	constexpr std::int64_t kMinuteMs = 60'000;
 	constexpr std::int64_t kHourMs = 60 * kMinuteMs;
 	constexpr std::int64_t kDayMs = 24 * kHourMs;
@@ -212,48 +212,6 @@ namespace blazeclaw::cron {
 			return node.contains("transportDispatch") &&
 				node["transportDispatch"].is_boolean() &&
 				node["transportDispatch"].get<bool>();
-		}
-
-		bool ResolveWebhookTransportDispatchEnabled(
-			const CronJson& node,
-			const bool defaultEnabled) {
-			if (node.contains("transportDispatch") &&
-				node["transportDispatch"].is_boolean()) {
-				return node["transportDispatch"].get<bool>();
-			}
-
-			return defaultEnabled;
-		}
-
-		bool ResolveDefaultWebhookTransportDispatchEnabled() {
-			constexpr const char* envName =
-				"BLAZECLAW_CRON_DEFAULT_WEBHOOK_TRANSPORT_DISPATCH";
-			const DWORD requiredLength =
-				GetEnvironmentVariableA(envName, nullptr, 0);
-			if (requiredLength == 0) {
-				return false;
-			}
-
-			std::string raw;
-			raw.resize(static_cast<std::size_t>(requiredLength));
-			const DWORD valueLength = GetEnvironmentVariableA(
-				envName,
-				raw.data(),
-				requiredLength);
-			if (valueLength == 0) {
-				return false;
-			}
-
-			raw.resize(static_cast<std::size_t>(valueLength));
-			const std::string value = ToLowerCopy(TrimCopy(raw));
-			if (value.empty()) {
-				return false;
-			}
-
-			return value == "1" ||
-				value == "true" ||
-				value == "yes" ||
-				value == "on";
 		}
 
 		std::wstring Utf8ToWide(const std::string& value) {
@@ -538,10 +496,6 @@ namespace blazeclaw::cron {
 			std::int64_t failureDestinationHttpStatus = 0;
 			std::string failureDestinationError;
 			std::string failureDestinationMode;
-			std::string failureAlertStatus = "not-requested";
-			bool failureAlertAttempted = false;
-			std::int64_t failureAlertHttpStatus = 0;
-			std::string failureAlertError;
 			std::string errorCategory;
 			bool timedOut = false;
 			bool aborted = false;
@@ -1514,9 +1468,6 @@ namespace blazeclaw::cron {
 				(outcome.skipDeliverySimulation ||
 					outcome.skipFailureDestinationSimulation);
 
-			const bool defaultWebhookTransportDispatchEnabled =
-				ResolveDefaultWebhookTransportDispatchEnabled();
-
 			if (!heartbeatBusyDeliverySuppressed &&
 				job.contains("delivery") &&
 				job["delivery"].is_object() &&
@@ -1585,9 +1536,7 @@ namespace blazeclaw::cron {
 						to = TrimCopy(delivery["url"].get<std::string>());
 					}
 					outcome.deliveryTarget = to;
-					const bool transportDispatch = ResolveWebhookTransportDispatchEnabled(
-						delivery,
-						defaultWebhookTransportDispatchEnabled);
+					const bool transportDispatch = IsTransportDispatchEnabled(delivery);
 					const auto simulatedHttpStatus =
 						TryReadInt64Field(delivery, "simulateHttpStatus");
 					if (simulateTransientFailure) {
@@ -1771,9 +1720,7 @@ namespace blazeclaw::cron {
 					if (failureMode == "webhook") {
 						outcome.failureDestinationAttempted = true;
 						const bool failureTransportDispatch =
-							ResolveWebhookTransportDispatchEnabled(
-								failureDestination,
-								defaultWebhookTransportDispatchEnabled);
+							IsTransportDispatchEnabled(failureDestination);
 						const auto failureDestinationHttpStatus =
 							TryReadInt64Field(failureDestination, "simulateHttpStatus");
 						if (failureDestinationHttpStatus.has_value()) {
@@ -1843,40 +1790,6 @@ namespace blazeclaw::cron {
 			const std::string tz = ToLowerCopy(TrimCopy(tzRaw));
 			if (tz.empty() || tz == "utc" || tz == "gmt" || tz == "z") {
 				return 0;
-			}
-
-			if (tz.rfind("etc/gmt", 0) == 0) {
-				const std::string suffix = tz.substr(7);
-				if (suffix.empty()) {
-					return 0;
-				}
-				if (suffix[0] != '+' && suffix[0] != '-') {
-					return std::nullopt;
-				}
-
-				const int posixSign = suffix[0] == '+' ? -1 : 1;
-				const std::string hourPart = suffix.substr(1);
-				if (hourPart.empty() || hourPart.size() > 2) {
-					return std::nullopt;
-				}
-				for (const char ch : hourPart) {
-					if (std::isdigit(static_cast<unsigned char>(ch)) == 0) {
-						return std::nullopt;
-					}
-				}
-
-				int hours = 0;
-				try {
-					hours = std::stoi(hourPart);
-				}
-				catch (...) {
-					return std::nullopt;
-				}
-
-				if (hours < 0 || hours > 23) {
-					return std::nullopt;
-				}
-				return posixSign * hours * 60;
 			}
 
 			std::size_t offsetPos = std::string::npos;
@@ -2033,12 +1946,25 @@ namespace blazeclaw::cron {
 				return nowMs + kMinuteMs;
 			}
 
+			const bool hasSecondsField = parts.size() >= 6;
+			const std::string secondToken =
+				hasSecondsField ? parts[0] : std::string("0");
+			const std::string minuteToken =
+				hasSecondsField ? parts[1] : parts[0];
+			const std::string hourToken =
+				hasSecondsField ? parts[2] : parts[1];
 			const std::string dayOfMonthToken =
-				parts.size() >= 3 ? parts[2] : std::string("*");
+				hasSecondsField
+				? (parts.size() >= 4 ? parts[3] : std::string("*"))
+				: (parts.size() >= 3 ? parts[2] : std::string("*"));
 			const std::string monthToken =
-				parts.size() >= 4 ? parts[3] : std::string("*");
+				hasSecondsField
+				? (parts.size() >= 5 ? parts[4] : std::string("*"))
+				: (parts.size() >= 4 ? parts[3] : std::string("*"));
 			const std::string dayOfWeekToken =
-				parts.size() >= 5 ? parts[4] : std::string("*");
+				hasSecondsField
+				? (parts.size() >= 6 ? parts[5] : std::string("*"))
+				: (parts.size() >= 5 ? parts[4] : std::string("*"));
 
 			const auto timezoneOffsetMinutes =
 				ParseTimezoneOffsetMinutes(schedule.value("tz", std::string()));
@@ -2051,14 +1977,20 @@ namespace blazeclaw::cron {
 			const std::int64_t timezoneOffsetMs =
 				static_cast<std::int64_t>(timezoneOffsetMinutes.value_or(0)) * 60 * 1000;
 			std::int64_t localNowMs = nowMs + timezoneOffsetMs;
-			std::int64_t candidateLocalMs = ((localNowMs / kMinuteMs) + 1) * kMinuteMs;
+			const std::int64_t stepMs = hasSecondsField ? kSecondMs : kMinuteMs;
+			std::int64_t candidateLocalMs = hasSecondsField
+				? ((localNowMs / kSecondMs) + 1) * kSecondMs
+				: ((localNowMs / kMinuteMs) + 1) * kMinuteMs;
+			const int maxAttempts =
+				hasSecondsField ? (60 * 60 * 24 * 8) : (60 * 24 * 366);
 
-			for (int attempt = 0; attempt < 60 * 24 * 366; ++attempt) {
+			for (int attempt = 0; attempt < maxAttempts; ++attempt) {
 				const std::time_t candidateSeconds =
 					static_cast<std::time_t>(candidateLocalMs / 1000);
 				std::tm candidateTm{};
 				gmtime_s(&candidateTm, &candidateSeconds);
 
+				const int second = candidateTm.tm_sec;
 				const int minute = candidateTm.tm_min;
 				const int hour = candidateTm.tm_hour;
 				const int dayOfMonth = candidateTm.tm_mday;
@@ -2078,8 +2010,9 @@ namespace blazeclaw::cron {
 					(!domWildcard && !dowWildcard &&
 						(dayOfMonthMatch || dayOfWeekMatch));
 
-				if (MatchCronToken(parts[0], minute, 59) &&
-					MatchCronToken(parts[1], hour, 23) &&
+				if ((!hasSecondsField || MatchCronToken(secondToken, second, 59)) &&
+					MatchCronToken(minuteToken, minute, 59) &&
+					MatchCronToken(hourToken, hour, 23) &&
 					MatchCronMonthToken(monthToken, month) &&
 					dayMatch) {
 					std::int64_t candidate = candidateLocalMs - timezoneOffsetMs;
@@ -2092,7 +2025,7 @@ namespace blazeclaw::cron {
 					}
 				}
 
-				candidateLocalMs += kMinuteMs;
+				candidateLocalMs += stepMs;
 			}
 
 			return nowMs + kMinuteMs;
@@ -2409,10 +2342,8 @@ namespace blazeclaw::cron {
 				pumpCallbacks->onStarted(*it, nowMs);
 			}
 
-			RunOutcome outcome =
+			const RunOutcome outcome =
 				EvaluateRunOutcome(*it, nowMs, m_runtimeAdapters);
-			const bool defaultWebhookTransportDispatchEnabled =
-				ResolveDefaultWebhookTransportDispatchEnabled();
 			state["runningAtMs"] = nowMs;
 			state["startedAtMs"] = nowMs;
 			state["lastRunAtMs"] = nowMs;
@@ -2686,11 +2617,6 @@ namespace blazeclaw::cron {
 						!StartsWithHttpScheme(failureAlertTarget)) {
 						state["failureAlertSuppressed"] = true;
 						state["failureAlertSuppressedReason"] = "invalid_webhook_target";
-						outcome.failureAlertStatus = "suppressed";
-						outcome.failureAlertAttempted = false;
-						outcome.failureAlertHttpStatus = 0;
-						outcome.failureAlertError =
-							"invalid failure alert webhook target";
 						state["lastFailureAlertAtMs"] = CronJson(nullptr);
 						state["lastFailureAlertMode"] = failureAlertMode;
 						state["lastFailureAlertTarget"] = failureAlertTarget.empty()
@@ -2715,98 +2641,20 @@ namespace blazeclaw::cron {
 							if (scheduledRetry) {
 								state["failureAlertSuppressed"] = true;
 								state["failureAlertSuppressedReason"] = "retry_pending";
-								outcome.failureAlertStatus = "suppressed";
-								outcome.failureAlertAttempted = false;
-								outcome.failureAlertHttpStatus = 0;
-								outcome.failureAlertError = "failure alert retry pending";
 							}
 							else {
 								failureAlertTriggered = true;
 								failureAlertAtMs = nowMs;
 								state["lastFailureAlertAtMs"] = nowMs;
-								outcome.failureAlertAttempted = true;
-								if (failureAlertMode == kFailureAlertModeWebhook) {
-									const auto simulatedFailureAlertHttpStatus =
-										TryReadInt64Field((*it)["failureAlert"], "simulateHttpStatus");
-									const bool transportDispatch =
-										ResolveWebhookTransportDispatchEnabled(
-											(*it)["failureAlert"],
-											defaultWebhookTransportDispatchEnabled);
-									if (simulatedFailureAlertHttpStatus.has_value()) {
-										outcome.failureAlertHttpStatus =
-											simulatedFailureAlertHttpStatus.value();
-										if (simulatedFailureAlertHttpStatus.value() >= 200 &&
-											simulatedFailureAlertHttpStatus.value() < 300) {
-											outcome.failureAlertStatus = "delivered";
-											outcome.failureAlertError.clear();
-										}
-										else {
-											outcome.failureAlertStatus = "not-delivered";
-											outcome.failureAlertError =
-												"failure alert webhook returned HTTP " +
-												std::to_string(simulatedFailureAlertHttpStatus.value());
-										}
-									}
-									else if (transportDispatch && StartsWithHttpScheme(failureAlertTarget)) {
-										const WebhookDispatchResult dispatch =
-											DispatchWebhookPostWinHttp(failureAlertTarget);
-										outcome.failureAlertAttempted = dispatch.attempted;
-										if (dispatch.httpStatus.has_value()) {
-											outcome.failureAlertHttpStatus = dispatch.httpStatus.value();
-											if (dispatch.httpStatus.value() >= 200 &&
-												dispatch.httpStatus.value() < 300) {
-												outcome.failureAlertStatus = "delivered";
-												outcome.failureAlertError.clear();
-											}
-											else {
-												outcome.failureAlertStatus = "not-delivered";
-												outcome.failureAlertError =
-													"failure alert webhook returned HTTP " +
-													std::to_string(dispatch.httpStatus.value());
-											}
-										}
-										else {
-											outcome.failureAlertStatus = "not-delivered";
-											outcome.failureAlertHttpStatus = 0;
-											outcome.failureAlertError = dispatch.error.empty()
-												? std::string("failure alert webhook transport dispatch failed")
-												: dispatch.error;
-										}
-									}
-									else if (StartsWithHttpScheme(failureAlertTarget)) {
-										outcome.failureAlertStatus = "delivered";
-										outcome.failureAlertHttpStatus = 0;
-										outcome.failureAlertError.clear();
-									}
-									else {
-										outcome.failureAlertStatus = "not-delivered";
-										outcome.failureAlertHttpStatus = 0;
-										outcome.failureAlertError =
-											"invalid failure alert webhook target";
-									}
-								}
-								else {
-									outcome.failureAlertStatus = "delivered";
-									outcome.failureAlertHttpStatus = 0;
-									outcome.failureAlertError.clear();
-								}
 							}
 						}
 						else if (consecutiveErrors < alertAfter) {
 							state["failureAlertSuppressed"] = true;
 							state["failureAlertSuppressedReason"] = "threshold_not_met";
-							outcome.failureAlertStatus = "suppressed";
-							outcome.failureAlertAttempted = false;
-							outcome.failureAlertHttpStatus = 0;
-							outcome.failureAlertError = "failure alert threshold not met";
 						}
 						else if (!cooldownOpen) {
 							state["failureAlertSuppressed"] = true;
 							state["failureAlertSuppressedReason"] = "cooldown_active";
-							outcome.failureAlertStatus = "suppressed";
-							outcome.failureAlertAttempted = false;
-							outcome.failureAlertHttpStatus = 0;
-							outcome.failureAlertError = "failure alert cooldown active";
 						}
 					}
 				}
@@ -2852,16 +2700,6 @@ namespace blazeclaw::cron {
 				heartbeatFallbackWakeRequestedAtMsSnapshot.has_value()
 				? CronJson(heartbeatFallbackWakeRequestedAtMsSnapshot.value())
 				: CronJson(nullptr);
-
-			const std::optional<std::int64_t> projectedRetryScheduledAtMs =
-				scheduledRetry && nextAfterRun.has_value()
-				? nextAfterRun
-				: (outcome.hasRetryDelayOverride
-					? std::optional<std::int64_t>(
-						nowMs + (std::max)(
-							static_cast<std::int64_t>(0),
-							outcome.retryDelayOverrideMs))
-					: std::nullopt);
 
 			runs.push_back({
 				{ "ts", nowMs },
@@ -2929,16 +2767,6 @@ namespace blazeclaw::cron {
 					? CronJson(nullptr)
 					: CronJson(failureAlertAccountIdSnapshot) },
 				{ "failureAlertAtMs", failureAlertTriggered ? CronJson(failureAlertAtMs) : CronJson(nullptr) },
-				{ "failureAlertStatus", outcome.failureAlertStatus.empty()
-					? CronJson(nullptr)
-					: CronJson(outcome.failureAlertStatus) },
-				{ "failureAlertAttempted", outcome.failureAlertAttempted },
-				{ "failureAlertHttpStatus", outcome.failureAlertHttpStatus > 0
-					? CronJson(outcome.failureAlertHttpStatus)
-					: CronJson(nullptr) },
-				{ "failureAlertError", outcome.failureAlertError.empty()
-					? CronJson(nullptr)
-					: CronJson(outcome.failureAlertError) },
 				{ "heartbeatBusyAttempts", heartbeatBusyAttemptsSnapshot },
 				{ "heartbeatFallbackWakeRequested", heartbeatFallbackWakeRequestedSnapshot },
 				{ "heartbeatFallbackWakeRequestedAtMs",
@@ -2947,7 +2775,7 @@ namespace blazeclaw::cron {
 					: CronJson(nullptr) },
 				{ "retryAttempt", retryAttempt },
 				{ "retryScheduled", scheduledRetry },
-				{ "retryScheduledAtMs", projectedRetryScheduledAtMs.has_value() ? CronJson(projectedRetryScheduledAtMs.value()) : CronJson(nullptr) },
+				{ "retryScheduledAtMs", scheduledRetry && nextAfterRun.has_value() ? CronJson(nextAfterRun.value()) : CronJson(nullptr) },
 				{ "durationMs", 0 },
 				{ "timedOut", outcome.timedOut },
 				{ "aborted", outcome.aborted },

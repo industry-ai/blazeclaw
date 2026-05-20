@@ -3700,6 +3700,31 @@ namespace blazeclaw::gateway {
 			std::lock_guard<std::mutex> lock(m_cronProductionMutex);
 			(void)m_chatRuntimeCallback(request);
 		}
+
+		if (m_transport.IsRunning()) {
+			cron::CronJson eventPayload = {
+				{ "kind", "cron.notification" },
+				{ "subtype", "schedule-auto-disable" },
+				{ "sessionKey", sessionKey },
+				{ "text", request.message },
+				{ "contextKey", event.contextKey }
+			};
+			if (!event.agentId.empty()) {
+				eventPayload["agentId"] = event.agentId;
+			}
+
+			std::string broadcastError;
+			m_transport.BroadcastOutboundFrame(
+				m_eventFanoutService.BuildChatEventFrame(
+					eventPayload.dump(),
+					++m_chatPushEventSeq),
+				broadcastError);
+			if (!broadcastError.empty()) {
+				EmitTelemetryEvent(
+					"gateway.cron.schedule_auto_disable.broadcast_error",
+					std::string("{\"error\":") + JsonString(broadcastError) + "}");
+			}
+		}
 	}
 
 	void GatewayHost::DispatchCronFailureAlertNotification(
