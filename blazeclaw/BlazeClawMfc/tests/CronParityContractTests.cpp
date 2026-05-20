@@ -658,6 +658,80 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
 	}
 
+	SECTION("cron.run maps jobId alias to id") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-run-jobid\","
+				"\"method\":\"cron.run\","
+				"\"params\":{"
+				"\"jobId\":\"cron-1\","
+				"\"mode\":\"force\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-run-jobid");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+	}
+
+	SECTION("cron.remove maps jobId alias to id") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-remove-jobid\","
+				"\"method\":\"cron.remove\","
+				"\"params\":{"
+				"\"jobId\":\"cron-1\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-remove-jobid");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+	}
+
+	SECTION("cron.runs preserves job scope when jobId alias is provided") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-runs-jobid-scope\","
+				"\"method\":\"cron.runs\","
+				"\"params\":{"
+				"\"scope\":\"job\","
+				"\"jobId\":\"cron-1\","
+				"\"limit\":20,"
+				"\"offset\":0"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-runs-jobid-scope");
+		if (response.value("ok", false)) {
+			REQUIRE(response.contains("payload"));
+			REQUIRE(response["payload"].is_object());
+			REQUIRE(response["payload"].contains("entries"));
+		}
+		else {
+			REQUIRE(response.contains("error"));
+			REQUIRE(response["error"].is_object());
+			REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+			REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+		}
+	}
+
 	SECTION("cron.runs normalizes string list aliases and invalid job scope") {
 		const nlohmann::json response = ParseGatewayFrame(
 			host.HandleInboundText(

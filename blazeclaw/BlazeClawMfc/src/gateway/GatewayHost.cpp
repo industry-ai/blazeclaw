@@ -76,6 +76,7 @@ namespace blazeclaw::gateway {
 
 			if (method != "cron.add" &&
 				method != "cron.update" &&
+				method != "cron.remove" &&
 				method != "cron.run" &&
 				method != "cron.runs" &&
 				method != "wake") {
@@ -95,6 +96,23 @@ namespace blazeclaw::gateway {
 			}
 
 			bool changed = false;
+
+			auto aliasCanonicalJobId = [&](Json& node) {
+				if (node.contains("cronId") &&
+					!node.contains("id") &&
+					!node.contains("jobId")) {
+					node["id"] = node["cronId"];
+					node.erase("cronId");
+					changed = true;
+				}
+
+				if (node.contains("jobId") &&
+					!node.contains("id") &&
+					node["jobId"].is_string()) {
+					node["id"] = node["jobId"];
+					changed = true;
+				}
+			};
 
 			auto moveFieldIfPresent = [&](Json& from, Json& to, const char* key) {
 				const auto it = from.find(key);
@@ -401,11 +419,7 @@ namespace blazeclaw::gateway {
 			}
 
 			if (method == "cron.update") {
-				if (params.contains("cronId") && !params.contains("id") && !params.contains("jobId")) {
-					params["id"] = params["cronId"];
-					params.erase("cronId");
-					changed = true;
-				}
+				aliasCanonicalJobId(params);
 
 				if (!params.contains("patch")) {
 					Json patch = Json::object();
@@ -676,19 +690,15 @@ namespace blazeclaw::gateway {
 			}
 
 			if (method == "cron.run") {
-				if (params.contains("cronId") && !params.contains("id") && !params.contains("jobId")) {
-					params["id"] = params["cronId"];
-					params.erase("cronId");
-					changed = true;
-				}
+				aliasCanonicalJobId(params);
+			}
+
+			if (method == "cron.remove") {
+				aliasCanonicalJobId(params);
 			}
 
 			if (method == "cron.runs") {
-				if (params.contains("cronId") && !params.contains("id") && !params.contains("jobId")) {
-					params["id"] = params["cronId"];
-					params.erase("cronId");
-					changed = true;
-				}
+				aliasCanonicalJobId(params);
 
 				if (params.contains("statuses") && params["statuses"].is_string() &&
 					!params.contains("status")) {

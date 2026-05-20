@@ -3394,6 +3394,18 @@
             return normalized;
         }
 
+        function buildCronJobIdentityParams(jobId) {
+            const resolved = String(jobId || "").trim();
+            if (!resolved) {
+                return {};
+            }
+
+            return {
+                id: resolved,
+                jobId: resolved,
+            };
+        }
+
         function recoverCronFlatJobShape(input) {
             const source = input && typeof input === "object"
                 ? input
@@ -3436,7 +3448,13 @@
                 hasRecoverable = true;
             });
 
-            return hasRecoverable
+            const hasMinimumSignal =
+                recovered.schedule !== undefined ||
+                recovered.payload !== undefined ||
+                recovered.message !== undefined ||
+                recovered.text !== undefined;
+
+            return hasRecoverable && hasMinimumSignal
                 ? recovered
                 : null;
         }
@@ -3653,10 +3671,11 @@
                 const normalizedPayload = applyCronToolParityToMutationPayload(payload);
 
                 if (state.agentCronEditingJobId) {
-                    await request("cron.update", {
-                        id: state.agentCronEditingJobId,
-                        patch: recoverCronFlatJobShape(normalizedPayload) || normalizedPayload,
-                    });
+                    await request("cron.update", Object.assign(
+                        buildCronJobIdentityParams(state.agentCronEditingJobId),
+                        {
+                            patch: recoverCronFlatJobShape(normalizedPayload) || normalizedPayload,
+                        }));
                     state.agentCronEditingJobId = null;
                 } else {
                     await request("cron.add", recoverCronFlatJobShape(normalizedPayload) || normalizedPayload);
@@ -3676,9 +3695,7 @@
             }
 
             return withCronBusy(async function () {
-                await request("cron.remove", {
-                    id: resolvedJobId,
-                });
+                await request("cron.remove", buildCronJobIdentityParams(resolvedJobId));
 
                 if (state.agentCronEditingJobId === resolvedJobId) {
                     resetCronFormToDefaults();
@@ -3701,10 +3718,9 @@
 
             const resolvedMode = mode === "due" ? "due" : "force";
             return withCronBusy(async function () {
-                await request("cron.run", {
-                    id: resolvedJobId,
-                    mode: resolvedMode,
-                });
+                await request("cron.run", Object.assign(
+                    buildCronJobIdentityParams(resolvedJobId),
+                    { mode: resolvedMode }));
                 await loadCronRuns({ append: false });
             });
         }
@@ -3966,15 +3982,19 @@
                 const scope = requestedScope === "job" && selectedJobId
                     ? "job"
                     : "all";
-                const res = await request("cron.runs", {
-                    scope: scope,
-                    id: scope === "job" && selectedJobId ? selectedJobId : undefined,
-                    limit: state.agentCronRunsLimit,
-                    offset: offset,
-                    status: state.agentCronRunsStatusFilter,
-                    query: String(state.agentCronRunsQuery || "").trim() || undefined,
-                    sortDir: state.agentCronRunsSortDir,
-                });
+                const runsParams = Object.assign(
+                    {
+                        scope: scope,
+                        limit: state.agentCronRunsLimit,
+                        offset: offset,
+                        status: state.agentCronRunsStatusFilter,
+                        query: String(state.agentCronRunsQuery || "").trim() || undefined,
+                        sortDir: state.agentCronRunsSortDir,
+                    },
+                    scope === "job" && selectedJobId
+                        ? buildCronJobIdentityParams(selectedJobId)
+                        : {});
+                const res = await request("cron.runs", runsParams);
                 if (shouldIgnoreResponse && shouldIgnoreResponse()) {
                     return;
                 }
@@ -6986,8 +7006,8 @@
 
             const runPending = controller.runCronJobNow("cron-main", "due");
             const runCall = harness.takeNextCall("cron.run");
-            assertRegression(runCall.params && runCall.params.id === "cron-main" && runCall.params.mode === "due",
-                "cron run-now should call cron.run with selected id and mode");
+            assertRegression(runCall.params && runCall.params.id === "cron-main" && runCall.params.jobId === "cron-main" && runCall.params.mode === "due",
+                "cron run-now should call cron.run with selected id/jobId aliases and mode");
             runCall.deferred.resolve({
                 payload: {
                     runId: "cron-run-1",
@@ -7009,8 +7029,8 @@
 
             const removePending = controller.removeCronJob("cron-main");
             const removeCall = harness.takeNextCall("cron.remove");
-            assertRegression(removeCall.params && removeCall.params.id === "cron-main",
-                "cron remove should call cron.remove with selected id");
+            assertRegression(removeCall.params && removeCall.params.id === "cron-main" && removeCall.params.jobId === "cron-main",
+                "cron remove should call cron.remove with selected id/jobId aliases");
             removeCall.deferred.resolve({
                 payload: {
                     removed: true,

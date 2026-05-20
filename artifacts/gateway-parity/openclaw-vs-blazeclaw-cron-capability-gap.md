@@ -1,14 +1,15 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BX P7 schema strictness + P0-P6 closure verification)
+Last refreshed: 2026-05-20 (Phase CA P9 tool-surface jobId alias parity + P0-P8 closure verification)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
 ## Summary
 
-BlazeClaw exposes the full cron/wake RPC surface at the gateway level. P0–P7
+BlazeClaw exposes the full cron/wake RPC surface at the gateway level. P0–P9
 execution priorities from §5 are now landed at baseline depth; remaining effort
-is P8+ production E2E breadth and deferred CLI/controller parity.
+is P10+ deferred CLI/controller parity and deeper OpenClaw hook-consumer / tool
+action breadth beyond baseline.
 
 ## Priority status (§5)
 
@@ -22,7 +23,9 @@ is P8+ production E2E breadth and deferred CLI/controller parity.
 | P5 | **Complete** (IANA Etc aliases + six-field cron baseline) |
 | P6 | **Complete** (Store JSON5 + per-job jsonl + migration baseline) |
 | P7 | **Complete** (Residual schema strictness baseline) |
-| P8+ | **Open** |
+| P8 | **Complete** (Production GatewayHost E2E baseline) |
+| P9 | **Complete** (Tool surface `jobId`/`id` alias + flat-shape guard baseline) |
+| P10+ | **Open** (deferred CLI; deeper tool/hook-consumer parity) |
 
 ## Work package status (2026-05-20)
 
@@ -35,23 +38,27 @@ is P8+ production E2E breadth and deferred CLI/controller parity.
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **P6 complete** (baseline) |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
 | Step 4 | Task-ledger manual/queued terminal hooks + `cron.runs` projection | **P4 complete** (baseline) |
+| Step 8 | Tool-surface `jobId`/`id` aliases + flat recovery guard | **P9 complete** (baseline) |
 | Step 9 | `lifecycleState`/`deliveryMode` taxonomy + projection consistency | **P7 complete** (baseline) |
+| Step 10 | Production GatewayHost E2E matrix | **P8 complete** (baseline) |
 
 ## Remaining high-impact gaps
 
 - OpenClaw isolated-agent module parity (WP-A breadth).
 - Dedicated channel/outbound plugin routing (WP-B breadth).
 - Full IANA timezone database parity (P5 breadth).
-- Production GatewayHost E2E matrix depth (P8).
-- OpenClaw hook-consumer integration depth (P8).
-- OpenClaw CLI/dashboard controller parity (deferred).
+- OpenClaw hook-consumer integration depth (beyond P8 baseline).
+- WebView `wake` action + `contextMessages` on manual run (beyond P9 baseline).
+- OpenClaw CLI/dashboard controller parity (P10 deferred).
 
 ## Validation
 
-Rebuild + rerun on build host after Phase BX:
+Rebuild + rerun on build host after Phase CA:
 
 ```powershell
 msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
+E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][normalize]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
-E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][schema][response][p7]"
 ```
+
+Evidence (2026-05-20, pre-rebuild binary): `[cron][gateway][normalize]` 111 assertions; `[cron]` 1418 assertions / 225 test cases.
