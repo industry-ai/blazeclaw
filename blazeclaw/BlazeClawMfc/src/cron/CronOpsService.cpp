@@ -85,6 +85,18 @@ namespace blazeclaw::cron {
 				entry["taskLedgerPhase"] = "terminal";
 			}
 			entry["taskLedgerStatus"] = status;
+		entry["retryAttempt"] = 0;
+		entry["retryScheduled"] = false;
+		entry["retryScheduledAtMs"] = CronJson(nullptr);
+		entry["nextRunAtMs"] = CronJson(nullptr);
+		entry["failureAlertTriggered"] = false;
+		entry["failureAlertSuppressed"] = false;
+		entry["failureAlertSuppressedReason"] = CronJson(nullptr);
+		entry["failureAlertMode"] = CronJson(nullptr);
+		entry["failureAlertTarget"] = CronJson(nullptr);
+		entry["failureAlertChannel"] = CronJson(nullptr);
+		entry["failureAlertAccountId"] = CronJson(nullptr);
+		entry["failureAlertAtMs"] = CronJson(nullptr);
 
 			return entry;
 		}

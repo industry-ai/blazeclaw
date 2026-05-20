@@ -7103,6 +7103,13 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
 			REQUIRE(payload.value("terminal", false));
 			REQUIRE(payload.contains("queuedAtMs"));
+			REQUIRE(payload.contains("retryAttempt"));
+			REQUIRE(payload.contains("retryScheduled"));
+			REQUIRE(payload.contains("retryScheduledAtMs"));
+			REQUIRE(payload.contains("failureAlertTriggered"));
+			REQUIRE(payload.contains("failureAlertSuppressed"));
+			REQUIRE(payload.contains("failureAlertMode"));
+			REQUIRE(payload.contains("failureAlertTarget"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("not due") !=
 				std::string::npos);
@@ -7159,6 +7166,13 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual unknown-job ter
 			REQUIRE(payload.value("terminal", false));
 			REQUIRE(payload.value("taskLedgerDisposition", std::string()) == "unknown_job");
 			REQUIRE(payload.contains("queuedAtMs"));
+			REQUIRE(payload.contains("retryAttempt"));
+			REQUIRE(payload.contains("retryScheduled"));
+			REQUIRE(payload.contains("retryScheduledAtMs"));
+			REQUIRE(payload.contains("failureAlertTriggered"));
+			REQUIRE(payload.contains("failureAlertSuppressed"));
+			REQUIRE(payload.contains("failureAlertMode"));
+			REQUIRE(payload.contains("failureAlertTarget"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("no longer exists") !=
 				std::string::npos);
