@@ -3762,6 +3762,33 @@ namespace blazeclaw::gateway {
 		}
 		catch (...) {
 		}
+
+		if (m_transport.IsRunning()) {
+			cron::CronJson eventPayload = {
+				{ "kind", "cron.notification" },
+				{ "subtype", "failure-alert" },
+				{ "sessionKey", sessionKey },
+				{ "text", text },
+				{ "jobId", jobId },
+				{ "mode", mode },
+				{ "target", target }
+			};
+			if (!error.empty()) {
+				eventPayload["error"] = error;
+			}
+
+			std::string broadcastError;
+			m_transport.BroadcastOutboundFrame(
+				m_eventFanoutService.BuildChatEventFrame(
+					eventPayload.dump(),
+					++m_chatPushEventSeq),
+				broadcastError);
+			if (!broadcastError.empty()) {
+				EmitTelemetryEvent(
+					"gateway.cron.failure_alert.broadcast_error",
+					std::string("{\"error\":") + JsonString(broadcastError) + "}");
+			}
+		}
 	}
 
 	void GatewayHost::DispatchCronAnnounceDeliveryNotification(
@@ -3833,6 +3860,31 @@ namespace blazeclaw::gateway {
 			(void)m_chatRuntimeCallback(request);
 		}
 		catch (...) {
+		}
+
+		if (m_transport.IsRunning()) {
+			cron::CronJson eventPayload = {
+				{ "kind", "cron.notification" },
+				{ "subtype", "announce" },
+				{ "sessionKey", sessionKey },
+				{ "text", text },
+				{ "jobId", jobId },
+				{ "target", deliveryTarget },
+				{ "channel", channel },
+				{ "accountId", accountId }
+			};
+
+			std::string broadcastError;
+			m_transport.BroadcastOutboundFrame(
+				m_eventFanoutService.BuildChatEventFrame(
+					eventPayload.dump(),
+					++m_chatPushEventSeq),
+				broadcastError);
+			if (!broadcastError.empty()) {
+				EmitTelemetryEvent(
+					"gateway.cron.announce.broadcast_error",
+					std::string("{\"error\":") + JsonString(broadcastError) + "}");
+			}
 		}
 	}
 

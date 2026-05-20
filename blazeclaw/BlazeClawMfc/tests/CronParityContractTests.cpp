@@ -8250,6 +8250,271 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Cron gateway production wiring returns runtime_unavailable for main-session runtime when chat callback is missing",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-main-runtime-unavailable");
+	GatewayHost& host = fixture.gateway();
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-main-runtime-unavailable-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a main runtime unavailable\",\"enabled\":true,") +
+		"\"sessionTarget\":\"main\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"runtime unavailable main\"}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-main-runtime-unavailable-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"runtime unavailable main wake\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-main-runtime-unavailable-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawRuntimeUnavailable = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("errorCategory", std::string()) != "runtime_unavailable") {
+			continue;
+		}
+		if (entry.value("summary", std::string()) != "chat runtime callback is not configured") {
+			continue;
+		}
+		sawRuntimeUnavailable = true;
+		break;
+	}
+	REQUIRE(sawRuntimeUnavailable);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring returns runtime_unavailable for isolated runtime when chat callback is missing",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-isolated-runtime-unavailable");
+	GatewayHost& host = fixture.gateway();
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-isolated-runtime-unavailable-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a isolated runtime unavailable\",\"enabled\":true,") +
+		"\"sessionTarget\":\"isolated\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"runtime unavailable isolated\"}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-isolated-runtime-unavailable-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"runtime unavailable isolated wake\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-isolated-runtime-unavailable-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawRuntimeUnavailable = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("errorCategory", std::string()) != "runtime_unavailable") {
+			continue;
+		}
+		if (entry.value("summary", std::string()) != "chat runtime callback is not configured") {
+			continue;
+		}
+		sawRuntimeUnavailable = true;
+		break;
+	}
+	REQUIRE(sawRuntimeUnavailable);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring uses isolated timeout fast-path without invoking callback",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-isolated-timeout-fastpath");
+	GatewayHost& host = fixture.gateway();
+	std::size_t callbackInvokeCount = 0;
+
+	host.SetChatRuntimeCallback(
+		[&callbackInvokeCount](const GatewayHost::ChatRuntimeRequest&) {
+			++callbackInvokeCount;
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "should-not-run",
+				.modelId = "unused-model",
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-isolated-timeout-fastpath-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a isolated timeout fastpath\",\"enabled\":true,") +
+		"\"sessionTarget\":\"isolated\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"timeout fastpath\",\"timeoutSeconds\":1}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-isolated-timeout-fastpath-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"isolated timeout fastpath wake\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+	REQUIRE(callbackInvokeCount == 0);
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-isolated-timeout-fastpath-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawTimeoutTerminal = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("errorCategory", std::string()) != "timeout") {
+			continue;
+		}
+		if (!entry.value("timedOut", false)) {
+			continue;
+		}
+		sawTimeoutTerminal = true;
+		break;
+	}
+	REQUIRE(sawTimeoutTerminal);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring resolves session-target key for isolated runtime callback lane",
+	"[cron][gateway][wp-f][wp-a]") {
+	GatewayCronProductionFixture fixture("production-isolated-session-target-routing");
+	GatewayHost& host = fixture.gateway();
+	std::optional<GatewayHost::ChatRuntimeRequest> capturedRequest;
+
+	host.SetChatRuntimeCallback(
+		[&capturedRequest](const GatewayHost::ChatRuntimeRequest& request) {
+			capturedRequest = request;
+			return GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = "isolated-session-target-ok",
+				.modelId = "not-used",
+			};
+		});
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpa-isolated-session-target-routing-add",
+		"cron.add",
+		std::string("{\"name\":\"wp-a isolated session target routing\",\"enabled\":true,") +
+		"\"sessionTarget\":\"session:agent:main:delta\"," +
+		"\"schedule\":{\"kind\":\"at\",\"atMs\":" + std::to_string(nowMs - 1) + "}," +
+		"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"isolated session target\"}," +
+		"\"delivery\":{\"mode\":\"none\"}," +
+		"\"deleteAfterRun\":true}");
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpa-isolated-session-target-routing-wake",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"isolated session-target wake\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	REQUIRE(capturedRequest.has_value());
+	REQUIRE(capturedRequest->sessionKey == "agent:main:delta");
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpa-isolated-session-target-routing-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":50,\"offset\":0,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawSessionTargetTerminal = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("summary", std::string()) != "isolated-session-target-ok") {
+			continue;
+		}
+		if (entry.value("model", std::string()) != "not-used") {
+			continue;
+		}
+		if (entry.value("sessionKey", std::string()) != "agent:main:delta") {
+			continue;
+		}
+		sawSessionTargetTerminal = true;
+		break;
+	}
+	REQUIRE(sawSessionTargetTerminal);
+}
+
+TEST_CASE(
 	"Cron gateway production wiring rejects invalid cron.run response after handler stack",
 	"[cron][gateway][wp-f][schema]") {
 	SchemaValidationIssue issue{};

@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase BO WP-B outbound transport alias + callback payload follow-up)
+Last refreshed: 2026-05-20 (Phase BQ P0 verification + P1/WP-B outbound notification event fan-out)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -14,8 +14,8 @@ documented in `openclaw-vs-blazeclaw-method-diff.md`.
 
 | Package | Focus | Status |
 | --- | --- | --- |
-| WP-A | Production runtime execution default | **Baseline landed**; isolated-agent module depth open |
-| WP-B | Outbound announce/webhook/failure-alert dispatch | **Baseline landed**; channel-plugin outbound depth open |
+| WP-A | Production runtime execution default | **Baseline landed**; production GatewayHost runtime-core E2E now covers omitted-kind + busy/retry/fallback + missing-callback `runtime_unavailable` lanes; isolated-agent module depth open |
+| WP-B | Outbound announce/webhook/failure-alert dispatch | **Baseline landed**; callback fan-out plus gateway `chat` event fan-out for terminal notifications; channel-plugin outbound depth open |
 | WP-C | Auto-disable notification delivery | **Baseline landed**; IANA/cron syntax breadth open |
 | WP-D | Scheduler hardening + realtime events | **Baseline landed**; parallel/missed-slot depth open |
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **Baseline landed**; doctor/chmod depth open |
