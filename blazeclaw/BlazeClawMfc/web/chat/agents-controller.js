@@ -3688,6 +3688,20 @@
             });
         }
 
+        async function triggerCronWake(mode) {
+            const resolvedMode = mode === "next-heartbeat"
+                ? "next-heartbeat"
+                : "now";
+
+            return withCronBusy(async function () {
+                await request("wake", {
+                    mode: resolvedMode,
+                });
+                await loadCronStatus({});
+                await loadCronRuns({ append: false });
+            });
+        }
+
         async function removeCronJob(jobId) {
             const resolvedJobId = String(jobId || "").trim();
             if (!resolvedJobId) {
@@ -4866,6 +4880,7 @@
             addOrUpdateCronJob,
             removeCronJob,
             runCronJobNow,
+            triggerCronWake,
             startCronEdit,
             startCronClone,
             cancelCronEdit,
@@ -7027,6 +7042,37 @@
             });
             await runPending;
 
+            const wakePending = controller.triggerCronWake("next-heartbeat");
+            const wakeCall = harness.takeNextCall("wake");
+            assertRegression(wakeCall.params && wakeCall.params.mode === "next-heartbeat",
+                "cron wake should call wake with explicit next-heartbeat mode");
+            wakeCall.deferred.resolve({
+                payload: {
+                    ok: true,
+                    mode: "next-heartbeat",
+                },
+            });
+            const statusAfterWakeCall = harness.takeNextCall("cron.status");
+            statusAfterWakeCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 456,
+                },
+            });
+            const runsAfterWakeCall = harness.takeNextCall("cron.runs");
+            runsAfterWakeCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await wakePending;
+
             const removePending = controller.removeCronJob("cron-main");
             const removeCall = harness.takeNextCall("cron.remove");
             assertRegression(removeCall.params && removeCall.params.id === "cron-main" && removeCall.params.jobId === "cron-main",
@@ -7070,7 +7116,7 @@
 
             assertRegression(state.agentCronSelectedJobId === null,
                 "cron remove should clear selected job when removed");
-            summary.push("cron mutation flow + validation baseline");
+            summary.push("cron mutation flow + wake action baseline");
         }
 
         return {
