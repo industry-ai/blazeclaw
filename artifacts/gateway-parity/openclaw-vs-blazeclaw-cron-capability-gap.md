@@ -1,25 +1,16 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CJ §7.3 Step 3-8 implementation + docs sync)
+Last refreshed: 2026-05-21 (Phase CM §7.4 Step 1-6 tranche #2 + jobs.ts row uplift)
 
-Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
+Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.4 jobs.ts closure)
 
 ## Summary
 
 BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
-maintains strong baseline parity through P0–P9. Step 2-4 depth now also
-includes explicit runtime execution provenance projection
-(`runtimeExecutionPath` + runtime adapter/simulation fallback booleans)
-through timer state/run snapshots and terminal task-ledger hooks. Remaining
-work is concentrated in P10+ breadth: execution/runtime permutations,
-hook-consumer side-effect depth, and tool-surface breadth (plus deferred CLI
-parity decision).
-
-Phase CJ follow-up implements §7.3 Step 3-8 baseline slices (every/at
-state-rearm parity, schedule-error carry-forward hardening, maintenance and
-projection evidence linkage) and completes required timer/schema/gateway/full
-validation gates, while retaining Section 2 `jobs.ts` `Medium` lock pending
-sustained closure-depth sign-off.
+maintains strong baseline parity through P0–P9. OpenClaw `jobs.ts` schedule/state
+core parity is now **Medium-High** after §7.4 Step 1-6 sustained soak and ordered
+gate replay (Phase CM). Remaining work is P10+ breadth: isolated-runtime,
+hook-consumer, tool-surface depth, and deferred CLI.
 
 ## Priority status (§5)
 
@@ -34,10 +25,19 @@ sustained closure-depth sign-off.
 | P6 | **Complete** (Store JSON5 + per-job jsonl + migration baseline) |
 | P7 | **Complete** (Residual schema strictness baseline) |
 | P8 | **Complete** (Production GatewayHost E2E baseline) |
-| P9 | **Complete** (Tool surface `jobId`/`id` alias + flat-shape guard baseline) |
-| P10+ | **Active** (execution-depth + hook-consumer depth + tool-surface breadth; deferred CLI decision) |
+| P9 | **Complete** (Tool surface baseline) |
+| P10+ | **Active** (runtime/hook-consumer/tool breadth; CLI deferred) |
 
-## Work package status (2026-05-20)
+## jobs.ts row status (Section 2)
+
+| Baseline | Counterpart | Status |
+| --- | --- | --- |
+| `src/cron/service/jobs.ts` | `CronTimerService.cpp` + `CronOpsService.cpp` | **Medium-High** (Phase CM) |
+
+Evidence: `JOBS-1..JOBS-5` pass in acceptance matrix; §7.4 tranche #2 sustained soak;
+ordered gates green (timer 691/98, schema 92/33, wp-f 47/4, cron 1501/235 x2).
+
+## Work package status (2026-05-21)
 
 | Package | Focus | Status |
 | --- | --- | --- |
@@ -47,27 +47,27 @@ sustained closure-depth sign-off.
 | WP-D | Scheduler hardening + realtime events | **P3 complete** (baseline) |
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **P6 complete** (baseline) |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
-| Step 4 | Task-ledger manual/queued terminal hooks + `cron.runs` projection | **P4 complete** (baseline) |
-| Step 8 | Tool-surface `jobId`/`id` aliases + flat recovery guard + wake action + `contextMessages` shaping | **P9 baseline + P10 follow-ups landed** |
-| Step 9 | `lifecycleState`/`deliveryMode` taxonomy + projection consistency | **P7 complete** (baseline) |
+| jobs.ts core | Schedule cursor, every/at, schedule-error, maintenance, projection | **§7.3–7.4 complete (Medium-High)** |
+| Step 8 | Tool surface + wake + contextMessages | **P9 baseline + P10 follow-ups** |
+| Step 9 | Schema taxonomy + projection consistency | **P7 complete** (baseline) |
 | Step 10 | Production GatewayHost E2E matrix | **P8 complete** (baseline) |
 
 ## Remaining high-impact gaps
 
-- OpenClaw isolated-agent runtime behavior breadth parity (WP-A depth).
-- Cross-layer hook-consumer/runtime integration depth (task-ledger/retry/cooldown side-effects).
-- Broader synthetic-job recovery depth beyond landed `contextMessages` tool-surface shaping.
-- OpenClaw `jobs.ts` schedule/state parity depth closure execution (see
-  `cron-parity-gap-and-port-plan.md` §7.3).
-- OpenClaw CLI/dashboard controller parity only if MFC CLI becomes product scope.
+- OpenClaw isolated-agent module parity (WP-A breadth).
+- Dedicated channel/outbound plugin routing (WP-B breadth).
+- Full IANA timezone database parity (P5 breadth).
+- OpenClaw hook-consumer integration depth.
+- MFC CLI/dashboard controller parity (P10 deferred).
 
 ## Validation
 
-Validation rerun after Phase CC:
-
 ```powershell
-msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
+E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][timer]"
+E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][schema][response]"
+E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][wp-f]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
+msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 ```
 
-Evidence (2026-05-20, Phase CF): `[cron][timer]` 672 assertions / 96 test cases, `[cron][schema][response]` 79 assertions / 30 test cases, `[cron][gateway][wp-f]` 152 assertions / 14 test cases, `[cron]` 1574 assertions / 240 test cases; required `msbuild` gate passed.
+Evidence (2026-05-21): timer 691/98; schema 92/33; wp-f 47/4; cron 1501/235 (sustained x2).

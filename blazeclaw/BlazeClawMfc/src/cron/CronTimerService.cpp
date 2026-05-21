@@ -27,8 +27,6 @@ namespace blazeclaw::cron {
 	namespace {
 		inline constexpr std::int64_t kMaxScheduleErrors = 3;
 
-		std::int64_t ResolveEveryAnchorMs(const CronJson& schedule, const CronJson& job);
-
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
 		inline constexpr std::int64_t kDefaultHeartbeatBusyMaxAttempts = 2;
 		inline constexpr std::int64_t kDefaultHeartbeatBusyDelayMs = 1500;
@@ -843,23 +841,6 @@ namespace blazeclaw::cron {
 		bool NormalizeJobTickState(CronJson& job, const std::int64_t nowMs) {
 			bool changed = false;
 			CronJson& state = EnsureStateObject(job);
-
-			if (job.contains("schedule") && job["schedule"].is_object()) {
-				CronJson& schedule = job["schedule"];
-				const std::string scheduleKind =
-					ToLowerCopy(TrimCopy(schedule.value("kind", std::string())));
-				if (scheduleKind == "every") {
-					const std::int64_t normalizedAnchorMs =
-						ResolveEveryAnchorMs(schedule, job);
-					const auto currentAnchorMs = TryReadInt64Field(schedule, "anchorMs");
-					if (!currentAnchorMs.has_value() ||
-						currentAnchorMs.value() != normalizedAnchorMs) {
-						schedule["anchorMs"] = normalizedAnchorMs;
-						changed = true;
-					}
-				}
-			}
-
 			if (!job.value("enabled", true)) {
 				if (state.contains("nextRunAtMs") && !state["nextRunAtMs"].is_null()) {
 					state["nextRunAtMs"] = nullptr;
@@ -2019,7 +2000,7 @@ namespace blazeclaw::cron {
 		std::optional<std::int64_t> ComputeNextAt(
 			const CronJson& schedule,
 			const CronJson& job,
-			const std::int64_t /*nowMs*/) {
+			const std::int64_t nowMs) {
 			const auto atMs =
 				TryReadInt64Field(schedule, "atMs").has_value()
 				? TryReadInt64Field(schedule, "atMs")

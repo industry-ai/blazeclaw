@@ -4781,7 +4781,7 @@ TEST_CASE("Cron ops update schedule error resets stale auto-disable signaling fi
 
 	const CronJson updated = ops.Update({
 		{ "id", id },
-		{ "patch", { { "schedule", { { "kind", "cron" } } } } }
+		{ "patch", { { "schedule", { { "kind", "cron" }, { "expr", "* * * * *" }, { "tz", "invalid/tz" } } } } }
 	});
 
 	REQUIRE(updated.contains("state"));
