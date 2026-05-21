@@ -6735,6 +6735,52 @@ TEST_CASE(
 	REQUIRE(runs[0]["usage"].value("totalTokens", 0) == 106);
 }
 
+TEST_CASE(
+	"Cron timer preferRuntimeExecution treats ambiguous runtime result as runtime_unavailable",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-production-ambiguous") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "sessionId", "main" },
+				{ "observedAtMs", 1'700'000'000'000 }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-production-ambiguous" },
+			{ "name", "production runtime ambiguous" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "runtime required" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
+	REQUIRE(runs[0].value("runtimeHandled", false));
+	REQUIRE(runs[0].value("runtimeExecutionPath", std::string()) == "runtime");
+	REQUIRE_FALSE(runs[0].value("simulationFallbackUsed", false));
+	REQUIRE_FALSE(runs[0].contains("usage"));
+}
+
 TEST_CASE("Cron timer schedules bounded retry when main heartbeat adapter reports busy", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;

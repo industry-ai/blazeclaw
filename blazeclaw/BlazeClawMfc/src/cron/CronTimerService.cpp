@@ -1362,6 +1362,15 @@ namespace blazeclaw::cron {
 						if (hasExplicitRuntimeOutcome) {
 							runtimeHandled = true;
 						}
+						else if (adapters.preferRuntimeExecution) {
+							runtimeHandled = true;
+							outcome.status = "error";
+							outcome.error =
+								"cron runtime adapter returned ambiguous result";
+							outcome.errorCategory = "runtime_unavailable";
+							outcome.summary = "Cron runtime execution is unavailable";
+							outcome.retryable = true;
+						}
 					}
 
 					if (runtimeHandled &&

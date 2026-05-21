@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CQ §7.5 CronStoreService (`store.ts`) high-uplift tranche + docs sync)
+Last refreshed: 2026-05-21 (Phase CT WP-A runtime-depth hardening + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -8,26 +8,21 @@ Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 w
 
 BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
 maintains strong baseline parity through P0–P9. OpenClaw `jobs.ts` schedule/state
-core parity remains strong and §7.5 is actively promoting remaining
-`Medium-High` rows to `High` using explicit acceptance locks, ordered gates,
-and sustained replay evidence. Phase CO/CP/CQ completed CronTimerService
+core parity remains strong and §7.5 high-uplift closure is complete for all
+tracked Section 2/3 rows. Phase CO/CP/CQ completed CronTimerService
 (`jobs.ts` + `timer.ts`), CronOpsService runtime-surface (`server-methods/cron.ts` + `ops.ts`),
 and CronStoreService (`store.ts`) row uplift to `High`. Remaining work is P10+ breadth:
-isolated-runtime, capability-level persistence closure, tool-surface depth, and deferred CLI.
+isolated-runtime, long-tail capability breadth, tool-surface depth, and deferred CLI.
 
-## §7.5 uplift targets (active)
+## §7.5 post-high closure targets (active)
 
-Target parity rows to promote from `Medium-High` to `High`:
+Section 2/3 high-uplift rows are closed; active targets are P10+ depth themes:
 
-- Section 2:
-  - `src/gateway/server-methods/cron.ts` counterpart,
-  - `src/cron/service/jobs.ts`,
-  - `src/cron/service/store.ts`,
-  - `src/cron/service/ops.ts`,
-  - `src/cron/service/timer.ts`.
-- Section 3 capabilities:
-  - `Persistence`,
-  - `Scheduling`.
+- runtime isolated-agent execution breadth,
+- outbound/channel delivery execution depth,
+- timezone and advanced cron syntax breadth,
+- task-ledger hook-consumer integration depth,
+- tool/controller deferred surface depth.
 
 Mandatory gate order for promotion tranches:
 
@@ -86,11 +81,22 @@ Evidence: Phase CQ store uplift gates green (`[cron][store]` 44/12,
 `[cron][schema][response]` 92/33, `[cron][gateway][wp-f]` 47/4,
 `[cron]` 1559/242, `msbuild` pass).
 
+## Section 3 capability status
+
+| Capability | Status | Evidence lock |
+| --- | --- | --- |
+| `Persistence` | **High** (Phase CR) | `UPLIFT-6` pass (`UPLIFT-3` + `[cron][store]` + full `[cron]`) |
+| `Scheduling` | **High** (Phase CR reaffirmed) | `UPLIFT-7` pass (`UPLIFT-5` + `[cron][timer]` + `[cron][gateway][wp-f]` + full `[cron]`) |
+
+Phase CR gate refresh: `[cron][store]` 60/14, `[cron][timer]` 718/103,
+`[cron][schema][response]` 92/33, `[cron][gateway][wp-f]` 47/4,
+`[cron]` 1559/242, `msbuild` pass.
+
 ## Work package status (2026-05-21)
 
 | Package | Focus | Status |
 | --- | --- | --- |
-| WP-A | Production runtime execution default | **P0 complete** |
+| WP-A | Production runtime execution default | **P0 complete** (Phase CT hardening applied) |
 | WP-B | Outbound announce/webhook/failure-alert dispatch | **P1 complete** |
 | WP-C | Auto-disable + schedule syntax breadth | **P2 complete** |
 | WP-D | Scheduler hardening + realtime events | **P3 complete** (baseline) |
