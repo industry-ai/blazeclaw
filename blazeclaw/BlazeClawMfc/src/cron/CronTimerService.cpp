@@ -992,6 +992,50 @@ namespace blazeclaw::cron {
 			return it->second;
 		}
 
+		std::string ExpandCronExpressionShorthand(const std::string& exprRaw) {
+			const std::string expr = ToLowerCopy(TrimCopy(exprRaw));
+			if (expr == "@annually" || expr == "@yearly") {
+				return "0 0 1 1 *";
+			}
+			if (expr == "@monthly") {
+				return "0 0 1 * *";
+			}
+			if (expr == "@weekly") {
+				return "0 0 * * 0";
+			}
+			if (expr == "@daily" || expr == "@midnight") {
+				return "0 0 * * *";
+			}
+			if (expr == "@hourly") {
+				return "0 * * * *";
+			}
+
+			return TrimCopy(exprRaw);
+		}
+
+		std::optional<int> TryResolveMilitaryTimezoneOffsetMinutes(const std::string& tzRaw) {
+			const std::string tz = ToLowerCopy(TrimCopy(tzRaw));
+			if (tz.size() != 1) {
+				return std::nullopt;
+			}
+
+			const char code = tz[0];
+			if (code == 'z') {
+				return 0;
+			}
+			if (code >= 'a' && code <= 'i') {
+				return static_cast<int>(code - 'a' + 1) * 60;
+			}
+			if (code >= 'k' && code <= 'm') {
+				return static_cast<int>(code - 'a') * 60;
+			}
+			if (code >= 'n' && code <= 'y') {
+				return -static_cast<int>(code - 'n' + 1) * 60;
+			}
+
+			return std::nullopt;
+		}
+
 		bool TryParseCronFieldValue(
 			const std::string& raw,
 			int& valueOut,
@@ -1878,6 +1922,12 @@ namespace blazeclaw::cron {
 
 		std::optional<int> ParseTimezoneOffsetMinutes(const std::string& tzRaw) {
 			const std::string tz = ToLowerCopy(TrimCopy(tzRaw));
+			const auto militaryOffsetMinutes =
+				TryResolveMilitaryTimezoneOffsetMinutes(tzRaw);
+			if (militaryOffsetMinutes.has_value()) {
+				return militaryOffsetMinutes;
+			}
+
 			if (tz.empty() ||
 				tz == "utc" ||
 				tz == "gmt" ||
@@ -2091,7 +2141,7 @@ namespace blazeclaw::cron {
 			}
 
 			const std::string expr =
-				TrimCopy(schedule.value("expr", std::string()));
+				ExpandCronExpressionShorthand(schedule.value("expr", std::string()));
 			std::istringstream stream(expr);
 			std::vector<std::string> parts;
 			std::string token;

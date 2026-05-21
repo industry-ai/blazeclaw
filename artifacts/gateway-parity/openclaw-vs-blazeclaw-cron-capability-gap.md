@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CU WP-B outbound delivery/channel projection hardening + docs sync)
+Last refreshed: 2026-05-21 (Phase CV Step 5 / P5 schedule-timezone breadth uplift + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -43,7 +43,7 @@ Mandatory gate order for promotion tranches:
 | P2 | **Complete** (WP-C auto-disable workflow + schedule syntax breadth) |
 | P3 | **Complete** (WP-D scheduler hardening baseline) |
 | P4 | **Complete** (Step 4 task-ledger cross-layer baseline) |
-| P5 | **Complete** (IANA Etc aliases + six-field cron baseline) |
+| P5 | **Complete** (High uplift: IANA Etc aliases + six-field + shorthand cron + military timezone aliases) |
 | P6 | **Complete** (Store JSON5 + per-job jsonl + migration baseline) |
 | P7 | **Complete** (Residual schema strictness baseline) |
 | P8 | **Complete** (Production GatewayHost E2E baseline) |
@@ -111,7 +111,7 @@ Phase CR gate refresh: `[cron][store]` 60/14, `[cron][timer]` 718/103,
 
 - OpenClaw isolated-agent module parity (WP-A breadth).
 - Dedicated channel/outbound plugin routing (WP-B breadth).
-- Full IANA timezone database parity (P5 breadth).
+- Full IANA timezone database parity depth beyond current `Etc/*` + military alias support (P5 long-tail).
 - OpenClaw hook-consumer long-tail integration breadth (beyond current row lock).
 - Persistence capability-level closure linkage across Section 2 + Section 3 uplift locks.
 - MFC CLI/dashboard controller parity (P10 deferred).
@@ -126,4 +126,4 @@ E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 ```
 
-Evidence (2026-05-21): timer 691/98; schema 92/33; wp-f 47/4; cron 1501/235 (sustained x2).
+Evidence (2026-05-21): `[cron][timer][step5]` 72/9; `[cron]` 1608/246; `msbuild` pass.

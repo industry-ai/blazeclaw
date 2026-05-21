@@ -4400,6 +4400,121 @@ TEST_CASE("Cron timer accepts additional UTC/GMT zero-offset aliases", "[cron][t
 	}
 }
 
+TEST_CASE("Cron timer accepts military timezone aliases with fixed offsets", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	auto BuildJobWithTz = [](const std::string& tz) {
+		return CronJson{
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "0 * * * *" }, { "tz", tz } } },
+			{ "state", CronJson::object() }
+		};
+	};
+
+	SECTION("A equals UTC+01") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("A"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UTC+01"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("M equals UTC+12") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("M"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UTC+12"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("N equals UTC-01") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("N"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UTC-01"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("Y equals UTC-12") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("Y"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UTC-12"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("J remains invalid") {
+		REQUIRE_THROWS_AS(
+			timer.ComputeNextRunAtMs(BuildJobWithTz("J"), nowMs),
+			std::invalid_argument);
+	}
+}
+
+TEST_CASE("Cron timer expands shorthand cron expressions", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	auto BuildJobWithExpr = [](const std::string& expr) {
+		return CronJson{
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", expr } } },
+			{ "state", CronJson::object() }
+		};
+	};
+
+	SECTION("@hourly equals canonical hourly form") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@hourly"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 * * * *"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("@daily equals canonical daily form") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@daily"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 0 * * *"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("@weekly equals canonical weekly form") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@weekly"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 0 * * 0"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("@monthly equals canonical monthly form") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@monthly"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 0 1 * *"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("@yearly and @annually map to the same canonical schedule") {
+		const auto yearlyNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@yearly"), nowMs);
+		const auto annuallyNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@annually"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 0 1 1 *"), nowMs);
+		REQUIRE(yearlyNextRun.has_value());
+		REQUIRE(annuallyNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(yearlyNextRun.value() == annuallyNextRun.value());
+		REQUIRE(yearlyNextRun.value() == explicitNextRun.value());
+	}
+
+	SECTION("@midnight equals canonical daily form") {
+		const auto aliasNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("@midnight"), nowMs);
+		const auto explicitNextRun = timer.ComputeNextRunAtMs(BuildJobWithExpr("0 0 * * *"), nowMs);
+		REQUIRE(aliasNextRun.has_value());
+		REQUIRE(explicitNextRun.has_value());
+		REQUIRE(aliasNextRun.value() == explicitNextRun.value());
+	}
+}
+
 TEST_CASE(
 	"Cron timer auto-disables cron job after repeated invalid cron expression field-count errors",
 	"[cron][timer][step5]") {
