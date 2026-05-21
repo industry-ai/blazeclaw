@@ -1,16 +1,42 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CM §7.4 Step 1-6 tranche #2 + jobs.ts row uplift)
+Last refreshed: 2026-05-21 (Phase CO §7.5 CronTimerService (`jobs.ts` + `timer.ts`) high-uplift tranche + docs sync)
 
-Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.4 jobs.ts closure)
+Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
 ## Summary
 
 BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
 maintains strong baseline parity through P0–P9. OpenClaw `jobs.ts` schedule/state
-core parity is now **Medium-High** after §7.4 Step 1-6 sustained soak and ordered
-gate replay (Phase CM). Remaining work is P10+ breadth: isolated-runtime,
+core parity remains strong and §7.5 is actively promoting remaining
+`Medium-High` rows to `High` using explicit acceptance locks, ordered gates,
+and sustained replay evidence. Phase CO completed CronTimerService
+(`jobs.ts` + `timer.ts`) row uplift to `High`. Remaining work is P10+ breadth: isolated-runtime,
 hook-consumer, tool-surface depth, and deferred CLI.
+
+## §7.5 uplift targets (active)
+
+Target parity rows to promote from `Medium-High` to `High`:
+
+- Section 2:
+  - `src/gateway/server-methods/cron.ts` counterpart,
+  - `src/cron/service/jobs.ts`,
+  - `src/cron/service/store.ts`,
+  - `src/cron/service/ops.ts`,
+  - `src/cron/service/timer.ts`.
+- Section 3 capabilities:
+  - `Persistence`,
+  - `Scheduling`.
+
+Mandatory gate order for promotion tranches:
+
+1. `[cron][timer]`
+2. `[cron][ops]`
+3. `[cron][store]`
+4. `[cron][schema][response]`
+5. `[cron][gateway][wp-f]`
+6. `[cron]`
+7. `msbuild` (`BlazeClaw.sln` Debug x64, CodePage 65001)
 
 ## Priority status (§5)
 
@@ -32,10 +58,11 @@ hook-consumer, tool-surface depth, and deferred CLI.
 
 | Baseline | Counterpart | Status |
 | --- | --- | --- |
-| `src/cron/service/jobs.ts` | `CronTimerService.cpp` + `CronOpsService.cpp` | **Medium-High** (Phase CM) |
+| `src/cron/service/jobs.ts` | `CronTimerService.cpp` + `CronOpsService.cpp` | **High** (Phase CO) |
 
-Evidence: `JOBS-1..JOBS-5` pass in acceptance matrix; §7.4 tranche #2 sustained soak;
-ordered gates green (timer 691/98, schema 92/33, wp-f 47/4, cron 1501/235 x2).
+Evidence: `JOBS-1..JOBS-5` pass in acceptance matrix; Phase CO timer/jobs uplift
+gates green (`[cron][timer][wp-a]` 35/6, `[cron][timer][step5]` 39/7,
+`[cron][gateway][wp-f]` 47/4, `[cron]` 1528/240, `msbuild` pass).
 
 ## Work package status (2026-05-21)
 
@@ -47,7 +74,7 @@ ordered gates green (timer 691/98, schema 92/33, wp-f 47/4, cron 1501/235 x2).
 | WP-D | Scheduler hardening + realtime events | **P3 complete** (baseline) |
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **P6 complete** (baseline) |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
-| jobs.ts core | Schedule cursor, every/at, schedule-error, maintenance, projection | **§7.3–7.4 complete (Medium-High)** |
+| jobs.ts core | Schedule cursor, every/at, schedule-error, maintenance, projection | **High (Phase CO)** |
 | Step 8 | Tool surface + wake + contextMessages | **P9 baseline + P10 follow-ups** |
 | Step 9 | Schema taxonomy + projection consistency | **P7 complete** (baseline) |
 | Step 10 | Production GatewayHost E2E matrix | **P8 complete** (baseline) |

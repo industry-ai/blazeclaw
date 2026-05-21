@@ -4282,6 +4282,37 @@ TEST_CASE("Cron timer auto-disables cron job after repeated invalid timezone sch
 			std::string()).find("auto-disabled") != std::string::npos);
 }
 
+TEST_CASE("Cron timer accepts additional UTC/GMT zero-offset aliases", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	auto BuildJobWithTz = [](const std::string& tz) {
+		return CronJson{
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" }, { "expr", "* * * * *" }, { "tz", tz } } },
+			{ "state", CronJson::object() }
+		};
+	};
+
+	SECTION("UT") {
+		const auto nextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UT"), nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+	}
+
+	SECTION("UTC0") {
+		const auto nextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("UTC0"), nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+	}
+
+	SECTION("Etc/UT") {
+		const auto nextRun = timer.ComputeNextRunAtMs(BuildJobWithTz("Etc/UT"), nowMs);
+		REQUIRE(nextRun.has_value());
+		REQUIRE(nextRun.value() > nowMs);
+	}
+}
+
 TEST_CASE(
 	"Cron timer auto-disables cron job after repeated invalid cron expression field-count errors",
 	"[cron][timer][step5]") {
@@ -4512,6 +4543,31 @@ TEST_CASE(
 		pumpOptions);
 	REQUIRE(executed == 1);
 	REQUIRE(runs.size() == 1);
+}
+
+TEST_CASE(
+	"Cron timer replays missed cron slots from lastScheduledForMs with bounded replay limit",
+	"[cron][timer][wp-d]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	const std::int64_t fiveMinutesMs = 5 * 60 * 1000;
+
+	CronJson job = {
+		{ "enabled", true },
+		{ "schedule",
+			{
+				{ "kind", "cron" },
+				{ "expr", "* * * * *" },
+				{ "allowCronMissedRunByLastRun", true },
+				{ "missedRunReplayLimit", 5 }
+			} },
+		{ "state", { { "lastScheduledForMs", nowMs - fiveMinutesMs } } }
+	};
+
+	const auto nextRun = timer.ComputeNextRunAtMs(job, nowMs);
+	REQUIRE(nextRun.has_value());
+	REQUIRE(nextRun.value() > (nowMs - fiveMinutesMs));
+	REQUIRE(nextRun.value() <= nowMs);
 }
 
 TEST_CASE(
@@ -6244,6 +6300,98 @@ TEST_CASE("Cron timer infers runtime handled for agentTurn outcome without handl
 	REQUIRE(runs[0].value("sessionKey", std::string()) == "runtime-inferred");
 }
 
+TEST_CASE(
+	"Cron timer coerces main-target agentTurn payload into runtime main-session lane",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.mainSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-main-coerce-agentturn") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-main-coerced" },
+				{ "sessionId", "main" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-main-coerce-agentturn" },
+			{ "name", "runtime main coerce" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "agentTurn" }, { "message", "bridge to main" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-main-coerced");
+	REQUIRE(runs[0].value("runtimeExecutionPath", std::string()) == "runtime");
+	REQUIRE_FALSE(runs[0].value("simulationFallbackUsed", false));
+}
+
+TEST_CASE(
+	"Cron timer coerces isolated-target systemEvent payload into runtime isolated lane",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("id", std::string()) != "job-runtime-isolated-coerce-systemevent") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "handled", true },
+				{ "status", "ok" },
+				{ "summary", "runtime-isolated-coerced" },
+				{ "sessionId", "isolated" }
+			};
+		};
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-isolated-coerce-systemevent" },
+			{ "name", "runtime isolated coerce" },
+			{ "enabled", true },
+			{ "sessionTarget", "isolated" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "bridge to isolated" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "ok");
+	REQUIRE(runs[0].value("summary", std::string()) == "runtime-isolated-coerced");
+	REQUIRE(runs[0].value("runtimeExecutionPath", std::string()) == "runtime");
+	REQUIRE_FALSE(runs[0].value("simulationFallbackUsed", false));
+}
+
 TEST_CASE("Cron timer explicit handled=false keeps systemEvent simulation fallback", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -6255,7 +6403,6 @@ TEST_CASE("Cron timer explicit handled=false keeps systemEvent simulation fallba
 			if (job.value("id", std::string()) != "job-runtime-handled-false-main") {
 				return std::nullopt;
 			}
-
 			return CronJson{
 				{ "handled", false },
 				{ "status", "ok" },
@@ -6367,6 +6514,39 @@ TEST_CASE(
 	REQUIRE(runs.size() == 1);
 	REQUIRE(runs[0].value("status", std::string()) == "error");
 	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
+	REQUIRE_FALSE(runs[0].contains("usage"));
+}
+
+TEST_CASE(
+	"Cron timer preferRuntimeExecution rejects unregistered adapter lane without simulation",
+	"[cron][timer][wp-a]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.preferRuntimeExecution = true;
+	// Intentionally keep adapters.mainSession unset to validate unregistered lane behavior.
+	timer.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-runtime-production-unregistered-main" },
+			{ "name", "production runtime unregistered main" },
+			{ "enabled", true },
+			{ "sessionTarget", "main" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "runtime required" } } },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(executed == 1);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("status", std::string()) == "error");
+	REQUIRE(runs[0].value("errorCategory", std::string()) == "runtime_unavailable");
+	REQUIRE_FALSE(runs[0].value("simulationFallbackUsed", false));
 	REQUIRE_FALSE(runs[0].contains("usage"));
 }
 

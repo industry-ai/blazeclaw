@@ -841,6 +841,22 @@ namespace blazeclaw::cron {
 		bool NormalizeJobTickState(CronJson& job, const std::int64_t nowMs) {
 			bool changed = false;
 			CronJson& state = EnsureStateObject(job);
+			if (job.contains("schedule") && job["schedule"].is_object()) {
+				CronJson& schedule = job["schedule"];
+				const std::string scheduleKind =
+					ToLowerCopy(TrimCopy(schedule.value("kind", std::string())));
+				if (scheduleKind == "every") {
+					const auto anchorMs = TryReadInt64Field(schedule, "anchorMs");
+					if (!anchorMs.has_value() || anchorMs.value() < 0) {
+						const auto createdAtMs = TryReadInt64Field(job, "createdAtMs");
+						schedule["anchorMs"] = createdAtMs.has_value() && createdAtMs.value() >= 0
+							? CronJson(createdAtMs.value())
+							: CronJson(nowMs);
+						changed = true;
+					}
+				}
+			}
+
 			if (!job.value("enabled", true)) {
 				if (state.contains("nextRunAtMs") && !state["nextRunAtMs"].is_null()) {
 					state["nextRunAtMs"] = nullptr;
@@ -1232,6 +1248,27 @@ namespace blazeclaw::cron {
 					sessionTargetRaw.substr(std::string("session:").size()));
 			}
 
+			const bool isolatedLikeTarget =
+				sessionTarget == "isolated" ||
+				sessionTarget.rfind("session:", 0) == 0 ||
+				(sessionTarget == "current" && !resolvedSessionKey.empty());
+
+			if (sessionTarget == "main" && payloadKind == "agentturn") {
+				const std::string message =
+					TrimCopy(payload.value("message", std::string()));
+				if (!message.empty()) {
+					payloadKind = "systemevent";
+				}
+			}
+
+			if (isolatedLikeTarget && payloadKind == "systemevent") {
+				const std::string text =
+					TrimCopy(payload.value("text", std::string()));
+				if (!text.empty()) {
+					payloadKind = "agentturn";
+				}
+			}
+
 			if (sessionTarget == "current") {
 				if (!resolvedSessionKey.empty()) {
 					outcome.sessionId = std::string("session:") + resolvedSessionKey;
@@ -1261,10 +1298,6 @@ namespace blazeclaw::cron {
 			}
 			outcome.sessionKey = resolvedSessionKey;
 
-			const bool isolatedLikeTarget =
-				sessionTarget == "isolated" ||
-				sessionTarget.rfind("session:", 0) == 0 ||
-				(sessionTarget == "current" && !resolvedSessionKey.empty());
 			if (payload.contains("model") && payload["model"].is_string()) {
 				outcome.model = TrimCopy(payload["model"].get<std::string>());
 			}
@@ -1407,11 +1440,18 @@ namespace blazeclaw::cron {
 					outcome.retryable = true;
 				}
 			}
+			else if (runtimeAdapter != nullptr && adapters.preferRuntimeExecution) {
+				runtimeHandled = true;
+				outcome.status = "error";
+				outcome.error = "cron runtime adapter is not registered";
+				outcome.errorCategory = "runtime_unavailable";
+				outcome.summary = "Cron runtime execution is unavailable";
+				outcome.retryable = true;
+			}
 
 			const bool allowSimulationFallback =
 				!runtimeHandled &&
 				(!adapters.preferRuntimeExecution ||
-					!runtimeAdapterRegistered ||
 					explicitRuntimeHandledFalse);
 			outcome.runtimeHandled = runtimeHandled;
 
@@ -1829,11 +1869,19 @@ namespace blazeclaw::cron {
 
 		std::optional<int> ParseTimezoneOffsetMinutes(const std::string& tzRaw) {
 			const std::string tz = ToLowerCopy(TrimCopy(tzRaw));
-			if (tz.empty() || tz == "utc" || tz == "gmt" || tz == "z") {
+			if (tz.empty() ||
+				tz == "utc" ||
+				tz == "gmt" ||
+				tz == "z" ||
+				tz == "ut" ||
+				tz == "utc0" ||
+				tz == "gmt0") {
 				return 0;
 			}
 
 			if (tz == "etc/utc" ||
+				tz == "etc/utc0" ||
+				tz == "etc/ut" ||
 				tz == "etc/uct" ||
 				tz == "etc/zulu" ||
 				tz == "etc/universal" ||
@@ -2215,6 +2263,43 @@ namespace blazeclaw::cron {
 		}
 
 		if (kind == "cron") {
+			const bool allowCronMissedRunByLastRun =
+				schedule.contains("allowCronMissedRunByLastRun") &&
+				schedule["allowCronMissedRunByLastRun"].is_boolean() &&
+				schedule["allowCronMissedRunByLastRun"].get<bool>();
+			if (allowCronMissedRunByLastRun &&
+				job.contains("state") &&
+				job["state"].is_object()) {
+				auto replayAnchor = TryReadInt64Field(job["state"], "lastRunAtMs");
+				if (!replayAnchor.has_value()) {
+					replayAnchor = TryReadInt64Field(job["state"], "lastScheduledForMs");
+				}
+				if (replayAnchor.has_value() &&
+					replayAnchor.value() >= 0 &&
+					replayAnchor.value() < nowMs) {
+					const std::int64_t replayLimit = (std::max)(
+						static_cast<std::int64_t>(1),
+						(std::min)(
+							static_cast<std::int64_t>(60),
+							TryReadInt64Field(schedule, "missedRunReplayLimit")
+							.value_or(1)));
+					std::int64_t replayCursor = replayAnchor.value();
+					for (std::int64_t replayAttempt = 0;
+						replayAttempt < replayLimit;
+						++replayAttempt) {
+						const auto replayCandidate =
+							ComputeNextCron(schedule, job, replayCursor);
+						if (!replayCandidate.has_value()) {
+							break;
+						}
+						if (replayCandidate.value() <= nowMs) {
+							return replayCandidate.value();
+						}
+						replayCursor = replayCandidate.value();
+					}
+				}
+			}
+
 			const auto next = ComputeNextCron(schedule, job, nowMs);
 			if (next.has_value()) {
 				return next;

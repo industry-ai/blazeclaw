@@ -16,7 +16,7 @@ namespace blazeclaw::cron {
 		CronRuntimeExecutionAdapter mainSession;
 		CronRuntimeExecutionAdapter isolatedSession;
 		// When true (production wiring), registered adapters are authoritative and
-		// simulation fallback runs only for explicit handled=false or unregistered lanes.
+		// simulation fallback runs only for explicit handled=false lanes.
 		bool preferRuntimeExecution = false;
 	};
 
