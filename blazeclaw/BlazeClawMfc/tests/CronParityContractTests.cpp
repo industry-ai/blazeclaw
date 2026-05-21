@@ -8409,6 +8409,54 @@ TEST_CASE("Cron ops integrates runtime projected failure destination unknown sta
 	REQUIRE(payload.value("summary", std::string()) == "ops-runtime-failure-destination-unknown");
 }
 
+TEST_CASE(
+	"Cron ops manual terminal hook carries source run linkage for hook-consumer correlation",
+	"[cron][ops][p4]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "manual source run linkage" },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "hook" } } },
+		{ "delivery", { { "mode", "webhook" }, { "to", "invalid-target" } } },
+		{ "deleteAfterRun", true }
+	});
+	const std::string jobId = added.value("id", std::string());
+	REQUIRE_FALSE(jobId.empty());
+
+	CronJson run = ops.Run({ { "id", jobId }, { "mode", "force" } });
+	REQUIRE(run.value("enqueued", false));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "manual" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	const CronJson& payload = failedPayloads.back();
+	REQUIRE(payload.value("taskLedgerStatus", std::string()) == "failed");
+	REQUIRE(payload.contains("sourceRunId"));
+	REQUIRE(payload.contains("sourceStatus"));
+	const std::string sourceStatus = payload.value("sourceStatus", std::string());
+	const bool hasErrorSource = sourceStatus == "error";
+	const bool hasMissingTerminalSource = sourceStatus == "missing_terminal_run";
+	REQUIRE(hasErrorSource != hasMissingTerminalSource);
+	if (hasErrorSource) {
+		REQUIRE(payload["sourceRunId"].is_string());
+		REQUIRE(payload.value("sourceRunId", std::string()).rfind("run:", 0) == 0);
+		REQUIRE(payload.value("reason", std::string()) == "not_delivered");
+	}
+	else {
+		REQUIRE(payload["sourceRunId"].is_null());
+		REQUIRE(payload.value("disposition", std::string()) == "missing_terminal_run");
+	}
+}
+
 TEST_CASE("Cron run validator rejects unsupported mode", "[cron][schema]") {
 	const RequestFrame request{
 		.id = "run-bad-mode",

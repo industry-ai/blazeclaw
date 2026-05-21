@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CV Step 5 / P5 schedule-timezone breadth uplift + docs sync)
+Last refreshed: 2026-05-21 (Phase CW Step 4 / P4+ hook-consumer depth uplift + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -42,7 +42,7 @@ Mandatory gate order for promotion tranches:
 | P1 | **Complete** (WP-B outbound delivery + failure alert) |
 | P2 | **Complete** (WP-C auto-disable workflow + schedule syntax breadth) |
 | P3 | **Complete** (WP-D scheduler hardening baseline) |
-| P4 | **Complete** (Step 4 task-ledger cross-layer baseline) |
+| P4 | **Complete** (High uplift: Step 4 task-ledger hook-consumer source-linkage depth) |
 | P5 | **Complete** (High uplift: IANA Etc aliases + six-field + shorthand cron + military timezone aliases) |
 | P6 | **Complete** (Store JSON5 + per-job jsonl + migration baseline) |
 | P7 | **Complete** (Residual schema strictness baseline) |
@@ -126,4 +126,4 @@ E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 ```
 
-Evidence (2026-05-21): `[cron][timer][step5]` 72/9; `[cron]` 1608/246; `msbuild` pass.
+Evidence (2026-05-21): `[cron][ops][p4]` 19/2; `[cron]` 1618/247; `msbuild` pass.

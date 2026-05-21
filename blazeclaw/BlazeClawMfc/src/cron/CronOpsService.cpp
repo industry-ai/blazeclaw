@@ -343,6 +343,12 @@ namespace blazeclaw::cron {
 		if (runEntry.contains("endedAtMs")) {
 			payload["endedAtMs"] = runEntry["endedAtMs"];
 		}
+			if (runEntry.contains("sourceRunId")) {
+				payload["sourceRunId"] = runEntry["sourceRunId"];
+			}
+			if (runEntry.contains("sourceStatus")) {
+				payload["sourceStatus"] = runEntry["sourceStatus"];
+			}
 
 			if (runEntry.contains("error")) {
 				payload["error"] = runEntry["error"];
@@ -1791,6 +1797,8 @@ namespace blazeclaw::cron {
 					request.queuedAtMs,
 					nowMs,
 					nowMs));
+				m_store.Runs().back()["sourceRunId"] = CronJson(nullptr);
+				m_store.Runs().back()["sourceStatus"] = "missing_terminal_run";
 				m_store.Runs().back()["taskLedgerDisposition"] = "missing_terminal_run";
 				m_store.Runs().back()["taskLedgerTerminal"] = true;
 				EmitTaskLedgerTerminalHook(m_store.Runs().back());
