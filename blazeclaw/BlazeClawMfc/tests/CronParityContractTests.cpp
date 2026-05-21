@@ -7357,11 +7357,18 @@ TEST_CASE("Cron ops emits task-ledger hooks for scheduled terminal runs", "[cron
 	REQUIRE_FALSE(completedPayloads.empty());
 	REQUIRE(failedPayloads.empty());
 	REQUIRE(runningPayloads.back().value("runtime", std::string()) == "cron");
+	REQUIRE(runningPayloads.back().value("action", std::string()) == "started");
+	REQUIRE(runningPayloads.back().value("lifecycleState", std::string()) == "active");
 	REQUIRE(runningPayloads.back().value("taskLedgerPhase", std::string()) == "active");
 	REQUIRE_FALSE(runningPayloads.back().value("taskLedgerTerminal", true));
 	REQUIRE(runningPayloads.back().value("taskLedgerStatus", std::string()) == "running");
+	REQUIRE(runningPayloads.back().value("taskLedgerDisposition", std::string()) == "started");
 	REQUIRE(runningPayloads.back().contains("deliveryStatus"));
 	REQUIRE(completedPayloads.back().value("terminal", false));
+	REQUIRE(completedPayloads.back().value("action", std::string()) == "finished");
+	REQUIRE(completedPayloads.back().value("lifecycleState", std::string()) == "terminal");
+	REQUIRE(completedPayloads.back().value("taskLedgerPhase", std::string()) == "terminal");
+	REQUIRE(completedPayloads.back().value("taskLedgerTerminal", false));
 	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
 	REQUIRE(completedPayloads.back().value("disposition", std::string()) == "dispatched");
 	REQUIRE(runningPayloads.back().contains("startedAtMs"));
@@ -7461,8 +7468,16 @@ TEST_CASE("Cron ops emits task-ledger completion hook for manual not-due termina
 			(disposition == "skipped" || disposition == "not_due")) {
 			sawNotDue = true;
 			REQUIRE(payload.value("action", std::string()) == "finished");
+			REQUIRE(payload.value("lifecycleState", std::string()) == "terminal");
 			REQUIRE(payload.value("phase", std::string()) == "terminal");
 			REQUIRE(payload.value("terminal", false));
+			REQUIRE(payload.value("deliveryStatus", std::string()) == "not-requested");
+			REQUIRE(payload.value("failureDestinationStatus", std::string()) == "not-requested");
+			REQUIRE(payload.value("failureAlertStatus", std::string()) == "not-requested");
+			REQUIRE_FALSE(payload.value("deliveryAttempted", true));
+			REQUIRE_FALSE(payload.value("failureDestinationAttempted", true));
+			REQUIRE_FALSE(payload.value("failureAlertAttempted", true));
+			REQUIRE(payload.value("reason", std::string()) == "not_due");
 			REQUIRE(payload.contains("queuedAtMs"));
 			REQUIRE(
 				payload.value("summary", std::string()).find("not due") !=

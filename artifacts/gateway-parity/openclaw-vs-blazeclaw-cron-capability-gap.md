@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CO §7.5 CronTimerService (`jobs.ts` + `timer.ts`) high-uplift tranche + docs sync)
+Last refreshed: 2026-05-21 (Phase CP §7.5 CronOpsService/runtime-surface (`server-methods/cron.ts` + `ops.ts`) high-uplift tranche + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -10,9 +10,10 @@ BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
 maintains strong baseline parity through P0–P9. OpenClaw `jobs.ts` schedule/state
 core parity remains strong and §7.5 is actively promoting remaining
 `Medium-High` rows to `High` using explicit acceptance locks, ordered gates,
-and sustained replay evidence. Phase CO completed CronTimerService
-(`jobs.ts` + `timer.ts`) row uplift to `High`. Remaining work is P10+ breadth: isolated-runtime,
-hook-consumer, tool-surface depth, and deferred CLI.
+and sustained replay evidence. Phase CO/CP completed CronTimerService
+(`jobs.ts` + `timer.ts`) plus CronOpsService runtime-surface (`server-methods/cron.ts` + `ops.ts`)
+row uplift to `High`. Remaining work is P10+ breadth: isolated-runtime,
+store-depth closure, tool-surface depth, and deferred CLI.
 
 ## §7.5 uplift targets (active)
 
@@ -64,6 +65,17 @@ Evidence: `JOBS-1..JOBS-5` pass in acceptance matrix; Phase CO timer/jobs uplift
 gates green (`[cron][timer][wp-a]` 35/6, `[cron][timer][step5]` 39/7,
 `[cron][gateway][wp-f]` 47/4, `[cron]` 1528/240, `msbuild` pass).
 
+## runtime-surface + ops rows status (Section 2)
+
+| Baseline | Counterpart | Status |
+| --- | --- | --- |
+| `src/gateway/server-methods/cron.ts` | `CronOpsService.cpp` + `GatewayHost.Handlers.Runtime.Surface.cpp` | **High** (Phase CP) |
+| `src/cron/service/ops.ts` | `CronOpsService.cpp` | **High** (Phase CP) |
+
+Evidence: Phase CP ops/runtime-surface uplift gates green (`[cron][ops]` 210/18,
+`[cron][schema][response]` 92/33, `[cron][gateway][wp-f]` 47/4,
+`[cron]` 1543/240 sustained x2, `msbuild` pass).
+
 ## Work package status (2026-05-21)
 
 | Package | Focus | Status |
@@ -84,7 +96,7 @@ gates green (`[cron][timer][wp-a]` 35/6, `[cron][timer][step5]` 39/7,
 - OpenClaw isolated-agent module parity (WP-A breadth).
 - Dedicated channel/outbound plugin routing (WP-B breadth).
 - Full IANA timezone database parity (P5 breadth).
-- OpenClaw hook-consumer integration depth.
+- OpenClaw hook-consumer long-tail integration breadth (beyond current row lock).
 - MFC CLI/dashboard controller parity (P10 deferred).
 
 ## Validation

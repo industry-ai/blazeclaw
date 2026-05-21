@@ -71,6 +71,20 @@ namespace blazeclaw::cron {
 
 			if (status == "queued" || status == "running") {
 				entry["deliveryStatus"] = "not-requested";
+				entry["failureDestinationStatus"] = "not-requested";
+				entry["failureAlertStatus"] = "not-requested";
+				entry["deliveryAttempted"] = false;
+				entry["failureDestinationAttempted"] = false;
+				entry["failureAlertAttempted"] = false;
+				entry["error"] = CronJson(nullptr);
+			}
+			else if (action == "finished" && status == "skipped") {
+				entry["deliveryStatus"] = "not-requested";
+				entry["failureDestinationStatus"] = "not-requested";
+				entry["failureAlertStatus"] = "not-requested";
+				entry["deliveryAttempted"] = false;
+				entry["failureDestinationAttempted"] = false;
+				entry["failureAlertAttempted"] = false;
 				entry["error"] = CronJson(nullptr);
 			}
 
@@ -85,6 +99,7 @@ namespace blazeclaw::cron {
 				entry["taskLedgerPhase"] = "terminal";
 			}
 			entry["taskLedgerStatus"] = status;
+			entry["taskLedgerDisposition"] = reason;
 			if (action == "finished") {
 				entry["taskLedgerTerminal"] = true;
 			}
@@ -282,6 +297,15 @@ namespace blazeclaw::cron {
 
 			if (runEntry.contains("taskLedgerStatus")) {
 				payload["taskLedgerStatus"] = runEntry["taskLedgerStatus"];
+			}
+			if (runEntry.contains("lifecycleState")) {
+				payload["lifecycleState"] = runEntry["lifecycleState"];
+			}
+			if (runEntry.contains("mode")) {
+				payload["mode"] = runEntry["mode"];
+			}
+			if (runEntry.contains("reason")) {
+				payload["reason"] = runEntry["reason"];
 			}
 			if (runEntry.contains("taskLedgerPhase")) {
 				payload["taskLedgerPhase"] = runEntry["taskLedgerPhase"];
@@ -1970,6 +1994,10 @@ namespace blazeclaw::cron {
 
 		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
 		payload["status"] = "running";
+		payload["action"] = "started";
+		payload["lifecycleState"] = "active";
+		payload["disposition"] = "started";
+		payload["taskLedgerDisposition"] = "started";
 		payload["taskLedgerStatus"] = "running";
 		payload["taskLedgerPhase"] = "active";
 		payload["taskLedgerTerminal"] = false;
@@ -1995,9 +2023,13 @@ namespace blazeclaw::cron {
 
 		CronJson payload = BuildTaskLedgerHookPayload(runEntry);
 		payload["status"] = mappedStatus;
+		payload["action"] = "finished";
+		payload["lifecycleState"] = "terminal";
 		payload["taskLedgerStatus"] = mappedStatus;
 		payload["disposition"] = mappedDisposition;
 		payload["taskLedgerDisposition"] = mappedDisposition;
+		payload["taskLedgerPhase"] = "terminal";
+		payload["taskLedgerTerminal"] = true;
 		payload["timedOut"] =
 			runEntry.value("timedOut", false) ||
 			ToLowerCopy(ReadStringOrEmpty(runEntry, "errorCategory")) == "timeout";
