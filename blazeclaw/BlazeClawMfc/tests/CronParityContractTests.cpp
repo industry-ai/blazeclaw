@@ -30,6 +30,7 @@ namespace {
 	using blazeclaw::cron::CronJson;
 	using blazeclaw::cron::IsUsableJsonDocument;
 	using blazeclaw::cron::ParseJsonWithJson5Fallback;
+	using blazeclaw::cron::ParseJsonStreamWithJson5Fallback;
 	using blazeclaw::cron::CronNormalize;
 	using blazeclaw::cron::CronOpsService;
 	using blazeclaw::cron::CronPumpOptions;
@@ -3807,6 +3808,92 @@ TEST_CASE("Cron store falls back to backup when primary file is corrupted", "[cr
 	store.EnsureLoaded();
 	REQUIRE(store.Jobs().size() == 1);
 	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-backup");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store prefers non-empty backup over empty primary and repairs primary store", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw-cron-store-backup-precedence-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << R"([])";
+	}
+	{
+		std::ofstream jobsBackup(
+			jobsPath.string() + ".bak",
+			std::ios::binary | std::ios::trunc);
+		jobsBackup << R"({"version":1,"jobs":[{"id":"job-from-backup","name":"backup","enabled":true,"schedule":{"kind":"every","everyMs":60000},"payload":{"kind":"systemEvent","text":"hi"}}]})";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << R"([])";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Jobs().size() == 1);
+	REQUIRE(store.Jobs()[0].value("id", std::string()) == "job-from-backup");
+
+	std::ifstream repairedJobs(jobsPath, std::ios::binary);
+	REQUIRE(repairedJobs.is_open());
+	const CronJson repairedParsed = ParseJsonStreamWithJson5Fallback(repairedJobs);
+	REQUIRE(IsUsableJsonDocument(repairedParsed));
+	REQUIRE(repairedParsed.contains("values"));
+	REQUIRE(repairedParsed["values"].is_array());
+	REQUIRE(repairedParsed["values"].size() == 1);
+	REQUIRE(repairedParsed["values"][0].value("id", std::string()) == "job-from-backup");
+
+	std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("Cron store repairs runs file from backup when primary is corrupted", "[cron][store][wp-e]") {
+	const std::filesystem::path root =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw-cron-store-runs-backup-repair-test";
+	std::error_code ec;
+	std::filesystem::remove_all(root, ec);
+	std::filesystem::create_directories(root, ec);
+
+	const std::filesystem::path jobsPath = root / "cron.jobs.json";
+	const std::filesystem::path runsPath = root / "cron.runs.json";
+
+	{
+		std::ofstream jobs(jobsPath, std::ios::binary | std::ios::trunc);
+		jobs << R"([])";
+	}
+	{
+		std::ofstream runs(runsPath, std::ios::binary | std::ios::trunc);
+		runs << "{";
+	}
+	{
+		std::ofstream runsBackup(
+			runsPath.string() + ".bak",
+			std::ios::binary | std::ios::trunc);
+		runsBackup << R"({"version":1,"kind":"runs","values":[{"jobId":"job-runs-backup","runId":"run-runs-backup","ts":123,"status":"ok","action":"finished"}]})";
+	}
+
+	CronStoreService store(jobsPath, runsPath);
+	store.EnsureLoaded();
+	REQUIRE(store.Runs().size() == 1);
+	REQUIRE(store.Runs()[0].value("runId", std::string()) == "run-runs-backup");
+
+	std::ifstream repairedRuns(runsPath, std::ios::binary);
+	REQUIRE(repairedRuns.is_open());
+	const CronJson repairedParsed = ParseJsonStreamWithJson5Fallback(repairedRuns);
+	REQUIRE(IsUsableJsonDocument(repairedParsed));
+	REQUIRE(repairedParsed.contains("values"));
+	REQUIRE(repairedParsed["values"].is_array());
+	REQUIRE(repairedParsed["values"].size() == 1);
+	REQUIRE(repairedParsed["values"][0].value("runId", std::string()) == "run-runs-backup");
 
 	std::filesystem::remove_all(root, ec);
 }

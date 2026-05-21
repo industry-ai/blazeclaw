@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CP §7.5 CronOpsService/runtime-surface (`server-methods/cron.ts` + `ops.ts`) high-uplift tranche + docs sync)
+Last refreshed: 2026-05-21 (Phase CQ §7.5 CronStoreService (`store.ts`) high-uplift tranche + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -10,10 +10,10 @@ BlazeClaw exposes the full cron/wake RPC surface at the gateway level and
 maintains strong baseline parity through P0–P9. OpenClaw `jobs.ts` schedule/state
 core parity remains strong and §7.5 is actively promoting remaining
 `Medium-High` rows to `High` using explicit acceptance locks, ordered gates,
-and sustained replay evidence. Phase CO/CP completed CronTimerService
-(`jobs.ts` + `timer.ts`) plus CronOpsService runtime-surface (`server-methods/cron.ts` + `ops.ts`)
-row uplift to `High`. Remaining work is P10+ breadth: isolated-runtime,
-store-depth closure, tool-surface depth, and deferred CLI.
+and sustained replay evidence. Phase CO/CP/CQ completed CronTimerService
+(`jobs.ts` + `timer.ts`), CronOpsService runtime-surface (`server-methods/cron.ts` + `ops.ts`),
+and CronStoreService (`store.ts`) row uplift to `High`. Remaining work is P10+ breadth:
+isolated-runtime, capability-level persistence closure, tool-surface depth, and deferred CLI.
 
 ## §7.5 uplift targets (active)
 
@@ -76,6 +76,16 @@ Evidence: Phase CP ops/runtime-surface uplift gates green (`[cron][ops]` 210/18,
 `[cron][schema][response]` 92/33, `[cron][gateway][wp-f]` 47/4,
 `[cron]` 1543/240 sustained x2, `msbuild` pass).
 
+## store row status (Section 2)
+
+| Baseline | Counterpart | Status |
+| --- | --- | --- |
+| `src/cron/service/store.ts` | `CronStoreService.cpp` | **High** (Phase CQ) |
+
+Evidence: Phase CQ store uplift gates green (`[cron][store]` 44/12,
+`[cron][schema][response]` 92/33, `[cron][gateway][wp-f]` 47/4,
+`[cron]` 1559/242, `msbuild` pass).
+
 ## Work package status (2026-05-21)
 
 | Package | Focus | Status |
@@ -84,7 +94,7 @@ Evidence: Phase CP ops/runtime-surface uplift gates green (`[cron][ops]` 210/18,
 | WP-B | Outbound announce/webhook/failure-alert dispatch | **P1 complete** |
 | WP-C | Auto-disable + schedule syntax breadth | **P2 complete** |
 | WP-D | Scheduler hardening + realtime events | **P3 complete** (baseline) |
-| WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` | **P6 complete** (baseline) |
+| WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` + recovery/repair precedence | **High (Phase CQ)** |
 | WP-F | Schema residuals + GatewayHost production E2E | **Baseline landed** |
 | jobs.ts core | Schedule cursor, every/at, schedule-error, maintenance, projection | **High (Phase CO)** |
 | Step 8 | Tool surface + wake + contextMessages | **P9 baseline + P10 follow-ups** |
@@ -97,6 +107,7 @@ Evidence: Phase CP ops/runtime-surface uplift gates green (`[cron][ops]` 210/18,
 - Dedicated channel/outbound plugin routing (WP-B breadth).
 - Full IANA timezone database parity (P5 breadth).
 - OpenClaw hook-consumer long-tail integration breadth (beyond current row lock).
+- Persistence capability-level closure linkage across Section 2 + Section 3 uplift locks.
 - MFC CLI/dashboard controller parity (P10 deferred).
 
 ## Validation

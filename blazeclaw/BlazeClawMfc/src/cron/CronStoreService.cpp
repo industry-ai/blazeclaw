@@ -251,6 +251,80 @@ namespace blazeclaw::cron {
 				(entry.contains("status") || entry.contains("runId") || entry.contains("ts"));
 		}
 
+		struct StoreArrayLoadResult {
+			CronJson values = CronJson::array();
+			bool usedBackup = false;
+			bool primaryExists = false;
+			bool primaryUsable = false;
+			bool backupUsable = false;
+			bool backupPreferredByPolicy = false;
+		};
+
+		StoreArrayLoadResult LoadArrayWithBackupPolicy(
+			const std::filesystem::path& path,
+			const char* expectedKind) {
+			StoreArrayLoadResult result;
+
+			CronJson primaryValues = CronJson::array();
+			CronJson backupValues = CronJson::array();
+
+			if (std::filesystem::exists(path)) {
+				result.primaryExists = true;
+				std::ifstream stream(path, std::ios::binary);
+				if (stream.is_open()) {
+					try {
+						const CronJson parsed = ParseJsonStreamWithJson5Fallback(stream);
+						if (IsUsableJsonDocument(parsed)) {
+							primaryValues = ParseArrayPayload(parsed, expectedKind);
+							result.primaryUsable = true;
+						}
+					}
+					catch (...) {
+					}
+				}
+			}
+
+			const std::filesystem::path backupPath = path.string() + ".bak";
+			if (std::filesystem::exists(backupPath)) {
+				std::ifstream backup(backupPath, std::ios::binary);
+				if (backup.is_open()) {
+					try {
+						const CronJson parsed = ParseJsonStreamWithJson5Fallback(backup);
+						if (IsUsableJsonDocument(parsed)) {
+							backupValues = ParseArrayPayload(parsed, expectedKind);
+							result.backupUsable = true;
+						}
+					}
+					catch (...) {
+					}
+				}
+			}
+
+			if (result.primaryUsable && result.backupUsable) {
+				if (primaryValues.empty() && !backupValues.empty()) {
+					result.values = backupValues;
+					result.usedBackup = true;
+					result.backupPreferredByPolicy = true;
+					return result;
+				}
+				result.values = primaryValues;
+				return result;
+			}
+
+			if (result.primaryUsable) {
+				result.values = primaryValues;
+				return result;
+			}
+
+			if (result.backupUsable) {
+				result.values = backupValues;
+				result.usedBackup = true;
+				return result;
+			}
+
+			return result;
+		}
+
 	} // namespace
 
 	std::filesystem::path CronStoreService::ResolveRunsDir(
@@ -309,8 +383,13 @@ namespace blazeclaw::cron {
 		std::filesystem::create_directories(m_jobsPath.parent_path(), ec);
 		std::filesystem::create_directories(m_runsDir, ec);
 
-		m_jobs = LoadArrayFile(m_jobsPath, "jobs");
-		const CronJson aggregateRuns = LoadArrayFile(m_runsPath, "runs");
+		const StoreArrayLoadResult jobsLoad =
+			LoadArrayWithBackupPolicy(m_jobsPath, "jobs");
+		const StoreArrayLoadResult runsLoad =
+			LoadArrayWithBackupPolicy(m_runsPath, "runs");
+
+		m_jobs = jobsLoad.values;
+		const CronJson aggregateRuns = runsLoad.values;
 		const CronJson jsonlRuns = LoadRunsFromJsonlDir(m_runsDir);
 		m_runs = MergeRunEntries(aggregateRuns, jsonlRuns);
 		for (auto& job : m_jobs) {
@@ -318,6 +397,14 @@ namespace blazeclaw::cron {
 		}
 
 		m_loaded = true;
+
+		if (jobsLoad.usedBackup && !jobsLoad.values.empty()) {
+			SaveArrayFile(m_jobsPath, jobsLoad.values);
+		}
+		if (runsLoad.usedBackup && !runsLoad.values.empty()) {
+			SaveArrayFile(m_runsPath, runsLoad.values);
+		}
+
 		m_jobsLastWriteTime = currentJobsWriteTime;
 		m_runsLastWriteTime = currentRunsWriteTime;
 		m_runsDirLastWriteTime = currentRunsDirWriteTime;
