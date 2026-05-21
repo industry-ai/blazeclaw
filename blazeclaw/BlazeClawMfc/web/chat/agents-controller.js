@@ -3262,12 +3262,37 @@
             if (Array.isArray(message.content)) {
                 const lines = [];
                 message.content.forEach(function (item) {
+                    if (typeof item === "string") {
+                        const plainLine = String(item || "").trim();
+                        if (plainLine) {
+                            lines.push(plainLine);
+                        }
+                        return;
+                    }
+
                     if (!item || typeof item !== "object") {
                         return;
                     }
                     const type = normalizeLowercaseStringOrEmpty(item.type);
-                    if (type === "text" && typeof item.text === "string") {
-                        const line = String(item.text || "").trim();
+                    if (type !== "text" && type !== "output_text") {
+                        return;
+                    }
+
+                    let resolvedText = "";
+                    if (typeof item.text === "string") {
+                        resolvedText = item.text;
+                    } else if (item.text && typeof item.text === "object") {
+                        if (typeof item.text.value === "string") {
+                            resolvedText = item.text.value;
+                        }
+                    }
+
+                    if (!resolvedText && typeof item.value === "string") {
+                        resolvedText = item.value;
+                    }
+
+                    if (resolvedText) {
+                        const line = String(resolvedText || "").trim();
                         if (line) {
                             lines.push(line);
                         }
@@ -3411,7 +3436,7 @@
 
         async function buildCronPayloadWithToolParity(form) {
             const payload = buildCronPayload(form);
-            if (!payload || payload.kind !== "systemEvent") {
+            if (!payload || (payload.kind !== "systemEvent" && payload.kind !== "agentTurn")) {
                 return payload;
             }
 
@@ -3420,8 +3445,12 @@
                 return payload;
             }
 
-            const baseText = typeof payload.text === "string"
-                ? stripExistingCronReminderContext(payload.text)
+            const contextField = payload.kind === "systemEvent"
+                ? "text"
+                : "message";
+
+            const baseText = typeof payload[contextField] === "string"
+                ? stripExistingCronReminderContext(payload[contextField])
                 : "";
             if (!baseText.trim()) {
                 return payload;
@@ -3429,11 +3458,12 @@
 
             const contextLines = await buildCronReminderContextLines(contextMessages);
             if (!contextLines.length) {
-                payload.text = baseText;
+                payload[contextField] = baseText;
                 return payload;
             }
 
-            payload.text = baseText + CRON_REMINDER_CONTEXT_MARKER + contextLines.join("\n");
+            payload[contextField] =
+                baseText + CRON_REMINDER_CONTEXT_MARKER + contextLines.join("\n");
             return payload;
         }
 
@@ -6013,6 +6043,107 @@
                 },
             });
             await contextSavePending;
+
+            controller.updateCronFormField("name", "Agent context parity");
+            controller.updateCronFormField("payloadKind", "agentTurn");
+            controller.updateCronFormField("payloadText", "Summarize for agent");
+            controller.updateCronFormField("contextMessages", "2");
+            const agentContextSavePending = controller.addOrUpdateCronJob();
+            const agentHistoryCall = harness.takeNextCall("chat.history");
+            assertRegression(
+                agentHistoryCall.params &&
+                agentHistoryCall.params.sessionKey === "agent:main:default" &&
+                agentHistoryCall.params.limit === 2,
+                "cron add should request chat.history for agentTurn payload context parity"
+            );
+            agentHistoryCall.deferred.resolve({
+                payload: {
+                    messages: [
+                        {
+                            role: "user",
+                            content: [
+                                {
+                                    type: "output_text",
+                                    text: {
+                                        value: "What changed since yesterday?",
+                                    },
+                                },
+                            ],
+                        },
+                        {
+                            role: "assistant",
+                            content: [
+                                {
+                                    type: "output_text",
+                                    value: "I tracked the latest merged fixes.",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            const agentContextAddCall = harness.takeNextCall("cron.add");
+            assertRegression(
+                agentContextAddCall.params &&
+                agentContextAddCall.params.payload &&
+                agentContextAddCall.params.payload.kind === "agentTurn" &&
+                typeof agentContextAddCall.params.payload.message === "string" &&
+                agentContextAddCall.params.payload.message.indexOf("Recent context:") >= 0 &&
+                agentContextAddCall.params.payload.message.indexOf("- User: What changed since yesterday?") >= 0 &&
+                agentContextAddCall.params.payload.message.indexOf("- Assistant: I tracked the latest merged fixes.") >= 0,
+                "cron add should append bounded recent context lines to agentTurn payload message"
+            );
+            agentContextAddCall.deferred.resolve({
+                payload: {
+                    added: true,
+                    cronId: "cron-agent-context",
+                },
+            });
+            const listAfterAgentContextCall = harness.takeNextCall("cron.list");
+            listAfterAgentContextCall.deferred.resolve({
+                payload: {
+                    jobs: [
+                        {
+                            id: "cron-main",
+                            name: "Main cron",
+                            enabled: true,
+                            schedule: {
+                                kind: "every",
+                                everyMs: 60000,
+                            },
+                            payload: {
+                                kind: "agentTurn",
+                                message: "Ping",
+                            },
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const statusAfterAgentContextCall = harness.takeNextCall("cron.status");
+            statusAfterAgentContextCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 432,
+                },
+            });
+            const runsAfterAgentContextCall = harness.takeNextCall("cron.runs");
+            runsAfterAgentContextCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await agentContextSavePending;
 
             controller.updateCronFormField("name", "No context");
             controller.updateCronFormField("payloadKind", "systemEvent");

@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CW Step 4 / P4+ hook-consumer depth uplift + docs sync)
+Last refreshed: 2026-05-21 (Phase CX Step 8 / P10 tool-controller depth uplift + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -48,7 +48,7 @@ Mandatory gate order for promotion tranches:
 | P7 | **Complete** (Residual schema strictness baseline) |
 | P8 | **Complete** (Production GatewayHost E2E baseline) |
 | P9 | **Complete** (Tool surface baseline) |
-| P10+ | **Active** (runtime/hook-consumer/tool breadth; CLI deferred) |
+| P10+ | **Active** (runtime/hook-consumer breadth; CLI deferred) |
 
 ## jobs.ts row status (Section 2)
 
@@ -126,4 +126,4 @@ E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 ```
 
-Evidence (2026-05-21): `[cron][ops][p4]` 19/2; `[cron]` 1618/247; `msbuild` pass.
+Evidence (2026-05-21): `[cron][gateway][normalize]` 132/2; `[cron]` 1618/247; `msbuild` pass.
