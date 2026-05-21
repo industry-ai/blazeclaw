@@ -3184,7 +3184,9 @@ namespace blazeclaw::gateway {
 			return std::string();
 		}
 
-		std::optional<CronJson> MapChatRuntimeResultToCron(const ChatRuntimeResult& result) {
+		std::optional<CronJson> MapChatRuntimeResultToCron(
+			const ChatRuntimeResult& result,
+			const std::string& runtimeModule = std::string()) {
 			CronJson response = CronJson::object();
 			response["handled"] = true;
 			response["observedAtMs"] = cron::UtcNowMs();
@@ -3244,6 +3246,10 @@ namespace blazeclaw::gateway {
 
 			if (!result.taskDeltas.empty()) {
 				response["taskDeltaCount"] = result.taskDeltas.size();
+			}
+
+			if (!runtimeModule.empty()) {
+				response["runtimeModule"] = runtimeModule;
 			}
 
 			return response;
@@ -3532,13 +3538,16 @@ namespace blazeclaw::gateway {
 			runtimeResult = m_chatRuntimeCallback(request);
 		}
 
-		auto mapped = cron_production::MapChatRuntimeResultToCron(runtimeResult);
+		auto mapped = cron_production::MapChatRuntimeResultToCron(
+			runtimeResult,
+			"main-session");
 		if (!mapped.has_value()) {
 			return std::nullopt;
 		}
 
 		mapped.value()["sessionKey"] = sessionKey;
 		mapped.value()["sessionId"] = "main";
+		mapped.value()["runtimeModule"] = "main-session";
 		if (!request.modelIdOverride.empty()) {
 			mapped.value()["model"] = request.modelIdOverride;
 		}
@@ -3623,13 +3632,25 @@ namespace blazeclaw::gateway {
 			runtimeResult = m_chatRuntimeCallback(request);
 		}
 
-		auto mapped = cron_production::MapChatRuntimeResultToCron(runtimeResult);
+		auto mapped = cron_production::MapChatRuntimeResultToCron(
+			runtimeResult,
+			"isolated-agent");
 		if (!mapped.has_value()) {
 			return std::nullopt;
 		}
 
 		mapped.value()["sessionKey"] = sessionKey;
 		mapped.value()["sessionId"] = sessionKey.empty() ? "isolated" : sessionKey;
+		mapped.value()["runtimeModule"] = "isolated-agent";
+		if (payload.contains("fallbacks") && payload["fallbacks"].is_array()) {
+			mapped.value()["fallbackPolicy"] = CronJson{
+				{ "fallbackCount", payload["fallbacks"].size() }
+			};
+		}
+		if (payload.contains("thinking") && payload["thinking"].is_string()) {
+			mapped.value()["thinkingLevel"] =
+				cron::TrimCopy(payload["thinking"].get<std::string>());
+		}
 		if (payload.contains("model") && payload["model"].is_string()) {
 			mapped.value()["model"] = cron::TrimCopy(payload["model"].get<std::string>());
 		}

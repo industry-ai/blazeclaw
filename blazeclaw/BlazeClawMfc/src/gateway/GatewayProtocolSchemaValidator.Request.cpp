@@ -2,6 +2,9 @@
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewaySchemaCatalog.Generated.h"
 
+#include "../cron/CronHygiene.h"
+#include "../cron/CronModels.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -710,11 +713,33 @@ namespace blazeclaw::gateway::protocol {
 
 			const std::string scheduleJson =
 				paramsJson.substr(scheduleValuePos, scheduleCursor - scheduleValuePos);
-			return ValidateCronScheduleObjectFields(
+			if (!ValidateCronScheduleObjectFields(
 				scheduleJson,
 				methodName,
 				fieldPrefix,
-				issue);
+				issue)) {
+				return false;
+			}
+
+			try {
+				const blazeclaw::cron::CronJson schedule =
+					blazeclaw::cron::CronJson::parse(scheduleJson);
+				const blazeclaw::cron::CronScheduleValidation validation =
+					blazeclaw::cron::ValidateScheduleTimestamp(schedule);
+				if (!validation.ok) {
+					SetIssue(
+						issue,
+						"schema_invalid_value",
+						"Method `" + methodName + "` requires `" + fieldPrefix +
+						"` to satisfy schedule timestamp constraints: " +
+						validation.message);
+					return false;
+				}
+			}
+			catch (...) {
+			}
+
+			return true;
 		}
 
 		bool ValidateOptionalSessionListParams(

@@ -2,6 +2,8 @@
 
 #include "CronOpsService.h"
 
+#include "CronHygiene.h"
+
 #include "../gateway/GatewayPersistencePaths.h"
 
 #include <algorithm>
@@ -618,6 +620,13 @@ namespace blazeclaw::cron {
 		const std::int64_t nowMs = UtcNowMs();
 
 		CronJson job = CronNormalize::NormalizeAddInput(params);
+		if (job.contains("schedule") && job["schedule"].is_object()) {
+			const CronScheduleValidation scheduleValidation =
+				ValidateScheduleTimestamp(job["schedule"], nowMs);
+			if (!scheduleValidation.ok) {
+				throw std::invalid_argument(scheduleValidation.message);
+			}
+		}
 		job["id"] =
 			"cron-" + std::to_string(nowMs) + "-" + std::to_string(++m_idCounter);
 		job["createdAtMs"] = nowMs;
@@ -660,6 +669,14 @@ namespace blazeclaw::cron {
 		const CronJson& patch = params["patch"];
 		CronNormalize::ApplyPatch(*job, patch);
 		const std::int64_t nowMs = UtcNowMs();
+		if (patch.contains("schedule") && (*job).contains("schedule") &&
+			(*job)["schedule"].is_object()) {
+			const CronScheduleValidation scheduleValidation =
+				ValidateScheduleTimestamp((*job)["schedule"], nowMs);
+			if (!scheduleValidation.ok) {
+				throw std::invalid_argument(scheduleValidation.message);
+			}
+		}
 		(*job)["updatedAtMs"] = nowMs;
 		const bool patchTouchesSchedule = patch.contains("schedule");
 		const bool patchTouchesEnabled = patch.contains("enabled");

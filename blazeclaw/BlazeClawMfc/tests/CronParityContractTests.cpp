@@ -6,6 +6,7 @@
 #include "../src/cron/CronOpsService.h"
 #include "../src/cron/CronOpsServiceTestHooks.h"
 #include "../src/cron/CronStoreService.h"
+#include "../src/cron/CronHygiene.h"
 #include "../src/cron/CronTimerService.h"
 #include "../src/gateway/GatewayHost.h"
 #include "../src/gateway/GatewayProtocolSchemaValidator.h"
@@ -38,7 +39,11 @@ namespace {
 	using blazeclaw::cron::CronRealtimeEvent;
 	using blazeclaw::cron::CronScheduleNotificationEvent;
 	using blazeclaw::cron::CronStoreService;
+	using blazeclaw::cron::ClearCronJobActive;
 	using blazeclaw::cron::CronTimerService;
+	using blazeclaw::cron::MarkCronJobActive;
+	using blazeclaw::cron::ResetCronActiveJobsForTests;
+	using blazeclaw::cron::SweepCronRunSessions;
 	using blazeclaw::cron::kCronMinRefireGapMs;
 	using blazeclaw::cron::kCronStuckRunMs;
 	using blazeclaw::cron::kWakeModeNextHeartbeat;
@@ -226,7 +231,11 @@ TEST_CASE("Cron timer accepts webhook url alias when delivery.to is omitted", "[
 			{ "enabled", true },
 			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
 			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
-			{ "delivery", { { "mode", "webhook" }, { "url", "https://example.test/hook" } } },
+			{ "delivery", {
+				{ "mode", "webhook" },
+				{ "url", "https://example.test/hook" },
+				{ "simulateHttpStatus", 200 }
+			} },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
 		}
 	});
@@ -259,7 +268,8 @@ TEST_CASE("Cron timer accepts webhook url alias for failure destination", "[cron
 					{ "failureDestination",
 						{
 							{ "mode", "webhook" },
-							{ "url", "https://example.test/failure" }
+							{ "url", "https://example.test/failure" },
+							{ "simulateHttpStatus", 200 }
 						} }
 				} },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
@@ -2184,7 +2194,8 @@ TEST_CASE("Cron timer infers webhook failure destination mode from url alias whe
 				{ "mode", "webhook" },
 				{ "to", "bad-target" },
 				{ "failureDestination", {
-					{ "url", "https://example.test/failure" }
+					{ "url", "https://example.test/failure" },
+					{ "simulateHttpStatus", 200 }
 				} }
 			} },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
@@ -5796,7 +5807,8 @@ TEST_CASE("Cron timer does not suppress webhook failure destination when webhook
 					{ "failureDestination",
 						{
 							{ "mode", "webhook" },
-							{ "to", "https://example.test/hook-failure" }
+							{ "to", "https://example.test/hook-failure" },
+							{ "transportDispatch", false }
 						} }
 				} },
 			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
@@ -7554,6 +7566,7 @@ TEST_CASE("Cron timer preserves primary delivery simulation when runtime project
 			{ "delivery", {
 				{ "mode", "webhook" },
 				{ "to", "https://primary.example/ok" },
+				{ "transportDispatch", false },
 				{ "failureDestination", {
 					{ "mode", "webhook" },
 					{ "to", "https://failure.example/unused" }
@@ -8619,4 +8632,189 @@ TEST_CASE(
 		invalidRun,
 		issue));
 	REQUIRE(issue.code == "schema_invalid_response");
+}
+
+TEST_CASE(
+	"Cron hygiene rejects schedule.at more than one minute in the past on add",
+	"[cron][hygiene][7.6]") {
+	ResetCronActiveJobsForTests();
+	IsolatedCronOpsFixture fixture("hygiene-past-at-add");
+
+	REQUIRE_THROWS_AS(
+		fixture.ops().Add({
+			{ "name", "past-at" },
+			{ "enabled", true },
+			{ "schedule", {
+				{ "kind", "at" },
+				{ "at", "2020-01-01T00:00:00Z" }
+			} },
+			{ "payload", {
+				{ "kind", "systemEvent" },
+				{ "text", "past" }
+			} }
+		}),
+		std::invalid_argument);
+}
+
+TEST_CASE(
+	"Cron hygiene active job guard prevents duplicate in-process pump",
+	"[cron][hygiene][7.6]") {
+	ResetCronActiveJobsForTests();
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "cron-active-guard" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "active guard" } } },
+			{ "state", { { "nextRunAtMs", blazeclaw::cron::UtcNowMs() - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+	CronTimerService timer;
+
+	MarkCronJobActive("cron-active-guard");
+	const std::size_t executed = timer.PumpDueRuns(jobs, runs, blazeclaw::cron::UtcNowMs(), false);
+	ClearCronJobActive("cron-active-guard");
+
+	REQUIRE(executed == 0);
+	REQUIRE(runs.empty());
+}
+
+TEST_CASE(
+	"Cron hygiene session reaper prunes stale cron run session metadata",
+	"[cron][hygiene][7.6]") {
+	ResetCronActiveJobsForTests();
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "cron-session-reaper" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "reaper" } } },
+			{ "state", {
+				{ "cronRunSessions", CronJson::array({
+					{
+						{ "sessionKey", "agent:main:cron:job:cron-session-reaper:run:old" },
+						{ "updatedAtMs", nowMs - (48 * 60 * 60 * 1000) }
+					},
+					{
+						{ "sessionKey", "agent:main:cron:job:cron-session-reaper:run:recent" },
+						{ "updatedAtMs", nowMs - 1000 }
+					}
+				}) }
+			} }
+		}
+	});
+
+	const std::size_t pruned = SweepCronRunSessions(jobs, nowMs);
+	REQUIRE(pruned == 1);
+	REQUIRE(jobs[0]["state"]["cronRunSessions"].size() == 1);
+	REQUIRE(jobs[0]["state"]["cronRunSessions"][0]["sessionKey"]
+		.get<std::string>()
+		.find("recent") != std::string::npos);
+}
+
+TEST_CASE(
+	"Cron timer announce delivery records metadata-delivered semantics",
+	"[cron][timer][7.6]") {
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "cron-announce-meta" },
+			{ "enabled", true },
+			{ "sessionKey", "agent:main:channel:webchat" },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "announce meta" } } },
+			{ "delivery", { { "mode", "announce" }, { "to", "agent:main:channel:webchat" } } },
+			{ "state", { { "nextRunAtMs", blazeclaw::cron::UtcNowMs() - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+	CronTimerService timer;
+	REQUIRE(timer.PumpDueRuns(jobs, runs, blazeclaw::cron::UtcNowMs(), false) == 1);
+	REQUIRE_FALSE(runs.empty());
+	REQUIRE(runs.back().value("deliverySemantics", std::string()) == "metadata-delivered");
+	REQUIRE(runs.back().value("deliveryChannelIoPerformed", false) == false);
+	REQUIRE(runs.back().value("runtimeModule", std::string()) == "main-session");
+}
+
+TEST_CASE(
+	"Cron gateway production wiring executes isolated agentTurn with runtime metadata",
+	"[cron][gateway][wp-f][7.6]") {
+	GatewayCronProductionFixture fixture("production-isolated-agent");
+	GatewayHost& host = fixture.gateway();
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-isolated",
+		"cron.add",
+		std::string(
+			"{\"name\":\"wp-f isolated\",\"enabled\":true,"
+			"\"sessionTarget\":\"isolated\","
+			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
+			"\"payload\":{\"kind\":\"agentTurn\",\"message\":\"isolated runtime\"},"
+			"\"delivery\":{\"mode\":\"none\"}}"));
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const std::string cronId =
+		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame cronRun = RouteGatewayCron(
+		host,
+		"wpf-cron-run-isolated",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+	REQUIRE(cronRun.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-isolated",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"pump isolated\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-isolated",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawIsolatedRuntime = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+		if (entry.value("runtimeModule", std::string()) == "isolated-agent") {
+			sawIsolatedRuntime = true;
+		}
+	}
+	REQUIRE(sawIsolatedRuntime);
+}
+
+TEST_CASE(
+	"Cron request validator rejects schedule.at more than one minute in the past",
+	"[cron][schema][7.6]") {
+	const RequestFrame request{
+		.id = "cron-add-past-at",
+		.method = "cron.add",
+		.		paramsJson = std::string(
+			"{\"name\":\"past\",\"enabled\":true,"
+			"\"schedule\":{\"kind\":\"at\",\"at\":\"2020-01-01T00:00:00Z\"},"
+			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"x\"}}")
+	};
+
+	SchemaValidationIssue issue{};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
+	REQUIRE(issue.code == "schema_invalid_value");
+	REQUIRE(issue.message.find("schedule timestamp") != std::string::npos);
 }

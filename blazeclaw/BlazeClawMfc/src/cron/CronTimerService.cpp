@@ -2,6 +2,8 @@
 
 #include "CronTimerService.h"
 
+#include "CronHygiene.h"
+
 #include <chrono>
 #include <cmath>
 #include <ctime>
@@ -208,9 +210,16 @@ namespace blazeclaw::cron {
 			return TrimCopy(target);
 		}
 
-		bool IsTransportDispatchEnabled(const CronJson& node) {
+		bool IsTransportDispatchEnabled(
+			const CronJson& node,
+			const std::string& deliveryMode = std::string()) {
 			if (node.contains("transportDispatch") && node["transportDispatch"].is_boolean()) {
 				return node["transportDispatch"].get<bool>();
+			}
+
+			const std::string mode = ToLowerCopy(TrimCopy(deliveryMode));
+			if (mode == "webhook") {
+				return true;
 			}
 
 			char* envValueRaw = nullptr;
@@ -489,6 +498,7 @@ namespace blazeclaw::cron {
 			std::string summary;
 			std::string error;
 			std::string runtimeExecutionPath = "none";
+			std::string runtimeModule;
 			bool runtimeAdapterRegistered = false;
 			bool runtimeAdapterInvoked = false;
 			bool runtimeHandled = false;
@@ -508,6 +518,8 @@ namespace blazeclaw::cron {
 			std::string deliveryAccountId;
 			bool delivered = false;
 			bool deliveryAttempted = false;
+			bool deliveryChannelIoPerformed = false;
+			std::string deliverySemantics;
 			std::int64_t deliveryHttpStatus = 0;
 			bool retryable = false;
 			std::string failureDestinationStatus = "not-requested";
@@ -640,6 +652,11 @@ namespace blazeclaw::cron {
 			}
 			if (runtimeResult.contains("provider") && runtimeResult["provider"].is_string()) {
 				outcome.provider = TrimCopy(runtimeResult["provider"].get<std::string>());
+			}
+			if (runtimeResult.contains("runtimeModule") &&
+				runtimeResult["runtimeModule"].is_string()) {
+				outcome.runtimeModule =
+					TrimCopy(runtimeResult["runtimeModule"].get<std::string>());
 			}
 
 			if (runtimeResult.contains("delivered") && runtimeResult["delivered"].is_boolean()) {
@@ -1581,6 +1598,15 @@ namespace blazeclaw::cron {
 				outcome.runtimeExecutionPath = "none";
 			}
 
+			if (outcome.runtimeModule.empty()) {
+				if (payloadKind == "systemevent") {
+					outcome.runtimeModule = "main-session";
+				}
+				else if (payloadKind == "agentturn") {
+					outcome.runtimeModule = "isolated-agent";
+				}
+			}
+
 			const bool heartbeatBusyDeliverySuppressed =
 				outcome.errorCategory == "heartbeat_busy" ||
 				outcome.errorCategory == "heartbeat_busy_fallback";
@@ -1658,6 +1684,8 @@ namespace blazeclaw::cron {
 					else {
 						outcome.deliveryStatus = "delivered";
 						outcome.delivered = true;
+						outcome.deliveryChannelIoPerformed = false;
+						outcome.deliverySemantics = "metadata-delivered";
 					}
 					}
 					else if (mode == "webhook") {
@@ -1670,7 +1698,7 @@ namespace blazeclaw::cron {
 						to = TrimCopy(delivery["url"].get<std::string>());
 					}
 					outcome.deliveryTarget = to;
-					const bool transportDispatch = IsTransportDispatchEnabled(delivery);
+					const bool transportDispatch = IsTransportDispatchEnabled(delivery, mode);
 					const auto simulatedHttpStatus =
 						TryReadInt64Field(delivery, "simulateHttpStatus");
 					if (simulateTransientFailure) {
@@ -1854,7 +1882,7 @@ namespace blazeclaw::cron {
 					if (failureMode == "webhook") {
 						outcome.failureDestinationAttempted = true;
 						const bool failureTransportDispatch =
-							IsTransportDispatchEnabled(failureDestination);
+							IsTransportDispatchEnabled(failureDestination, failureMode);
 						const auto failureDestinationHttpStatus =
 							TryReadInt64Field(failureDestination, "simulateHttpStatus");
 						if (failureDestinationHttpStatus.has_value()) {
@@ -2620,6 +2648,27 @@ namespace blazeclaw::cron {
 				continue;
 			}
 
+			if (IsCronJobActive(id)) {
+				++it;
+				continue;
+			}
+
+			struct ActiveJobGuard {
+				std::string jobId;
+				explicit ActiveJobGuard(std::string activeJobId)
+					: jobId(std::move(activeJobId)) {
+					if (!jobId.empty()) {
+						MarkCronJobActive(jobId);
+					}
+				}
+				~ActiveJobGuard() {
+					if (!jobId.empty()) {
+						ClearCronJobActive(jobId);
+					}
+				}
+			};
+			const ActiveJobGuard activeJobGuard(id);
+
 			CronJson& state = EnsureStateObject(*it);
 			if (TryReadInt64Field(state, "runningAtMs").has_value()) {
 				++it;
@@ -2969,7 +3018,9 @@ namespace blazeclaw::cron {
 							const bool alertTransportDispatch =
 								(*it).contains("failureAlert") &&
 								(*it)["failureAlert"].is_object() &&
-								IsTransportDispatchEnabled((*it)["failureAlert"]);
+								IsTransportDispatchEnabled(
+									(*it)["failureAlert"],
+									failureAlertMode);
 							const auto alertHttpStatus =
 								(*it).contains("failureAlert") &&
 								(*it)["failureAlert"].is_object()
@@ -3187,6 +3238,16 @@ namespace blazeclaw::cron {
 					{ "totalTokens", outcome.usageTotalTokens }
 				});
 			}
+			if (!effectiveSessionKey.empty()) {
+				RecordCronRunSession(*it, effectiveSessionKey, nowMs);
+			}
+			if (!outcome.runtimeModule.empty()) {
+				runs.back()["runtimeModule"] = outcome.runtimeModule;
+			}
+			if (!outcome.deliverySemantics.empty()) {
+				runs.back()["deliverySemantics"] = outcome.deliverySemantics;
+				runs.back()["deliveryChannelIoPerformed"] = outcome.deliveryChannelIoPerformed;
+			}
 			if (pumpCallbacks != nullptr &&
 				static_cast<bool>(pumpCallbacks->onFinished) &&
 				!runs.empty()) {
@@ -3202,6 +3263,7 @@ namespace blazeclaw::cron {
 			++it;
 		}
 
+		(void)SweepCronRunSessions(jobs, nowMs);
 		return executed;
 	}
 
