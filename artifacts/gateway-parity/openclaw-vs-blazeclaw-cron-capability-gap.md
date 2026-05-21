@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase CE Step 5 schedule-expression strictness follow-up + docs sync)
+Last refreshed: 2026-05-20 (Phase CF Step 6-11 failure-alert observability + schema strictness + production E2E follow-up + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -15,10 +15,12 @@ work is concentrated in P10+ breadth: execution/runtime permutations,
 hook-consumer side-effect depth, and tool-surface breadth (plus deferred CLI
 parity decision).
 
-Phase CE Step 5 follow-up also tightened cron schedule parity by enforcing
-deterministic cron expression field-count/token validation errors in
-`ComputeNextCron`, reducing silent invalid-expression fallback behavior and
-aligning schedule-error auto-disable semantics.
+Phase CF Step 6-11 follow-up tightened failure-alert and schema observability
+parity by projecting `failureAlertStatus=not-requested` for not-configured
+suppression lanes, enforcing `failureAlertStatus` taxonomy in
+`cron.runs` response validation, and adding production
+`[cron][gateway][wp-f][step6][step10]` E2E coverage for handler-stack
+`cron.runs` projection.
 
 ## Priority status (§5)
 
@@ -67,4 +69,4 @@ msbuild "E:\gitRepo\blazeClaw\blazeclaw\BlazeClaw.sln" /t:Build /p:Configuration
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
 ```
 
-Evidence (2026-05-20, Phase CE): `[cron][timer][step5]` 16 assertions / 2 test cases, `[cron]` 1447 assertions / 227 test cases; required `msbuild` gate passed.
+Evidence (2026-05-20, Phase CF): `[cron][timer]` 672 assertions / 96 test cases, `[cron][schema][response]` 79 assertions / 30 test cases, `[cron][gateway][wp-f]` 152 assertions / 14 test cases, `[cron]` 1574 assertions / 240 test cases; required `msbuild` gate passed.

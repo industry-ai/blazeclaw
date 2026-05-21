@@ -2311,6 +2311,7 @@ TEST_CASE("Cron timer suppresses failureAlert when not explicitly configured", "
 	REQUIRE_FALSE(runs[0].value("failureAlertTriggered", true));
 	REQUIRE(runs[0].value("failureAlertSuppressed", false));
 	REQUIRE(runs[0].value("failureAlertSuppressedReason", std::string()) == "not_configured");
+	REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-requested");
 	REQUIRE(jobs[0]["state"]["lastFailureAlertAtMs"].is_null());
 	REQUIRE(jobs[0]["state"].value("failureAlertSuppressedReason", std::string()) == "not_configured");
 }
@@ -2955,6 +2956,30 @@ TEST_CASE("Cron patch null sessionKey canonicalizes stale session target by payl
 		REQUIRE_FALSE(job.contains("sessionKey"));
 		REQUIRE(job.value("sessionTarget", std::string()) == "main");
 	}
+}
+
+TEST_CASE("Cron runs response validator enforces failureAlertStatus taxonomy", "[cron][schema][response][step9]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-runs-failure-alert-status-valid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"error\",\"failureAlertStatus\":\"not-requested\"}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
+
+	const ResponseFrame invalidResponse{
+		.id = "cron-runs-failure-alert-status-invalid",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"error\",\"failureAlertStatus\":\"suppressed\"}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", invalidResponse, issue));
+	REQUIRE(issue.code == "schema_invalid_response");
 }
 
 TEST_CASE("Cron patch normalize infers webhook modes from url aliases when mode is omitted", "[cron][normalize]") {
@@ -4448,6 +4473,70 @@ TEST_CASE(
 	}
 	REQUIRE(sawStarted);
 	REQUIRE(sawFinished);
+}
+
+TEST_CASE(
+	"Cron gateway production wiring projects not-configured failure alert observability in cron.runs",
+	"[cron][gateway][wp-f][step6][step10]") {
+	GatewayCronProductionFixture fixture("production-failure-alert-not-configured");
+	GatewayHost& host = fixture.gateway();
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-alert-not-configured",
+		"cron.add",
+		std::string(
+			"{\"name\":\"wp-f alert-not-configured job\",\"enabled\":true,"
+			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
+			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"gateway failure alert not configured\"},"
+			"\"delivery\":{\"mode\":\"webhook\",\"to\":\"invalid-url\"}}"));
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const std::string cronId =
+		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame wakeNow = RouteGatewayCron(
+		host,
+		"wpf-wake-alert-not-configured",
+		"wake",
+		std::string("{\"mode\":\"now\",\"text\":\"execute failure alert not configured\"}"));
+	REQUIRE(wakeNow.ok);
+	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+	const ResponseFrame cronRuns = RouteGatewayCron(
+		host,
+		"wpf-cron-runs-alert-not-configured",
+		"cron.runs",
+		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+		"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
+	REQUIRE(cronRuns.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+
+	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+	REQUIRE(runsPayload.contains("entries"));
+	REQUIRE(runsPayload["entries"].is_array());
+
+	bool sawExpectedEntry = false;
+	for (const auto& entry : runsPayload["entries"]) {
+		if (!entry.is_object()) {
+			continue;
+		}
+		if (entry.value("action", std::string()) != "finished") {
+			continue;
+		}
+
+		sawExpectedEntry = true;
+		REQUIRE(entry.value("status", std::string()) == "error");
+		REQUIRE(entry.value("failureAlertSuppressed", false));
+		REQUIRE(
+			entry.value("failureAlertSuppressedReason", std::string()) ==
+			"not_configured");
+		REQUIRE(entry.value("failureAlertStatus", std::string()) == "not-requested");
+		break;
+	}
+
+	REQUIRE(sawExpectedEntry);
 }
 
 TEST_CASE(

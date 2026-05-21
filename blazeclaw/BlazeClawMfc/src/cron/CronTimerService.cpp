@@ -2653,6 +2653,7 @@ namespace blazeclaw::cron {
 						state["lastFailureAlertAtMs"] = CronJson(nullptr);
 						state["failureAlertSuppressed"] = true;
 						state["failureAlertSuppressedReason"] = "not_configured";
+						outcome.failureAlertStatus = "not-requested";
 					}
 					else {
 						std::string failureAlertMode = kFailureAlertModeAnnounce;

@@ -182,6 +182,17 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
+			if (HasFieldToken(payload, "failureAlertStatus") &&
+				!IsFieldNull(payload, "failureAlertStatus") &&
+				!ValidateTopLevelEnumStringField(
+					payload,
+					"failureAlertStatus",
+					{ "not-requested", "delivered", "not-delivered" },
+					issue,
+					errorMessage)) {
+				return false;
+			}
+
 			if (HasFieldToken(payload, "taskLedgerStatus") &&
 				!IsFieldNull(payload, "taskLedgerStatus") &&
 				!ValidateTopLevelEnumStringField(
