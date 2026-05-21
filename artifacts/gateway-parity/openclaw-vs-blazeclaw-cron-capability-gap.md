@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-20 (Phase CF Step 6-11 failure-alert observability + schema strictness + production E2E follow-up + docs sync)
+Last refreshed: 2026-05-21 (Phase CJ §7.3 Step 3-8 implementation + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages WP-A..F)
 
@@ -15,12 +15,11 @@ work is concentrated in P10+ breadth: execution/runtime permutations,
 hook-consumer side-effect depth, and tool-surface breadth (plus deferred CLI
 parity decision).
 
-Phase CF Step 6-11 follow-up tightened failure-alert and schema observability
-parity by projecting `failureAlertStatus=not-requested` for not-configured
-suppression lanes, enforcing `failureAlertStatus` taxonomy in
-`cron.runs` response validation, and adding production
-`[cron][gateway][wp-f][step6][step10]` E2E coverage for handler-stack
-`cron.runs` projection.
+Phase CJ follow-up implements §7.3 Step 3-8 baseline slices (every/at
+state-rearm parity, schedule-error carry-forward hardening, maintenance and
+projection evidence linkage) and completes required timer/schema/gateway/full
+validation gates, while retaining Section 2 `jobs.ts` `Medium` lock pending
+sustained closure-depth sign-off.
 
 ## Priority status (§5)
 
@@ -58,6 +57,8 @@ suppression lanes, enforcing `failureAlertStatus` taxonomy in
 - OpenClaw isolated-agent runtime behavior breadth parity (WP-A depth).
 - Cross-layer hook-consumer/runtime integration depth (task-ledger/retry/cooldown side-effects).
 - Broader synthetic-job recovery depth beyond landed `contextMessages` tool-surface shaping.
+- OpenClaw `jobs.ts` schedule/state parity depth closure execution (see
+  `cron-parity-gap-and-port-plan.md` §7.3).
 - OpenClaw CLI/dashboard controller parity only if MFC CLI becomes product scope.
 
 ## Validation

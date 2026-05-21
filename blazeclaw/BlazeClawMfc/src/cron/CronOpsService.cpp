@@ -1092,6 +1092,16 @@ namespace blazeclaw::cron {
 			state["nextRunAtMs"] = nullptr;
 			state["scheduleErrorCount"] = 1;
 			state["lastError"] = std::string("schedule error: ") + ex.what();
+			state["scheduleAutoDisabled"] = nullptr;
+			state["scheduleAutoDisabledAtMs"] = nullptr;
+			state["scheduleAutoDisabledReason"] = nullptr;
+			state["scheduleAutoDisableNotificationText"] = nullptr;
+			state["scheduleAutoDisableNotificationContextKey"] = nullptr;
+			state["scheduleAutoDisableNotificationAgentId"] = nullptr;
+			state["scheduleAutoDisableNotificationSessionKey"] = nullptr;
+			state["scheduleAutoDisableHeartbeatWakeRequested"] = nullptr;
+			state["scheduleAutoDisableHeartbeatWakeRequestedAtMs"] = nullptr;
+			state["scheduleAutoDisableHeartbeatWakeReason"] = nullptr;
 		}
 	}
 

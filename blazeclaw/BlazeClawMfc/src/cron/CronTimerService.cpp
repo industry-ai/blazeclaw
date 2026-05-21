@@ -27,6 +27,8 @@ namespace blazeclaw::cron {
 	namespace {
 		inline constexpr std::int64_t kMaxScheduleErrors = 3;
 
+		std::int64_t ResolveEveryAnchorMs(const CronJson& schedule, const CronJson& job);
+
 		inline constexpr std::int64_t kDefaultRetryDelayMs = 60'000;
 		inline constexpr std::int64_t kDefaultHeartbeatBusyMaxAttempts = 2;
 		inline constexpr std::int64_t kDefaultHeartbeatBusyDelayMs = 1500;
@@ -841,6 +843,23 @@ namespace blazeclaw::cron {
 		bool NormalizeJobTickState(CronJson& job, const std::int64_t nowMs) {
 			bool changed = false;
 			CronJson& state = EnsureStateObject(job);
+
+			if (job.contains("schedule") && job["schedule"].is_object()) {
+				CronJson& schedule = job["schedule"];
+				const std::string scheduleKind =
+					ToLowerCopy(TrimCopy(schedule.value("kind", std::string())));
+				if (scheduleKind == "every") {
+					const std::int64_t normalizedAnchorMs =
+						ResolveEveryAnchorMs(schedule, job);
+					const auto currentAnchorMs = TryReadInt64Field(schedule, "anchorMs");
+					if (!currentAnchorMs.has_value() ||
+						currentAnchorMs.value() != normalizedAnchorMs) {
+						schedule["anchorMs"] = normalizedAnchorMs;
+						changed = true;
+					}
+				}
+			}
+
 			if (!job.value("enabled", true)) {
 				if (state.contains("nextRunAtMs") && !state["nextRunAtMs"].is_null()) {
 					state["nextRunAtMs"] = nullptr;
@@ -2000,13 +2019,13 @@ namespace blazeclaw::cron {
 		std::optional<std::int64_t> ComputeNextAt(
 			const CronJson& schedule,
 			const CronJson& job,
-			const std::int64_t nowMs) {
+			const std::int64_t /*nowMs*/) {
 			const auto atMs =
 				TryReadInt64Field(schedule, "atMs").has_value()
 				? TryReadInt64Field(schedule, "atMs")
 				: TryReadInt64Field(schedule, "at");
 			if (!atMs.has_value()) {
-				return nowMs + 5 * 60 * 1000;
+				return std::nullopt;
 			}
 
 			const auto lastStatus =
@@ -2029,8 +2048,12 @@ namespace blazeclaw::cron {
 			const CronJson& schedule,
 			const CronJson& job,
 			const std::int64_t nowMs) {
+			if (!schedule.contains("expr") || !schedule["expr"].is_string()) {
+				throw std::invalid_argument("invalid cron expression field count");
+			}
+
 			const std::string expr =
-				TrimCopy(schedule.value("expr", std::string("* * * * *")));
+				TrimCopy(schedule.value("expr", std::string()));
 			std::istringstream stream(expr);
 			std::vector<std::string> parts;
 			std::string token;
@@ -2112,9 +2135,22 @@ namespace blazeclaw::cron {
 				static_cast<std::int64_t>(timezoneOffsetMinutes.value_or(0)) * 60 * 1000;
 			std::int64_t localNowMs = nowMs + timezoneOffsetMs;
 			const std::int64_t stepMs = hasSecondsField ? kSecondMs : kMinuteMs;
-			std::int64_t candidateLocalMs = hasSecondsField
-				? ((localNowMs / kSecondMs) + 1) * kSecondMs
-				: ((localNowMs / kMinuteMs) + 1) * kMinuteMs;
+
+			const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
+			const std::int64_t offsetMs =
+				(staggerMs.has_value() && staggerMs.value() > 0)
+				? ResolveStableCronOffsetMs(job, staggerMs.value())
+				: 0;
+
+			std::int64_t cursorMs = nowMs;
+			if (!hasSecondsField && offsetMs > 0) {
+				cursorMs = (std::max)(static_cast<std::int64_t>(0), nowMs - offsetMs);
+			}
+
+			std::int64_t candidateLocalMs =
+				hasSecondsField
+				? (((cursorMs + timezoneOffsetMs) / kSecondMs) + 1) * kSecondMs
+				: (((cursorMs + timezoneOffsetMs) / kMinuteMs) + 1) * kMinuteMs;
 			const int maxAttempts =
 				hasSecondsField ? (60 * 60 * 24 * 8) : (60 * 24 * 366);
 
@@ -2150,9 +2186,8 @@ namespace blazeclaw::cron {
 					MatchCronMonthToken(monthToken, month) &&
 					dayMatch) {
 					std::int64_t candidate = candidateLocalMs - timezoneOffsetMs;
-					const auto staggerMs = TryReadInt64Field(schedule, "staggerMs");
-					if (staggerMs.has_value() && staggerMs.value() > 0) {
-						candidate += ResolveStableCronOffsetMs(job, staggerMs.value());
+					if (offsetMs > 0) {
+						candidate += offsetMs;
 					}
 					if (candidate > nowMs) {
 						return candidate;
@@ -2162,7 +2197,7 @@ namespace blazeclaw::cron {
 				candidateLocalMs += stepMs;
 			}
 
-			return nowMs + kMinuteMs;
+			return std::nullopt;
 		}
 	}
 
@@ -2199,7 +2234,13 @@ namespace blazeclaw::cron {
 		}
 
 		if (kind == "cron") {
-			return ComputeNextCron(schedule, job, nowMs);
+			const auto next = ComputeNextCron(schedule, job, nowMs);
+			if (next.has_value()) {
+				return next;
+			}
+
+			const std::int64_t nextSecondMs = ((nowMs / kSecondMs) * kSecondMs) + kSecondMs;
+			return ComputeNextCron(schedule, job, nextSecondMs);
 		}
 
 		return std::nullopt;

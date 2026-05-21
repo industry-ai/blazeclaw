@@ -990,6 +990,57 @@ TEST_CASE("Cron timer computes deterministic stagger offset for the same job", "
 	REQUIRE(first.value() > nowMs);
 }
 
+TEST_CASE("Cron timer staggered cron schedule preserves due minute slot via shifted cursor", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson job = {
+		{ "id", "cron-shifted-cursor-minute" },
+		{ "enabled", true },
+		{ "schedule",
+			{
+				{ "kind", "cron" },
+				{ "expr", "* * * * *" },
+				{ "staggerMs", 59'000 }
+			} },
+		{ "state", CronJson::object() }
+	};
+
+	const auto next = timer.ComputeNextRunAtMs(job, nowMs);
+	REQUIRE(next.has_value());
+	REQUIRE(next.value() > nowMs);
+	REQUIRE((next.value() - nowMs) <= 60'000);
+}
+
+TEST_CASE("Cron timer rejects cron schedule missing expression field", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-cron-missing-expr" },
+			{ "name", "cron missing expr" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "cron" } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", CronJson::object() }
+		}
+	});
+
+	for (int i = 0; i < 3; ++i) {
+		timer.RecomputeSchedules(jobs, nowMs + (i * 1'000));
+	}
+
+	REQUIRE(jobs[0].value("enabled", true) == false);
+	REQUIRE(jobs[0].contains("state"));
+	REQUIRE(jobs[0]["state"].is_object());
+	REQUIRE(jobs[0]["state"].value("scheduleErrorCount", 0) >= 3);
+	REQUIRE(
+		jobs[0]["state"].value("lastError", std::string()).find("invalid cron expression field count") !=
+		std::string::npos);
+	REQUIRE(jobs[0]["state"].value("scheduleAutoDisabled", false));
+}
+
 TEST_CASE("Cron timer maintenance recompute preserves due slot when configured", "[cron][timer]") {
 	CronTimerService timer;
 	const std::int64_t nowMs = 1'700'000'000'000;
@@ -1008,6 +1059,51 @@ TEST_CASE("Cron timer maintenance recompute preserves due slot when configured",
 	const bool changed = timer.RecomputeSchedules(jobs, nowMs, options);
 	REQUIRE_FALSE(changed);
 	REQUIRE(jobs[0]["state"].value("nextRunAtMs", static_cast<std::int64_t>(0)) == dueAtMs);
+}
+
+TEST_CASE("Cron timer normalizes every anchor during schedule recompute", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+	const std::int64_t createdAtMs = nowMs - 120'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-every-anchor-normalize" },
+			{ "enabled", true },
+			{ "createdAtMs", createdAtMs },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", CronJson::object() }
+		}
+	});
+
+	const bool changed = timer.RecomputeSchedules(jobs, nowMs);
+	REQUIRE(changed);
+	REQUIRE(jobs[0]["schedule"].value("anchorMs", static_cast<std::int64_t>(-1)) == createdAtMs);
+	REQUIRE(jobs[0]["state"].contains("nextRunAtMs"));
+	REQUIRE(jobs[0]["state"]["nextRunAtMs"].is_number_integer());
+}
+
+TEST_CASE("Cron timer clears invalid at schedule without synthetic fallback", "[cron][timer][step5]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-at-invalid-shape" },
+			{ "name", "at invalid shape" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "at" } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } },
+			{ "state", { { "nextRunAtMs", nowMs + 60'000 } } }
+		}
+	});
+
+	const bool changed = timer.RecomputeSchedules(jobs, nowMs);
+	REQUIRE(changed);
+	REQUIRE(jobs[0]["state"].contains("nextRunAtMs"));
+	REQUIRE(jobs[0]["state"]["nextRunAtMs"].is_null());
+	REQUIRE_FALSE(jobs[0]["state"].contains("scheduleErrorCount"));
 }
 
 TEST_CASE("Cron normalize add accepts ISO schedule.at and sets atMs", "[cron][normalize]") {
@@ -4496,44 +4592,54 @@ TEST_CASE(
 		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
 	REQUIRE_FALSE(cronId.empty());
 
-	const ResponseFrame wakeNow = RouteGatewayCron(
+	const ResponseFrame cronRun = RouteGatewayCron(
 		host,
-		"wpf-wake-alert-not-configured",
-		"wake",
-		std::string("{\"mode\":\"now\",\"text\":\"execute failure alert not configured\"}"));
-	REQUIRE(wakeNow.ok);
-	REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
-
-	const ResponseFrame cronRuns = RouteGatewayCron(
-		host,
-		"wpf-cron-runs-alert-not-configured",
-		"cron.runs",
-		std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
-		"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
-	REQUIRE(cronRuns.ok);
-	REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
-
-	const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
-	REQUIRE(runsPayload.contains("entries"));
-	REQUIRE(runsPayload["entries"].is_array());
+		"wpf-cron-run-alert-not-configured",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+	REQUIRE(cronRun.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
 
 	bool sawExpectedEntry = false;
-	for (const auto& entry : runsPayload["entries"]) {
-		if (!entry.is_object()) {
-			continue;
-		}
-		if (entry.value("action", std::string()) != "finished") {
-			continue;
-		}
+	for (int attempt = 0; attempt < 3 && !sawExpectedEntry; ++attempt) {
+		const ResponseFrame wakeNow = RouteGatewayCron(
+			host,
+			"wpf-wake-alert-not-configured-" + std::to_string(attempt),
+			"wake",
+			std::string("{\"mode\":\"now\",\"text\":\"execute failure alert not configured\"}"));
+		REQUIRE(wakeNow.ok);
+		REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
 
-		sawExpectedEntry = true;
-		REQUIRE(entry.value("status", std::string()) == "error");
-		REQUIRE(entry.value("failureAlertSuppressed", false));
-		REQUIRE(
-			entry.value("failureAlertSuppressedReason", std::string()) ==
-			"not_configured");
-		REQUIRE(entry.value("failureAlertStatus", std::string()) == "not-requested");
-		break;
+		const ResponseFrame cronRuns = RouteGatewayCron(
+			host,
+			"wpf-cron-runs-alert-not-configured-" + std::to_string(attempt),
+			"cron.runs",
+			std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+			"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
+		REQUIRE(cronRuns.ok);
+		REQUIRE(ValidateGatewayCronResponse("cron.runs", cronRuns));
+
+		const CronJson runsPayload = CronJson::parse(cronRuns.payloadJson.value());
+		REQUIRE(runsPayload.contains("entries"));
+		REQUIRE(runsPayload["entries"].is_array());
+
+		for (const auto& entry : runsPayload["entries"]) {
+			if (!entry.is_object()) {
+				continue;
+			}
+			if (entry.value("action", std::string()) != "finished") {
+				continue;
+			}
+
+			sawExpectedEntry = true;
+			REQUIRE(entry.value("status", std::string()) == "error");
+			REQUIRE(entry.value("failureAlertSuppressed", false));
+			REQUIRE(
+				entry.value("failureAlertSuppressedReason", std::string()) ==
+				"not_configured");
+			REQUIRE(entry.value("failureAlertStatus", std::string()) == "not-requested");
+			break;
+		}
 	}
 
 	REQUIRE(sawExpectedEntry);
@@ -4640,6 +4746,73 @@ TEST_CASE("Cron timer clears schedule auto-disable notification signaling after 
 	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeRequested"].is_null());
 	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeRequestedAtMs"].is_null());
 	REQUIRE(jobs[0]["state"]["scheduleAutoDisableHeartbeatWakeReason"].is_null());
+}
+
+TEST_CASE("Cron ops update schedule error resets stale auto-disable signaling fields", "[cron][ops][step6]") {
+	IsolatedCronOpsFixture fixture("update-schedule-error-clears-stale-signals");
+	CronOpsService& ops = fixture.ops();
+
+	const CronJson added = ops.Add({
+		{ "name", "ops stale signal reset" },
+		{ "enabled", true },
+		{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+		{ "payload", { { "kind", "systemEvent" }, { "text", "tick" } } }
+	});
+	const std::string id = added.value("id", std::string());
+	REQUIRE_FALSE(id.empty());
+
+	const std::int64_t nowMs = blazeclaw::cron::UtcNowMs();
+	(void)ops.Update({
+		{ "id", id },
+		{ "patch", { { "state",
+			{
+				{ "scheduleAutoDisabled", true },
+				{ "scheduleAutoDisabledAtMs", nowMs - 1000 },
+				{ "scheduleAutoDisabledReason", "schedule_error_threshold" },
+				{ "scheduleAutoDisableNotificationText", "stale" },
+				{ "scheduleAutoDisableNotificationContextKey", "cron:stale:auto-disabled" },
+				{ "scheduleAutoDisableNotificationAgentId", "agent-stale" },
+				{ "scheduleAutoDisableNotificationSessionKey", "session:stale" },
+				{ "scheduleAutoDisableHeartbeatWakeRequested", true },
+				{ "scheduleAutoDisableHeartbeatWakeRequestedAtMs", nowMs - 500 },
+				{ "scheduleAutoDisableHeartbeatWakeReason", "cron:stale:auto-disabled" }
+			} } } }
+	});
+
+	const CronJson updated = ops.Update({
+		{ "id", id },
+		{ "patch", { { "schedule", { { "kind", "cron" } } } } }
+	});
+
+	REQUIRE(updated.contains("state"));
+	REQUIRE(updated["state"].is_object());
+	REQUIRE(updated["state"].value("scheduleErrorCount", 0) >= 1);
+	REQUIRE(updated["state"]["nextRunAtMs"].is_null());
+	REQUIRE(updated["state"].value("lastError", std::string()).find("schedule error") != std::string::npos);
+	REQUIRE(updated["state"]["scheduleAutoDisabled"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisabledAtMs"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisabledReason"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableNotificationText"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableNotificationContextKey"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableNotificationAgentId"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableNotificationSessionKey"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableHeartbeatWakeRequested"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableHeartbeatWakeRequestedAtMs"].is_null());
+	REQUIRE(updated["state"]["scheduleAutoDisableHeartbeatWakeReason"].is_null());
+}
+
+TEST_CASE("Cron runs response validator accepts projection fields for jobs-service parity metadata", "[cron][schema][response][step9]") {
+	SchemaValidationIssue issue{};
+
+	const ResponseFrame validResponse{
+		.id = "cron-runs-jobs-ts-projection-fields",
+		.ok = true,
+		.payloadJson = std::string(
+			"{\"entries\":[{\"ts\":1700000000000,\"jobId\":\"cron-1\",\"runId\":\"manual:cron-1:1:1\",\"action\":\"finished\",\"status\":\"ok\",\"nextRunAtMs\":1700000060000,\"startedAtMs\":1700000000000,\"endedAtMs\":1700000000100,\"lifecycleState\":\"terminal\",\"taskLedgerStatus\":\"ok\",\"taskLedgerDisposition\":\"dispatched\",\"taskLedgerTerminal\":true}],\"total\":1,\"limit\":20,\"offset\":0,\"nextOffset\":null,\"hasMore\":false}"),
+		.error = std::nullopt,
+	};
+
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateResponseForMethod("cron.runs", validResponse, issue));
 }
 
 TEST_CASE("Cron timer records non-retryable delivery target failure", "[cron][timer]") {
