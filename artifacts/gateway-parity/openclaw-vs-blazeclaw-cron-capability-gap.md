@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CT WP-A runtime-depth hardening + docs sync)
+Last refreshed: 2026-05-21 (Phase CU WP-B outbound delivery/channel projection hardening + docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.1 work packages, §7.3–§7.5 uplift governance)
 
@@ -97,7 +97,7 @@ Phase CR gate refresh: `[cron][store]` 60/14, `[cron][timer]` 718/103,
 | Package | Focus | Status |
 | --- | --- | --- |
 | WP-A | Production runtime execution default | **P0 complete** (Phase CT hardening applied) |
-| WP-B | Outbound announce/webhook/failure-alert dispatch | **P1 complete** |
+| WP-B | Outbound announce/webhook/failure-alert dispatch | **P1 complete** (Phase CU metadata projection depth landed) |
 | WP-C | Auto-disable + schedule syntax breadth | **P2 complete** |
 | WP-D | Scheduler hardening + realtime events | **P3 complete** (baseline) |
 | WP-E | Store JSON5 + per-job `runs/<jobId>.jsonl` + recovery/repair precedence | **High (Phase CQ)** |

@@ -3761,6 +3761,10 @@ namespace blazeclaw::gateway {
 			cron_production::ReadStringField(cronPayload, "failureAlertMode");
 		const std::string target =
 			cron_production::ReadStringField(cronPayload, "failureAlertTarget");
+		const std::string channel =
+			cron_production::ReadStringField(cronPayload, "failureAlertChannel");
+		const std::string accountId =
+			cron_production::ReadStringField(cronPayload, "failureAlertAccountId");
 		const std::string summary =
 			cron_production::ReadStringField(cronPayload, "summary");
 		const std::string error =
@@ -3775,6 +3779,12 @@ namespace blazeclaw::gateway {
 		}
 		if (!target.empty()) {
 			text += " target=" + target;
+		}
+		if (!channel.empty()) {
+			text += " channel=" + channel;
+		}
+		if (!accountId.empty()) {
+			text += " accountId=" + accountId;
 		}
 		if (!summary.empty()) {
 			text += " summary=" + summary;
@@ -3806,7 +3816,9 @@ namespace blazeclaw::gateway {
 				{ "text", text },
 				{ "jobId", jobId },
 				{ "mode", mode },
-				{ "target", target }
+				{ "target", target },
+				{ "channel", channel },
+				{ "accountId", accountId }
 			};
 			if (!error.empty()) {
 				eventPayload["error"] = error;

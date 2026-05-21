@@ -4789,6 +4789,71 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Cron gateway production wiring failure-alert callback includes channel and account metadata",
+	"[cron][gateway][wp-f][wp-b]") {
+	GatewayCronProductionFixture fixture("production-failure-alert-channel-account-callback");
+	GatewayHost& host = fixture.gateway();
+
+	std::vector<GatewayHost::ChatRuntimeRequest> callbackRequests;
+	host.SetChatRuntimeCallback(
+		[&callbackRequests](const GatewayHost::ChatRuntimeRequest& request) {
+			callbackRequests.push_back(request);
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "ok";
+			return result;
+		});
+
+	const ResponseFrame cronAdd = RouteGatewayCron(
+		host,
+		"wpf-cron-add-alert-channel-account",
+		"cron.add",
+		std::string(
+			"{\"name\":\"wp-f alert channel account job\",\"enabled\":true,"
+			"\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},"
+			"\"payload\":{\"kind\":\"systemEvent\",\"text\":\"gateway failure alert channel account\"},"
+			"\"delivery\":{\"mode\":\"webhook\",\"to\":\"invalid-url\"},"
+			"\"failureAlert\":{\"after\":1,\"cooldownMs\":0,\"mode\":\"announce\",\"channel\":\"alerts\",\"accountId\":\"acc-1\"}}"));
+	REQUIRE(cronAdd.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.add", cronAdd));
+	const std::string cronId =
+		CronJson::parse(cronAdd.payloadJson.value()).value("id", std::string());
+	REQUIRE_FALSE(cronId.empty());
+
+	const ResponseFrame cronRun = RouteGatewayCron(
+		host,
+		"wpf-cron-run-alert-channel-account",
+		"cron.run",
+		std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+	REQUIRE(cronRun.ok);
+	REQUIRE(ValidateGatewayCronResponse("cron.run", cronRun));
+
+	bool sawFailureAlertCallback = false;
+	for (int attempt = 0; attempt < 3 && !sawFailureAlertCallback; ++attempt) {
+		const ResponseFrame wakeNow = RouteGatewayCron(
+			host,
+			"wpf-wake-alert-channel-account-" + std::to_string(attempt),
+			"wake",
+			std::string("{\"mode\":\"now\",\"text\":\"execute failure alert channel account\"}"));
+		REQUIRE(wakeNow.ok);
+		REQUIRE(ValidateGatewayCronResponse("wake", wakeNow));
+
+		for (const auto& request : callbackRequests) {
+			if (request.message.find("[cron][failure-alert]") == std::string::npos) {
+				continue;
+			}
+			if (request.message.find("channel=alerts") != std::string::npos &&
+				request.message.find("accountId=acc-1") != std::string::npos) {
+				sawFailureAlertCallback = true;
+				break;
+			}
+		}
+	}
+
+	REQUIRE(sawFailureAlertCallback);
+}
+
+TEST_CASE(
 	"Cron ops startup catchup defers excess missed jobs with staggered nextRunAtMs",
 	"[cron][timer][wp-d]") {
 	IsolatedCronOpsFixture fixture("startup-catchup-stagger");
