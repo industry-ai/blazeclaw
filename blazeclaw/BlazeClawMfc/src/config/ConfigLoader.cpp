@@ -1114,6 +1114,12 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.activeModelId=", 0) == 0) {
+				outConfig.speechRecognition.activeModelId =
+					Trim(trimmedLine.substr(20));
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.model_path=", 0) == 0) {
 				outConfig.speechRecognition.modelPath = Trim(trimmedLine.substr(18));
 				continue;
@@ -1925,6 +1931,12 @@ namespace blazeclaw::config {
 		outConfig.speechRecognition.provider = ToLowerTrim(outConfig.speechRecognition.provider);
 		if (outConfig.speechRecognition.provider.empty()) {
 			outConfig.speechRecognition.provider = L"onnx";
+		}
+		outConfig.speechRecognition.activeModelId =
+			ToLowerTrim(outConfig.speechRecognition.activeModelId);
+		if (outConfig.speechRecognition.activeModelId.empty()) {
+			outConfig.speechRecognition.activeModelId =
+				L"speech/qwen3-asr-1.7b-onnx";
 		}
 		outConfig.speechRecognition.modelVariant = ToLowerTrim(outConfig.speechRecognition.modelVariant);
 		if (outConfig.speechRecognition.modelVariant != L"int4" &&

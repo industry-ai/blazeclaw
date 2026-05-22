@@ -12,7 +12,10 @@ without changing the ONNX runtime backend contract.
 - Completed: Step 2 (single-select feature-model behavior on load/save)
 - Completed: Step 3 (persist selected model mapping into `speech.storageRoot`)
 - Completed: Step 4 (manual non-catalog storage root preserved with unselected catalog state)
-- Remaining: Step 5+
+- Completed: Step 5 (optional `speech.activeModelId` schema + loader + Settings persistence)
+- Completed: Step 6 (docs/config comments updated for catalog id + switching behavior)
+- Completed: Step 7 (validation run with required command attempt + project fallback build)
+- Remaining: none
 
 ## Codebase analysis summary
 
@@ -31,14 +34,17 @@ without changing the ONNX runtime backend contract.
 - `CSettingsDialog::LoadFeatureModels()` shows two ASR entries in `IDC_LIST_MODELS_EX`:
   - `speech/qwen3-asr-1.7b-onnx`
   - `speech/qwen3-asr-0.6b-onnx`
-- But save path in `OnOK()` only computes:
-  - `speechEnabled = any(featureModel.enabled)`
-- It does **not** map selected model to `speech.storageRoot`.
-- Default fallback still points to 1.7B path in `SettingsDialog.cpp`:
-  - `L"BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx"`.
 
-### Current gap
-Switching is not functional yet because feature-list selection is disconnected from persisted model root selection.
+- Save path in `OnOK()` now:
+  - normalizes feature selection to single-select,
+  - maps selected feature model id to catalog `speech.storageRoot`,
+  - persists optional `speech.activeModelId`.
+- Manual non-catalog `speech.storageRoot` edits are preserved with no catalog
+  model selected.
+
+### Current status
+Catalog-based ASR model switching is implemented for 1.7B and 0.6B models,
+including persisted model identity and custom-root compatibility behavior.
 
 ## Design decision
 Use `speech.storageRoot` as the single source of truth for selected ASR model directory.

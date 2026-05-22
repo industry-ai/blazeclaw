@@ -487,7 +487,10 @@ namespace blazeclaw::config {
 		bool cudaEnabled = true;
 		std::wstring provider = L"onnx";
 		std::wstring rolloutStage = L"dev";
-		std::wstring storageRoot = L"models/chat/qwen3-asr-1.7b-onnx";
+		std::wstring storageRoot =
+			L"BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx";
+		std::wstring activeModelId =
+			L"speech/qwen3-asr-1.7b-onnx";
 		std::wstring modelPath;
 		std::wstring modelVariant = L"auto"; // auto|int4|fp16|fp32
 		std::wstring runtimeHotMode = L"always_online"; // always_online|on_demand|idle_timeout

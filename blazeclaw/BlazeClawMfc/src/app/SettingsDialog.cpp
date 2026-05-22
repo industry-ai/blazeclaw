@@ -39,6 +39,28 @@ namespace {
 		return kAsrFeatureModels.front().storageRoot;
 	}
 
+	const char* DefaultAsrFeatureModelId()
+	{
+		return kAsrFeatureModels.front().id;
+	}
+
+	std::optional<size_t> TryResolveFeatureIndexByFeatureId(
+		const std::vector<CSettingsDialog::FeatureModelItem>& featureModels,
+		const std::string& featureModelId)
+	{
+		if (featureModelId.empty()) {
+			return std::nullopt;
+		}
+
+		for (size_t i = 0; i < featureModels.size(); ++i) {
+			if (featureModels[i].id == featureModelId) {
+				return i;
+			}
+		}
+
+		return std::nullopt;
+	}
+
 	std::wstring NormalizePathForCompare(const std::wstring& raw)
 	{
 		std::wstring normalized = raw;
@@ -167,6 +189,7 @@ namespace {
 		bool enabled = false;
 		std::wstring provider = L"onnx";
 		std::wstring storageRoot = DefaultAsrStorageRoot();
+		std::string activeModelId = DefaultAsrFeatureModelId();
 		std::wstring modelPath;
 	};
 
@@ -306,6 +329,11 @@ namespace {
 				continue;
 			}
 
+			if (trimmed.rfind(L"speech.activeModelId=", 0) == 0) {
+				state.activeModelId = ToNarrowAscii(TrimW(trimmed.substr(20)));
+				continue;
+			}
+
 			if (trimmed.rfind(L"speech.model_path=", 0) == 0) {
 				state.modelPath = TrimW(trimmed.substr(18));
 				continue;
@@ -317,6 +345,9 @@ namespace {
 		}
 		if (state.storageRoot.empty()) {
 			state.storageRoot = DefaultAsrStorageRoot();
+		}
+		if (state.activeModelId.empty()) {
+			state.activeModelId = DefaultAsrFeatureModelId();
 		}
 
 		return state;
@@ -395,6 +426,12 @@ void CSettingsDialog::LoadFeatureModels()
 		selectedFeatureIndex = TryResolveFeatureIndexByStorageRoot(
 			m_featureModels,
 			speechConfig.storageRoot);
+
+		if (!selectedFeatureIndex.has_value()) {
+			selectedFeatureIndex = TryResolveFeatureIndexByFeatureId(
+				m_featureModels,
+				speechConfig.activeModelId);
+		}
 
 		if (!selectedFeatureIndex.has_value() &&
 			TrimW(speechConfig.storageRoot).empty() &&
@@ -784,6 +821,12 @@ void CSettingsDialog::OnOK()
 		lines,
 		L"speech.storageRoot",
 		speechStorageRoot);
+	UpsertConfigEntry(
+		lines,
+		L"speech.activeModelId",
+		selectedFeatureModelId.has_value()
+		? ToWideAscii(*selectedFeatureModelId)
+		: L"");
 	UpsertConfigEntry(
 		lines,
 		L"speech.model_path",
