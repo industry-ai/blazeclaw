@@ -484,6 +484,9 @@
         const onSessionControlStateChanged = typeof opts.onSessionControlStateChanged === "function"
             ? opts.onSessionControlStateChanged
             : function () { };
+        const onCronSlashCommand = typeof opts.onCronSlashCommand === "function"
+            ? opts.onCronSlashCommand
+            : null;
 
         state.sessionOptions = Array.isArray(state.sessionOptions)
             ? state.sessionOptions
@@ -1556,6 +1559,25 @@
             if (command === "abort") {
                 await abort();
                 return { handled: true };
+            }
+
+            if (command === "cron") {
+                if (typeof onCronSlashCommand !== "function") {
+                    addMessage("/cron is unavailable in this session.", "error");
+                    return { handled: true };
+                }
+
+                const slashResult = await onCronSlashCommand(line);
+                const result = slashResult && typeof slashResult === "object"
+                    ? slashResult
+                    : {};
+                const messageText = String(result.message || "").trim();
+                if (messageText) {
+                    addMessage(messageText, result.kind === "error" ? "error" : "peer");
+                }
+                return {
+                    handled: true,
+                };
             }
 
             return { handled: false };
@@ -3768,6 +3790,47 @@
                 row.text.includes("waiting for terminal event; queued message (1)")),
                 "queued-send guardrail should surface explicit waiting-for-terminal status text");
             summary.push("queue waiting-status guardrail");
+        }
+
+        {
+            const state = createRegressionState();
+            state.inputEl.value = "/cron status";
+            const captured = [];
+            let cronCalls = 0;
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    captured.push({
+                        text: String(text || ""),
+                        kind: String(kind || ""),
+                    });
+                },
+                onCronSlashCommand: async (line) => {
+                    cronCalls += 1;
+                    return {
+                        handled: true,
+                        ok: true,
+                        kind: "peer",
+                        message: JSON.stringify({
+                            surface: "cron-cli",
+                            ok: true,
+                            code: "ok",
+                            command: "status",
+                            echo: line,
+                        }),
+                    };
+                },
+            });
+
+            await controller.send(false);
+            assertRegression(cronCalls === 1,
+                "chat slash handler should route /cron command lines to injected execution bridge callback");
+            assertRegression(captured.some((row) =>
+                row.kind === "peer" &&
+                row.text.indexOf("\"surface\":\"cron-cli\"") >= 0 &&
+                row.text.indexOf("\"command\":\"status\"") >= 0),
+                "chat slash handler should render deterministic /cron execution envelope output");
+            summary.push("cron slash execution bridge callback");
         }
 
         {

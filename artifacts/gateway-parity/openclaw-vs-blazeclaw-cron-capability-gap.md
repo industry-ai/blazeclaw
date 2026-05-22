@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase DC §7.7 Step 3-4 grammar + UX contract baseline)
+Last refreshed: 2026-05-21 (Phase DD §7.7 Step 5-6 execution bridge + regression baseline)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.7)
 
@@ -33,9 +33,9 @@ residual edges, and expanded production E2E.
 | --- | --- |
 | P0–P9 + P10 tool depth | **Complete** |
 | §7.6 depth (P11+) | **Complete** |
-| §7.7 `/cron` cli parity (Step 1-4) | **In Progress** (baseline landed) |
+| §7.7 `/cron` cli parity (Step 1-6) | **In Progress** (baseline landed) |
 
-## Remaining gaps (Phase DC)
+## Remaining gaps (Phase DD)
 
 | Theme | OpenClaw | BlazeClaw gap |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ residual edges, and expanded production E2E.
 | Active job dedupe | `active-jobs.ts` | Lighter process-level guard |
 | Past `at` guard | `validate-timestamp.ts` | Normalization only |
 | Store ops | Doctor migrations + runLog prune config | Backup/jsonl landed; doctor depth open |
-| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser + planner + structured UX baseline landed (Step 1-4); execution routing/E2E parity pending |
+| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser + planner + structured UX + execution bridge + regression baseline landed (Step 1-6); production E2E parity pending |
 
 ## Validation (2026-05-21)
 

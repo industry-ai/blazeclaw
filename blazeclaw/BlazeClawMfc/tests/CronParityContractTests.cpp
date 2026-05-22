@@ -887,6 +887,73 @@ TEST_CASE("Cron gateway pre-validator normalization canonicalizes flat update/ru
 		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
 	}
 
+	SECTION("cron.add canonicalizes cli-shaped delivery/failureAlert flat aliases") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-add-cli-flat-aliases\","
+				"\"method\":\"cron.add\","
+				"\"params\":{"
+				"\"kind\":\"every\","
+				"\"everyMs\":1800000,"
+				"\"text\":\"nightly ping\","
+				"\"deliveryMode\":\"webhook\","
+				"\"deliveryUrl\":\"https://example.test/delivery\","
+				"\"failureAlertAfter\":2,"
+				"\"failureAlertCooldown\":10,"
+				"\"failureAlertMode\":\"announce\","
+				"\"failureAlertChannel\":\"wechat\","
+				"\"failureAlertTo\":\"ops-room\","
+				"\"failureAlertAccountId\":\"wechat.default\""
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-add-cli-flat-aliases");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
+	SECTION("cron.update patch canonicalizes cli-shaped flat aliases") {
+		const nlohmann::json response = ParseGatewayFrame(
+			host.HandleInboundText(
+				"{"
+				"\"type\":\"req\","
+				"\"id\":\"cron-update-cli-flat-aliases\","
+				"\"method\":\"cron.update\","
+				"\"params\":{"
+				"\"id\":\"cron-1\","
+				"\"patch\":{"
+				"\"kind\":\"every\","
+				"\"everyMs\":1800000,"
+				"\"message\":\"patched payload\","
+				"\"deliveryMode\":\"webhook\","
+				"\"deliveryUrl\":\"https://example.test/update\","
+				"\"failureAlertAfter\":3,"
+				"\"failureAlertCooldown\":30,"
+				"\"failureAlertMode\":\"announce\","
+				"\"failureAlertChannel\":\"wechat\","
+				"\"failureAlertTo\":\"ops-room\","
+				"\"failureAlertAccountId\":\"wechat.default\""
+				"}"
+				"}"
+				"}"));
+
+		REQUIRE(response.value("type", std::string()) == "res");
+		REQUIRE(response.value("id", std::string()) == "cron-update-cli-flat-aliases");
+		REQUIRE_FALSE(response.value("ok", true));
+		REQUIRE(response.contains("error"));
+		REQUIRE(response["error"].is_object());
+		REQUIRE(response["error"].value("code", std::string()) != "schema_missing_field");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_params");
+		REQUIRE(response["error"].value("code", std::string()) != "schema_invalid_type");
+	}
+
 	SECTION("wake maps wakeMode alias to mode") {
 		const nlohmann::json response = ParseGatewayFrame(
 			host.HandleInboundText(

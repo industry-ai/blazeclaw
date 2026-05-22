@@ -2514,6 +2514,22 @@
             syncSessionControlsPolling();
             updateComposerState();
         },
+        onCronSlashCommand: async (input) => {
+            if (!agentsController || typeof agentsController.executeCronCliSlashCommand !== "function") {
+                return {
+                    handled: true,
+                    ok: false,
+                    kind: "error",
+                    message: JSON.stringify({
+                        surface: "cron-cli",
+                        ok: false,
+                        code: "unavailable",
+                        message: "/cron is unavailable because agents control plane is disabled.",
+                    }),
+                };
+            }
+            return agentsController.executeCronCliSlashCommand(String(input || ""));
+        },
     });
 
     if (state.speechTranscribeBtn) {
