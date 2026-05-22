@@ -4,6 +4,7 @@
 #include <atomic>
 #include <mutex>
 #include <functional>
+#include <chrono>
 #include "CNetwork_c.h"
 #include "config_client.h"
 
@@ -25,7 +26,8 @@ struct BindResult {
     std::string conversation_id;
     std::string node_id;
     std::string device_id;
-    std::string qr_payload_url;  // 服务器返回的二维码 URL
+    std::string expiresAt;
+    std::string qr_payload_url;
 };
 
 class QRCodeLoginService {
@@ -66,6 +68,9 @@ public:
     // 是否正在运行（轮询中）
     bool IsRunning() const { return m_running.load(); }
 
+    // 检查二维码是否过期
+    bool IsLocallyExpired() const;
+
 private:
     QRCodeLoginService() = default;
     ~QRCodeLoginService() = default;
@@ -81,6 +86,9 @@ private:
     // 更新状态（通知回调）
     void UpdateStatus(QRCodeStatus status, const BindResult& result);
 
+    // 检查本地过期时间
+    time_t ParseIso8601Time(const std::string& timeStr);
+
     // 成员变量
     CNetwork_c* m_network = nullptr;
     std::string m_server_ip;
@@ -89,6 +97,7 @@ private:
     std::string m_qr_payload;
     std::atomic<QRCodeStatus> m_status{QRCodeStatus::Unknown};
     std::atomic<bool> m_running{false};
+    std::chrono::system_clock::time_point m_expires_at;  // 本地过期时间点
     std::mutex m_mutex;
     std::function<void(QRCodeStatus, const BindResult&)> m_callback;
 };

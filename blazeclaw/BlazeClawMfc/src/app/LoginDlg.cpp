@@ -394,7 +394,7 @@ void CLoginDlg::OnBnClickedQrCodeLoginButton()
 	ShowWindow(SW_HIDE);
 	
 	// 弹出二维码登录对话框
-	CQRCodeLoginDlg qrDlg(this);
+	CQRCodeLoginDlg qrDlg;
 	qrDlg.SetLoginCallback([this](bool success, const std::wstring& message) {
 		if (success)
 		{

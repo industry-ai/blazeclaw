@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "framework.h"
 #include "QRCodeLoginService.h"
 #include "CNetwork_c.h"
@@ -51,6 +51,16 @@ bool QRCodeLoginService::CreateBind(const std::string& device_type,
 
     LOG_INFO("[QRCodeLoginService] Config: host={}, port={}", host, port);
 
+    // 检查配置是否有效
+    if (host.empty()) {
+        LOG_ERROR("[QRCodeLoginService] Host is empty! Using default 127.0.0.1");
+        host = "127.0.0.1";
+    }
+    if (port <= 0) {
+        LOG_ERROR("[QRCodeLoginService] Port is invalid! Using default 8765");
+        port = 8765;
+    }
+
     // 构建 CREATE_BIND 请求（与 TV 端一致）
     json req;
     req["cmd"] = "CREATE_BIND";
@@ -65,6 +75,7 @@ bool QRCodeLoginService::CreateBind(const std::string& device_type,
     std::string response = SendNodeBindRequest(payload);
     if (response.empty()) {
         LOG_ERROR("[QRCodeLoginService] Empty response from server");
+        LOG_ERROR("[QRCodeLoginService] Possible reasons: server not running, connection failed, or server returned empty response");
         return false;
     }
 
@@ -75,6 +86,7 @@ bool QRCodeLoginService::CreateBind(const std::string& device_type,
     if (!result.success) {
         LOG_ERROR("[QRCodeLoginService] CreateBind failed: code={}, msg={}",
                   result.code, result.error_message);
+        LOG_ERROR("[QRCodeLoginService] Server response indicates failure");
         return false;
     }
 
@@ -94,6 +106,14 @@ bool QRCodeLoginService::CreateBind(const std::string& device_type,
 
     m_status.store(QRCodeStatus::Pending);
     m_running.store(true);
+
+    if (!result.expiresAt.empty()) {
+        time_t expire_time = ParseIso8601Time(result.expiresAt);
+        if (expire_time > 0) {
+            m_expires_at = std::chrono::system_clock::from_time_t(expire_time);
+            LOG_INFO("[QRCodeLoginService] QR code expires at: {}", result.expiresAt);
+        }
+    }
 
     UpdateStatus(QRCodeStatus::Pending, result);
     LOG_INFO("[QRCodeLoginService] Bind created successfully!");
@@ -231,6 +251,7 @@ BindResult QRCodeLoginService::ParseNodeBindResponse(const std::string& json_res
         result.conversation_id = root.value("conversation_id", "");
         result.node_id = root.value("node_id", "");
         result.device_id = root.value("device_id", "");
+        result.expiresAt = root.value("expires_at", "");
 
         // 如果有错误消息
         if (root.contains("error")) {
@@ -269,4 +290,41 @@ void QRCodeLoginService::Stop() {
     m_status.store(QRCodeStatus::Unknown);
     m_bind_token.clear();
     m_qr_payload.clear();
+}
+
+time_t QRCodeLoginService::ParseIso8601Time(const std::string& timeStr) {
+    if (timeStr.empty()) {
+        return 0;
+    }
+
+    struct tm tm = {};
+    int milliseconds = 0;
+
+    if (sscanf_s(timeStr.c_str(), "%d-%d-%dT%d:%d:%d.%dZ",
+                 &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+                 &tm.tm_hour, &tm.tm_min, &tm.tm_sec, &milliseconds) == 7) {
+        tm.tm_year -= 1900;
+        tm.tm_mon -= 1;
+        tm.tm_isdst = 0;
+        return _mkgmtime(&tm);
+    }
+
+    if (sscanf_s(timeStr.c_str(), "%d-%d-%dT%d:%d:%dZ",
+                 &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+                 &tm.tm_hour, &tm.tm_min, &tm.tm_sec) == 6) {
+        tm.tm_year -= 1900;
+        tm.tm_mon -= 1;
+        tm.tm_isdst = 0;
+        return _mkgmtime(&tm);
+    }
+
+    return 0;
+}
+
+bool QRCodeLoginService::IsLocallyExpired() const {
+    if (m_expires_at.time_since_epoch().count() == 0) {
+        return false;
+    }
+    auto now = std::chrono::system_clock::now();
+    return now >= m_expires_at;
 }

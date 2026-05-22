@@ -5,8 +5,6 @@
 #include <functional>
 #include <string>
 #include <vector>
-#include <thread>
-#include <atomic>
 
 // 前向声明
 class QRCodeLoginService;
@@ -52,6 +50,7 @@ private:
     UINT_PTR m_pollingTimer = 0;
     std::atomic<bool> m_isLoggedIn{false};
     std::atomic<bool> m_stopPolling{false};
+    bool m_isExpired{false};
     std::string m_bindToken;
     std::vector<std::vector<bool>> m_qrData;
 

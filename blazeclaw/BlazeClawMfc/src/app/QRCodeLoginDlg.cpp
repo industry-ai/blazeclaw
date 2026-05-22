@@ -1,13 +1,12 @@
 ﻿#include "pch.h"
-#include "framework.h"
 #include "QRCodeLoginDlg.h"
 #include "QRCodeLoginService.h"
 #include "afxdialogex.h"
 #include "Logger.h"
 #include "qrcodegen.hpp"
 
-#include <time.h>
 #include <vector>
+#include <time.h>
 #include <string>
 #include <algorithm>
 
@@ -24,6 +23,7 @@ CQRCodeLoginDlg::CQRCodeLoginDlg(CWnd* pParent /*=nullptr*/)
     : CDialogEx(IDD_QRCODE_LOGIN, pParent)
     , m_loginStatus(_T("正在获取二维码..."))
     , m_pollingTimer(0)
+    , m_isExpired(false)
 {
 }
 
@@ -49,13 +49,14 @@ BOOL CQRCodeLoginDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
 
-    if (!RequestQrCode())
+    if (RequestQrCode())
     {
-        UpdateStatus(_T("获取二维码失败，请点击刷新重试"));
-        return TRUE;
+        StartPolling();
     }
-
-    StartPolling();
+    else
+    {
+        UpdateStatus(_T("获取二维码失败，请重试"));
+    }
 
     return TRUE;
 }
@@ -80,7 +81,12 @@ void CQRCodeLoginDlg::OnPaint()
 {
     CPaintDC dc(this);
 
-    if (m_qrData.empty()) return;
+    if (m_qrData.empty()) {
+        LOG_INFO("[CQRCodeLoginDlg] OnPaint: m_qrData is empty, skipping");
+        return;
+    }
+
+    LOG_INFO("[CQRCodeLoginDlg] OnPaint: drawing QR code {}x{}", m_qrData.size(), m_qrData.size());
 
     CWnd* pStatic = GetDlgItem(IDC_STATIC_QRCODE);
     if (!pStatic) return;
@@ -131,9 +137,12 @@ void CQRCodeLoginDlg::OnBnClickedRefresh()
 {
     StopPolling();
     m_isLoggedIn.store(false);
+    m_isExpired = false;
     UpdateStatus(_T("正在获取二维码..."));
     m_qrData.clear();
     Invalidate();
+    // 清理之前的绑定状态
+    QRCodeLoginService::Instance().Stop();
 
     if (RequestQrCode())
     {
@@ -215,11 +224,18 @@ bool CQRCodeLoginDlg::RequestQrCode()
         LOG_INFO("[CQRCodeLoginDlg] bind_token: {}", m_bindToken);
         LOG_INFO("[CQRCodeLoginDlg] qr_payload: {}", qrPayload);
 
+        // 确认 qrPayload 不为空
+        if (qrPayload.empty()) {
+            LOG_ERROR("[CQRCodeLoginDlg] qrPayload is empty!");
+            return false;
+        }
+
         // 生成二维码图像
         GenerateQrImage(qrPayload);
 
         UpdateStatus(_T("请使用手机App扫描二维码"));
         Invalidate();
+        UpdateWindow(); // 强制立即重绘
 
         return true;
     }
@@ -243,6 +259,15 @@ bool CQRCodeLoginDlg::CheckLoginStatus()
 
     try
     {
+        if (QRCodeLoginService::Instance().IsLocallyExpired()) {
+            LOG_INFO("[CQRCodeLoginDlg] QR code expired (local check)");
+            m_isExpired = true;
+            StopPolling();
+            UpdateStatus(_T("二维码已过期，请点击刷新"));
+            // 不调用 loginCallback，让用户留在二维码登录界面
+            return false;
+        }
+
         BindResult result = QRCodeLoginService::Instance().GetBindStatus(m_bindToken);
 
         switch (result.status) {
@@ -256,10 +281,10 @@ bool CQRCodeLoginDlg::CheckLoginStatus()
 
         case QRCodeStatus::Bound:
             LOG_INFO("[CQRCodeLoginDlg] Login successful!");
+            UpdateData(FALSE);
             m_isLoggedIn.store(true);
             StopPolling();
             UpdateStatus(_T("登录成功！"));
-            UpdateData(FALSE);
 
             if (m_loginCallback)
             {
@@ -268,18 +293,14 @@ bool CQRCodeLoginDlg::CheckLoginStatus()
 
             ::Sleep(1000);
             EndDialog(IDOK);
-            return true;
-
+            break;
         case QRCodeStatus::Expired:
-            LOG_INFO("[CQRCodeLoginDlg] QR code expired");
-            m_isLoggedIn.store(true);
+            LOG_INFO("[CQRCodeLoginDlg] QR code expired (from server)");
+            m_isExpired = true;
+            
             StopPolling();
             UpdateStatus(_T("二维码已过期，请点击刷新"));
-            
-            if (m_loginCallback)
-            {
-                m_loginCallback(false, L"二维码已过期");
-            }
+            // 不调用 loginCallback，让用户留在二维码登录界面
             return false;
 
         default:
@@ -335,6 +356,9 @@ void CQRCodeLoginDlg::GenerateQrImage(const std::string& qrContent)
         }
 
         LOG_INFO("[CQRCodeLoginDlg] QR code generated: {}x{}", size, size);
+
+        // 确认 m_qrData 已填充
+        LOG_INFO("[CQRCodeLoginDlg] m_qrData size: {}", m_qrData.size());
     }
     catch (const std::exception& e)
     {
