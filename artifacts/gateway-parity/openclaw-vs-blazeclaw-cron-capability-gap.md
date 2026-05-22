@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase DD §7.7 Step 5-6 execution bridge + regression baseline)
+Last refreshed: 2026-05-21 (Phase DE §7.7 Step 7-9 production E2E + validation/docs closure baseline)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.7)
 
@@ -33,7 +33,7 @@ residual edges, and expanded production E2E.
 | --- | --- |
 | P0–P9 + P10 tool depth | **Complete** |
 | §7.6 depth (P11+) | **Complete** |
-| §7.7 `/cron` cli parity (Step 1-6) | **In Progress** (baseline landed) |
+| §7.7 `/cron` cli parity (Step 1-9) | **In Progress** (Phase DE baseline landed) |
 
 ## Remaining gaps (Phase DD)
 
@@ -45,17 +45,16 @@ residual edges, and expanded production E2E.
 | Active job dedupe | `active-jobs.ts` | Lighter process-level guard |
 | Past `at` guard | `validate-timestamp.ts` | Normalization only |
 | Store ops | Doctor migrations + runLog prune config | Backup/jsonl landed; doctor depth open |
-| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser + planner + structured UX + execution bridge + regression baseline landed (Step 1-6); production E2E parity pending |
+| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser + planner + structured UX + execution bridge + regression baseline landed (Step 1-6); production E2E permutations + ordered gate/doc closure baseline landed (Step 7-9) |
 
-## Validation (2026-05-21)
+## Validation (2026-05-21, Phase DE)
 
 ```powershell
-E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][timer]"
-E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][ops]"
-E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][store]"
+E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][normalize]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][schema][response]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][wp-f]"
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron]"
+msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 ```
 
-Evidence: timer 759/106; ops 220/19; store 60/14; schema 92/33; wp-f 55/5; cron 1618/247.
+Evidence: normalize 136/2; schema 92/33; wp-f 83/7; cron 1664/254; msbuild pass.
