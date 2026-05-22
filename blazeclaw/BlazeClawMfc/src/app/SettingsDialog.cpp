@@ -190,14 +190,17 @@ BOOL CSettingsDialog::OnInitDialog()
 	SetWindowTextW(_T("Settings"));
 
 	// Subclass the controls
-	m_listModels.SubclassDlgItem(IDC_LIST_MODELS, this);
+	m_listGenerativeModels.SubclassDlgItem(IDC_LIST_MODELS, this);
+	m_listFeatureModels.SubclassDlgItem(IDC_LIST_MODELS_EX, this);
 	m_staticCount.SubclassDlgItem(IDC_STATIC_MODEL_COUNT, this);
 
 	// Set up list view for checkboxes
-	m_listModels.SetExtendedStyle(LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
+	m_listGenerativeModels.SetExtendedStyle(LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
+	m_listFeatureModels.SetExtendedStyle(LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
 
 	// Add column (no header, just the model name)
-	m_listModels.InsertColumn(0, _T(""), LVCFMT_LEFT, 370);
+	m_listGenerativeModels.InsertColumn(0, _T(""), LVCFMT_LEFT, 370);
+	m_listFeatureModels.InsertColumn(0, _T(""), LVCFMT_LEFT, 370);
 	m_progress.SetRange32(0, 100);
 	m_progress.SetPos(0);
 
@@ -216,43 +219,50 @@ void CSettingsDialog::DoDataExchange(CDataExchange* pDX)
 void CSettingsDialog::LoadModels()
 {
 	m_models.clear();
-	m_listModels.DeleteAllItems();
+	m_listGenerativeModels.DeleteAllItems();
+	m_listFeatureModels.DeleteAllItems();
 
 	// Built-in models
 	m_models.push_back({
-		 "default",
-		 "Default Model (Local ONNX)",
-		 "Seed",
+		"default",
+		"Default Model (Local ONNX)",
+		"Seed",
+		"",
 		false
 		});
 	m_models.push_back({
 		"reasoner",
 		"Reasoner Model (Local ONNX)",
 		"Seed",
+		"",
 		false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-chat",
 		"DeepSeek Chat",
 		"DeepSeek",
+		"",
 		false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-reasoner",
 		"DeepSeek Reasoner",
 		"DeepSeek",
+		"",
 		false
 		});
 	m_models.push_back({
 		"qwen3-local-onnx",
 		"Qwen3 Local ONNX",
 		"Local",
+		"",
 		false
 		});
 	m_models.push_back({
 		"llama/gemma-4-E2B-it",
 		"Gemma 4 E2B (IT) — Local (llama.cpp)",
 		"Local (llama.cpp)",
+		"",
 		false
 		});
 
@@ -261,57 +271,63 @@ void CSettingsDialog::LoadModels()
 		"qwen2.5-1.5b-instruct-onnx",
 		"Qwen2.5 1.5B Instruct (ONNX)",
 		"Local",
+		"",
 		false
 		});
 	m_models.push_back({
 		"gpt-4o",
 		"GPT-4o",
 		"OpenAI",
+		"",
 		false
 		});
 	m_models.push_back({
 		"gpt-4o-mini",
 		"GPT-4o Mini",
 		"OpenAI",
+		"",
 		false
 		});
 	m_models.push_back({
 		"gpt-4-turbo",
 		"GPT-4 Turbo",
 		"OpenAI",
+		"",
 		false
 		});
 	m_models.push_back({
 		"gpt-3.5-turbo",
 		"GPT-3.5 Turbo",
 		"OpenAI",
+		"",
 		false
 		});
 
 	// Load enabled state from config if available
-	std::unordered_map<std::string, bool> enabledById;
-	std::string activeProvider;
-	std::string activeModel;
+	std::unordered_map<std::string, bool>	enabledById;
+	std::string		activeProvider;
+	std::string		activeModel;
+
 	ReadModelConfigState(enabledById, activeProvider, activeModel);
 
-	bool anyChecked = false;
+	bool	anyChecked	= false;
 	for (auto& model : m_models) {
-		const auto it = enabledById.find(model.id);
+		const auto it	= enabledById.find(model.id);
 		if (it == enabledById.end()) {
 			continue;
 		}
 
-		model.enabled = it->second;
+		model.enabled	= it->second;
 		if (model.enabled) {
-			anyChecked = true;
+			anyChecked	= true;
 		}
 	}
 
 	if (!anyChecked) {
 		for (auto& model : m_models) {
 			if (MatchesActiveSelection(model, activeProvider, activeModel)) {
-				model.enabled = true;
-				anyChecked = true;
+				model.enabled	= true;
+				anyChecked		= true;
 				break;
 			}
 		}
@@ -320,7 +336,7 @@ void CSettingsDialog::LoadModels()
 	if (!anyChecked) {
 		for (auto& model : m_models) {
 			if (model.id == "default") {
-				model.enabled = true;
+				model.enabled	= true;
 				break;
 			}
 		}
@@ -328,17 +344,17 @@ void CSettingsDialog::LoadModels()
 
 	// Populate the list
 	for (size_t i = 0; i < m_models.size(); ++i) {
-		int item = m_listModels.InsertItem((int)i,
+		int item = m_listGenerativeModels.InsertItem((int)i,
 			CA2T(m_models[i].name.c_str(), CP_UTF8));
-		m_listModels.SetItemData(item, (DWORD_PTR)i);
-		m_listModels.SetCheck(item, m_models[i].enabled ? TRUE : FALSE);
+		m_listGenerativeModels.SetItemData(item, (DWORD_PTR)i);
+		m_listGenerativeModels.SetCheck(item, m_models[i].enabled ? TRUE : FALSE);
 	}
 }
 
 void CSettingsDialog::UpdateModelCount()
 {
-	int total = (int)m_models.size();
-	int enabled = 0;
+	int total	= (int)m_models.size();
+	int enabled	= 0;
 	for (const auto& m : m_models) {
 		if (m.enabled) ++enabled;
 	}
@@ -351,7 +367,7 @@ void CSettingsDialog::UpdateModelCount()
 void CSettingsDialog::SelectAll(BOOL select)
 {
 	for (int i = 0; i < static_cast<int>(m_models.size()); ++i) {
-		m_listModels.SetCheck(i, select);
+		m_listGenerativeModels.SetCheck(i, select);
 		m_models[static_cast<size_t>(i)].enabled = (select != FALSE);
 	}
 	UpdateModelCount();
@@ -388,10 +404,10 @@ void CSettingsDialog::OnOK()
 	updateProgress(20);
 
 	// Save enabled state back to config
-	for (int i = 0; i < m_listModels.GetItemCount(); ++i) {
-		size_t idx = (size_t)m_listModels.GetItemData(i);
+	for (int i = 0; i < m_listGenerativeModels.GetItemCount(); ++i) {
+		size_t idx = (size_t)m_listGenerativeModels.GetItemData(i);
 		if (idx < m_models.size()) {
-			m_models[idx].enabled = (m_listModels.GetCheck(i) != FALSE);
+			m_models[idx].enabled = (m_listGenerativeModels.GetCheck(i) != FALSE);
 		}
 	}
 	updateProgress(40);
@@ -404,10 +420,10 @@ void CSettingsDialog::OnOK()
 		const std::string activeModel = app->Services().ActiveChatModel();
 
 		const int selectedItem =
-			m_listModels.GetNextItem(-1, LVNI_SELECTED);
+			m_listGenerativeModels.GetNextItem(-1, LVNI_SELECTED);
 		if (selectedItem >= 0) {
 			const size_t selectedIndex =
-				(size_t)m_listModels.GetItemData(selectedItem);
+				(size_t)m_listGenerativeModels.GetItemData(selectedItem);
 			if (selectedIndex < m_models.size() &&
 				m_models[selectedIndex].enabled) {
 				targetIndex = selectedIndex;

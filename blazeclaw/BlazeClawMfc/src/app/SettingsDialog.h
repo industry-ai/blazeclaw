@@ -17,6 +17,7 @@ public:
 		std::string id;
 		std::string name;
 		std::string provider;
+		std::string feature = "";
 		bool        enabled = false;
 	};
 
@@ -36,12 +37,14 @@ private:
 	void UpdateModelCount();
 	void SelectAll(BOOL select);
 
-	CListCtrl       m_listModels;
+	CListCtrl       m_listGenerativeModels;
+	CListCtrl       m_listFeatureModels;
 	CStatic         m_staticCount;
 	std::vector<ModelItem> m_models;
 
 	afx_msg void OnSelectAll();
 	afx_msg void OnDeselectAll();
+
 public:
 	CProgressCtrl m_progress;
 };
