@@ -21,6 +21,13 @@ public:
 		bool        enabled = false;
 	};
 
+	struct FeatureModelItem {
+		std::string id;
+		std::string name;
+		std::string provider;
+		bool        enabled = false;
+	};
+
 	const std::vector<ModelItem>& GetEnabledModels() const { return m_models; }
 
 protected:
@@ -34,13 +41,19 @@ protected:
 
 private:
 	void LoadModels();
+	void LoadFeatureModels();
 	void UpdateModelCount();
 	void SelectAll(BOOL select);
 
 	CListCtrl       m_listGenerativeModels;
 	CListCtrl       m_listFeatureModels;
 	CStatic         m_staticCount;
+	CEdit			 m_editSpeechStorageRoot;
+	CEdit			 m_editSpeechModelPath;
+	CString			 m_speechStorageRoot;
+	CString			 m_speechModelPath;
 	std::vector<ModelItem> m_models;
+	std::vector<FeatureModelItem> m_featureModels;
 
 	afx_msg void OnSelectAll();
 	afx_msg void OnDeselectAll();

@@ -65,6 +65,14 @@ namespace {
 		return fallback;
 	}
 
+	struct SpeechConfigState {
+		bool enabled = false;
+		std::wstring provider = L"onnx";
+		std::wstring storageRoot =
+			L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+		std::wstring modelPath;
+	};
+
 	void UpsertConfigEntry(
 		std::vector<std::wstring>& lines,
 		const std::wstring& key,
@@ -169,6 +177,54 @@ namespace {
 			}
 		}
 	}
+
+	SpeechConfigState ReadSpeechConfigState()
+	{
+		SpeechConfigState state;
+
+		std::wifstream input(kConfigPath);
+		if (!input.is_open()) {
+			return state;
+		}
+
+		std::wstring line;
+		while (std::getline(input, line)) {
+			const std::wstring trimmed = TrimW(line);
+			if (trimmed.empty() || trimmed.starts_with(L"#")) {
+				continue;
+			}
+
+			if (trimmed.rfind(L"speech.enabled=", 0) == 0) {
+				state.enabled = ParseBoolW(trimmed.substr(15), state.enabled);
+				continue;
+			}
+
+			if (trimmed.rfind(L"speech.provider=", 0) == 0) {
+				state.provider = TrimW(trimmed.substr(16));
+				continue;
+			}
+
+			if (trimmed.rfind(L"speech.storageRoot=", 0) == 0) {
+				state.storageRoot = TrimW(trimmed.substr(19));
+				continue;
+			}
+
+			if (trimmed.rfind(L"speech.model_path=", 0) == 0) {
+				state.modelPath = TrimW(trimmed.substr(18));
+				continue;
+			}
+		}
+
+		if (state.provider.empty()) {
+			state.provider = L"onnx";
+		}
+		if (state.storageRoot.empty()) {
+			state.storageRoot =
+				L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+		}
+
+		return state;
+	}
 }
 
 IMPLEMENT_DYNAMIC(CSettingsDialog, CDialogEx)
@@ -193,6 +249,8 @@ BOOL CSettingsDialog::OnInitDialog()
 	m_listGenerativeModels.SubclassDlgItem(IDC_LIST_MODELS, this);
 	m_listFeatureModels.SubclassDlgItem(IDC_LIST_MODELS_EX, this);
 	m_staticCount.SubclassDlgItem(IDC_STATIC_MODEL_COUNT, this);
+	//m_editSpeechStorageRoot.SubclassDlgItem(IDC_EDIT_SPEECH_STORAGE_ROOT, this);
+	//m_editSpeechModelPath.SubclassDlgItem(IDC_EDIT_SPEECH_MODEL_PATH, this);
 
 	// Set up list view for checkboxes
 	m_listGenerativeModels.SetExtendedStyle(LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
@@ -205,6 +263,7 @@ BOOL CSettingsDialog::OnInitDialog()
 	m_progress.SetPos(0);
 
 	LoadModels();
+	LoadFeatureModels();
 	UpdateModelCount();
 
 	return TRUE;
@@ -214,6 +273,44 @@ void CSettingsDialog::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_PROGRESS1, m_progress);
+	DDX_Control(pDX, IDC_EDIT_SPEECH_STORAGE_ROOT, m_editSpeechStorageRoot);
+	DDX_Control(pDX, IDC_EDIT_SPEECH_MODEL_PATH, m_editSpeechModelPath);
+	DDX_Text(pDX, IDC_EDIT_SPEECH_STORAGE_ROOT, m_speechStorageRoot);
+	DDX_Text(pDX, IDC_EDIT_SPEECH_MODEL_PATH, m_speechModelPath);
+}
+
+void CSettingsDialog::LoadFeatureModels()
+{
+	m_featureModels.clear();
+	m_listFeatureModels.DeleteAllItems();
+
+	m_featureModels.push_back({
+		"speech/qwen3-asr-1.7b-onnx",
+		"Qwen3 ASR 1.7B (ONNX)",
+		"ONNX Runtime",
+		false,
+		});
+
+	const SpeechConfigState speechConfig = ReadSpeechConfigState();
+
+	m_speechStorageRoot = speechConfig.storageRoot.c_str();
+	m_speechModelPath = speechConfig.modelPath.c_str();
+
+	if (!m_featureModels.empty()) {
+		m_featureModels[0].enabled = speechConfig.enabled;
+	}
+
+	for (size_t i = 0; i < m_featureModels.size(); ++i) {
+		const int item = m_listFeatureModels.InsertItem(
+			static_cast<int>(i),
+			CA2T(m_featureModels[i].name.c_str(), CP_UTF8));
+		m_listFeatureModels.SetItemData(item, static_cast<DWORD_PTR>(i));
+		m_listFeatureModels.SetCheck(
+			item,
+			m_featureModels[i].enabled ? TRUE : FALSE);
+	}
+
+	UpdateData(FALSE);
 }
 
 void CSettingsDialog::LoadModels()
@@ -410,6 +507,32 @@ void CSettingsDialog::OnOK()
 			m_models[idx].enabled = (m_listGenerativeModels.GetCheck(i) != FALSE);
 		}
 	}
+
+	UpdateData(TRUE);
+	for (int i = 0; i < m_listFeatureModels.GetItemCount(); ++i) {
+		const size_t idx =
+			static_cast<size_t>(m_listFeatureModels.GetItemData(i));
+		if (idx < m_featureModels.size()) {
+			m_featureModels[idx].enabled =
+				(m_listFeatureModels.GetCheck(i) != FALSE);
+		}
+	}
+
+	const bool speechEnabled = std::any_of(
+		m_featureModels.begin(),
+		m_featureModels.end(),
+		[](const FeatureModelItem& item) {
+			return item.enabled;
+		});
+
+	std::wstring speechStorageRoot =
+		TrimW(static_cast<LPCWSTR>(m_speechStorageRoot));
+	if (speechStorageRoot.empty()) {
+		speechStorageRoot =
+			L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+	}
+	const std::wstring speechModelPath =
+		TrimW(static_cast<LPCWSTR>(m_speechModelPath));
 	updateProgress(40);
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -493,6 +616,23 @@ void CSettingsDialog::OnOK()
 			L"chat.model.enabled." + ToWideAscii(item.id),
 			item.enabled ? L"true" : L"false");
 	}
+
+	UpsertConfigEntry(
+		lines,
+		L"speech.enabled",
+		speechEnabled ? L"true" : L"false");
+	UpsertConfigEntry(
+		lines,
+		L"speech.provider",
+		L"onnx");
+	UpsertConfigEntry(
+		lines,
+		L"speech.storageRoot",
+		speechStorageRoot);
+	UpsertConfigEntry(
+		lines,
+		L"speech.model_path",
+		speechModelPath);
 
 	if (app && targetIndex.has_value() && *targetIndex < m_models.size()) {
 		const auto [provider, model] =
