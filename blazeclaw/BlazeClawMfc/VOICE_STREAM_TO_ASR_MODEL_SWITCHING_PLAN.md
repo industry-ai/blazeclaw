@@ -10,7 +10,9 @@ without changing the ONNX runtime backend contract.
 ## Progress
 - Completed: Step 1 (ASR id<->storageRoot mapping helpers in `SettingsDialog.cpp`)
 - Completed: Step 2 (single-select feature-model behavior on load/save)
-- Remaining: Step 3+
+- Completed: Step 3 (persist selected model mapping into `speech.storageRoot`)
+- Completed: Step 4 (manual non-catalog storage root preserved with unselected catalog state)
+- Remaining: Step 5+
 
 ## Codebase analysis summary
 

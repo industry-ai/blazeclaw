@@ -396,7 +396,9 @@ void CSettingsDialog::LoadFeatureModels()
 			m_featureModels,
 			speechConfig.storageRoot);
 
-		if (!selectedFeatureIndex.has_value() && !m_featureModels.empty()) {
+		if (!selectedFeatureIndex.has_value() &&
+			TrimW(speechConfig.storageRoot).empty() &&
+			!m_featureModels.empty()) {
 			selectedFeatureIndex = 0;
 		}
 
@@ -669,7 +671,19 @@ void CSettingsDialog::OnOK()
 
 	std::wstring speechStorageRoot =
 		TrimW(static_cast<LPCWSTR>(m_speechStorageRoot));
-	if (speechStorageRoot.empty()) {
+	std::optional<std::string> selectedFeatureModelId;
+	std::optional<std::wstring> selectedFeatureStorageRoot;
+	if (selectedFeatureIndex.has_value() &&
+		*selectedFeatureIndex < m_featureModels.size()) {
+		selectedFeatureModelId = m_featureModels[*selectedFeatureIndex].id;
+		selectedFeatureStorageRoot = TryResolveAsrStorageRootByFeatureId(
+			*selectedFeatureModelId);
+	}
+
+	if (selectedFeatureStorageRoot.has_value()) {
+		speechStorageRoot = *selectedFeatureStorageRoot;
+	}
+	else if (speechStorageRoot.empty()) {
 		speechStorageRoot = DefaultAsrStorageRoot();
 	}
 	const std::wstring speechModelPath =
