@@ -3,6 +3,7 @@
 #include "BlazeClawMfcApp.h"
 
 #include <algorithm>
+#include <array>
 #include <cwctype>
 #include <fstream>
 #include <optional>
@@ -10,6 +11,103 @@
 
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
+
+	struct AsrFeatureModelDefinition {
+		const char* id;
+		const char* name;
+		const char* provider;
+		const wchar_t* storageRoot;
+	};
+
+	constexpr std::array<AsrFeatureModelDefinition, 2> kAsrFeatureModels = {
+		AsrFeatureModelDefinition{
+			"speech/qwen3-asr-1.7b-onnx",
+			"Qwen3 ASR 1.7B (ONNX)",
+			"ONNX Runtime",
+			L"BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx",
+		},
+		AsrFeatureModelDefinition{
+			"speech/qwen3-asr-0.6b-onnx",
+			"Qwen3 ASR 0.6B (ONNX)",
+			"ONNX Runtime",
+			L"BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx",
+		},
+	};
+
+	const wchar_t* DefaultAsrStorageRoot()
+	{
+		return kAsrFeatureModels.front().storageRoot;
+	}
+
+	std::wstring NormalizePathForCompare(const std::wstring& raw)
+	{
+		std::wstring normalized = raw;
+		const auto first = std::find_if_not(
+			normalized.begin(),
+			normalized.end(),
+			[](const wchar_t ch) { return std::iswspace(ch) != 0; });
+		const auto last = std::find_if_not(
+			normalized.rbegin(),
+			normalized.rend(),
+			[](const wchar_t ch) { return std::iswspace(ch) != 0; }).base();
+
+		if (first >= last) {
+			return {};
+		}
+
+		normalized = std::wstring(first, last);
+		for (wchar_t& ch : normalized) {
+			if (ch == L'\\') {
+				ch = L'/';
+				continue;
+			}
+
+			ch = static_cast<wchar_t>(std::towlower(ch));
+		}
+
+		while (!normalized.empty() &&
+			normalized.back() == L'/') {
+			normalized.pop_back();
+		}
+
+		return normalized;
+	}
+
+	std::optional<std::wstring> TryResolveAsrStorageRootByFeatureId(
+		const std::string& featureId)
+	{
+		for (const auto& entry : kAsrFeatureModels) {
+			if (featureId == entry.id) {
+				return std::wstring(entry.storageRoot);
+			}
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<size_t> TryResolveFeatureIndexByStorageRoot(
+		const std::vector<CSettingsDialog::FeatureModelItem>& featureModels,
+		const std::wstring& storageRoot)
+	{
+		const std::wstring normalizedRoot = NormalizePathForCompare(storageRoot);
+		if (normalizedRoot.empty()) {
+			return std::nullopt;
+		}
+
+		for (size_t i = 0; i < featureModels.size(); ++i) {
+			const auto mapped =
+				TryResolveAsrStorageRootByFeatureId(featureModels[i].id);
+			if (!mapped.has_value()) {
+				continue;
+			}
+
+			if (normalizedRoot == NormalizePathForCompare(*mapped)) {
+				return i;
+			}
+		}
+
+		return std::nullopt;
+	}
 
 	std::wstring TrimW(const std::wstring& value)
 	{
@@ -68,8 +166,7 @@ namespace {
 	struct SpeechConfigState {
 		bool enabled = false;
 		std::wstring provider = L"onnx";
-		std::wstring storageRoot =
-			L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+		std::wstring storageRoot = DefaultAsrStorageRoot();
 		std::wstring modelPath;
 	};
 
@@ -219,8 +316,7 @@ namespace {
 			state.provider = L"onnx";
 		}
 		if (state.storageRoot.empty()) {
-			state.storageRoot =
-				L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+			state.storageRoot = DefaultAsrStorageRoot();
 		}
 
 		return state;
@@ -249,8 +345,6 @@ BOOL CSettingsDialog::OnInitDialog()
 	m_listGenerativeModels.SubclassDlgItem(IDC_LIST_MODELS, this);
 	m_listFeatureModels.SubclassDlgItem(IDC_LIST_MODELS_EX, this);
 	m_staticCount.SubclassDlgItem(IDC_STATIC_MODEL_COUNT, this);
-	//m_editSpeechStorageRoot.SubclassDlgItem(IDC_EDIT_SPEECH_STORAGE_ROOT, this);
-	//m_editSpeechModelPath.SubclassDlgItem(IDC_EDIT_SPEECH_MODEL_PATH, this);
 
 	// Set up list view for checkboxes
 	m_listGenerativeModels.SetExtendedStyle(LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
@@ -284,20 +378,46 @@ void CSettingsDialog::LoadFeatureModels()
 	m_featureModels.clear();
 	m_listFeatureModels.DeleteAllItems();
 
-	m_featureModels.push_back({
-		"speech/qwen3-asr-1.7b-onnx",
-		"Qwen3 ASR 1.7B (ONNX)",
-		"ONNX Runtime",
-		false,
-		});
+	for (const auto& entry : kAsrFeatureModels) {
+		m_featureModels.push_back({
+			entry.id,
+			entry.name,
+			entry.provider,
+			false,
+			});
+	}
 
 	const SpeechConfigState speechConfig = ReadSpeechConfigState();
+	std::optional<size_t> selectedFeatureIndex;
+	std::wstring resolvedStorageRoot = speechConfig.storageRoot;
 
-	m_speechStorageRoot = speechConfig.storageRoot.c_str();
+	if (speechConfig.enabled) {
+		selectedFeatureIndex = TryResolveFeatureIndexByStorageRoot(
+			m_featureModels,
+			speechConfig.storageRoot);
+
+		if (!selectedFeatureIndex.has_value() && !m_featureModels.empty()) {
+			selectedFeatureIndex = 0;
+		}
+
+		if (selectedFeatureIndex.has_value() &&
+			*selectedFeatureIndex < m_featureModels.size()) {
+			const auto selectedStorageRoot = TryResolveAsrStorageRootByFeatureId(
+				m_featureModels[*selectedFeatureIndex].id);
+			if (selectedStorageRoot.has_value()) {
+				resolvedStorageRoot = *selectedStorageRoot;
+			}
+		}
+	}
+
+	m_speechStorageRoot = resolvedStorageRoot.c_str();
 	m_speechModelPath = speechConfig.modelPath.c_str();
 
-	if (!m_featureModels.empty()) {
-		m_featureModels[0].enabled = speechConfig.enabled;
+	for (size_t i = 0; i < m_featureModels.size(); ++i) {
+		m_featureModels[i].enabled =
+			speechConfig.enabled &&
+			selectedFeatureIndex.has_value() &&
+			*selectedFeatureIndex == i;
 	}
 
 	for (size_t i = 0; i < m_featureModels.size(); ++i) {
@@ -317,7 +437,6 @@ void CSettingsDialog::LoadModels()
 {
 	m_models.clear();
 	m_listGenerativeModels.DeleteAllItems();
-	m_listFeatureModels.DeleteAllItems();
 
 	// Built-in models
 	m_models.push_back({
@@ -509,27 +628,49 @@ void CSettingsDialog::OnOK()
 	}
 
 	UpdateData(TRUE);
+	std::optional<size_t> selectedFeatureIndex;
+	bool featureSelectionCommitted = false;
 	for (int i = 0; i < m_listFeatureModels.GetItemCount(); ++i) {
 		const size_t idx =
 			static_cast<size_t>(m_listFeatureModels.GetItemData(i));
-		if (idx < m_featureModels.size()) {
-			m_featureModels[idx].enabled =
-				(m_listFeatureModels.GetCheck(i) != FALSE);
+		if (idx >= m_featureModels.size()) {
+			continue;
+		}
+
+		bool enabled = (m_listFeatureModels.GetCheck(i) != FALSE);
+		if (enabled) {
+			if (featureSelectionCommitted) {
+				enabled = false;
+			}
+			else {
+				featureSelectionCommitted = true;
+				selectedFeatureIndex = idx;
+			}
+		}
+
+		m_featureModels[idx].enabled = enabled;
+		m_listFeatureModels.SetCheck(i, enabled ? TRUE : FALSE);
+	}
+
+	for (size_t i = 0; i < m_featureModels.size(); ++i) {
+		if (!selectedFeatureIndex.has_value() ||
+			*selectedFeatureIndex != i) {
+			m_featureModels[i].enabled = false;
 		}
 	}
 
-	const bool speechEnabled = std::any_of(
-		m_featureModels.begin(),
-		m_featureModels.end(),
-		[](const FeatureModelItem& item) {
-			return item.enabled;
-		});
+	if (!selectedFeatureIndex.has_value()) {
+		for (int i = 0; i < m_listFeatureModels.GetItemCount(); ++i) {
+			m_listFeatureModels.SetCheck(i, FALSE);
+		}
+	}
+
+	const bool speechEnabled = selectedFeatureIndex.has_value();
 
 	std::wstring speechStorageRoot =
 		TrimW(static_cast<LPCWSTR>(m_speechStorageRoot));
 	if (speechStorageRoot.empty()) {
-		speechStorageRoot =
-			L"BlazeClawMfc/models/chat/qwen3-asr-1.7b-onnx";
+		speechStorageRoot = DefaultAsrStorageRoot();
 	}
 	const std::wstring speechModelPath =
 		TrimW(static_cast<LPCWSTR>(m_speechModelPath));
