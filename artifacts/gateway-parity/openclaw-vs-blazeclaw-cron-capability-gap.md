@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase CY full counterpart re-review)
+Last refreshed: 2026-05-21 (Phase DB §7.7 Step 1-2 `/cron` parser baseline)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.6)
 
@@ -32,7 +32,8 @@ residual edges, and expanded production E2E.
 | Priority | Status |
 | --- | --- |
 | P0–P9 + P10 tool depth | **Complete** |
-| §7.6 depth (P11+) | **Active** |
+| §7.6 depth (P11+) | **Complete** |
+| §7.7 `/cron` cli parity (Step 1-2) | **In Progress** (baseline landed) |
 
 ## Remaining gaps (Phase CY)
 
@@ -44,7 +45,7 @@ residual edges, and expanded production E2E.
 | Active job dedupe | `active-jobs.ts` | Lighter process-level guard |
 | Past `at` guard | `validate-timestamp.ts` | Normalization only |
 | Store ops | Doctor migrations + runLog prune config | Backup/jsonl landed; doctor depth open |
-| CLI/UI | `cron-cli`, native UI | WebView-first; CLI deferred |
+| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser baseline landed (Step 1-2); full command routing/help/error/E2E parity pending |
 
 ## Validation (2026-05-21)
 

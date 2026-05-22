@@ -346,6 +346,12 @@
         if (!Array.isArray(state.agentCronModelSuggestions)) {
             state.agentCronModelSuggestions = [];
         }
+        if (typeof state.agentCronCliParseError !== "string" && state.agentCronCliParseError !== null) {
+            state.agentCronCliParseError = null;
+        }
+        if (!state.agentCronCliLastParsed || typeof state.agentCronCliLastParsed !== "object") {
+            state.agentCronCliLastParsed = null;
+        }
 
         if (typeof state.dreamingStatusLoading !== "boolean") {
             state.dreamingStatusLoading = false;
@@ -3073,6 +3079,422 @@
             return Number.isFinite(parsed) ? parsed : fallback;
         }
 
+        const CRON_CLI_SLASH_PREFIX = "/cron";
+        const CRON_CLI_COMMAND_ALIASES = {
+            help: ["help", "-h", "--help"],
+            status: ["status"],
+            list: ["list", "ls"],
+            add: ["add", "create"],
+            edit: ["edit", "update"],
+            remove: ["rm", "remove", "delete"],
+            run: ["run"],
+            runs: ["runs"],
+            wake: ["wake"],
+        };
+        const CRON_CLI_ALLOWED_OPTIONS = {
+            help: {
+                json: true,
+            },
+            status: {
+                json: true,
+            },
+            list: {
+                all: true,
+                json: true,
+                includeDisabled: true,
+                enabled: true,
+                limit: true,
+                offset: true,
+                query: true,
+                sortBy: true,
+                sortDir: true,
+            },
+            add: {
+                name: true,
+                description: true,
+                disabled: true,
+                deleteAfterRun: true,
+                keepAfterRun: true,
+                agent: true,
+                session: true,
+                sessionKey: true,
+                wake: true,
+                at: true,
+                every: true,
+                cron: true,
+                tz: true,
+                stagger: true,
+                exact: true,
+                systemEvent: true,
+                message: true,
+                thinking: true,
+                model: true,
+                timeoutSeconds: true,
+                lightContext: true,
+                tools: true,
+                announce: true,
+                deliver: true,
+                noDeliver: true,
+                channel: true,
+                to: true,
+                account: true,
+                bestEffortDeliver: true,
+                json: true,
+            },
+            edit: {
+                name: true,
+                description: true,
+                enable: true,
+                disable: true,
+                deleteAfterRun: true,
+                keepAfterRun: true,
+                session: true,
+                agent: true,
+                clearAgent: true,
+                sessionKey: true,
+                clearSessionKey: true,
+                wake: true,
+                at: true,
+                every: true,
+                cron: true,
+                tz: true,
+                stagger: true,
+                exact: true,
+                systemEvent: true,
+                message: true,
+                thinking: true,
+                model: true,
+                timeoutSeconds: true,
+                lightContext: true,
+                noLightContext: true,
+                tools: true,
+                clearTools: true,
+                announce: true,
+                deliver: true,
+                noDeliver: true,
+                channel: true,
+                to: true,
+                account: true,
+                bestEffortDeliver: true,
+                noBestEffortDeliver: true,
+                failureAlert: true,
+                noFailureAlert: true,
+                failureAlertAfter: true,
+                failureAlertChannel: true,
+                failureAlertTo: true,
+                failureAlertCooldown: true,
+                failureAlertMode: true,
+                failureAlertAccountId: true,
+                json: true,
+            },
+            remove: {
+                json: true,
+                id: true,
+                jobId: true,
+            },
+            run: {
+                due: true,
+                mode: true,
+                json: true,
+                id: true,
+                jobId: true,
+            },
+            runs: {
+                id: true,
+                jobId: true,
+                limit: true,
+                offset: true,
+                scope: true,
+                status: true,
+                statuses: true,
+                deliveryStatus: true,
+                deliveryStatuses: true,
+                query: true,
+                sortDir: true,
+                json: true,
+            },
+            wake: {
+                mode: true,
+                json: true,
+            },
+        };
+
+        function toCronCliOptionKey(rawKey) {
+            return String(rawKey || "")
+                .trim()
+                .replace(/^--?/, "")
+                .replace(/-([a-z])/g, function (_, letter) {
+                    return String(letter || "").toUpperCase();
+                });
+        }
+
+        function tokenizeCronCliInput(rawInput) {
+            const source = String(rawInput || "");
+            const tokens = [];
+            let current = "";
+            let inQuote = false;
+            let quote = "";
+            let escaping = false;
+
+            function pushToken() {
+                if (current.length > 0) {
+                    tokens.push(current);
+                    current = "";
+                }
+            }
+
+            for (let index = 0; index < source.length; index += 1) {
+                const ch = source.charAt(index);
+
+                if (escaping) {
+                    current += ch;
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch === "\\") {
+                    escaping = true;
+                    continue;
+                }
+
+                if (inQuote) {
+                    if (ch === quote) {
+                        inQuote = false;
+                        quote = "";
+                    } else {
+                        current += ch;
+                    }
+                    continue;
+                }
+
+                if (ch === '"' || ch === "'") {
+                    inQuote = true;
+                    quote = ch;
+                    continue;
+                }
+
+                if (/\s/.test(ch)) {
+                    pushToken();
+                    continue;
+                }
+
+                current += ch;
+            }
+
+            if (escaping) {
+                current += "\\";
+            }
+            if (inQuote) {
+                return {
+                    ok: false,
+                    error: "Unclosed quote in /cron command.",
+                    tokens: tokens,
+                };
+            }
+
+            pushToken();
+            return {
+                ok: true,
+                tokens: tokens,
+            };
+        }
+
+        function resolveCronCliCanonicalCommand(rawCommand) {
+            const normalized = normalizeLowercaseStringOrEmpty(rawCommand);
+            if (!normalized) {
+                return "help";
+            }
+
+            const canonicalCommands = Object.keys(CRON_CLI_COMMAND_ALIASES);
+            for (let index = 0; index < canonicalCommands.length; index += 1) {
+                const candidate = canonicalCommands[index];
+                const aliases = CRON_CLI_COMMAND_ALIASES[candidate] || [];
+                if (aliases.indexOf(normalized) >= 0) {
+                    return candidate;
+                }
+            }
+
+            return "";
+        }
+
+        function coerceCronCliOptionValue(value) {
+            if (value === true) {
+                return true;
+            }
+
+            const raw = String(value || "").trim();
+            if (!raw) {
+                return "";
+            }
+
+            const lowered = normalizeLowercaseStringOrEmpty(raw);
+            if (lowered === "true") {
+                return true;
+            }
+            if (lowered === "false") {
+                return false;
+            }
+            if (/^-?\d+$/.test(raw)) {
+                const parsedInt = Number(raw);
+                if (Number.isFinite(parsedInt)) {
+                    return parsedInt;
+                }
+            }
+            if (/^-?\d+\.\d+$/.test(raw)) {
+                const parsedFloat = Number(raw);
+                if (Number.isFinite(parsedFloat)) {
+                    return parsedFloat;
+                }
+            }
+
+            return raw;
+        }
+
+        function parseCronCliSlashCommand(input) {
+            const rawInput = String(input || "");
+            const trimmedInput = rawInput.trim();
+            if (!trimmedInput) {
+                return {
+                    handled: false,
+                    reason: "empty",
+                };
+            }
+
+            if (trimmedInput.slice(0, CRON_CLI_SLASH_PREFIX.length).toLowerCase() !== CRON_CLI_SLASH_PREFIX) {
+                return {
+                    handled: false,
+                    reason: "not-cron",
+                };
+            }
+
+            const tokenized = tokenizeCronCliInput(trimmedInput);
+            if (!tokenized.ok) {
+                return {
+                    handled: true,
+                    ok: false,
+                    error: tokenized.error,
+                    rawInput: rawInput,
+                    tokens: tokenized.tokens || [],
+                };
+            }
+
+            const tokens = tokenized.tokens || [];
+            const firstToken = normalizeLowercaseStringOrEmpty(tokens[0]).replace(/^\//, "");
+            if (firstToken !== CRON_CLI_SLASH_PREFIX.slice(1)) {
+                return {
+                    handled: false,
+                    reason: "not-cron",
+                };
+            }
+
+            const rawCommand = tokens.length > 1
+                ? String(tokens[1] || "")
+                : "help";
+            const canonicalCommand = resolveCronCliCanonicalCommand(rawCommand);
+            if (!canonicalCommand) {
+                return {
+                    handled: true,
+                    ok: false,
+                    error: "Unknown /cron command: " + String(rawCommand || "").trim(),
+                    rawInput: rawInput,
+                    tokens: tokens,
+                };
+            }
+
+            const allowedOptions = CRON_CLI_ALLOWED_OPTIONS[canonicalCommand] || {};
+            const args = {
+                positionals: [],
+                options: {},
+            };
+
+            let index = 2;
+            while (index < tokens.length) {
+                const token = String(tokens[index] || "");
+                if (!token) {
+                    index += 1;
+                    continue;
+                }
+
+                if (token.indexOf("--") === 0) {
+                    const equalIndex = token.indexOf("=");
+                    const rawOption = equalIndex >= 0
+                        ? token.slice(0, equalIndex)
+                        : token;
+                    const optionKey = toCronCliOptionKey(rawOption);
+                    if (!allowedOptions[optionKey]) {
+                        return {
+                            handled: true,
+                            ok: false,
+                            error: "Unknown option for /cron " + canonicalCommand + ": " + rawOption,
+                            rawInput: rawInput,
+                            tokens: tokens,
+                        };
+                    }
+
+                    let value = true;
+                    if (equalIndex >= 0) {
+                        value = token.slice(equalIndex + 1);
+                    } else {
+                        const nextToken = tokens[index + 1];
+                        if (typeof nextToken === "string" && nextToken.indexOf("--") !== 0) {
+                            value = nextToken;
+                            index += 1;
+                        }
+                    }
+
+                    const coercedValue = coerceCronCliOptionValue(value);
+                    if (Object.prototype.hasOwnProperty.call(args.options, optionKey)) {
+                        const existing = args.options[optionKey];
+                        if (Array.isArray(existing)) {
+                            existing.push(coercedValue);
+                        } else {
+                            args.options[optionKey] = [existing, coercedValue];
+                        }
+                    } else {
+                        args.options[optionKey] = coercedValue;
+                    }
+                    index += 1;
+                    continue;
+                }
+
+                if (token.charAt(0) === "-") {
+                    return {
+                        handled: true,
+                        ok: false,
+                        error: "Unsupported short option in /cron command: " + token,
+                        rawInput: rawInput,
+                        tokens: tokens,
+                    };
+                }
+
+                args.positionals.push(token);
+                index += 1;
+            }
+
+            return {
+                handled: true,
+                ok: true,
+                kind: "cron-cli",
+                command: canonicalCommand,
+                rawCommand: String(rawCommand || "").trim(),
+                args: args,
+                rawInput: rawInput,
+                tokens: tokens,
+            };
+        }
+
+        function tryParseCronCliSlashCommand(input) {
+            const parsed = parseCronCliSlashCommand(input);
+            if (parsed && parsed.handled) {
+                state.agentCronCliLastParsed = parsed;
+                state.agentCronCliParseError = parsed.ok === false
+                    ? String(parsed.error || "Invalid /cron command")
+                    : null;
+                onStateUpdated();
+            }
+            return parsed;
+        }
+
         function normalizeLowercaseStringOrEmpty(value) {
             return String(value || "").trim().toLowerCase();
         }
@@ -5100,6 +5522,8 @@
             updateCronJobsFilter,
             updateCronRunsFilter,
             updateCronFormField,
+            parseCronCliSlashCommand,
+            tryParseCronCliSlashCommand,
             addOrUpdateCronJob,
             removeCronJob,
             runCronJobNow,
@@ -7397,6 +7821,66 @@
                 "dreaming ui model should include rotating phrase text");
 
             summary.push("dreaming controller parity baseline + ui model");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createAgentsController({
+                state,
+                request: createRegressionHarnessRequestStub().request,
+            });
+
+            const notCron = controller.parseCronCliSlashCommand("hello world");
+            assertRegression(notCron && notCron.handled === false,
+                "cron slash parser should ignore non-/cron input");
+
+            const listParsed = controller.parseCronCliSlashCommand("/cron list --all --limit 20 --query \"nightly report\"");
+            assertRegression(listParsed && listParsed.ok === true && listParsed.command === "list",
+                "cron slash parser should resolve canonical list command");
+            assertRegression(listParsed && listParsed.args && listParsed.args.options &&
+                listParsed.args.options.all === true &&
+                listParsed.args.options.limit === 20 &&
+                listParsed.args.options.query === "nightly report",
+            "cron slash parser should coerce list options deterministically");
+
+            const aliasParsed = controller.parseCronCliSlashCommand("/cron create --name \"Nightly report\" --every 30m --message \"ship it\"");
+            assertRegression(aliasParsed && aliasParsed.ok === true && aliasParsed.command === "add",
+                "cron slash parser should resolve create alias to add command");
+            assertRegression(aliasParsed && aliasParsed.args && aliasParsed.args.options &&
+                aliasParsed.args.options.name === "Nightly report" &&
+                aliasParsed.args.options.every === "30m" &&
+                aliasParsed.args.options.message === "ship it",
+            "cron slash parser should preserve quoted option values");
+
+            const unknownOption = controller.parseCronCliSlashCommand("/cron status --bogus");
+            assertRegression(unknownOption && unknownOption.ok === false &&
+                String(unknownOption.error || "").indexOf("Unknown option") >= 0,
+            "cron slash parser should reject unknown options by command surface");
+
+            const unclosedQuote = controller.parseCronCliSlashCommand("/cron add --name \"Nightly");
+            assertRegression(unclosedQuote && unclosedQuote.ok === false &&
+                String(unclosedQuote.error || "").indexOf("Unclosed quote") >= 0,
+            "cron slash parser should reject unclosed quoted input");
+
+            const shortOption = controller.parseCronCliSlashCommand("/cron list -a");
+            assertRegression(shortOption && shortOption.ok === false &&
+                String(shortOption.error || "").indexOf("Unsupported short option") >= 0,
+            "cron slash parser should reject unsupported short options");
+
+            const trackedError = controller.tryParseCronCliSlashCommand("/cron wake --unknown");
+            assertRegression(trackedError && trackedError.ok === false &&
+                typeof state.agentCronCliParseError === "string" &&
+                state.agentCronCliParseError.indexOf("Unknown option") >= 0,
+            "cron slash parser should persist parse error state through tracked parser helper");
+
+            const trackedSuccess = controller.tryParseCronCliSlashCommand("/cron wake --mode next-heartbeat");
+            assertRegression(trackedSuccess && trackedSuccess.ok === true &&
+                state.agentCronCliParseError === null &&
+                state.agentCronCliLastParsed &&
+                state.agentCronCliLastParsed.command === "wake",
+            "cron slash parser should persist last parsed command and clear prior parse error on success");
+
+            summary.push("cron slash parser baseline determinism");
         }
 
         {
