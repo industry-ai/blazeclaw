@@ -3218,6 +3218,29 @@
                 json: true,
             },
         };
+        const CRON_CLI_USAGE = {
+            root: "/cron <command> [options]",
+            help: "/cron help [command]",
+            status: "/cron status [--json]",
+            list: "/cron list [--all|--include-disabled] [--limit <n>] [--offset <n>] [--query <text>]",
+            add: "/cron add --name <name> (--at <when>|--every <duration>|--cron <expr>) (--system-event <text>|--message <text>)",
+            edit: "/cron edit <id> [patch options]",
+            remove: "/cron remove <id>",
+            run: "/cron run <id> [--due|--mode <force|due>]",
+            runs: "/cron runs --id <id> [--limit <n>]",
+            wake: "/cron wake [--mode <now|next-heartbeat>]",
+        };
+        const CRON_CLI_COMMAND_HELP_ORDER = [
+            "help",
+            "status",
+            "list",
+            "add",
+            "edit",
+            "remove",
+            "run",
+            "runs",
+            "wake",
+        ];
 
         function toCronCliOptionKey(rawKey) {
             return String(rawKey || "")
@@ -3287,6 +3310,7 @@
             if (inQuote) {
                 return {
                     ok: false,
+                    errorCode: "unclosed_quote",
                     error: "Unclosed quote in /cron command.",
                     tokens: tokens,
                 };
@@ -3372,6 +3396,7 @@
                 return {
                     handled: true,
                     ok: false,
+                    errorCode: tokenized.errorCode || "parse_error",
                     error: tokenized.error,
                     rawInput: rawInput,
                     tokens: tokenized.tokens || [],
@@ -3395,6 +3420,7 @@
                 return {
                     handled: true,
                     ok: false,
+                    errorCode: "unknown_command",
                     error: "Unknown /cron command: " + String(rawCommand || "").trim(),
                     rawInput: rawInput,
                     tokens: tokens,
@@ -3425,6 +3451,7 @@
                         return {
                             handled: true,
                             ok: false,
+                            errorCode: "unknown_option",
                             error: "Unknown option for /cron " + canonicalCommand + ": " + rawOption,
                             rawInput: rawInput,
                             tokens: tokens,
@@ -3461,6 +3488,7 @@
                     return {
                         handled: true,
                         ok: false,
+                        errorCode: "unsupported_short_option",
                         error: "Unsupported short option in /cron command: " + token,
                         rawInput: rawInput,
                         tokens: tokens,
@@ -3493,6 +3521,525 @@
                 onStateUpdated();
             }
             return parsed;
+        }
+
+        function formatCronCliSupportedCommands() {
+            return CRON_CLI_COMMAND_HELP_ORDER.slice();
+        }
+
+        function buildCronCliHelpContract(command) {
+            const resolved = resolveCronCliCanonicalCommand(command || "") || "help";
+            const usage = CRON_CLI_USAGE[resolved] || CRON_CLI_USAGE.root;
+            return {
+                ok: true,
+                code: "help",
+                command: resolved,
+                usage: usage,
+                commands: formatCronCliSupportedCommands(),
+                rootUsage: CRON_CLI_USAGE.root,
+            };
+        }
+
+        function buildCronCliErrorContract(code, message, details, command) {
+            return {
+                ok: false,
+                code: String(code || "validation_error"),
+                message: String(message || "Invalid /cron command"),
+                details: details || null,
+                command: command || null,
+                rootUsage: CRON_CLI_USAGE.root,
+                commands: formatCronCliSupportedCommands(),
+            };
+        }
+
+        function resolveCronCliJobId(args) {
+            const parsedArgs = args && typeof args === "object"
+                ? args
+                : {};
+            const options = parsedArgs.options && typeof parsedArgs.options === "object"
+                ? parsedArgs.options
+                : {};
+            const positionals = Array.isArray(parsedArgs.positionals)
+                ? parsedArgs.positionals
+                : [];
+
+            const optionId = String(options.id || options.jobId || "").trim();
+            if (optionId) {
+                return optionId;
+            }
+
+            const positionalId = String(positionals[0] || "").trim();
+            return positionalId;
+        }
+
+        function parseCronCliIntegerOption(value, fieldName) {
+            if (value === undefined || value === null || value === "") {
+                return {
+                    ok: true,
+                    value: null,
+                };
+            }
+
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || Math.floor(parsed) !== parsed || parsed < 0) {
+                return {
+                    ok: false,
+                    error: fieldName + " must be a non-negative integer.",
+                };
+            }
+
+            return {
+                ok: true,
+                value: parsed,
+            };
+        }
+
+        function resolveCronCliWakeMode(value) {
+            const normalized = normalizeLowercaseStringOrEmpty(value);
+            if (!normalized) {
+                return "now";
+            }
+            if (normalized === "now") {
+                return "now";
+            }
+            if (normalized === "next-heartbeat" ||
+                normalized === "nextheartbeat" ||
+                normalized === "next_heartbeat") {
+                return "next-heartbeat";
+            }
+            return "";
+        }
+
+        function buildCronCliCommandPlan(parsed) {
+            if (!parsed || parsed.handled !== true) {
+                return {
+                    handled: false,
+                };
+            }
+
+            if (parsed.ok !== true) {
+                return {
+                    handled: true,
+                    command: parsed.command || null,
+                    ux: buildCronCliErrorContract(
+                        parsed.errorCode || "parse_error",
+                        parsed.error || "Invalid /cron command",
+                        {
+                            rawInput: parsed.rawInput || "",
+                        },
+                        parsed.command || null
+                    ),
+                };
+            }
+
+            const command = String(parsed.command || "").trim();
+            const args = parsed.args && typeof parsed.args === "object"
+                ? parsed.args
+                : {
+                    positionals: [],
+                    options: {},
+                };
+            const options = args.options && typeof args.options === "object"
+                ? args.options
+                : {};
+
+            if (command === "help") {
+                const helpTarget = String((args.positionals && args.positionals[0]) || "").trim();
+                const resolvedTarget = resolveCronCliCanonicalCommand(helpTarget || "") || "help";
+                return {
+                    handled: true,
+                    command: "help",
+                    method: null,
+                    params: {},
+                    ux: buildCronCliHelpContract(resolvedTarget),
+                };
+            }
+
+            if (command === "status") {
+                return {
+                    handled: true,
+                    command: "status",
+                    method: "cron.status",
+                    params: {},
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "status",
+                        usage: CRON_CLI_USAGE.status,
+                    },
+                };
+            }
+
+            if (command === "list") {
+                const normalized = {
+                    includeDisabled: options.all === true || options.includeDisabled === true,
+                    enabled: typeof options.enabled === "string"
+                        ? String(options.enabled).trim()
+                        : undefined,
+                    query: typeof options.query === "string"
+                        ? String(options.query).trim()
+                        : undefined,
+                    sortBy: typeof options.sortBy === "string"
+                        ? String(options.sortBy).trim()
+                        : undefined,
+                    sortDir: typeof options.sortDir === "string"
+                        ? String(options.sortDir).trim()
+                        : undefined,
+                };
+
+                const limitResult = parseCronCliIntegerOption(options.limit, "limit");
+                if (!limitResult.ok) {
+                    return {
+                        handled: true,
+                        command: "list",
+                        ux: buildCronCliErrorContract("invalid_range", limitResult.error, null, "list"),
+                    };
+                }
+                const offsetResult = parseCronCliIntegerOption(options.offset, "offset");
+                if (!offsetResult.ok) {
+                    return {
+                        handled: true,
+                        command: "list",
+                        ux: buildCronCliErrorContract("invalid_range", offsetResult.error, null, "list"),
+                    };
+                }
+
+                if (limitResult.value !== null) {
+                    normalized.limit = limitResult.value;
+                }
+                if (offsetResult.value !== null) {
+                    normalized.offset = offsetResult.value;
+                }
+
+                return {
+                    handled: true,
+                    command: "list",
+                    method: "cron.list",
+                    params: normalized,
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "list",
+                        usage: CRON_CLI_USAGE.list,
+                    },
+                };
+            }
+
+            if (command === "remove") {
+                const jobId = resolveCronCliJobId(args);
+                if (!jobId) {
+                    return {
+                        handled: true,
+                        command: "remove",
+                        ux: buildCronCliErrorContract(
+                            "missing_required",
+                            "Missing required job id for /cron remove.",
+                            {
+                                usage: CRON_CLI_USAGE.remove,
+                            },
+                            "remove"
+                        ),
+                    };
+                }
+
+                return {
+                    handled: true,
+                    command: "remove",
+                    method: "cron.remove",
+                    params: buildCronJobIdentityParams(jobId),
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "remove",
+                        usage: CRON_CLI_USAGE.remove,
+                    },
+                };
+            }
+
+            if (command === "run") {
+                const jobId = resolveCronCliJobId(args);
+                if (!jobId) {
+                    return {
+                        handled: true,
+                        command: "run",
+                        ux: buildCronCliErrorContract(
+                            "missing_required",
+                            "Missing required job id for /cron run.",
+                            {
+                                usage: CRON_CLI_USAGE.run,
+                            },
+                            "run"
+                        ),
+                    };
+                }
+
+                let mode = "force";
+                if (options.due === true) {
+                    mode = "due";
+                }
+                if (typeof options.mode === "string" && String(options.mode).trim()) {
+                    const requestedMode = normalizeLowercaseStringOrEmpty(options.mode);
+                    if (requestedMode !== "due" && requestedMode !== "force") {
+                        return {
+                            handled: true,
+                            command: "run",
+                            ux: buildCronCliErrorContract(
+                                "invalid_enum",
+                                "run mode must be due or force.",
+                                null,
+                                "run"
+                            ),
+                        };
+                    }
+                    mode = requestedMode;
+                }
+
+                return {
+                    handled: true,
+                    command: "run",
+                    method: "cron.run",
+                    params: Object.assign({}, buildCronJobIdentityParams(jobId), {
+                        mode: mode,
+                    }),
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "run",
+                        usage: CRON_CLI_USAGE.run,
+                    },
+                };
+            }
+
+            if (command === "runs") {
+                const jobId = resolveCronCliJobId(args);
+                if (!jobId) {
+                    return {
+                        handled: true,
+                        command: "runs",
+                        ux: buildCronCliErrorContract(
+                            "missing_required",
+                            "Missing required --id for /cron runs.",
+                            {
+                                usage: CRON_CLI_USAGE.runs,
+                            },
+                            "runs"
+                        ),
+                    };
+                }
+
+                const limitResult = parseCronCliIntegerOption(options.limit, "limit");
+                if (!limitResult.ok) {
+                    return {
+                        handled: true,
+                        command: "runs",
+                        ux: buildCronCliErrorContract("invalid_range", limitResult.error, null, "runs"),
+                    };
+                }
+
+                const params = Object.assign({}, buildCronJobIdentityParams(jobId), {
+                    scope: "job",
+                    limit: limitResult.value !== null
+                        ? limitResult.value
+                        : 50,
+                });
+
+                return {
+                    handled: true,
+                    command: "runs",
+                    method: "cron.runs",
+                    params: params,
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "runs",
+                        usage: CRON_CLI_USAGE.runs,
+                    },
+                };
+            }
+
+            if (command === "wake") {
+                const wakeMode = resolveCronCliWakeMode(options.mode);
+                if (!wakeMode) {
+                    return {
+                        handled: true,
+                        command: "wake",
+                        ux: buildCronCliErrorContract(
+                            "invalid_enum",
+                            "wake mode must be now or next-heartbeat.",
+                            null,
+                            "wake"
+                        ),
+                    };
+                }
+
+                return {
+                    handled: true,
+                    command: "wake",
+                    method: "wake",
+                    params: {
+                        mode: wakeMode,
+                    },
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: "wake",
+                        usage: CRON_CLI_USAGE.wake,
+                    },
+                };
+            }
+
+            if (command === "add" || command === "edit") {
+                const scheduleSignals = [
+                    options.at !== undefined,
+                    options.every !== undefined,
+                    options.cron !== undefined,
+                ].filter(Boolean).length;
+                if (command === "add" && scheduleSignals !== 1) {
+                    return {
+                        handled: true,
+                        command: command,
+                        ux: buildCronCliErrorContract(
+                            "missing_required",
+                            "add requires exactly one schedule: --at, --every, or --cron.",
+                            {
+                                usage: CRON_CLI_USAGE.add,
+                            },
+                            command
+                        ),
+                    };
+                }
+                if (command === "edit" && scheduleSignals > 1) {
+                    return {
+                        handled: true,
+                        command: command,
+                        ux: buildCronCliErrorContract(
+                            "invalid_combination",
+                            "edit accepts at most one schedule change: --at, --every, or --cron.",
+                            {
+                                usage: CRON_CLI_USAGE.edit,
+                            },
+                            command
+                        ),
+                    };
+                }
+
+                const payloadSignals = [
+                    options.systemEvent !== undefined,
+                    options.message !== undefined,
+                ].filter(Boolean).length;
+                if (command === "add" && payloadSignals !== 1) {
+                    return {
+                        handled: true,
+                        command: command,
+                        ux: buildCronCliErrorContract(
+                            "missing_required",
+                            "add requires exactly one payload: --system-event or --message.",
+                            {
+                                usage: CRON_CLI_USAGE.add,
+                            },
+                            command
+                        ),
+                    };
+                }
+                if (command === "edit" && payloadSignals > 1) {
+                    return {
+                        handled: true,
+                        command: command,
+                        ux: buildCronCliErrorContract(
+                            "invalid_combination",
+                            "edit accepts at most one payload change: --system-event or --message.",
+                            {
+                                usage: CRON_CLI_USAGE.edit,
+                            },
+                            command
+                        ),
+                    };
+                }
+
+                let method = "cron.add";
+                const params = {
+                    options: Object.assign({}, options),
+                    positionals: Array.isArray(args.positionals)
+                        ? args.positionals.slice()
+                        : [],
+                };
+                if (command === "add") {
+                    const name = String(options.name || "").trim();
+                    if (!name) {
+                        return {
+                            handled: true,
+                            command: "add",
+                            ux: buildCronCliErrorContract(
+                                "missing_required",
+                                "Missing required --name for /cron add.",
+                                {
+                                    usage: CRON_CLI_USAGE.add,
+                                },
+                                "add"
+                            ),
+                        };
+                    }
+                    params.options.name = name;
+                }
+                if (command === "edit") {
+                    method = "cron.update";
+                    const editId = resolveCronCliJobId(args);
+                    if (!editId) {
+                        return {
+                            handled: true,
+                            command: "edit",
+                            ux: buildCronCliErrorContract(
+                                "missing_required",
+                                "Missing required job id for /cron edit.",
+                                {
+                                    usage: CRON_CLI_USAGE.edit,
+                                },
+                                "edit"
+                            ),
+                        };
+                    }
+                    params.job = buildCronJobIdentityParams(editId);
+                }
+
+                return {
+                    handled: true,
+                    command: command,
+                    method: method,
+                    params: params,
+                    ux: {
+                        ok: true,
+                        code: "planned",
+                        command: command,
+                        usage: command === "add"
+                            ? CRON_CLI_USAGE.add
+                            : CRON_CLI_USAGE.edit,
+                    },
+                };
+            }
+
+            return {
+                handled: true,
+                command: command,
+                ux: buildCronCliErrorContract(
+                    "not_implemented",
+                    "Command is not yet mapped in slash-command planner: " + command,
+                    null,
+                    command
+                ),
+            };
+        }
+
+        function planCronCliSlashCommand(input) {
+            const parsed = parseCronCliSlashCommand(input);
+            const plan = buildCronCliCommandPlan(parsed);
+            if (plan && plan.handled) {
+                state.agentCronCliLastParsed = parsed;
+                state.agentCronCliParseError = plan.ux && plan.ux.ok === false
+                    ? String(plan.ux.message || "Invalid /cron command")
+                    : null;
+                onStateUpdated();
+            }
+            return plan;
         }
 
         function normalizeLowercaseStringOrEmpty(value) {
@@ -5524,6 +6071,9 @@
             updateCronFormField,
             parseCronCliSlashCommand,
             tryParseCronCliSlashCommand,
+            buildCronCliCommandPlan,
+            planCronCliSlashCommand,
+            buildCronCliHelpContract,
             addOrUpdateCronJob,
             removeCronJob,
             runCronJobNow,
@@ -7879,6 +8429,54 @@
                 state.agentCronCliLastParsed &&
                 state.agentCronCliLastParsed.command === "wake",
             "cron slash parser should persist last parsed command and clear prior parse error on success");
+
+            const listPlan = controller.planCronCliSlashCommand("/cron list --all --limit 20 --offset 3 --query nightly --sort-dir desc");
+            assertRegression(listPlan && listPlan.handled === true && listPlan.method === "cron.list",
+                "cron slash planner should map list command to cron.list");
+            assertRegression(listPlan && listPlan.params && listPlan.params.includeDisabled === true &&
+                listPlan.params.limit === 20 && listPlan.params.offset === 3,
+            "cron slash planner should normalize list defaults and numeric options");
+
+            const removePlan = controller.planCronCliSlashCommand("/cron delete cron-main");
+            assertRegression(removePlan && removePlan.method === "cron.remove" &&
+                removePlan.params && removePlan.params.id === "cron-main" &&
+                removePlan.params.jobId === "cron-main",
+            "cron slash planner should normalize remove aliases to cron.remove id/jobId payload");
+
+            const runDuePlan = controller.planCronCliSlashCommand("/cron run cron-main --due");
+            assertRegression(runDuePlan && runDuePlan.method === "cron.run" &&
+                runDuePlan.params && runDuePlan.params.mode === "due",
+            "cron slash planner should normalize run due-mode alias behavior");
+
+            const wakePlan = controller.planCronCliSlashCommand("/cron wake --mode next_heartbeat");
+            assertRegression(wakePlan && wakePlan.method === "wake" &&
+                wakePlan.params && wakePlan.params.mode === "next-heartbeat",
+            "cron slash planner should normalize wake mode aliases to strict taxonomy");
+
+            const addMissingNamePlan = controller.planCronCliSlashCommand("/cron add --every 30m --message hi");
+            assertRegression(addMissingNamePlan && addMissingNamePlan.ux && addMissingNamePlan.ux.ok === false &&
+                addMissingNamePlan.ux.code === "missing_required" &&
+                String(addMissingNamePlan.ux.message || "").indexOf("--name") >= 0,
+            "cron slash planner should return structured missing-required UX for add without --name");
+
+            const addInvalidPayloadPlan = controller.planCronCliSlashCommand("/cron add --name Nightly --every 30m --message hi --system-event hey");
+            assertRegression(addInvalidPayloadPlan && addInvalidPayloadPlan.ux && addInvalidPayloadPlan.ux.ok === false &&
+                addInvalidPayloadPlan.ux.code === "missing_required",
+            "cron slash planner should return structured payload contract error for conflicting add payload options");
+
+            const editMissingIdPlan = controller.planCronCliSlashCommand("/cron update --message hi");
+            assertRegression(editMissingIdPlan && editMissingIdPlan.ux && editMissingIdPlan.ux.ok === false &&
+                editMissingIdPlan.ux.code === "missing_required" &&
+                String(editMissingIdPlan.ux.message || "").indexOf("job id") >= 0,
+            "cron slash planner should enforce required edit job id contract");
+
+            const helpPlan = controller.planCronCliSlashCommand("/cron help runs");
+            assertRegression(helpPlan && helpPlan.ux && helpPlan.ux.ok === true &&
+                helpPlan.ux.code === "help" &&
+                helpPlan.ux.command === "runs" &&
+                typeof helpPlan.ux.usage === "string" &&
+                helpPlan.ux.usage.indexOf("/cron runs") === 0,
+            "cron slash planner should provide structured help contract for subcommands");
 
             summary.push("cron slash parser baseline determinism");
         }
