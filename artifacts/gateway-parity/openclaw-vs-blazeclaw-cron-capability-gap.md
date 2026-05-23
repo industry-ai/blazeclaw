@@ -1,16 +1,18 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-21 (Phase DE §7.7 Step 7-9 production E2E + validation/docs closure baseline)
+Last refreshed: 2026-05-22 (Phase DG §7.8 Step 1-5 execution + validation/docs sync)
 
 Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.7)
 
 ## Summary
 
-BlazeClaw cron parity is **strong on the service/gateway contract surface**: all
-Section 2 core rows are **High** with 247 `[cron]` tests (1618 assertions) green.
-Remaining work is **behavioral depth** under §7.6: isolated-agent runtime module,
-true outbound delivery, cron session hygiene, store doctor/prune ops, schema
-residual edges, and expanded production E2E.
+BlazeClaw cron parity is **closed and sustained** on the service/gateway/tool
+surface: all Section 2 core rows remain **High**, §7.6 and §7.7 baselines remain
+pass-linked, and Phase DF replayed ordered gates green (`[cron]` 1664 assertions /
+254 test cases).
+
+Phase DG update: §7.8 Step 1-5 governance execution is completed with no reopen
+trigger conditions met; closure remains in pass-lock mode.
 
 ## OpenClaw inventory (non-test, ~45 modules)
 
@@ -33,21 +35,17 @@ residual edges, and expanded production E2E.
 | --- | --- |
 | P0–P9 + P10 tool depth | **Complete** |
 | §7.6 depth (P11+) | **Complete** |
-| §7.7 `/cron` cli parity (Step 1-9) | **In Progress** (Phase DE baseline landed) |
+| §7.7 `/cron` cli parity (Step 1-9) | **Complete** (Phase DE baseline, sustained in Phase DG) |
+| §7.8 post-closure re-open governance | **Active policy** |
 
-## Remaining gaps (Phase DD)
+## Remaining gaps (Phase DG)
 
 | Theme | OpenClaw | BlazeClaw gap |
 | --- | --- | --- |
-| Isolated runtime | Full `isolated-agent/*` orchestration | Adapter callbacks; module depth lighter |
-| Outbound delivery | Default runtime dispatch | Simulation + opt-in `transportDispatch` |
-| Session hygiene | `session-reaper.ts` | Not yet in cron subsystem |
-| Active job dedupe | `active-jobs.ts` | Lighter process-level guard |
-| Past `at` guard | `validate-timestamp.ts` | Normalization only |
-| Store ops | Doctor migrations + runLog prune config | Backup/jsonl landed; doctor depth open |
-| CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parser + planner + structured UX + execution bridge + regression baseline landed (Step 1-6); production E2E permutations + ordered gate/doc closure baseline landed (Step 7-9) |
+| Isolated runtime submodule graph | Full `isolated-agent/*` orchestration breadth | Adapter-backed runtime outcomes/metadata are landed; deep module graph remains product-scoped deferred |
+| Native CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parity is closed; native MFC CLI/dashboard remains deferred unless product scope changes |
 
-## Validation (2026-05-21, Phase DE)
+## Validation (2026-05-22, Phase DG)
 
 ```powershell
 E:\gitRepo\blazeClaw\blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe "[cron][gateway][normalize]"
