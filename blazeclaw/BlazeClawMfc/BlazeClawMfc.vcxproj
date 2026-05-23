@@ -540,6 +540,7 @@
     <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
+    <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />

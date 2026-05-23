@@ -16,6 +16,7 @@
 #include "SharedDocMarkdownChildFrame.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
+#include "../core/runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 
 #include <filesystem>
 #include <fstream>
@@ -67,6 +68,19 @@ namespace {
 		return output.empty() ? L"none" : output;
 	}
 
+	std::wstring JoinUtf8Values(const std::vector<std::string>& values) {
+		if (values.empty()) {
+			return L"none";
+		}
+
+		std::vector<std::wstring> converted;
+		converted.reserve(values.size());
+		for (const auto& value : values) {
+			converted.push_back(ToWide(value));
+		}
+		return JoinValues(converted);
+	}
+
 	std::wstring Trim(const std::wstring& value) {
 		const auto first = std::find_if_not(
 			value.begin(),
@@ -81,6 +95,72 @@ namespace {
 		}
 
 		return std::wstring(first, last);
+	}
+
+	bool HasCommandLineSwitch(const wchar_t* value) {
+		if (value == nullptr || *value == L'\0') {
+			return false;
+		}
+
+		for (int idx = 1; idx < __argc; ++idx) {
+			if (_wcsicmp(__wargv[idx], value) == 0) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	std::vector<std::wstring> CollectCommandLineValuesWithPrefix(
+		const std::wstring& prefix) {
+		std::vector<std::wstring> values;
+		for (int idx = 1; idx < __argc; ++idx) {
+			const std::wstring arg = __wargv[idx] == nullptr
+				? std::wstring()
+				: std::wstring(__wargv[idx]);
+			if (arg.rfind(prefix, 0) != 0) {
+				continue;
+			}
+
+			const std::wstring value = Trim(arg.substr(prefix.size()));
+			if (!value.empty()) {
+				values.push_back(value);
+			}
+		}
+
+		return values;
+	}
+
+	std::optional<int> TryRunOfflineSttOptimizationCommand(
+		const blazeclaw::config::AppConfig& config) {
+		if (!HasCommandLineSwitch(L"--stt-optimize-offline")) {
+			return std::nullopt;
+		}
+
+		const auto explicitRoots = CollectCommandLineValuesWithPrefix(
+			L"--stt-model-root=");
+		const auto optimizationResult =
+			blazeclaw::core::speechrecognition::OptimizeSpeechRecognitionModelsOffline(
+				config.speechRecognition,
+				explicitRoots);
+
+		TRACE(
+			"[Startup][speech.offline.optimize.summary] %S optimizedRoots=%S failedRoots=%S\n",
+			optimizationResult.summary.c_str(),
+			JoinUtf8Values(optimizationResult.optimizedRoots).c_str(),
+			JoinUtf8Values(optimizationResult.failedRoots).c_str());
+
+		if (!optimizationResult.success) {
+			TRACE(
+				"[Startup][speech.offline.optimize.failed] summary=%S\n",
+				optimizationResult.summary.c_str());
+			return 1;
+		}
+
+		TRACE(
+			"[Startup][speech.offline.optimize.completed] summary=%S\n",
+			optimizationResult.summary.c_str());
+		return 0;
 	}
 
 	void UpsertConfigEntry(
@@ -794,6 +874,14 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 
 	m_configLoader.LoadFromFile(kConfigPath, m_config);
 	AppendStartupCheckpoint(L"InitInstance.config.loaded");
+	if (const auto commandExitCode = TryRunOfflineSttOptimizationCommand(m_config);
+		commandExitCode.has_value()) {
+		const std::wstring checkpoint = *commandExitCode == 0
+			? L"InitInstance.exit.speech.offline.optimize.success"
+			: L"InitInstance.exit.speech.offline.optimize.failed";
+		AppendStartupCheckpoint(checkpoint);
+		::ExitProcess(static_cast<UINT>(*commandExitCode));
+	}
 	std::optional<std::wstring> startupServiceError;
 	try {
 		if (!m_serviceManager.Start(m_config)) {

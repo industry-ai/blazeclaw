@@ -92,6 +92,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsFrontmatterCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTsAggregateParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionOfflineOptimizationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
@@ -208,6 +209,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\PythonProcessExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\PiEmbeddedService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\ToolArgumentValidators.cpp" />

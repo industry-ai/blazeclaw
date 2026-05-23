@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -463,6 +464,431 @@ namespace blazeclaw::core::speechrecognition {
 					return static_cast<char>(std::tolower(ch));
 				});
 			return normalized;
+		}
+
+		std::filesystem::path ResolveConfiguredPath(
+			const std::wstring& configuredPath,
+			const std::wstring& storageRoot);
+
+		std::string NormalizeSpeechModelVariant(const std::wstring& value) {
+			std::string normalized = ToNarrowLocal(value);
+			std::transform(
+				normalized.begin(),
+				normalized.end(),
+				normalized.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			if (normalized == "int4" ||
+				normalized == "fp16" ||
+				normalized == "fp32") {
+				return normalized;
+			}
+
+			return "auto";
+		}
+
+		struct ModelVariantPaths {
+			std::string variant;
+			std::filesystem::path encoderPath;
+			std::filesystem::path decoderInitPath;
+			std::filesystem::path decoderStepPath;
+		};
+
+		ModelVariantPaths BuildModelVariantPaths(
+			const std::filesystem::path& rootPath,
+			const std::string& variant) {
+			if (variant == "int4") {
+				return ModelVariantPaths{
+					.variant = variant,
+					.encoderPath = rootPath / L"encoder.int4.onnx",
+					.decoderInitPath = rootPath / L"decoder_init.int4.onnx",
+					.decoderStepPath = rootPath / L"decoder_step.int4.onnx",
+				};
+			}
+			if (variant == "fp16") {
+				return ModelVariantPaths{
+					.variant = variant,
+					.encoderPath = rootPath / L"encoder.fp16.onnx",
+					.decoderInitPath = rootPath / L"decoder_init.fp16.onnx",
+					.decoderStepPath = rootPath / L"decoder_step.fp16.onnx",
+				};
+			}
+
+			return ModelVariantPaths{
+				.variant = "fp32",
+				.encoderPath = rootPath / L"encoder.onnx",
+				.decoderInitPath = rootPath / L"decoder_init.onnx",
+				.decoderStepPath = rootPath / L"decoder_step.onnx",
+			};
+		}
+
+		std::optional<ModelVariantPaths> SelectModelVariantPaths(
+			const std::filesystem::path& rootPath,
+			const std::wstring& configuredVariant,
+			std::vector<std::string>& outCandidateVariants) {
+			const std::string preferredVariant =
+				NormalizeSpeechModelVariant(configuredVariant);
+			if (preferredVariant == "int4" ||
+				preferredVariant == "fp16" ||
+				preferredVariant == "fp32") {
+				outCandidateVariants.push_back(preferredVariant);
+			}
+			else {
+				outCandidateVariants = { "int4", "fp16", "fp32" };
+			}
+
+			for (const auto& variant : outCandidateVariants) {
+				auto candidate = BuildModelVariantPaths(rootPath, variant);
+				if (std::filesystem::exists(candidate.encoderPath) &&
+					std::filesystem::exists(candidate.decoderInitPath)) {
+					return candidate;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::string FileTimeToTickString(const std::filesystem::file_time_type& fileTime) {
+			return std::to_string(fileTime.time_since_epoch().count());
+		}
+
+		std::string BuildUtcTimestamp() {
+			const std::time_t now = std::time(nullptr);
+			std::tm utcTm{};
+			if (gmtime_s(&utcTm, &now) != 0) {
+				return "";
+			}
+
+			char buffer[32]{};
+			if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utcTm) == 0) {
+				return "";
+			}
+
+			return std::string(buffer);
+		}
+
+		std::filesystem::path BuildOptimizedArtifactPath(const std::filesystem::path& sourcePath) {
+			const std::filesystem::path optimizedDir = sourcePath.parent_path() / L"optimized";
+			const std::wstring optimizedFileName =
+				sourcePath.stem().wstring() + L".optimized" + sourcePath.extension().wstring();
+			return optimizedDir / optimizedFileName;
+		}
+
+		nlohmann::json BuildArtifactFingerprintJson(const std::filesystem::path& path) {
+			nlohmann::json fingerprint = nlohmann::json::object();
+			std::error_code ec;
+			const auto fileSize = std::filesystem::file_size(path, ec);
+			fingerprint["path"] = ToNarrowLocal(path.filename().wstring());
+			if (!ec) {
+				fingerprint["sizeBytes"] = fileSize;
+			}
+			ec.clear();
+			const auto writeTime = std::filesystem::last_write_time(path, ec);
+			if (!ec) {
+				fingerprint["writeTimeTick"] = FileTimeToTickString(writeTime);
+			}
+
+			return fingerprint;
+		}
+
+		bool RunOfflineGraphOptimization(
+			const std::filesystem::path& sourcePath,
+			const std::filesystem::path& optimizedPath,
+			const SpeechRecognitionRuntimeSnapshot& runtimeSnapshot,
+			std::string& outError) {
+			outError.clear();
+#if !BLAZECLAW_HAS_ONNXRUNTIME
+			(void)sourcePath;
+			(void)optimizedPath;
+			(void)runtimeSnapshot;
+			outError = "onnxruntime headers not available at compile time";
+			return false;
+#else
+			try {
+				if (!std::filesystem::exists(sourcePath)) {
+					outError = "source model not found";
+					return false;
+				}
+
+				std::error_code ec;
+				std::filesystem::create_directories(optimizedPath.parent_path(), ec);
+				if (ec) {
+					outError = "failed to create optimized output directory";
+					return false;
+				}
+
+				ec.clear();
+				if (std::filesystem::exists(optimizedPath, ec)) {
+					ec.clear();
+					std::filesystem::remove(optimizedPath, ec);
+					if (ec) {
+						outError = "failed to remove existing optimized artifact";
+						return false;
+					}
+				}
+				ec.clear();
+
+				Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "blazeclaw-speech-offline-opt");
+				Ort::SessionOptions options;
+				ConfigureDefaultSessionOptions(options, runtimeSnapshot);
+				options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+				options.SetOptimizedModelFilePath(optimizedPath.c_str());
+				Ort::Session session(env, sourcePath.c_str(), options);
+				(void)session.GetInputCount();
+
+				ec.clear();
+				if (!std::filesystem::exists(optimizedPath, ec) || ec) {
+					outError = "optimized artifact was not produced";
+					return false;
+				}
+
+				ec.clear();
+				const auto optimizedSize = std::filesystem::file_size(optimizedPath, ec);
+				if (ec || optimizedSize == 0) {
+					outError = "optimized artifact is empty";
+					return false;
+				}
+
+				return true;
+			}
+			catch (const std::exception& ex) {
+				outError = ex.what();
+				return false;
+			}
+#endif
+		}
+
+		std::filesystem::path ResolveConfiguredPath(
+			const std::wstring& configuredPath,
+			const std::wstring& storageRoot);
+
+		std::vector<std::filesystem::path> ResolveOfflineOptimizationRoots(
+			const blazeclaw::config::SpeechRecognitionConfig& config,
+			const std::vector<std::wstring>& modelRoots) {
+			std::vector<std::filesystem::path> candidates;
+			if (!modelRoots.empty()) {
+				candidates.reserve(modelRoots.size());
+				for (const auto& root : modelRoots) {
+					if (root.empty()) {
+						continue;
+					}
+					candidates.push_back(ResolveConfiguredPath(root, L""));
+				}
+			}
+			else {
+				candidates = {
+					ResolveConfiguredPath(
+						L"BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx",
+						config.storageRoot),
+					ResolveConfiguredPath(
+						L"BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx",
+						config.storageRoot),
+				};
+			}
+
+			std::unordered_set<std::string> dedupe;
+			std::vector<std::filesystem::path> resolved;
+			for (const auto& candidate : candidates) {
+				const auto normalized = candidate.lexically_normal();
+				const std::string key = ToNarrowLocal(normalized.wstring());
+				if (key.empty() || dedupe.find(key) != dedupe.end()) {
+					continue;
+				}
+				dedupe.insert(key);
+				resolved.push_back(normalized);
+			}
+
+			return resolved;
+		}
+
+		struct RuntimeModelLoadPaths {
+			std::filesystem::path encoderPath;
+			std::filesystem::path decoderInitPath;
+			std::filesystem::path decoderStepPath;
+			bool optimized = false;
+			std::string reason;
+		};
+
+		bool ValidateSourceFingerprint(
+			const std::filesystem::path& sourcePath,
+			const nlohmann::json& fingerprint,
+			std::string& outReason) {
+			if (!fingerprint.is_object()) {
+				outReason = "fingerprint_not_object";
+				return false;
+			}
+
+			std::error_code ec;
+			const auto fileSize = std::filesystem::file_size(sourcePath, ec);
+			if (ec) {
+				outReason = "source_size_unavailable";
+				return false;
+			}
+
+			ec.clear();
+			const auto writeTime = std::filesystem::last_write_time(sourcePath, ec);
+			if (ec) {
+				outReason = "source_write_time_unavailable";
+				return false;
+			}
+
+			if (!fingerprint.contains("sizeBytes") ||
+				!fingerprint.contains("writeTimeTick")) {
+				outReason = "fingerprint_missing_fields";
+				return false;
+			}
+
+			const auto expectedSize = fingerprint["sizeBytes"].get<std::uintmax_t>();
+			const auto expectedWriteTick = fingerprint["writeTimeTick"].get<std::string>();
+			if (expectedSize != fileSize) {
+				outReason = "source_size_mismatch";
+				return false;
+			}
+
+			if (expectedWriteTick != FileTimeToTickString(writeTime)) {
+				outReason = "source_write_time_mismatch";
+				return false;
+			}
+
+			return true;
+		}
+
+		RuntimeModelLoadPaths ResolveRuntimeModelLoadPaths(
+			const std::filesystem::path& rootPath,
+			const ModelVariantPaths& sourceVariantPaths) {
+			RuntimeModelLoadPaths resolved{
+				.encoderPath = sourceVariantPaths.encoderPath,
+				.decoderInitPath = sourceVariantPaths.decoderInitPath,
+				.decoderStepPath = sourceVariantPaths.decoderStepPath,
+				.optimized = false,
+				.reason = "optimized_metadata_missing",
+			};
+
+			const std::filesystem::path metadataPath =
+				rootPath / L"optimized" / L"optimization.metadata.json";
+			if (!std::filesystem::exists(metadataPath)) {
+				return resolved;
+			}
+
+			nlohmann::json metadata;
+			try {
+				std::ifstream metadataFile(metadataPath);
+				if (!metadataFile.is_open()) {
+					resolved.reason = "optimized_metadata_open_failed";
+					return resolved;
+				}
+				metadataFile >> metadata;
+			}
+			catch (...) {
+				resolved.reason = "optimized_metadata_parse_failed";
+				return resolved;
+			}
+
+			if (!metadata.contains("entries") || !metadata["entries"].is_array()) {
+				resolved.reason = "optimized_metadata_entries_missing";
+				return resolved;
+			}
+
+			const nlohmann::json* selectedEntry = nullptr;
+			for (const auto& entry : metadata["entries"]) {
+				if (!entry.is_object() ||
+					!entry.contains("variant") ||
+					!entry["variant"].is_string()) {
+					continue;
+				}
+				if (entry["variant"].get<std::string>() == sourceVariantPaths.variant) {
+					selectedEntry = &entry;
+					break;
+				}
+			}
+
+			if (selectedEntry == nullptr) {
+				resolved.reason = "optimized_metadata_variant_missing";
+				return resolved;
+			}
+
+			if (!selectedEntry->contains("source") ||
+				!selectedEntry->contains("optimized") ||
+				!selectedEntry->contains("fingerprints") ||
+				!(*selectedEntry)["source"].is_object() ||
+				!(*selectedEntry)["optimized"].is_object() ||
+				!(*selectedEntry)["fingerprints"].is_object()) {
+				resolved.reason = "optimized_metadata_entry_shape_invalid";
+				return resolved;
+			}
+
+			const auto& sourceNode = (*selectedEntry)["source"];
+			const auto& optimizedNode = (*selectedEntry)["optimized"];
+			const auto& fingerprintNode = (*selectedEntry)["fingerprints"];
+
+			auto validateRequiredArtifact = [&](const char* artifactName,
+				const std::filesystem::path& expectedSourcePath,
+				std::filesystem::path& outOptimizedPath) -> bool {
+				if (!sourceNode.contains(artifactName) ||
+					!sourceNode[artifactName].is_string() ||
+					!optimizedNode.contains(artifactName) ||
+					!optimizedNode[artifactName].is_string() ||
+					!fingerprintNode.contains(artifactName)) {
+					resolved.reason = std::string("optimized_metadata_missing_") + artifactName;
+					return false;
+				}
+
+				if (sourceNode[artifactName].get<std::string>() !=
+					ToNarrowLocal(expectedSourcePath.filename().wstring())) {
+					resolved.reason = std::string("optimized_metadata_source_name_mismatch_") + artifactName;
+					return false;
+				}
+
+				std::string fingerprintReason;
+				if (!ValidateSourceFingerprint(
+					expectedSourcePath,
+					fingerprintNode[artifactName],
+					fingerprintReason)) {
+					resolved.reason = std::string("optimized_source_fingerprint_invalid_") +
+						artifactName + "_" + fingerprintReason;
+					return false;
+				}
+
+				outOptimizedPath = rootPath / L"optimized" /
+					ToWideLocal(optimizedNode[artifactName].get<std::string>());
+				if (!std::filesystem::exists(outOptimizedPath)) {
+					resolved.reason = std::string("optimized_artifact_missing_") + artifactName;
+					return false;
+				}
+
+				return true;
+			};
+
+			std::filesystem::path optimizedEncoderPath;
+			std::filesystem::path optimizedDecoderInitPath;
+			if (!validateRequiredArtifact(
+				"encoder",
+				sourceVariantPaths.encoderPath,
+				optimizedEncoderPath) ||
+				!validateRequiredArtifact(
+					"decoderInit",
+					sourceVariantPaths.decoderInitPath,
+					optimizedDecoderInitPath)) {
+				return resolved;
+			}
+
+			resolved.encoderPath = optimizedEncoderPath;
+			resolved.decoderInitPath = optimizedDecoderInitPath;
+			resolved.optimized = true;
+			resolved.reason = "optimized_metadata_valid";
+
+			if (std::filesystem::exists(sourceVariantPaths.decoderStepPath) &&
+				optimizedNode.contains("decoderStep") &&
+				optimizedNode["decoderStep"].is_string()) {
+				const auto optimizedDecoderStepPath = rootPath / L"optimized" /
+					ToWideLocal(optimizedNode["decoderStep"].get<std::string>());
+				if (std::filesystem::exists(optimizedDecoderStepPath)) {
+					resolved.decoderStepPath = optimizedDecoderStepPath;
+				}
+			}
+
+			return resolved;
 		}
 
 		std::string NormalizeExecutionMode(const std::wstring& value) {
@@ -1124,58 +1550,27 @@ namespace blazeclaw::core::speechrecognition {
 			return false;
 		}
 
-		struct VariantPaths {
-			std::string variant;
-			std::filesystem::path encoderPath;
-			std::filesystem::path decoderInitPath;
-			std::filesystem::path decoderStepPath;
-		};
-
-		auto buildVariantPaths = [&rootPath](const std::string& variant) -> VariantPaths {
-			if (variant == "int4") {
-				return VariantPaths{
-					.variant = variant,
-					.encoderPath = rootPath / L"encoder.int4.onnx",
-					.decoderInitPath = rootPath / L"decoder_init.int4.onnx",
-					.decoderStepPath = rootPath / L"decoder_step.int4.onnx",
-				};
-			}
-			if (variant == "fp16") {
-				return VariantPaths{
-					.variant = variant,
-					.encoderPath = rootPath / L"encoder.fp16.onnx",
-					.decoderInitPath = rootPath / L"decoder_init.fp16.onnx",
-					.decoderStepPath = rootPath / L"decoder_step.fp16.onnx",
-				};
-			}
-			return VariantPaths{
-				.variant = "fp32",
-				.encoderPath = rootPath / L"encoder.onnx",
-				.decoderInitPath = rootPath / L"decoder_init.onnx",
-				.decoderStepPath = rootPath / L"decoder_step.onnx",
-			};
-		};
-
-		const std::string preferredVariant = NormalizeProvider(m_config.speechRecognition.modelVariant);
 		std::vector<std::string> candidateVariants;
-		if (preferredVariant == "int4" || preferredVariant == "fp16" || preferredVariant == "fp32") {
-			candidateVariants.push_back(preferredVariant);
-		}
-		else {
-			candidateVariants = { "int4", "fp16", "fp32" };
-		}
-
-		std::optional<VariantPaths> selectedVariant;
-		for (const auto& variant : candidateVariants) {
-			auto candidate = buildVariantPaths(variant);
-			if (std::filesystem::exists(candidate.encoderPath) &&
-				std::filesystem::exists(candidate.decoderInitPath)) {
-				selectedVariant = std::move(candidate);
-				break;
-			}
-		}
+		std::optional<ModelVariantPaths> selectedVariant = SelectModelVariantPaths(
+			rootPath,
+			m_config.speechRecognition.modelVariant,
+			candidateVariants);
 
 		if (!selectedVariant.has_value()) {
+			std::ostringstream variantFailureDetails;
+			variantFailureDetails << "configured="
+				<< NormalizeSpeechModelVariant(m_config.speechRecognition.modelVariant)
+				<< " candidates=";
+			for (std::size_t i = 0; i < candidateVariants.size(); ++i) {
+				if (i > 0) {
+					variantFailureDetails << ",";
+				}
+				variantFailureDetails << candidateVariants[i];
+			}
+			TraceRuntime(
+				"runtime.model.variant.missing",
+				std::string(),
+				variantFailureDetails.str());
 			outResult.ok = false;
 			outResult.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::ModelNotFound,
@@ -1187,9 +1582,28 @@ namespace blazeclaw::core::speechrecognition {
 			return false;
 		}
 
-		const std::filesystem::path encoderPath = selectedVariant->encoderPath;
-		const std::filesystem::path decoderInitPath = selectedVariant->decoderInitPath;
-		const std::filesystem::path decoderStepPath = selectedVariant->decoderStepPath;
+		const auto runtimeModelPaths = ResolveRuntimeModelLoadPaths(
+			rootPath,
+			*selectedVariant);
+		const std::filesystem::path encoderPath = runtimeModelPaths.encoderPath;
+		const std::filesystem::path decoderInitPath = runtimeModelPaths.decoderInitPath;
+		const std::filesystem::path decoderStepPath = runtimeModelPaths.decoderStepPath;
+		TraceRuntime(
+			"runtime.model.variant.selected",
+			std::string(),
+			"variant=" + selectedVariant->variant +
+			" encoder=" + ToNarrow(encoderPath.wstring()) +
+			" decoderInit=" + ToNarrow(decoderInitPath.wstring()) +
+			" decoderStep=" +
+			(std::filesystem::exists(decoderStepPath)
+				? ToNarrow(decoderStepPath.wstring())
+				: std::string("missing")));
+		TraceRuntime(
+			"runtime.model.load_mode",
+			std::string(),
+			"mode=" + std::string(runtimeModelPaths.optimized ? "optimized" : "source") +
+			" reason=" + runtimeModelPaths.reason +
+			" variant=" + selectedVariant->variant);
 		const std::filesystem::path tokenizerJsonPath = rootPath / L"tokenizer.json";
 		const std::filesystem::path fallbackVocabPath = rootPath / L"vocab.json";
 
@@ -2598,6 +3012,149 @@ namespace blazeclaw::core::speechrecognition {
 		const std::string& runId,
 		const std::string& details) {
 		TRACE("[SpeechRecognition][%S] runId=%S %S\n", stage, runId.c_str(), details.c_str());
+	}
+
+	SpeechOfflineOptimizationResult OptimizeSpeechRecognitionModelsOffline(
+		const blazeclaw::config::SpeechRecognitionConfig& config,
+		const std::vector<std::wstring>& modelRoots) {
+		SpeechOfflineOptimizationResult result;
+		auto addFailedRoot = [&result](const std::filesystem::path& rootPath) {
+			const std::string root = ToNarrowLocal(rootPath.wstring());
+			if (std::find(result.failedRoots.begin(), result.failedRoots.end(), root) ==
+				result.failedRoots.end()) {
+				result.failedRoots.push_back(root);
+			}
+		};
+		const auto resolvedRoots = ResolveOfflineOptimizationRoots(config, modelRoots);
+		if (resolvedRoots.empty()) {
+			result.summary = "no STT model roots resolved for offline optimization";
+			return result;
+		}
+
+		SpeechRecognitionRuntimeSnapshot optimizationSnapshot;
+		optimizationSnapshot.executionMode = NormalizeExecutionMode(config.executionMode);
+		optimizationSnapshot.threads = config.threads;
+
+		std::size_t optimizedRootsCount = 0;
+		for (const auto& rootPath : resolvedRoots) {
+			if (!std::filesystem::exists(rootPath)) {
+				addFailedRoot(rootPath);
+				TRACE(
+					"[SpeechRecognition][offline.optimize.root_missing] root=%S\n",
+					rootPath.c_str());
+				continue;
+			}
+
+			nlohmann::json metadata = nlohmann::json::object();
+			metadata["schemaVersion"] = 1;
+			metadata["generatedAtUtc"] = BuildUtcTimestamp();
+			metadata["optimizer"] = "onnxruntime";
+			metadata["graphOptimizationLevel"] = "ORT_ENABLE_ALL";
+			metadata["modelRoot"] = ToNarrowLocal(rootPath.wstring());
+			metadata["entries"] = nlohmann::json::array();
+
+			bool rootSucceeded = true;
+			bool foundAtLeastOneVariant = false;
+			for (const auto& variant : { std::string("int4"), std::string("fp16"), std::string("fp32") }) {
+				const auto variantPaths = BuildModelVariantPaths(rootPath, variant);
+				if (!std::filesystem::exists(variantPaths.encoderPath) ||
+					!std::filesystem::exists(variantPaths.decoderInitPath)) {
+					continue;
+				}
+
+				foundAtLeastOneVariant = true;
+				nlohmann::json entry = nlohmann::json::object();
+				entry["variant"] = variantPaths.variant;
+				entry["source"] = nlohmann::json::object();
+				entry["optimized"] = nlohmann::json::object();
+				entry["fingerprints"] = nlohmann::json::object();
+
+				const std::vector<std::pair<std::string, std::filesystem::path>> sourceArtifacts = {
+					{ "encoder", variantPaths.encoderPath },
+					{ "decoderInit", variantPaths.decoderInitPath },
+					{ "decoderStep", variantPaths.decoderStepPath },
+				};
+
+				for (const auto& [artifactName, sourcePath] : sourceArtifacts) {
+					if (!std::filesystem::exists(sourcePath)) {
+						continue;
+					}
+
+					const auto optimizedPath = BuildOptimizedArtifactPath(sourcePath);
+					std::string optimizeError;
+					if (!RunOfflineGraphOptimization(
+						sourcePath,
+						optimizedPath,
+						optimizationSnapshot,
+						optimizeError)) {
+						rootSucceeded = false;
+						addFailedRoot(rootPath);
+						TRACE(
+							"[SpeechRecognition][offline.optimize.failed] root=%S variant=%S artifact=%S message=%S\n",
+							rootPath.c_str(),
+							variantPaths.variant.c_str(),
+							artifactName.c_str(),
+							optimizeError.c_str());
+						break;
+					}
+
+					entry["source"][artifactName] =
+						ToNarrowLocal(sourcePath.filename().wstring());
+					entry["optimized"][artifactName] =
+						ToNarrowLocal(optimizedPath.filename().wstring());
+					entry["fingerprints"][artifactName] = BuildArtifactFingerprintJson(sourcePath);
+				}
+
+				if (!rootSucceeded) {
+					break;
+				}
+
+				metadata["entries"].push_back(std::move(entry));
+			}
+
+			if (!foundAtLeastOneVariant || !rootSucceeded) {
+				if (!foundAtLeastOneVariant) {
+					addFailedRoot(rootPath);
+					TRACE(
+						"[SpeechRecognition][offline.optimize.no_variants] root=%S\n",
+						rootPath.c_str());
+				}
+				continue;
+			}
+
+			const std::filesystem::path metadataPath =
+				rootPath / L"optimized" / L"optimization.metadata.json";
+			std::error_code ec;
+			std::filesystem::create_directories(metadataPath.parent_path(), ec);
+			ec.clear();
+			std::ofstream metadataFile(metadataPath, std::ios::trunc);
+			if (!metadataFile.is_open()) {
+				addFailedRoot(rootPath);
+				TRACE(
+					"[SpeechRecognition][offline.optimize.metadata_open_failed] root=%S metadata=%S\n",
+					rootPath.c_str(),
+					metadataPath.c_str());
+				continue;
+			}
+
+			metadataFile << metadata.dump(2) << "\n";
+			metadataFile.close();
+
+			++optimizedRootsCount;
+			result.optimizedRoots.push_back(ToNarrowLocal(rootPath.wstring()));
+			TRACE(
+				"[SpeechRecognition][offline.optimize.completed] root=%S metadata=%S\n",
+				rootPath.c_str(),
+				metadataPath.c_str());
+		}
+
+		result.success = !result.optimizedRoots.empty() && result.failedRoots.empty();
+		std::ostringstream summary;
+		summary << "roots_total=" << resolvedRoots.size()
+			<< " roots_optimized=" << optimizedRootsCount
+			<< " roots_failed=" << result.failedRoots.size();
+		result.summary = summary.str();
+		return result;
 	}
 
 	std::string SpeechRecognitionErrorCodeToString(SpeechRecognitionErrorCode code) {

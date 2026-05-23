@@ -7,8 +7,20 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace blazeclaw::core::speechrecognition {
+
+	struct SpeechOfflineOptimizationResult {
+		bool success = false;
+		std::vector<std::string> optimizedRoots;
+		std::vector<std::string> failedRoots;
+		std::string summary;
+	};
+
+	[[nodiscard]] SpeechOfflineOptimizationResult OptimizeSpeechRecognitionModelsOffline(
+		const blazeclaw::config::SpeechRecognitionConfig& config,
+		const std::vector<std::wstring>& modelRoots = {});
 
 	class SpeechRecognitionRuntime final : public ISpeechRecognitionRuntime {
 	public:
