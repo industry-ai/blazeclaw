@@ -19,6 +19,37 @@ enum class VoiceRecorderState
     Paused      // Paused
 };
 
+enum class VoiceBoundarySignalType
+{
+    SpeechStartCandidate,
+    SpeechEndCandidate,
+    MaxUtteranceTimeout,
+};
+
+struct VoiceBoundarySignal
+{
+    VoiceBoundarySignalType type = VoiceBoundarySignalType::SpeechStartCandidate;
+    uint64_t startSequence = 0;
+    uint64_t endSequence = 0;
+    uint32_t durationMs = 0;
+};
+
+class IVoiceVadProvider
+{
+public:
+    virtual ~IVoiceVadProvider() = default;
+    virtual bool IsSpeech(
+        const float* samples,
+        size_t sampleCount,
+        uint32_t sampleRate) = 0;
+};
+
+enum class VoiceVadProviderType
+{
+    NoOp,
+    Nvidia,
+};
+
 // Recording configuration
 struct VoiceRecorderConfig
 {
@@ -27,6 +58,11 @@ struct VoiceRecorderConfig
     UINT nBitsPerSample = 16;     // Bits per sample: 16bit
     UINT ringBufferDurationSeconds = 30; // Ring retention window
     UINT ringCaptureChannelIndex = 0; // Interleaved channel index captured into ring
+    bool vadEnabled = true;
+    VoiceVadProviderType vadProviderType = VoiceVadProviderType::NoOp;
+    UINT vadFrameDurationMs = 20;
+    UINT vadSilenceDurationMs = 500;
+    UINT vadMaxUtteranceMs = 15000;
 
     DWORD GetAvgBytesPerSec() const
     {
@@ -43,6 +79,12 @@ struct VoiceRecorderConfig
         return static_cast<size_t>(nSamplesPerSec) *
                static_cast<size_t>(ringBufferDurationSeconds);
     }
+
+    size_t GetVadFrameSamples() const
+    {
+        return static_cast<size_t>(nSamplesPerSec) *
+               static_cast<size_t>(vadFrameDurationMs) / 1000;
+    }
 };
 
 // Recording data callback interface
@@ -55,6 +97,10 @@ public:
     virtual void OnVoiceSessionChanged(
         const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState) = 0;
     virtual void OnVoiceError(long nError, const wchar_t* pszDescription) = 0;
+    virtual void OnVoiceBoundarySignal(const VoiceBoundarySignal& signal)
+    {
+        UNREFERENCED_PARAMETER(signal);
+    }
 };
 
 // Voice recorder wrapper class
@@ -119,6 +165,14 @@ protected:
         blazeclaw::core::speechrecognition::SpeechSessionStage stage);
     void NotifySessionState(
         blazeclaw::core::speechrecognition::SpeechSessionStage stage);
+    void ResetVadState();
+    void ProcessVadFromRing();
+    void EmitBoundarySignal(
+        VoiceBoundarySignalType type,
+        uint64_t startSequence,
+        uint64_t endSequence);
+    std::unique_ptr<IVoiceVadProvider> CreateVadProvider(
+        VoiceVadProviderType providerType) const;
 
 private:
     HWND           m_hNotifyWnd;
@@ -139,6 +193,14 @@ private:
     std::vector<BYTE> m_recordedData;
     DWORD          m_dwRecordedDataSize;
     std::unique_ptr<AudioRingBuffer> m_audioRingBuffer;
+    std::unique_ptr<IVoiceVadProvider> m_vadProvider;
+    uint64_t       m_vadNextSequence;
+    uint64_t       m_vadSpeechStartSequence;
+    uint64_t       m_vadLastSpeechSequence;
+    uint64_t       m_vadSilenceSamples;
+    uint32_t       m_vadBoundarySignalSequence;
+    bool           m_vadSpeechActive;
+    std::vector<float> m_vadFrameBuffer;
 
     BOOL           m_bInitialized;
 };

@@ -6,6 +6,36 @@
 
 namespace {
 
+class NoOpVoiceVadProvider final : public IVoiceVadProvider
+{
+public:
+    bool IsSpeech(
+        const float* samples,
+        size_t sampleCount,
+        uint32_t sampleRate) override
+    {
+        UNREFERENCED_PARAMETER(samples);
+        UNREFERENCED_PARAMETER(sampleCount);
+        UNREFERENCED_PARAMETER(sampleRate);
+        return true;
+    }
+};
+
+class NvidiaVoiceVadProvider final : public IVoiceVadProvider
+{
+public:
+    bool IsSpeech(
+        const float* samples,
+        size_t sampleCount,
+        uint32_t sampleRate) override
+    {
+        UNREFERENCED_PARAMETER(samples);
+        UNREFERENCED_PARAMETER(sampleCount);
+        UNREFERENCED_PARAMETER(sampleRate);
+        return true;
+    }
+};
+
 std::string ToNarrow(const wchar_t* value)
 {
     if (value == nullptr)
@@ -32,6 +62,17 @@ size_t ResolveRingCapacitySamples(const VoiceRecorderConfig& config)
     return static_cast<size_t>(config.nSamplesPerSec);
 }
 
+uint64_t DurationMsToSamples(
+    const VoiceRecorderConfig& config,
+    const uint32_t durationMs)
+{
+    if (config.nSamplesPerSec == 0) {
+        return 0;
+    }
+
+    return (static_cast<uint64_t>(config.nSamplesPerSec) * durationMs) / 1000ULL;
+}
+
 } // namespace
 
 CVoiceRecorder::CVoiceRecorder()
@@ -44,6 +85,12 @@ CVoiceRecorder::CVoiceRecorder()
     , m_pWaveHeaders(nullptr)
     , m_pBuffers(nullptr)
     , m_dwRecordedDataSize(0)
+    , m_vadNextSequence(0)
+    , m_vadSpeechStartSequence(0)
+    , m_vadLastSpeechSequence(0)
+    , m_vadSilenceSamples(0)
+    , m_vadBoundarySignalSequence(0)
+    , m_vadSpeechActive(false)
     , m_bInitialized(FALSE)
 {
     m_szFilePath[0] = L'\0';
@@ -76,6 +123,8 @@ BOOL CVoiceRecorder::Initialize(HWND hWnd, const VoiceRecorderConfig& config)
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
     m_audioRingBuffer =
         std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
+    m_vadProvider = CreateVadProvider(m_config.vadProviderType);
+    ResetVadState();
 
     m_bInitialized = TRUE;
     return TRUE;
@@ -130,6 +179,8 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
     m_dwRecordedDataSize = 0;
     m_audioRingBuffer =
         std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
+    m_vadProvider = CreateVadProvider(m_config.vadProviderType);
+    ResetVadState();
     m_sessionState = {};
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
     m_sessionState.audioPath = ToNarrow(m_szFilePath);
@@ -229,6 +280,7 @@ BOOL CVoiceRecorder::StopRecording()
 
     VoiceRecorderState prevState = m_state;
     m_state = VoiceRecorderState::Idle;
+    m_vadSpeechActive = false;
     HWAVEIN hWaveInToClose = m_hWaveIn;
     m_hWaveIn = nullptr;
 
@@ -354,6 +406,8 @@ void CVoiceRecorder::HandleWaveInMessage(UINT uMsg, WPARAM wParam, LPARAM lParam
                         (std::min)(
                             static_cast<size_t>(m_config.ringCaptureChannelIndex),
                             static_cast<size_t>(m_config.nChannels - 1)));
+
+                    ProcessVadFromRing();
                 }
             }
 
@@ -636,5 +690,147 @@ void CVoiceRecorder::NotifySessionState(
     if (m_pCallback != nullptr)
     {
         m_pCallback->OnVoiceSessionChanged(m_sessionState);
+    }
+}
+
+void CVoiceRecorder::ResetVadState()
+{
+    m_vadNextSequence = 0;
+    m_vadSpeechStartSequence = 0;
+    m_vadLastSpeechSequence = 0;
+    m_vadSilenceSamples = 0;
+    m_vadBoundarySignalSequence = 0;
+    m_vadSpeechActive = false;
+    m_vadFrameBuffer.clear();
+}
+
+void CVoiceRecorder::ProcessVadFromRing()
+{
+    if (!m_config.vadEnabled ||
+        m_audioRingBuffer == nullptr ||
+        m_vadProvider == nullptr ||
+        m_config.nSamplesPerSec == 0) {
+        return;
+    }
+
+    const size_t frameSamples = m_config.GetVadFrameSamples();
+    if (frameSamples == 0) {
+        return;
+    }
+
+    const uint64_t oldestAvailable = m_audioRingBuffer->GetOldestAvailableSequence();
+    const uint64_t latestAvailable = m_audioRingBuffer->GetLatestSequence();
+
+    if (m_vadNextSequence < oldestAvailable) {
+        m_vadNextSequence = oldestAvailable;
+    }
+
+    const uint64_t silenceThresholdSamples =
+        DurationMsToSamples(m_config, static_cast<uint32_t>(m_config.vadSilenceDurationMs));
+    const uint64_t maxUtteranceSamples =
+        DurationMsToSamples(m_config, static_cast<uint32_t>(m_config.vadMaxUtteranceMs));
+
+    while (m_vadNextSequence + static_cast<uint64_t>(frameSamples) <= latestAvailable) {
+        if (!m_audioRingBuffer->ReadWindowBySequence(
+            m_vadFrameBuffer,
+            m_vadNextSequence,
+            frameSamples,
+            AudioRingBuffer::kDefaultReadSpinCount)) {
+            break;
+        }
+
+        const bool frameIsSpeech = m_vadProvider->IsSpeech(
+            m_vadFrameBuffer.data(),
+            m_vadFrameBuffer.size(),
+            m_config.nSamplesPerSec);
+
+        const uint64_t frameStart = m_vadNextSequence;
+        const uint64_t frameEnd = m_vadNextSequence + static_cast<uint64_t>(frameSamples);
+
+        if (frameIsSpeech) {
+            if (!m_vadSpeechActive) {
+                m_vadSpeechActive = true;
+                m_vadSpeechStartSequence = frameStart;
+                m_vadLastSpeechSequence = frameEnd;
+                m_vadSilenceSamples = 0;
+                EmitBoundarySignal(
+                    VoiceBoundarySignalType::SpeechStartCandidate,
+                    frameStart,
+                    frameEnd);
+            }
+            else {
+                m_vadLastSpeechSequence = frameEnd;
+                m_vadSilenceSamples = 0;
+            }
+        }
+        else if (m_vadSpeechActive) {
+            m_vadSilenceSamples += static_cast<uint64_t>(frameSamples);
+            if (silenceThresholdSamples > 0 &&
+                m_vadSilenceSamples >= silenceThresholdSamples) {
+                EmitBoundarySignal(
+                    VoiceBoundarySignalType::SpeechEndCandidate,
+                    m_vadSpeechStartSequence,
+                    m_vadLastSpeechSequence);
+                m_vadSpeechActive = false;
+                m_vadSilenceSamples = 0;
+            }
+        }
+
+        if (m_vadSpeechActive && maxUtteranceSamples > 0 &&
+            frameEnd - m_vadSpeechStartSequence >= maxUtteranceSamples) {
+            EmitBoundarySignal(
+                VoiceBoundarySignalType::MaxUtteranceTimeout,
+                m_vadSpeechStartSequence,
+                frameEnd);
+            m_vadSpeechActive = false;
+            m_vadSilenceSamples = 0;
+        }
+
+        m_vadNextSequence = frameEnd;
+    }
+}
+
+void CVoiceRecorder::EmitBoundarySignal(
+    VoiceBoundarySignalType type,
+    uint64_t startSequence,
+    uint64_t endSequence)
+{
+    if (endSequence <= startSequence || m_config.nSamplesPerSec == 0) {
+        return;
+    }
+
+    VoiceBoundarySignal signal;
+    signal.type = type;
+    signal.startSequence = startSequence;
+    signal.endSequence = endSequence;
+    signal.durationMs = static_cast<uint32_t>(
+        ((endSequence - startSequence) * 1000ULL) /
+        static_cast<uint64_t>(m_config.nSamplesPerSec));
+
+    m_sessionState.segment = blazeclaw::core::speechrecognition::SpeechTranscriptSegment{
+        .text = type == VoiceBoundarySignalType::SpeechStartCandidate
+            ? "speech_start_candidate"
+            : (type == VoiceBoundarySignalType::SpeechEndCandidate
+                ? "speech_end_candidate"
+                : "max_utterance_timeout"),
+        .final = type != VoiceBoundarySignalType::SpeechStartCandidate,
+        .sequence = ++m_vadBoundarySignalSequence,
+    };
+
+    if (m_pCallback != nullptr) {
+        m_pCallback->OnVoiceBoundarySignal(signal);
+        m_pCallback->OnVoiceSessionChanged(m_sessionState);
+    }
+}
+
+std::unique_ptr<IVoiceVadProvider> CVoiceRecorder::CreateVadProvider(
+    VoiceVadProviderType providerType) const
+{
+    switch (providerType) {
+    case VoiceVadProviderType::Nvidia:
+        return std::make_unique<NvidiaVoiceVadProvider>();
+    case VoiceVadProviderType::NoOp:
+    default:
+        return std::make_unique<NoOpVoiceVadProvider>();
     }
 }

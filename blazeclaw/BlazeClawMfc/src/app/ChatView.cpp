@@ -683,6 +683,35 @@ void CChatView::OnVoiceError(long nError, const wchar_t* pszDescription)
 	m_wndVoice.SetWindowText(_T("语音"));
 }
 
+void CChatView::OnVoiceBoundarySignal(const VoiceBoundarySignal& signal)
+{
+	CString message;
+	const wchar_t* typeText = L"speech_start_candidate";
+	switch (signal.type)
+	{
+	case VoiceBoundarySignalType::SpeechStartCandidate:
+		typeText = L"speech_start_candidate";
+		break;
+	case VoiceBoundarySignalType::SpeechEndCandidate:
+		typeText = L"speech_end_candidate";
+		break;
+	case VoiceBoundarySignalType::MaxUtteranceTimeout:
+		typeText = L"max_utterance_timeout";
+		break;
+	default:
+		typeText = L"unknown";
+		break;
+	}
+
+	message.Format(
+		L"[Voice][VAD] %s seq=%llu..%llu durationMs=%u",
+		typeText,
+		static_cast<unsigned long long>(signal.startSequence),
+		static_cast<unsigned long long>(signal.endSequence),
+		signal.durationMs);
+	AddStatusMessage(message);
+}
+
 void CChatView::UpdateVoiceSessionState(
 	const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState)
 {

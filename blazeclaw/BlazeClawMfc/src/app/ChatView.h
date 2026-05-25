@@ -165,4 +165,5 @@ public:
 	virtual void OnVoiceSessionChanged(
 		const blazeclaw::core::speechrecognition::SpeechSessionState& sessionState) override;
 	virtual void OnVoiceError(long nError, const wchar_t* pszDescription) override;
+	virtual void OnVoiceBoundarySignal(const VoiceBoundarySignal& signal) override;
 };
