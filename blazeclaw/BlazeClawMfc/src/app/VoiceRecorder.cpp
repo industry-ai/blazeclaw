@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "VoiceRecorder.h"
 
+#include <algorithm>
+
 namespace {
 
 std::string ToNarrow(const wchar_t* value)
@@ -17,6 +19,16 @@ std::string ToNarrow(const wchar_t* value)
         ++value;
     }
     return output;
+}
+
+size_t ResolveRingCapacitySamples(const VoiceRecorderConfig& config)
+{
+    const size_t requested = config.GetRingCapacitySamples();
+    if (requested > 0) {
+        return requested;
+    }
+
+    return static_cast<size_t>(config.nSamplesPerSec);
 }
 
 } // namespace
@@ -61,6 +73,8 @@ BOOL CVoiceRecorder::Initialize(HWND hWnd, const VoiceRecorderConfig& config)
     m_nBufferCount = 3;
     m_sessionState = {};
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
+    m_audioRingBuffer =
+        std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
 
     m_bInitialized = TRUE;
     return TRUE;
@@ -113,6 +127,8 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
     // Clear buffer
     m_recordedData.clear();
     m_dwRecordedDataSize = 0;
+    m_audioRingBuffer =
+        std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
     m_sessionState = {};
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
     m_sessionState.audioPath = ToNarrow(m_szFilePath);
@@ -323,6 +339,23 @@ void CVoiceRecorder::HandleWaveInMessage(UINT uMsg, WPARAM wParam, LPARAM lParam
             // Append audio data to in-memory buffer
             const BYTE* pData = (const BYTE*)pWaveHdr->lpData;
             DWORD dwLen = pWaveHdr->dwBytesRecorded;
+
+            if (m_audioRingBuffer != nullptr &&
+                m_config.nBitsPerSample == 16 &&
+                m_config.nChannels > 0) {
+                const size_t blockAlign = static_cast<size_t>(m_config.GetBlockAlign());
+                if (blockAlign > 0) {
+                    const size_t frameCount = static_cast<size_t>(dwLen) / blockAlign;
+                    m_audioRingBuffer->PushInterleavedPcm16(
+                        reinterpret_cast<const int16_t*>(pData),
+                        frameCount,
+                        static_cast<size_t>(m_config.nChannels),
+                        (std::min)(
+                            static_cast<size_t>(m_config.ringCaptureChannelIndex),
+                            static_cast<size_t>(m_config.nChannels - 1)));
+                }
+            }
+
             m_recordedData.insert(m_recordedData.end(), pData, pData + dwLen);
             m_dwRecordedDataSize += dwLen;
 
@@ -494,6 +527,56 @@ BOOL CVoiceRecorder::SetInputDevice(int nDeviceIndex)
 {
     m_nDeviceID = (UINT)nDeviceIndex;
     return TRUE;
+}
+
+bool CVoiceRecorder::ReadLatestSamples(
+    std::vector<float>& out,
+    size_t sampleCount) const
+{
+    if (m_audioRingBuffer == nullptr) {
+        out.clear();
+        return false;
+    }
+
+    return m_audioRingBuffer->PeekLatest(
+        out,
+        sampleCount,
+        AudioRingBuffer::kDefaultReadSpinCount);
+}
+
+bool CVoiceRecorder::ReadSamplesBySequence(
+    std::vector<float>& out,
+    uint64_t startSequence,
+    size_t sampleCount) const
+{
+    if (m_audioRingBuffer == nullptr) {
+        out.clear();
+        return false;
+    }
+
+    return m_audioRingBuffer->ReadWindowBySequence(
+        out,
+        startSequence,
+        sampleCount,
+        AudioRingBuffer::kDefaultReadSpinCount);
+}
+
+uint64_t CVoiceRecorder::GetRingLatestSequence() const
+{
+    if (m_audioRingBuffer == nullptr) {
+        return 0;
+    }
+
+    return m_audioRingBuffer->GetLatestSequence();
+}
+
+uint64_t CVoiceRecorder::GetRingOldestAvailableSequence() const
+{
+    if (m_audioRingBuffer == nullptr) {
+        return 0;
+    }
+
+    return m_audioRingBuffer->GetOldestAvailableSequence();
 }
 
 void CVoiceRecorder::UpdateSessionState(

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
+#include "AudioRingBuffer.h"
 
 #include <mmsystem.h>
 #include <mmreg.h>
+#include <memory>
 #include <vector>
 
 #pragma comment(lib, "winmm.lib")
@@ -22,6 +24,8 @@ struct VoiceRecorderConfig
     UINT nChannels = 1;           // Channels: 1 = mono
     UINT nSamplesPerSec = 16000; // Sample rate: 16000Hz
     UINT nBitsPerSample = 16;     // Bits per sample: 16bit
+    UINT ringBufferDurationSeconds = 30; // Ring retention window
+    UINT ringCaptureChannelIndex = 0; // Interleaved channel index captured into ring
 
     DWORD GetAvgBytesPerSec() const
     {
@@ -31,6 +35,12 @@ struct VoiceRecorderConfig
     DWORD GetBlockAlign() const
     {
         return nChannels * nBitsPerSample / 8;
+    }
+
+    size_t GetRingCapacitySamples() const
+    {
+        return static_cast<size_t>(nSamplesPerSec) *
+               static_cast<size_t>(ringBufferDurationSeconds);
     }
 };
 
@@ -75,6 +85,15 @@ public:
     // Raw audio data access (PCM bytes)
     const std::vector<BYTE>& GetRecordedData() const { return m_recordedData; }
 
+    // Ring-backed sample access for downstream STT pipeline
+    bool ReadLatestSamples(std::vector<float>& out, size_t sampleCount) const;
+    bool ReadSamplesBySequence(
+        std::vector<float>& out,
+        uint64_t startSequence,
+        size_t sampleCount) const;
+    uint64_t GetRingLatestSequence() const;
+    uint64_t GetRingOldestAvailableSequence() const;
+
     // Callback setting
     void SetCallback(IVoiceRecorderCallback* pCallback) { m_pCallback = pCallback; }
 
@@ -116,6 +135,7 @@ private:
     // In-memory audio buffer (PCM)
     std::vector<BYTE> m_recordedData;
     DWORD          m_dwRecordedDataSize;
+    std::unique_ptr<AudioRingBuffer> m_audioRingBuffer;
 
     BOOL           m_bInitialized;
 };
