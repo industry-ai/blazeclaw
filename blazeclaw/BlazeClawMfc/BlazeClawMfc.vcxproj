@@ -113,6 +113,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\app\AudioRingBuffer.h" />
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />
     <ClInclude Include="src\app\BlazeClawMFCApp.h" />
     <ClInclude Include="src\app\BlazeClawMFCDoc.h" />
@@ -325,6 +326,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\BlazeClawMarkdownView.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />

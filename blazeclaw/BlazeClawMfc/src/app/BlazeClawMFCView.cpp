@@ -3741,6 +3741,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.method = method,
 		.paramsJson = paramsJson,
 	};
+
 	if (method == "speech.transcribe")
 	{
 		const HWND hwnd = GetSafeHwnd();
@@ -3843,6 +3844,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			.detach();
 		return;
 	}
+
 	const auto response = app->RouteGatewayRequest(request);
 	if (response.ok && response.payloadJson.has_value())
 	{
