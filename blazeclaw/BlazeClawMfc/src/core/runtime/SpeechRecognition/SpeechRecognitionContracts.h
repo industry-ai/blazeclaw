@@ -57,11 +57,15 @@ namespace blazeclaw::core::speechrecognition {
 	struct SpeechAudioArtifact {
 		SpeechAudioHandoffMode handoffMode = SpeechAudioHandoffMode::WavFile;
 		std::string path;
+		std::string streamId;
 		std::string mimeType = "audio/wav";
 		std::string container = "wav";
 		std::uint32_t sampleRate = 16000;
 		std::uint32_t channels = 1;
 		std::uint32_t bitsPerSample = 16;
+		std::uint32_t frameSamples = 0;
+		std::uint64_t sequenceStart = 0;
+		std::uint64_t sequenceEnd = 0;
 		std::uint32_t durationMs = 0;
 	};
 

@@ -6,6 +6,7 @@
 #include <mmsystem.h>
 #include <mmreg.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #pragma comment(lib, "winmm.lib")
@@ -93,6 +94,8 @@ public:
         size_t sampleCount) const;
     uint64_t GetRingLatestSequence() const;
     uint64_t GetRingOldestAvailableSequence() const;
+    std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+        BuildStreamingAudioArtifact() const;
 
     // Callback setting
     void SetCallback(IVoiceRecorderCallback* pCallback) { m_pCallback = pCallback; }

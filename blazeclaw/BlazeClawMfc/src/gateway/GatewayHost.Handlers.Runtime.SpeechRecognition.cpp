@@ -12,6 +12,72 @@ namespace blazeclaw::gateway {
 	namespace handlers::runtime {
 
 		void SpeechRecognitionHandlers::RegisterAll(GatewayHost& host) {
+			auto audioHandoffModeToString =
+				[](blazeclaw::core::speechrecognition::SpeechAudioHandoffMode mode) {
+					switch (mode) {
+					case blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream:
+						return std::string("pcm_stream");
+					case blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::WavFile:
+					default:
+						return std::string("wav_file");
+					}
+				};
+
+			auto buildAudioArtifactJson =
+				[&audioHandoffModeToString](
+					const blazeclaw::core::speechrecognition::SpeechAudioArtifact& artifact) {
+					return JsonObject({
+						{ "handoffMode", JsonString(audioHandoffModeToString(artifact.handoffMode)) },
+						{ "path", JsonString(artifact.path) },
+						{ "streamId", JsonString(artifact.streamId) },
+						{ "mimeType", JsonString(artifact.mimeType) },
+						{ "container", JsonString(artifact.container) },
+						{ "sampleRate", JsonNumber(static_cast<std::uint64_t>(artifact.sampleRate)) },
+						{ "channels", JsonNumber(static_cast<std::uint64_t>(artifact.channels)) },
+						{ "bitsPerSample", JsonNumber(static_cast<std::uint64_t>(artifact.bitsPerSample)) },
+						{ "frameSamples", JsonNumber(static_cast<std::uint64_t>(artifact.frameSamples)) },
+						{ "sequenceStart", JsonNumber(artifact.sequenceStart) },
+						{ "sequenceEnd", JsonNumber(artifact.sequenceEnd) },
+						{ "durationMs", JsonNumber(static_cast<std::uint64_t>(artifact.durationMs)) },
+					});
+				};
+
+			auto tryParseAudioArtifact =
+				[](const std::optional<std::string>& artifactJson)
+				-> std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> {
+					if (!artifactJson.has_value() || artifactJson->empty()) {
+						return std::nullopt;
+					}
+
+					try {
+						const auto parsed = nlohmann::json::parse(*artifactJson);
+						if (!parsed.is_object()) {
+							return std::nullopt;
+						}
+
+						blazeclaw::core::speechrecognition::SpeechAudioArtifact artifact;
+						const auto mode = parsed.value("handoffMode", std::string("wav_file"));
+						artifact.handoffMode = mode == "pcm_stream"
+							? blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream
+							: blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::WavFile;
+						artifact.path = parsed.value("path", std::string{});
+						artifact.streamId = parsed.value("streamId", std::string{});
+						artifact.mimeType = parsed.value("mimeType", artifact.mimeType);
+						artifact.container = parsed.value("container", artifact.container);
+						artifact.sampleRate = parsed.value("sampleRate", artifact.sampleRate);
+						artifact.channels = parsed.value("channels", artifact.channels);
+						artifact.bitsPerSample = parsed.value("bitsPerSample", artifact.bitsPerSample);
+						artifact.frameSamples = parsed.value("frameSamples", artifact.frameSamples);
+						artifact.sequenceStart = parsed.value("sequenceStart", artifact.sequenceStart);
+						artifact.sequenceEnd = parsed.value("sequenceEnd", artifact.sequenceEnd);
+						artifact.durationMs = parsed.value("durationMs", artifact.durationMs);
+						return artifact;
+					}
+					catch (...) {
+						return std::nullopt;
+					}
+				};
+
 			auto NormalizeMarkdownToPlainText = [](std::string text) {
 				auto replaceAll = [](std::string& value, const std::string& from, const std::string& to) {
 					std::size_t cursor = 0;
@@ -106,10 +172,15 @@ namespace blazeclaw::gateway {
 								{ "supported", JsonBool(sttSupported) },
 								{ "ready", JsonBool(sttReady) },
 								{ "mode", JsonString("record-then-transcribe") },
-								{ "audioHandoffMode", JsonString("wav_file") },
+								{ "audioHandoffMode", JsonString("dual") },
+								{ "audioHandoffModes", JsonArray({
+									JsonString("wav_file"),
+									JsonString("pcm_stream"),
+								}) },
 								{ "audioMimeType", JsonString("audio/wav") },
 								{ "audioContainer", JsonString("wav") },
-								{ "streamingSupported", JsonBool(false) },
+								{ "streamingSupported", JsonBool(true) },
+								{ "streamingMode", JsonString("artifact_metadata") },
 							{ "status", JsonString(sttRuntimeStatus.status) },
 							{ "provider", JsonString(sttRuntimeStatus.provider) },
 							{ "effectiveExecutionProvider", JsonString(sttRuntimeStatus.effectiveExecutionProvider) },
@@ -170,13 +241,22 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.stopRecording",
-				[&host](const protocol::RequestFrame& request) {
+				[&host, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
 					// Stop native recording and return audioPath
 					const auto result = host.StopNativeRecording();
 					if (!result.ok) {
 						return protocol::ErrorResponse(request, std::string("stop_recording_failed"), result.errorMessage);
 					}
-					const std::string payload = JsonObject({ { "ok", JsonBool(true) }, { "audioPath", JsonString(result.audioPath) } });
+					const std::string payload = result.audioArtifact.has_value()
+						? JsonObject({
+							{ "ok", JsonBool(true) },
+							{ "audioPath", JsonString(result.audioPath) },
+							{ "audioArtifact", buildAudioArtifactJson(*result.audioArtifact) },
+						})
+						: JsonObject({
+							{ "ok", JsonBool(true) },
+							{ "audioPath", JsonString(result.audioPath) },
+						});
 					return protocol::OkResponse(request, payload);
 				});
 
@@ -370,7 +450,7 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.transcribe",
-				[&host](const protocol::RequestFrame& request) {
+				[&host, &tryParseAudioArtifact, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
 					auto stageToString = [](blazeclaw::core::speechrecognition::SpeechSessionStage stage) {
 						switch (stage) {
 						case blazeclaw::core::speechrecognition::SpeechSessionStage::Idle: return std::string("idle");
@@ -390,12 +470,15 @@ namespace blazeclaw::gateway {
 					const std::string prompt = params.GetString("prompt");
 					const std::string sessionId = params.GetString("sessionId");
 					const std::string runId = params.GetString("runId");
+					const auto audioArtifact =
+						tryParseAudioArtifact(params.GetObject("audioArtifact"));
 
 					const auto accepted = host.AcceptSpeechTranscription(
 						GatewayHost::SpeechExecutionRequest{
 							.runId = runId,
 							.sessionId = sessionId,
 							.audioPath = audioPath,
+							.audioArtifact = audioArtifact,
 							.language = language,
 							.prompt = prompt,
 						});
@@ -453,6 +536,7 @@ namespace blazeclaw::gateway {
 							.runId = accepted.executionState.runId,
 							.sessionId = sessionId,
 							.audioPath = audioPath,
+							.audioArtifact = audioArtifact,
 							.language = language,
 							.prompt = prompt,
 						});
@@ -479,6 +563,12 @@ namespace blazeclaw::gateway {
 						? transcribe.sessionState.runId
 						: runId;
 					const bool hasSegment = transcribe.sessionState.segment.has_value();
+					const std::string audioArtifactJson =
+						transcribe.sessionState.audioArtifact.has_value()
+						? buildAudioArtifactJson(*transcribe.sessionState.audioArtifact)
+						: (audioArtifact.has_value()
+							? buildAudioArtifactJson(*audioArtifact)
+							: std::string("null"));
 					auto normalizeSpeechErrorCode = [](const std::string& raw) {
 						std::string normalized;
 						normalized.reserve(raw.size());
@@ -559,6 +649,7 @@ namespace blazeclaw::gateway {
 							{ "language", JsonString(normalizedLanguage) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
+							{ "audioArtifact", audioArtifactJson },
 							{ "segment", JsonObject({
 								{ "text", JsonString(transcribe.sessionState.segment->text) },
 								{ "final", JsonBool(transcribe.sessionState.segment->final) },
@@ -574,6 +665,7 @@ namespace blazeclaw::gateway {
 							{ "language", JsonString(normalizedLanguage) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
+							{ "audioArtifact", audioArtifactJson },
 						});
 
 					return protocol::OkResponse(
@@ -597,6 +689,7 @@ namespace blazeclaw::gateway {
 								{ "language", JsonString(normalizedLanguage) },
 								{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 								{ "cancelRequested", JsonBool(false) },
+								{ "audioArtifact", audioArtifactJson },
 							}) },
 							{ "transcriptInjection", JsonObject({
 								{ "source", JsonString("voice") },
@@ -619,6 +712,7 @@ namespace blazeclaw::gateway {
 								{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 								{ "stage", JsonString(normalizedStage) },
 								{ "hasSegment", JsonBool(hasSegment) },
+								{ "audioArtifact", audioArtifactJson },
 							}) },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorMessage", JsonString(transcribe.errorMessage) },

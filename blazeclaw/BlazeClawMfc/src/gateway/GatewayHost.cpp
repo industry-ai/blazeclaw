@@ -1183,6 +1183,13 @@ namespace blazeclaw::gateway {
 		std::string pathUtf8 = ToNarrow(lastPathWide);
 		result.ok = true;
 		result.audioPath = pathUtf8;
+		blazeclaw::core::speechrecognition::SpeechAudioArtifact audioArtifact;
+		audioArtifact.handoffMode = blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
+		audioArtifact.path = pathUtf8;
+		audioArtifact.streamId = "voice_recorder";
+		audioArtifact.mimeType = "audio/pcm";
+		audioArtifact.container = "pcm_s16le";
+		result.audioArtifact = audioArtifact;
 		return result;
 	}
 

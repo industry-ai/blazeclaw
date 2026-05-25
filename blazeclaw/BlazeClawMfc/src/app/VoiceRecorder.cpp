@@ -2,6 +2,7 @@
 #include "VoiceRecorder.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace {
 
@@ -577,6 +578,44 @@ uint64_t CVoiceRecorder::GetRingOldestAvailableSequence() const
     }
 
     return m_audioRingBuffer->GetOldestAvailableSequence();
+}
+
+std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+CVoiceRecorder::BuildStreamingAudioArtifact() const
+{
+    if (m_audioRingBuffer == nullptr || m_config.nSamplesPerSec == 0) {
+        return std::nullopt;
+    }
+
+    const uint64_t sequenceStart = m_audioRingBuffer->GetOldestAvailableSequence();
+    const uint64_t sequenceEnd = m_audioRingBuffer->GetLatestSequence();
+    if (sequenceEnd <= sequenceStart) {
+        return std::nullopt;
+    }
+
+    blazeclaw::core::speechrecognition::SpeechAudioArtifact artifact;
+    artifact.handoffMode =
+        blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
+    artifact.path = ToNarrow(m_szFilePath);
+    artifact.streamId = m_sessionState.runId.empty()
+        ? m_sessionState.sessionId
+        : m_sessionState.runId;
+    artifact.mimeType = "audio/pcm";
+    artifact.container = "pcm_s16le";
+    artifact.sampleRate = m_config.nSamplesPerSec;
+    artifact.channels = 1;
+    artifact.bitsPerSample = m_config.nBitsPerSample;
+    artifact.frameSamples = static_cast<std::uint32_t>(m_config.nSamplesPerSec / 100);
+    artifact.sequenceStart = sequenceStart;
+    artifact.sequenceEnd = sequenceEnd;
+
+    const uint64_t availableSamples = sequenceEnd - sequenceStart;
+    const uint64_t durationMsRaw =
+        (availableSamples * 1000ULL) / static_cast<uint64_t>(m_config.nSamplesPerSec);
+    artifact.durationMs = static_cast<std::uint32_t>((std::min)(
+        durationMsRaw,
+        static_cast<uint64_t>((std::numeric_limits<std::uint32_t>::max)())));
+    return artifact;
 }
 
 void CVoiceRecorder::UpdateSessionState(

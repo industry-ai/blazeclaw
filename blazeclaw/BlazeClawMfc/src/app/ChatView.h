@@ -156,6 +156,8 @@ public:
 	// Helpers for external callers (WebView bridge)
 	bool StartRecordingToPath(const CStringW& filePath);
 	CStringW StopRecordingAndGetPath();
+	std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+		GetLastRecordingAudioArtifact() const;
 
 	// IVoiceRecorderCallback
 	virtual void OnVoiceDataAvailable(const BYTE* pData, DWORD dwLength) override;

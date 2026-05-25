@@ -367,6 +367,12 @@ CStringW CChatView::StopRecordingAndGetPath()
 	return m_strLastVoiceFilePath;
 }
 
+std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+CChatView::GetLastRecordingAudioArtifact() const
+{
+	return m_voiceRecorder.BuildStreamingAudioArtifact();
+}
+
 int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CView::OnCreate(lpCreateStruct) == -1)

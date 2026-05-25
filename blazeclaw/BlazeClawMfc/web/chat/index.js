@@ -2574,12 +2574,16 @@
                     ? stopResponse.payload
                     : {};
                 const audioPath = String(payload.audioPath || "").trim();
+                const audioArtifact = payload.audioArtifact && typeof payload.audioArtifact === "object"
+                    ? payload.audioArtifact
+                    : null;
 
                 if (typeof controller.applySpeechLifecycleUpdate === "function") {
                     controller.applySpeechLifecycleUpdate({
                         stage: "stopped",
                         sessionId: state.sessionKey,
                         audioPath,
+                        audioArtifact,
                         text: "",
                         errorCode: "",
                         errorMessage: "",
@@ -2594,7 +2598,11 @@
                 }
 
                 const prompt = String(state.inputEl.value || "").trim();
-                await controller.transcribeSpeech({ audioPath, prompt });
+                await controller.transcribeSpeech({
+                    audioPath,
+                    audioArtifact,
+                    prompt,
+                });
                 if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                     state.speechSessionState = controller.getSpeechSessionStateSnapshot();
                 }

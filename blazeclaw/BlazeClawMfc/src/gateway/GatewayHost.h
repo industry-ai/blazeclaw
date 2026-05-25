@@ -564,6 +564,7 @@ namespace blazeclaw::gateway {
 		struct NativeRecordingResult {
 			bool ok = false;
 			std::string audioPath;
+			std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> audioArtifact;
 			std::string errorMessage;
 		};
 

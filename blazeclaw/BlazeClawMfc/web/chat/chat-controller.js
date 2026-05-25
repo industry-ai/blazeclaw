@@ -769,6 +769,11 @@
                 runId: String(speechSession.runId || source.runId || "").trim(),
                 sessionId: String(speechSession.sessionId || source.sessionId || "").trim(),
                 audioPath: String(speechSession.audioPath || source.audioPath || "").trim(),
+                audioArtifact: speechSession.audioArtifact && typeof speechSession.audioArtifact === "object"
+                    ? { ...speechSession.audioArtifact }
+                    : source.audioArtifact && typeof source.audioArtifact === "object"
+                        ? { ...source.audioArtifact }
+                        : null,
                 language: String(speechSession.language || source.language || "").trim(),
                 latencyMs: Number.isFinite(Number(speechSession.latencyMs || source.latencyMs))
                     ? Number(speechSession.latencyMs || source.latencyMs)
@@ -2068,6 +2073,9 @@
             const audioPath = String(sendOptions.audioPath || "").trim();
             const prompt = String(sendOptions.prompt || "").trim();
             const language = String(sendOptions.language || "").trim();
+            const audioArtifact = sendOptions.audioArtifact && typeof sendOptions.audioArtifact === "object"
+                ? sendOptions.audioArtifact
+                : null;
             const requestOverride = typeof sendOptions.requestOverride === "function"
                 ? sendOptions.requestOverride
                 : null;
@@ -2084,6 +2092,9 @@
             }
             if (language) {
                 transcriptRequest.language = language;
+            }
+            if (audioArtifact) {
+                transcriptRequest.audioArtifact = audioArtifact;
             }
 
             applySpeechLifecycleUpdate({
@@ -2142,6 +2153,11 @@
                             sessionId: String(payload.sessionId || state.sessionKey || "").trim(),
                             runId: String(payload.executionRunId || payload.runId || payload.speechSession && payload.speechSession.runId || "").trim(),
                             audioPath: String(payload.audioPath || payload.speechSession && payload.speechSession.audioPath || "").trim(),
+                            audioArtifact: payload.audioArtifact && typeof payload.audioArtifact === "object"
+                                ? payload.audioArtifact
+                                : payload.speechSession && payload.speechSession.audioArtifact && typeof payload.speechSession.audioArtifact === "object"
+                                    ? payload.speechSession.audioArtifact
+                                    : null,
                             language: String(payload.language || payload.speechSession && payload.speechSession.language || "").trim(),
                             latencyMs: Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : Number(payload.speechSession && payload.speechSession.latencyMs || 0),
                             transcriptInjection: payload.transcriptInjection && typeof payload.transcriptInjection === "object"
