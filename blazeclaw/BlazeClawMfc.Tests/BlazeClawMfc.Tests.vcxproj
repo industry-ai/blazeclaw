@@ -35,7 +35,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -93,6 +93,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTsAggregateParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionOfflineOptimizationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AudioRingBufferPhaseETests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\VoiceRecorderRingArtifactIntegrationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
@@ -228,6 +230,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\DiagnosticsRegressionComparator.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\CMgrMessage.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\app\\AudioRingBuffer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.h" />

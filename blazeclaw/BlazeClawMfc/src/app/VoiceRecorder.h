@@ -32,6 +32,16 @@ struct VoiceBoundarySignal
     uint64_t startSequence = 0;
     uint64_t endSequence = 0;
     uint32_t durationMs = 0;
+    uint64_t chunkLatencyUs = 0;
+};
+
+struct VoiceRecorderTelemetry
+{
+    uint64_t ringOccupancyPercent = 0;
+    uint64_t ringDroppedSamples = 0;
+    uint64_t chunkEnqueueLatencyUs = 0;
+    uint64_t silenceSegmentationLatencyUs = 0;
+    uint64_t boundarySignalCount = 0;
 };
 
 class IVoiceVadProvider
@@ -142,6 +152,14 @@ public:
     uint64_t GetRingOldestAvailableSequence() const;
     std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
         BuildStreamingAudioArtifact() const;
+    VoiceRecorderTelemetry GetTelemetrySnapshot() const;
+
+    // Test-oriented deterministic ingest helper
+    void PushPcm16ChunkForTest(
+        const int16_t* data,
+        size_t frameCount,
+        size_t channelCount,
+        uint64_t enqueueLatencyUs = 0);
 
     // Callback setting
     void SetCallback(IVoiceRecorderCallback* pCallback) { m_pCallback = pCallback; }
@@ -167,10 +185,12 @@ protected:
         blazeclaw::core::speechrecognition::SpeechSessionStage stage);
     void ResetVadState();
     void ProcessVadFromRing();
+    void ProcessVadFromRingWithLatency(uint64_t enqueueLatencyUs);
     void EmitBoundarySignal(
         VoiceBoundarySignalType type,
         uint64_t startSequence,
-        uint64_t endSequence);
+        uint64_t endSequence,
+        uint64_t chunkLatencyUs = 0);
     std::unique_ptr<IVoiceVadProvider> CreateVadProvider(
         VoiceVadProviderType providerType) const;
 
@@ -201,6 +221,7 @@ private:
     uint32_t       m_vadBoundarySignalSequence;
     bool           m_vadSpeechActive;
     std::vector<float> m_vadFrameBuffer;
+    VoiceRecorderTelemetry m_telemetry;
 
     BOOL           m_bInitialized;
 };

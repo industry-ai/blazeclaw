@@ -12,6 +12,27 @@ namespace blazeclaw::gateway {
 	namespace handlers::runtime {
 
 		void SpeechRecognitionHandlers::RegisterAll(GatewayHost& host) {
+			auto isRingStreamingFeatureEnabled = []() {
+				char* raw = nullptr;
+				size_t size = 0;
+				const int readStatus = _dupenv_s(&raw, &size, "BLAZECLAW_RING_STREAMING_ENABLED");
+				if (readStatus != 0 || raw == nullptr) {
+					return true;
+				}
+
+				std::string value(raw);
+				free(raw);
+				for (char& ch : value) {
+					if (ch >= 'A' && ch <= 'Z') {
+						ch = static_cast<char>(ch - 'A' + 'a');
+					}
+				}
+
+				return !(value == "0" || value == "false" || value == "off");
+			};
+
+			const bool ringStreamingEnabled = isRingStreamingFeatureEnabled();
+
 			auto audioHandoffModeToString =
 				[](blazeclaw::core::speechrecognition::SpeechAudioHandoffMode mode) {
 					switch (mode) {
@@ -153,7 +174,7 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.capabilities.get",
-				[&host](const protocol::RequestFrame& request) {
+				[&host, &ringStreamingEnabled](const protocol::RequestFrame& request) {
 					const bool runtimeConnected = host.IsRunning();
 					const auto sttRuntimeStatus = host.GetSpeechRecognitionRuntimeStatus();
 					const bool sttSupported = true;
@@ -179,8 +200,9 @@ namespace blazeclaw::gateway {
 								}) },
 								{ "audioMimeType", JsonString("audio/wav") },
 								{ "audioContainer", JsonString("wav") },
-								{ "streamingSupported", JsonBool(true) },
+								{ "streamingSupported", JsonBool(ringStreamingEnabled) },
 								{ "streamingMode", JsonString("artifact_metadata") },
+								{ "ringStreamingEnabled", JsonBool(ringStreamingEnabled) },
 							{ "status", JsonString(sttRuntimeStatus.status) },
 							{ "provider", JsonString(sttRuntimeStatus.provider) },
 							{ "effectiveExecutionProvider", JsonString(sttRuntimeStatus.effectiveExecutionProvider) },
@@ -450,7 +472,7 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.transcribe",
-				[&host, &tryParseAudioArtifact, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
+				[&host, &tryParseAudioArtifact, &buildAudioArtifactJson, &ringStreamingEnabled](const protocol::RequestFrame& request) {
 					auto stageToString = [](blazeclaw::core::speechrecognition::SpeechSessionStage stage) {
 						switch (stage) {
 						case blazeclaw::core::speechrecognition::SpeechSessionStage::Idle: return std::string("idle");
@@ -470,8 +492,11 @@ namespace blazeclaw::gateway {
 					const std::string prompt = params.GetString("prompt");
 					const std::string sessionId = params.GetString("sessionId");
 					const std::string runId = params.GetString("runId");
-					const auto audioArtifact =
+					auto audioArtifact =
 						tryParseAudioArtifact(params.GetObject("audioArtifact"));
+					if (!ringStreamingEnabled) {
+						audioArtifact.reset();
+					}
 
 					const auto accepted = host.AcceptSpeechTranscription(
 						GatewayHost::SpeechExecutionRequest{
@@ -531,7 +556,7 @@ namespace blazeclaw::gateway {
 							}));
 					}
 
-					const auto transcribe = host.TranscribeSpeech(
+					auto transcribe = host.TranscribeSpeech(
 						GatewayHost::SpeechTranscribeRequest{
 							.runId = accepted.executionState.runId,
 							.sessionId = sessionId,
@@ -540,6 +565,32 @@ namespace blazeclaw::gateway {
 							.language = language,
 							.prompt = prompt,
 						});
+
+					if (!transcribe.ok &&
+						audioArtifact.has_value() &&
+						(transcribe.errorCode == "runtime_unavailable" ||
+							transcribe.errorCode == "invalid_input" ||
+							transcribe.errorCode == "inference_failed")) {
+						EmitTelemetryEvent(
+							"gateway.speech.handoff.fallback",
+							JsonObject({
+								{ "sessionId", JsonString(sessionId) },
+								{ "runId", JsonString(accepted.executionState.runId) },
+								{ "reason", JsonString(transcribe.errorCode) },
+								{ "from", JsonString("pcm_stream") },
+								{ "to", JsonString("wav_file") },
+							}));
+
+						transcribe = host.TranscribeSpeech(
+							GatewayHost::SpeechTranscribeRequest{
+								.runId = accepted.executionState.runId,
+								.sessionId = sessionId,
+								.audioPath = audioPath,
+								.audioArtifact = std::nullopt,
+								.language = language,
+								.prompt = prompt,
+							});
+					}
 
 					const std::string normalizedStage = stageToString(transcribe.sessionState.stage);
 					const std::string normalizedLanguage =

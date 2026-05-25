@@ -2,6 +2,7 @@
 #include "VoiceRecorder.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 
 namespace {
@@ -566,8 +567,8 @@ BOOL CVoiceRecorder::GetInputDeviceName(int nDeviceIndex, wchar_t* pszName, int 
         return FALSE;
     }
 
-    WAVEINCAPS wic = {};
-    MMRESULT mmResult = waveInGetDevCaps((UINT)nDeviceIndex, &wic, sizeof(WAVEINCAPS));
+    WAVEINCAPSW wic = {};
+    MMRESULT mmResult = waveInGetDevCapsW((UINT)nDeviceIndex, &wic, sizeof(WAVEINCAPSW));
     if (mmResult != MMSYSERR_NOERROR)
     {
         return FALSE;
@@ -702,9 +703,15 @@ void CVoiceRecorder::ResetVadState()
     m_vadBoundarySignalSequence = 0;
     m_vadSpeechActive = false;
     m_vadFrameBuffer.clear();
+    m_telemetry = {};
 }
 
 void CVoiceRecorder::ProcessVadFromRing()
+{
+    ProcessVadFromRingWithLatency(0);
+}
+
+void CVoiceRecorder::ProcessVadFromRingWithLatency(uint64_t enqueueLatencyUs)
 {
     if (!m_config.vadEnabled ||
         m_audioRingBuffer == nullptr ||
@@ -756,7 +763,8 @@ void CVoiceRecorder::ProcessVadFromRing()
                 EmitBoundarySignal(
                     VoiceBoundarySignalType::SpeechStartCandidate,
                     frameStart,
-                    frameEnd);
+                    frameEnd,
+                    enqueueLatencyUs);
             }
             else {
                 m_vadLastSpeechSequence = frameEnd;
@@ -770,7 +778,8 @@ void CVoiceRecorder::ProcessVadFromRing()
                 EmitBoundarySignal(
                     VoiceBoundarySignalType::SpeechEndCandidate,
                     m_vadSpeechStartSequence,
-                    m_vadLastSpeechSequence);
+                    m_vadLastSpeechSequence,
+                    enqueueLatencyUs);
                 m_vadSpeechActive = false;
                 m_vadSilenceSamples = 0;
             }
@@ -781,7 +790,8 @@ void CVoiceRecorder::ProcessVadFromRing()
             EmitBoundarySignal(
                 VoiceBoundarySignalType::MaxUtteranceTimeout,
                 m_vadSpeechStartSequence,
-                frameEnd);
+                frameEnd,
+                enqueueLatencyUs);
             m_vadSpeechActive = false;
             m_vadSilenceSamples = 0;
         }
@@ -793,7 +803,8 @@ void CVoiceRecorder::ProcessVadFromRing()
 void CVoiceRecorder::EmitBoundarySignal(
     VoiceBoundarySignalType type,
     uint64_t startSequence,
-    uint64_t endSequence)
+    uint64_t endSequence,
+    uint64_t chunkLatencyUs)
 {
     if (endSequence <= startSequence || m_config.nSamplesPerSec == 0) {
         return;
@@ -803,9 +814,13 @@ void CVoiceRecorder::EmitBoundarySignal(
     signal.type = type;
     signal.startSequence = startSequence;
     signal.endSequence = endSequence;
+    signal.chunkLatencyUs = chunkLatencyUs;
     signal.durationMs = static_cast<uint32_t>(
         ((endSequence - startSequence) * 1000ULL) /
         static_cast<uint64_t>(m_config.nSamplesPerSec));
+
+    m_telemetry.boundarySignalCount += 1;
+    m_telemetry.silenceSegmentationLatencyUs = chunkLatencyUs;
 
     m_sessionState.segment = blazeclaw::core::speechrecognition::SpeechTranscriptSegment{
         .text = type == VoiceBoundarySignalType::SpeechStartCandidate
@@ -821,6 +836,52 @@ void CVoiceRecorder::EmitBoundarySignal(
         m_pCallback->OnVoiceBoundarySignal(signal);
         m_pCallback->OnVoiceSessionChanged(m_sessionState);
     }
+}
+
+VoiceRecorderTelemetry CVoiceRecorder::GetTelemetrySnapshot() const
+{
+    return m_telemetry;
+}
+
+void CVoiceRecorder::PushPcm16ChunkForTest(
+    const int16_t* data,
+    size_t frameCount,
+    size_t channelCount,
+    uint64_t enqueueLatencyUs)
+{
+    if (data == nullptr || frameCount == 0 || channelCount == 0) {
+        return;
+    }
+
+    if (m_audioRingBuffer == nullptr) {
+        m_audioRingBuffer =
+            std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
+    }
+
+    if (m_vadProvider == nullptr) {
+        m_vadProvider = CreateVadProvider(m_config.vadProviderType);
+    }
+
+    m_audioRingBuffer->PushInterleavedPcm16(
+        data,
+        frameCount,
+        channelCount,
+        (std::min)(
+            static_cast<size_t>(m_config.ringCaptureChannelIndex),
+            channelCount - 1));
+
+    m_telemetry.chunkEnqueueLatencyUs = enqueueLatencyUs;
+    const uint64_t ringCapacity =
+        static_cast<uint64_t>(m_audioRingBuffer->GetCapacitySamples());
+    const uint64_t available =
+        m_audioRingBuffer->GetLatestSequence() -
+        m_audioRingBuffer->GetOldestAvailableSequence();
+    m_telemetry.ringOccupancyPercent = ringCapacity == 0
+        ? 0
+        : (available * 100ULL) / ringCapacity;
+    m_telemetry.ringDroppedSamples = m_audioRingBuffer->GetDroppedSamples();
+
+    ProcessVadFromRingWithLatency(enqueueLatencyUs);
 }
 
 std::unique_ptr<IVoiceVadProvider> CVoiceRecorder::CreateVadProvider(

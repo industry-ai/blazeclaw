@@ -71,10 +71,96 @@ BOOL CVoiceRecorder::SetInputDevice(int) {
 	return TRUE;
 }
 
+bool CVoiceRecorder::ReadLatestSamples(std::vector<float>& out, size_t sampleCount) const {
+	if (!m_audioRingBuffer) {
+		out.clear();
+		return false;
+	}
+	return m_audioRingBuffer->PeekLatest(out, sampleCount);
+}
+
+bool CVoiceRecorder::ReadSamplesBySequence(
+	std::vector<float>& out,
+	uint64_t startSequence,
+	size_t sampleCount) const {
+	if (!m_audioRingBuffer) {
+		out.clear();
+		return false;
+	}
+	return m_audioRingBuffer->ReadWindowBySequence(out, startSequence, sampleCount);
+}
+
+uint64_t CVoiceRecorder::GetRingLatestSequence() const {
+	return m_audioRingBuffer ? m_audioRingBuffer->GetLatestSequence() : 0;
+}
+
+uint64_t CVoiceRecorder::GetRingOldestAvailableSequence() const {
+	return m_audioRingBuffer ? m_audioRingBuffer->GetOldestAvailableSequence() : 0;
+}
+
+std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+CVoiceRecorder::BuildStreamingAudioArtifact() const {
+	if (!m_audioRingBuffer) {
+		return std::nullopt;
+	}
+
+	blazeclaw::core::speechrecognition::SpeechAudioArtifact artifact;
+	artifact.handoffMode = blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
+	artifact.sampleRate = m_config.nSamplesPerSec;
+	artifact.channels = 1;
+	artifact.bitsPerSample = m_config.nBitsPerSample;
+	artifact.sequenceStart = m_audioRingBuffer->GetOldestAvailableSequence();
+	artifact.sequenceEnd = m_audioRingBuffer->GetLatestSequence();
+	if (artifact.sequenceEnd <= artifact.sequenceStart) {
+		return std::nullopt;
+	}
+	artifact.durationMs = static_cast<std::uint32_t>(
+		((artifact.sequenceEnd - artifact.sequenceStart) * 1000ULL) /
+		(static_cast<std::uint64_t>(artifact.sampleRate == 0 ? 1 : artifact.sampleRate)));
+	return artifact;
+}
+
+VoiceRecorderTelemetry CVoiceRecorder::GetTelemetrySnapshot() const {
+	return m_telemetry;
+}
+
+void CVoiceRecorder::PushPcm16ChunkForTest(
+	const int16_t* data,
+	size_t frameCount,
+	size_t channelCount,
+	uint64_t enqueueLatencyUs) {
+	if (!data || frameCount == 0 || channelCount == 0) {
+		return;
+	}
+	if (!m_audioRingBuffer) {
+		m_audioRingBuffer = std::make_unique<AudioRingBuffer>(m_config.GetRingCapacitySamples());
+	}
+	m_audioRingBuffer->PushInterleavedPcm16(data, frameCount, channelCount, 0);
+	m_telemetry.chunkEnqueueLatencyUs = enqueueLatencyUs;
+	const auto cap = static_cast<uint64_t>(m_audioRingBuffer->GetCapacitySamples());
+	const auto avail = m_audioRingBuffer->GetLatestSequence() - m_audioRingBuffer->GetOldestAvailableSequence();
+	m_telemetry.ringOccupancyPercent = cap == 0 ? 0 : (avail * 100ULL) / cap;
+	m_telemetry.ringDroppedSamples = m_audioRingBuffer->GetDroppedSamples();
+}
+
+void CVoiceRecorder::ResetVadState() {}
+void CVoiceRecorder::ProcessVadFromRing() {}
+void CVoiceRecorder::ProcessVadFromRingWithLatency(uint64_t) {}
+void CVoiceRecorder::EmitBoundarySignal(VoiceBoundarySignalType, uint64_t, uint64_t, uint64_t) {}
+
+std::unique_ptr<IVoiceVadProvider> CVoiceRecorder::CreateVadProvider(VoiceVadProviderType) const {
+	return {};
+}
+
 bool CChatView::StartRecordingToPath(const CStringW&) {
 	return true;
 }
 
 CStringW CChatView::StopRecordingAndGetPath() {
 	return CStringW();
+}
+
+std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+CChatView::GetLastRecordingAudioArtifact() const {
+	return std::nullopt;
 }

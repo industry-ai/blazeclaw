@@ -538,11 +538,13 @@
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <!-- Tests moved to a separate test project BlazeClawMfc.Tests.vcxproj -->
+    <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
+    <ClCompile Include="tests\VoiceRecorderRingArtifactIntegrationTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
