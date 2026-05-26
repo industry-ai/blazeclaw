@@ -249,6 +249,13 @@ namespace blazeclaw::core {
 		void SetActiveChatProvider(
 			const std::string& provider,
 			const std::string& model);
+		[[nodiscard]] bool ApplySpeechRecognitionConfigReload(
+			bool speechEnabled,
+			const std::wstring& speechProvider,
+			const std::wstring& speechStorageRoot,
+			const std::wstring& speechActiveModelId,
+			const std::wstring& speechModelPath,
+			std::string* outStatusMessage = nullptr);
 		[[nodiscard]] const std::string& ActiveChatProvider() const noexcept;
 		[[nodiscard]] const std::string& ActiveChatModel() const noexcept;
 		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;

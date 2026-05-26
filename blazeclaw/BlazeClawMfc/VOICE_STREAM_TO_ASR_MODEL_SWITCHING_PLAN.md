@@ -1,13 +1,27 @@
-# ASR model switching implementation plan (qwen3-asr-1.7b-onnx / qwen3-asr-0.6b-onnx)
+# ASR model switching implementation plan
 
-## Goal
-Implement user-visible switching between two local STT models:
+## Scope update (current)
+
+Add third local STT model selection support and runtime switch lifecycle:
 - `BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx/`
 - `BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx/`
+- `BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en/`
+
+Sherpa model note:
+- Sherpa path is wired as a local STT model selection target in `CSettingsDialog`.
+- Do not wire NVIDIA VAD to sherpa in this iteration (sherpa model has its own VAD flow).
+
+## Goal
+
+Implement user-visible switching between local STT models:
+- `BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx/`
+- `BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx/`
+- `BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en/`
 
 without changing the ONNX runtime backend contract.
 
 ## Progress
+
 - Completed: Step 1 (ASR id<->storageRoot mapping helpers in `SettingsDialog.cpp`)
 - Completed: Step 2 (single-select feature-model behavior on load/save)
 - Completed: Step 3 (persist selected model mapping into `speech.storageRoot`)
@@ -15,11 +29,15 @@ without changing the ONNX runtime backend contract.
 - Completed: Step 5 (optional `speech.activeModelId` schema + loader + Settings persistence)
 - Completed: Step 6 (docs/config comments updated for catalog id + switching behavior)
 - Completed: Step 7 (validation run with required command attempt + project fallback build)
+- Completed: Step 8 (add sherpa feature catalog entry and three-model Settings wiring)
+- Completed: Step 9 (runtime model-switch reload lifecycle: unload previous session, configure/load selected model)
+- Completed: Step 10 (docs/config comments refreshed for third model + sherpa VAD note)
 - Remaining: none
 
 ## Codebase analysis summary
 
 ### Current configuration/runtime path flow
+
 - Speech runtime model root is resolved from config keys already consumed by runtime:
   - `speech.storageRoot`
   - `speech.model_path`
@@ -31,9 +49,11 @@ without changing the ONNX runtime backend contract.
   - (`speech.enabled`, `speech.provider`, `speech.storageRoot`, `speech.model_path`, etc.)
 
 ### Current Settings UI state
-- `CSettingsDialog::LoadFeatureModels()` shows two ASR entries in `IDC_LIST_MODELS_EX`:
+
+- `CSettingsDialog::LoadFeatureModels()` shows ASR entries in `IDC_LIST_MODELS_EX`:
   - `speech/qwen3-asr-1.7b-onnx`
   - `speech/qwen3-asr-0.6b-onnx`
+  - `speech/sherpa-onnx-streaming-zipformer-bilingual-zh-en`
 
 - Save path in `OnOK()` now:
   - normalizes feature selection to single-select,
@@ -43,10 +63,12 @@ without changing the ONNX runtime backend contract.
   model selected.
 
 ### Current status
-Catalog-based ASR model switching is implemented for 1.7B and 0.6B models,
+
+Catalog-based ASR model switching is implemented for 1.7B, 0.6B, and sherpa models,
 including persisted model identity and custom-root compatibility behavior.
 
 ## Design decision
+
 Use `speech.storageRoot` as the single source of truth for selected ASR model directory.
 
 Rationale:
@@ -57,15 +79,18 @@ Rationale:
 ## Implementation plan
 
 ### Step 1: Add explicit ASR model identity mapping in Settings dialog
+
 File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
 - Introduce a local static mapping table from feature model id to default storage root:
   - `speech/qwen3-asr-1.7b-onnx -> BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx`
   - `speech/qwen3-asr-0.6b-onnx -> BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx`
+  - `speech/sherpa-onnx-streaming-zipformer-bilingual-zh-en -> BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en`
 - Add helpers:
   - resolve selected feature index from `speech.storageRoot`
   - resolve storage root from selected feature id.
 
 ### Step 2: Make feature selection mutually exclusive (radio-like behavior)
+
 File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
 - In `LoadFeatureModels()`, set exactly one selected model when `speech.enabled=true`:
   - Prefer match by current `speech.storageRoot`
@@ -75,6 +100,7 @@ File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
   - if none checked, set `speech.enabled=false`.
 
 ### Step 3: Persist selected model root on save
+
 File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
 - In `OnOK()`:
   - derive `selectedFeatureModelId`
@@ -84,6 +110,7 @@ File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
   - keep `speech.provider=onnx` as current behavior.
 
 ### Step 4: Keep manual path edits compatible
+
 File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
 - If user edits `ASR Storage Root` manually to a non-catalog path:
   - preserve edited value in `speech.storageRoot`
@@ -93,6 +120,7 @@ File: `BlazeClawMfc/src/app/SettingsDialog.cpp`
 - Recommended behavior: uncheck all catalog models on mismatch to avoid misleading UI state.
 
 ### Step 5: Optional config schema enhancement for future model catalogs
+
 Files:
 - `BlazeClawMfc/src/config/ConfigModels.h`
 - `BlazeClawMfc/src/config/ConfigLoader.cpp`
@@ -100,22 +128,27 @@ Files:
 - (optional) `BlazeClawMfc/blazeclaw.conf`
 
 Add optional key:
-- `speech.activeModelId=speech/qwen3-asr-1.7b-onnx|speech/qwen3-asr-0.6b-onnx`
+- `speech.activeModelId=speech/qwen3-asr-1.7b-onnx|speech/qwen3-asr-0.6b-onnx|speech/sherpa-onnx-streaming-zipformer-bilingual-zh-en`
 
 This is optional for current rollout because `speech.storageRoot` is sufficient, but recommended for future catalog growth and analytics clarity.
 
 ### Step 6: Documentation updates
+
 Update docs to reflect switching behavior and source of truth:
 - `blazeclaw/docs/readme.md`
 - `BlazeClawMfc/src/config/blazeclaw.conf` comments
 - `BlazeClawMfc/blazeclaw.conf` comments
 
 Document:
-- two supported STT folders
+- three supported STT folders
 - Settings feature list is single-select for ASR model
 - `speech.storageRoot` drives runtime model resolution.
+- Runtime switch behavior: when selected model differs from previous selection,
+  previous runtime session is unloaded and selected model is reconfigured/reloaded.
+- Sherpa-specific note: no NVIDIA VAD wiring is added in this plan.
 
 ### Step 7: Validation plan
+
 1. Build validation:
    - Preferred repo command (if solution exists):
 	 - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
@@ -131,6 +164,7 @@ Document:
    - Existing hotword/runtime-hot keys remain untouched.
 
 ## Risks and mitigations
+
 - Risk: checkbox list allows multi-select while feature is conceptually single-select.
   - Mitigation: enforce single-select normalization on save and sync on load.
 - Risk: manual storage root edits conflict with catalog checkboxes.
@@ -139,6 +173,7 @@ Document:
   - Mitigation: update both template and runtime config comments consistently.
 
 ## Out of scope for this iteration
+
 - Automatic benchmark-based dynamic model switching.
 - Download/install pipeline for missing STT model folders.
 - Non-ONNX speech providers.

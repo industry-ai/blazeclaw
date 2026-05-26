@@ -19,7 +19,7 @@ namespace {
 		const wchar_t* storageRoot;
 	};
 
-	constexpr std::array<AsrFeatureModelDefinition, 2> kAsrFeatureModels = {
+	constexpr std::array<AsrFeatureModelDefinition, 3> kAsrFeatureModels = {
 		AsrFeatureModelDefinition{
 			"speech/qwen3-asr-1.7b-onnx",
 			"Qwen3 ASR 1.7B (ONNX)",
@@ -31,6 +31,12 @@ namespace {
 			"Qwen3 ASR 0.6B (ONNX)",
 			"ONNX Runtime",
 			L"BlazeClawMfc/models/STT/qwen3-asr-0.6b-onnx",
+		},
+		AsrFeatureModelDefinition{
+			"speech/sherpa-onnx-streaming-zipformer-bilingual-zh-en",
+			"Sherpa ONNX Streaming Zipformer (ZH-EN)",
+			"ONNX Runtime",
+			L"BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en",
 		},
 	};
 
@@ -667,6 +673,7 @@ void CSettingsDialog::OnOK()
 	}
 
 	UpdateData(TRUE);
+	const SpeechConfigState previousSpeechConfig = ReadSpeechConfigState();
 	std::optional<size_t> selectedFeatureIndex;
 	bool featureSelectionCommitted = false;
 	for (int i = 0; i < m_listFeatureModels.GetItemCount(); ++i) {
@@ -725,6 +732,14 @@ void CSettingsDialog::OnOK()
 	}
 	const std::wstring speechModelPath =
 		TrimW(static_cast<LPCWSTR>(m_speechModelPath));
+	const bool speechSelectionChanged =
+		(previousSpeechConfig.enabled != speechEnabled) ||
+		(NormalizePathForCompare(previousSpeechConfig.storageRoot) !=
+			NormalizePathForCompare(speechStorageRoot)) ||
+		(previousSpeechConfig.activeModelId !=
+			(selectedFeatureModelId.has_value() ? *selectedFeatureModelId : std::string())) ||
+		(NormalizePathForCompare(previousSpeechConfig.modelPath) !=
+			NormalizePathForCompare(speechModelPath));
 	updateProgress(40);
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -871,6 +886,20 @@ void CSettingsDialog::OnOK()
 				}
 			}
 		}
+	}
+
+	if (app && speechSelectionChanged) {
+		std::string speechReloadStatus;
+		const bool speechReloaded = app->Services().ApplySpeechRecognitionConfigReload(
+			speechEnabled,
+			L"onnx",
+			speechStorageRoot,
+			selectedFeatureModelId.has_value()
+			? ToWideAscii(*selectedFeatureModelId)
+			: std::wstring(),
+			speechModelPath,
+			&speechReloadStatus);
+		(void)speechReloaded;
 	}
 
 	updateProgress(85);
