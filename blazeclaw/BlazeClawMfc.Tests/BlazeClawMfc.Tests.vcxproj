@@ -211,6 +211,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\PythonProcessExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\PiEmbeddedService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />

@@ -349,6 +349,8 @@ namespace blazeclaw::core {
 			status.status = snapshot.status;
 			status.provider = snapshot.provider;
 			status.modelPath = snapshot.modelPath;
+			status.modelLayout = snapshot.modelLayout;
+			status.modelVariant = snapshot.modelVariant;
 			status.runtimeHotMode = snapshot.runtimeHotMode;
 			status.runtimeHotLifecycleState = snapshot.runtimeHotLifecycleState;
 			status.runtimeHotWarmupEnabled = snapshot.runtimeHotWarmupEnabled;

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SpeechRecognitionRuntime.h"
+#include "SpeechModelLayoutProbe.h"
 
 #include <algorithm>
 #include <array>
@@ -486,6 +487,24 @@ namespace blazeclaw::core::speechrecognition {
 			}
 
 			return "auto";
+		}
+
+		std::string JoinValues(
+			const std::vector<std::string>& values,
+			const std::string& fallback = "none") {
+			if (values.empty()) {
+				return fallback;
+			}
+
+			std::ostringstream oss;
+			for (std::size_t i = 0; i < values.size(); ++i) {
+				if (i > 0) {
+					oss << ",";
+				}
+				oss << values[i];
+			}
+
+			return oss.str();
 		}
 
 		struct ModelVariantPaths {
@@ -1599,6 +1618,58 @@ namespace blazeclaw::core::speechrecognition {
 			};
 			m_snapshot.ready = false;
 			m_snapshot.status = "model_missing";
+			m_snapshot.error = outResult.error;
+			return false;
+		}
+
+		const auto layoutProbe = ProbeSpeechModelLayout(rootPath);
+		m_snapshot.modelLayout = layoutProbe.layout;
+		TraceRuntime(
+			"runtime.model.layout.detected",
+			std::string(),
+			"layout=" + layoutProbe.layout +
+			" qwenVariants=" + JoinValues(layoutProbe.availableQwenVariants) +
+			" available=" + JoinValues(layoutProbe.availableArtifacts) +
+			" missing=" + JoinValues(layoutProbe.missingArtifacts));
+
+		if (layoutProbe.kind == SpeechModelLayoutKind::SherpaZipformerTransducer) {
+			TraceRuntime(
+				"runtime.model.layout.route",
+				std::string(),
+				"layout=sherpa_zipformer_transducer route=sherpa_streaming_engine");
+
+			m_snapshot.modelVariant = "sherpa_transducer";
+			m_snapshot.encoderModelPath = ToNarrow(layoutProbe.sherpaEncoderPath.wstring());
+			m_snapshot.decoderInitModelPath = ToNarrow(layoutProbe.sherpaDecoderPath.wstring());
+			m_snapshot.decoderStepModelPath = ToNarrow(layoutProbe.sherpaJoinerPath.wstring());
+			m_snapshot.tokenizerPath = ToNarrow(layoutProbe.sherpaTokensPath.wstring());
+
+			outResult.ok = false;
+			outResult.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::ModelLoadFailed,
+				.message = "sherpa zipformer transducer layout detected; sherpa streaming engine is not implemented yet",
+			};
+			m_snapshot.ready = false;
+			m_snapshot.status = "model_layout_routed_unimplemented";
+			m_snapshot.error = outResult.error;
+			return false;
+		}
+
+		if (layoutProbe.kind != SpeechModelLayoutKind::QwenDecoderInitStep) {
+			TraceRuntime(
+				"runtime.model.layout.unsupported",
+				std::string(),
+				"layout=" + layoutProbe.layout +
+				" available=" + JoinValues(layoutProbe.availableArtifacts) +
+				" missing=" + JoinValues(layoutProbe.missingArtifacts));
+
+			outResult.ok = false;
+			outResult.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::ModelNotFound,
+				.message = "no supported speech model layout detected at configured model path",
+			};
+			m_snapshot.ready = false;
+			m_snapshot.status = "model_layout_unknown";
 			m_snapshot.error = outResult.error;
 			return false;
 		}

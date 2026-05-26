@@ -545,12 +545,13 @@ namespace {
 
 		CString runtimeLine;
 		runtimeLine.Format(
-			L"[Speech] startup.runtime - ready=%s status=%s provider=%s effectiveProvider=%s model=%s variant=%s encoder=%s decoderInit=%s tokenizer=%s loadAttempts=%llu loadFailures=%llu transcribeCompleted=%llu",
+			L"[Speech] startup.runtime - ready=%s status=%s provider=%s effectiveProvider=%s model=%s layout=%s variant=%s encoder=%s decoderInit=%s tokenizer=%s loadAttempts=%llu loadFailures=%llu transcribeCompleted=%llu",
 			runtime.ready ? L"true" : L"false",
 			ToWide(runtime.status).c_str(),
 			ToWide(runtime.provider).c_str(),
 			ToWide(runtime.effectiveExecutionProvider).c_str(),
 			ToWide(runtime.modelPath).c_str(),
+			ToWide(runtime.modelLayout).c_str(),
 			ToWide(runtime.modelVariant).c_str(),
 			ToWide(runtime.encoderModelPath).c_str(),
 			ToWide(runtime.decoderInitModelPath).c_str(),

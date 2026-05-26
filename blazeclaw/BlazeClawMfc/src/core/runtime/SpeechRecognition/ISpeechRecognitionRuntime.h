@@ -53,6 +53,7 @@ namespace blazeclaw::core::speechrecognition {
 		bool lastInputResampled = false;
 		std::uint32_t lastFeatureFrames = 0;
 		std::uint32_t lastFeatureBins = 0;
+		std::string modelLayout;
 		std::string modelVariant;
 		std::string encoderModelPath;
 		std::string decoderInitModelPath;

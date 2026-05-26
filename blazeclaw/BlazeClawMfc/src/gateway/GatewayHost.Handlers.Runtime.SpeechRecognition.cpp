@@ -204,6 +204,8 @@ namespace blazeclaw::gateway {
 								{ "streamingMode", JsonString("artifact_metadata") },
 								{ "ringStreamingEnabled", JsonBool(ringStreamingEnabled) },
 							{ "status", JsonString(sttRuntimeStatus.status) },
+						{ "modelLayout", JsonString(sttRuntimeStatus.modelLayout) },
+						{ "modelVariant", JsonString(sttRuntimeStatus.modelVariant) },
 							{ "provider", JsonString(sttRuntimeStatus.provider) },
 							{ "effectiveExecutionProvider", JsonString(sttRuntimeStatus.effectiveExecutionProvider) },
 							{ "runtimeHot", JsonObject({

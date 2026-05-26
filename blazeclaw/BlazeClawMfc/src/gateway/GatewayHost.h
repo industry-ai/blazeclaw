@@ -317,6 +317,8 @@ namespace blazeclaw::gateway {
 			std::string status;
 			std::string provider;
 			std::string modelPath;
+			std::string modelLayout;
+			std::string modelVariant;
 			std::string runtimeHotMode;
 			std::string runtimeHotLifecycleState;
 			bool runtimeHotWarmupEnabled = false;
