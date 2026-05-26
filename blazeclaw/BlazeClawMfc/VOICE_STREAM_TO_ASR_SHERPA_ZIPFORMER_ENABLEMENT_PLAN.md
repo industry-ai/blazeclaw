@@ -304,6 +304,8 @@ Implemented notes:
 
 ### Phase 7: Tests and validation
 
+Status: completed
+
 Target files:
 
 - `tests/SpeechRecognitionOfflineOptimizationTests.cpp`
@@ -330,6 +332,21 @@ Manual verification checklist:
 3. Speak mixed Chinese/English and observe live partial updates.
 4. Verify VAD-driven segment finals appear without stopping recording.
 5. Stop recording and verify final flush + clean shutdown.
+
+Implemented notes:
+
+- Added new model-layout tests in
+	`tests/SpeechRecognitionModelLayoutDetectionTests.cpp`:
+	- Qwen layout detection (`qwen_decoder_init_step`)
+	- Sherpa layout detection (`sherpa_zipformer_transducer`)
+	- Incomplete sherpa artifact reporting.
+- Added new realtime streaming tests in
+	`tests/SpeechRecognitionRealtimeStreamingTests.cpp`:
+	- deterministic streaming segment finalization
+	- sequence catch-up behavior when cursor lags oldest ring sequence
+	- cancellation behavior path.
+- Added both new tests to `BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj`
+	for compilation and validation coverage.
 
 ## Risks and mitigations
 
