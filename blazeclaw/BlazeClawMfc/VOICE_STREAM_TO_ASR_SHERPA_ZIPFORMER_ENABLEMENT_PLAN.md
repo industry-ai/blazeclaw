@@ -254,6 +254,8 @@ Implemented notes:
 
 ### Phase 6: Config and capabilities for realtime sherpa mode
 
+Status: completed
+
 Target files:
 
 - `src/config/ConfigModels.h`
@@ -277,6 +279,26 @@ Outcome:
 
 - runtime behavior is configurable and transparent.
 - capabilities accurately represent realtime streaming support.
+
+Implemented notes:
+
+- Added explicit speech streaming config flags in speech config model and loader:
+	- `speech.streaming.enabled`
+	- `speech.streaming.chunk_ms`
+	- `speech.streaming.lookback_ms`
+- Preserved compatibility aliases with existing keys:
+	- `speech.chunk_ms`
+	- `speech.overlap_ms`
+	(bidirectional mapping + shared normalization).
+- Runtime snapshot and gateway runtime-status now expose streaming config:
+	- `streamingEnabled`
+	- `streamingChunkMs`
+	- `streamingLookbackMs`
+- `speech.capabilities.get` now advertises sherpa-aware realtime capability:
+	- `audioHandoffMode=pcm_stream` for sherpa layout
+	- config-gated `streamingSupported`
+	- `modelNativeVad=true` for sherpa layout
+	- includes streaming tuning fields for transparency.
 
 ---
 

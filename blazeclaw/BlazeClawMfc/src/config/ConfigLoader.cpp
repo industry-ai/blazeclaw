@@ -1214,10 +1214,35 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.streaming.enabled=", 0) == 0) {
+				outConfig.speechRecognition.streamingEnabled =
+					ParseBool(trimmedLine.substr(24), true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.streaming.chunk_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(25), value) && value > 0) {
+					outConfig.speechRecognition.streamingChunkMs = value;
+					outConfig.speechRecognition.chunkMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.streaming.lookback_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(28), value)) {
+					outConfig.speechRecognition.streamingLookbackMs = value;
+					outConfig.speechRecognition.overlapMs = value;
+				}
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.chunk_ms=", 0) == 0) {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(16), value) && value > 0) {
 					outConfig.speechRecognition.chunkMs = value;
+					outConfig.speechRecognition.streamingChunkMs = value;
 				}
 				continue;
 			}
@@ -1226,6 +1251,7 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(18), value)) {
 					outConfig.speechRecognition.overlapMs = value;
+					outConfig.speechRecognition.streamingLookbackMs = value;
 				}
 				continue;
 			}
@@ -1993,13 +2019,16 @@ namespace blazeclaw::config {
 				outConfig.speechRecognition.allowedLanguages.end()),
 			outConfig.speechRecognition.allowedLanguages.end());
 		const auto normalizedChunk = std::clamp<std::uint32_t>(
-			outConfig.speechRecognition.chunkMs,
+			outConfig.speechRecognition.streamingChunkMs,
 			320u,
 			1500u);
+		outConfig.speechRecognition.streamingChunkMs = normalizedChunk;
 		outConfig.speechRecognition.chunkMs = normalizedChunk;
-		outConfig.speechRecognition.overlapMs = (std::min)(
-			outConfig.speechRecognition.overlapMs,
+		const auto normalizedLookback = (std::min)(
+			outConfig.speechRecognition.streamingLookbackMs,
 			normalizedChunk > 0 ? normalizedChunk - 1 : 0u);
+		outConfig.speechRecognition.streamingLookbackMs = normalizedLookback;
+		outConfig.speechRecognition.overlapMs = normalizedLookback;
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
 		if (outConfig.localModel.provider == L"llama.cpp") {

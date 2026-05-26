@@ -30,6 +30,9 @@ namespace blazeclaw::core::speechrecognition {
 		std::string lastPromptBuildError;
 		std::string language;
 		std::uint32_t sampleRate = 16000;
+		bool streamingEnabled = false;
+		std::uint32_t streamingChunkMs = 0;
+		std::uint32_t streamingLookbackMs = 0;
 		std::uint32_t threads = 0;
 		std::string executionMode;
 		bool cudaExecutionProviderAvailable = false;

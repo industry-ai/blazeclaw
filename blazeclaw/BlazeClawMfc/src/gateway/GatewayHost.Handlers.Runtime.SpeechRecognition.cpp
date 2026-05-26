@@ -177,6 +177,12 @@ namespace blazeclaw::gateway {
 				[&host, &ringStreamingEnabled](const protocol::RequestFrame& request) {
 					const bool runtimeConnected = host.IsRunning();
 					const auto sttRuntimeStatus = host.GetSpeechRecognitionRuntimeStatus();
+						const bool sherpaLayout = sttRuntimeStatus.modelLayout == "sherpa_zipformer_transducer";
+						const bool streamingConfigured = sttRuntimeStatus.streamingEnabled;
+						const bool streamingSupported = ringStreamingEnabled && streamingConfigured;
+						const std::string audioHandoffMode = sherpaLayout
+							? std::string("pcm_stream")
+							: std::string("dual");
 					const bool sttSupported = true;
 					const bool sttReady = runtimeConnected &&
 						sttRuntimeStatus.enabled &&
@@ -193,16 +199,20 @@ namespace blazeclaw::gateway {
 								{ "supported", JsonBool(sttSupported) },
 								{ "ready", JsonBool(sttReady) },
 								{ "mode", JsonString("record-then-transcribe") },
-								{ "audioHandoffMode", JsonString("dual") },
+								{ "audioHandoffMode", JsonString(audioHandoffMode) },
 								{ "audioHandoffModes", JsonArray({
 									JsonString("wav_file"),
 									JsonString("pcm_stream"),
 								}) },
 								{ "audioMimeType", JsonString("audio/wav") },
 								{ "audioContainer", JsonString("wav") },
-								{ "streamingSupported", JsonBool(ringStreamingEnabled) },
+								{ "streamingSupported", JsonBool(streamingSupported) },
 								{ "streamingMode", JsonString("artifact_metadata") },
 								{ "ringStreamingEnabled", JsonBool(ringStreamingEnabled) },
+								{ "streamingConfigured", JsonBool(streamingConfigured) },
+								{ "streamingChunkMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.streamingChunkMs)) },
+								{ "streamingLookbackMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.streamingLookbackMs)) },
+								{ "modelNativeVad", JsonBool(sherpaLayout) },
 							{ "status", JsonString(sttRuntimeStatus.status) },
 						{ "modelLayout", JsonString(sttRuntimeStatus.modelLayout) },
 						{ "modelVariant", JsonString(sttRuntimeStatus.modelVariant) },

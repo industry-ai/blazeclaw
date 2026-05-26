@@ -506,6 +506,9 @@ namespace blazeclaw::config {
 		std::vector<std::wstring> allowedLanguages = { L"en", L"zh" };
 		bool enforceAllowedLanguages = false;
 		std::uint32_t sampleRate = 16000;
+		bool streamingEnabled = true;
+		std::uint32_t streamingChunkMs = 1000;
+		std::uint32_t streamingLookbackMs = 320;
 		std::uint32_t chunkMs = 1000;
 		std::uint32_t overlapMs = 320;
 		std::uint32_t threads = 4;

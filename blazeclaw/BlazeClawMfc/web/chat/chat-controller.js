@@ -729,6 +729,16 @@
             return {
                 sttSupported: Boolean(stt.supported),
                 sttReady: Boolean(stt.ready),
+                audioHandoffMode: String(stt.audioHandoffMode || "dual").trim() || "dual",
+                streamingSupported: Boolean(stt.streamingSupported),
+                streamingConfigured: Boolean(stt.streamingConfigured),
+                modelNativeVad: Boolean(stt.modelNativeVad),
+                streamingChunkMs: Number.isFinite(Number(stt.streamingChunkMs))
+                    ? Number(stt.streamingChunkMs)
+                    : 0,
+                streamingLookbackMs: Number.isFinite(Number(stt.streamingLookbackMs))
+                    ? Number(stt.streamingLookbackMs)
+                    : 0,
                 transcriptSupportsSegments: Boolean(transcript.supportsSegments),
                 transcriptSupportsInterim: Boolean(transcript.supportsInterim),
                 transcriptSupportsFinal: transcript.supportsFinal !== false,
@@ -903,6 +913,12 @@
                 state.speechCapabilities = {
                     sttSupported: false,
                     sttReady: false,
+                audioHandoffMode: "dual",
+                streamingSupported: false,
+                streamingConfigured: false,
+                modelNativeVad: false,
+                streamingChunkMs: 0,
+                streamingLookbackMs: 0,
                     transcriptSupportsSegments: false,
                     transcriptSupportsInterim: false,
                     transcriptSupportsFinal: true,
@@ -928,6 +944,12 @@
                 : {
                     sttSupported: false,
                     sttReady: false,
+                    audioHandoffMode: "dual",
+                    streamingSupported: false,
+                    streamingConfigured: false,
+                    modelNativeVad: false,
+                    streamingChunkMs: 0,
+                    streamingLookbackMs: 0,
                     transcriptSupportsSegments: false,
                     transcriptSupportsInterim: false,
                     transcriptSupportsFinal: true,

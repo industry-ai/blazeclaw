@@ -443,6 +443,9 @@ namespace blazeclaw::core {
 			status.hotwordsDebugDumpPrompt = snapshot.hotwordsDebugDumpPrompt;
 			status.lastPromptBuildStatus = snapshot.lastPromptBuildStatus;
 			status.lastPromptBuildError = snapshot.lastPromptBuildError;
+			status.streamingEnabled = snapshot.streamingEnabled;
+			status.streamingChunkMs = snapshot.streamingChunkMs;
+			status.streamingLookbackMs = snapshot.streamingLookbackMs;
 			status.effectiveExecutionProvider = snapshot.effectiveExecutionProvider;
 			return status;
 			});

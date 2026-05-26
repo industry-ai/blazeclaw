@@ -1450,6 +1450,9 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.modelPath = ToNarrow(m_config.speechRecognition.modelPath);
 		m_snapshot.language = ToNarrow(m_config.speechRecognition.language);
 		m_snapshot.sampleRate = m_config.speechRecognition.sampleRate;
+		m_snapshot.streamingEnabled = m_config.speechRecognition.streamingEnabled;
+		m_snapshot.streamingChunkMs = m_config.speechRecognition.streamingChunkMs;
+		m_snapshot.streamingLookbackMs = m_config.speechRecognition.streamingLookbackMs;
 		m_snapshot.threads = m_config.speechRecognition.threads;
 		m_snapshot.executionMode = NormalizeExecutionMode(m_config.speechRecognition.executionMode);
 		m_snapshot.cudaExecutionProviderAvailable = false;

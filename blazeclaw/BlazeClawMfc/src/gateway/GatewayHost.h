@@ -331,6 +331,9 @@ namespace blazeclaw::gateway {
 			bool hotwordsDebugDumpPrompt = false;
 			std::string lastPromptBuildStatus;
 			std::string lastPromptBuildError;
+			bool streamingEnabled = false;
+			std::uint32_t streamingChunkMs = 0;
+			std::uint32_t streamingLookbackMs = 0;
 			std::string effectiveExecutionProvider;
 		};
 
