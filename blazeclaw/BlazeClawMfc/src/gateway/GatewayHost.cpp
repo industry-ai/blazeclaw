@@ -2166,6 +2166,15 @@ namespace blazeclaw::gateway {
 		m_speechExecutionUpdateCallback = std::move(callback);
 	}
 
+	void GatewayHost::NotifySpeechExecutionUpdate(
+		const blazeclaw::core::speechrecognition::SpeechExecutionState& state) const {
+		if (!m_speechExecutionUpdateCallback) {
+			return;
+		}
+
+		m_speechExecutionUpdateCallback(state);
+	}
+
 	void GatewayHost::SetSpeechTranscribeAcceptedCallback(
 		SpeechTranscribeAcceptedCallback callback) {
 		m_speechTranscribeAcceptedCallback = std::move(callback);

@@ -42,6 +42,9 @@ namespace blazeclaw::core::speechrecognition {
 
 	enum class SpeechExecutionStage {
 		Queued,
+		StartStream,
+		Streaming,
+		SegmentFinalized,
 		Recording,
 		Stopped,
 		Transcribing,

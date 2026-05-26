@@ -16,6 +16,12 @@ namespace blazeclaw::core {
 			switch (stage) {
 			case SpeechExecutionStage::Queued:
 				return "queued";
+			case SpeechExecutionStage::StartStream:
+				return "start_stream";
+			case SpeechExecutionStage::Streaming:
+				return "streaming";
+			case SpeechExecutionStage::SegmentFinalized:
+				return "segment_finalized";
 			case SpeechExecutionStage::Recording:
 				return "recording";
 			case SpeechExecutionStage::Stopped:
@@ -196,11 +202,42 @@ namespace blazeclaw::core {
 
 		ExecutionState transcribingState;
 		ExecutionUpdateCallback callback;
+		const bool isStreamingRequest = request.streamingInput.has_value();
+
+		auto emitStageUpdate = [&]() {
+			ExecutionState emittedState;
+			ExecutionUpdateCallback emittedCallback;
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const auto current = m_executionByRunId.find(accepted.executionState.runId);
+				if (current != m_executionByRunId.end()) {
+					emittedState = current->second;
+					emittedCallback = m_executionUpdateCallback;
+				}
+			}
+			if (emittedCallback) {
+				emittedCallback(emittedState);
+			}
+		};
+
+		if (isStreamingRequest) {
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const auto current = m_executionByRunId.find(accepted.executionState.runId);
+				if (current != m_executionByRunId.end()) {
+					current->second.stage = SpeechExecutionStage::StartStream;
+				}
+			}
+			emitStageUpdate();
+		}
+
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			const auto current = m_executionByRunId.find(accepted.executionState.runId);
 			if (current != m_executionByRunId.end()) {
-				current->second.stage = SpeechExecutionStage::Transcribing;
+				current->second.stage = isStreamingRequest
+					? SpeechExecutionStage::Streaming
+					: SpeechExecutionStage::Transcribing;
 				transcribingState = current->second;
 				callback = m_executionUpdateCallback;
 			}
@@ -223,6 +260,32 @@ namespace blazeclaw::core {
 			.language = request.language,
 			.prompt = request.prompt,
 		});
+
+		if (isStreamingRequest &&
+			result.sessionState.segment.has_value() &&
+			result.sessionState.segment->final) {
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const auto current = m_executionByRunId.find(accepted.executionState.runId);
+				if (current != m_executionByRunId.end()) {
+					current->second.stage = SpeechExecutionStage::SegmentFinalized;
+					current->second.segment = result.sessionState.segment;
+					current->second.transcriptText = result.sessionState.transcriptText.empty()
+						? result.text
+						: result.sessionState.transcriptText;
+				}
+			}
+			emitStageUpdate();
+
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const auto current = m_executionByRunId.find(accepted.executionState.runId);
+				if (current != m_executionByRunId.end()) {
+					current->second.stage = SpeechExecutionStage::Stopped;
+				}
+			}
+			emitStageUpdate();
+		}
 
 		ExecutionState completedState = BuildState(
 			accepted.executionState,
@@ -346,6 +409,9 @@ namespace blazeclaw::core {
 		speechrecognition::SpeechExecutionStage stage) {
 		switch (stage) {
 		case speechrecognition::SpeechExecutionStage::Queued:
+		case speechrecognition::SpeechExecutionStage::StartStream:
+		case speechrecognition::SpeechExecutionStage::Streaming:
+		case speechrecognition::SpeechExecutionStage::SegmentFinalized:
 		case speechrecognition::SpeechExecutionStage::Recording:
 		case speechrecognition::SpeechExecutionStage::Stopped:
 		case speechrecognition::SpeechExecutionStage::Transcribing:

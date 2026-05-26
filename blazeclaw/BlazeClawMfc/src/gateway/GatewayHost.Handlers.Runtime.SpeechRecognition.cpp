@@ -241,6 +241,9 @@ namespace blazeclaw::gateway {
 							}) },
 							{ "lifecycle", JsonArray({
 								JsonString("idle"),
+								JsonString("start_stream"),
+								JsonString("streaming"),
+								JsonString("segment_finalized"),
 								JsonString("recording"),
 								JsonString("paused"),
 								JsonString("stopped"),
@@ -475,6 +478,23 @@ namespace blazeclaw::gateway {
 			host.RuntimeContext().dispatcher->Register(
 				"speech.transcribe",
 				[&host, &tryParseAudioArtifact, &buildAudioArtifactJson, &ringStreamingEnabled](const protocol::RequestFrame& request) {
+				auto executionStageToString =
+					[](blazeclaw::core::speechrecognition::SpeechExecutionStage stage) {
+						switch (stage) {
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Queued: return std::string("queued");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::StartStream: return std::string("start_stream");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Streaming: return std::string("streaming");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::SegmentFinalized: return std::string("segment_finalized");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Recording: return std::string("recording");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Stopped: return std::string("stopped");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Transcribing: return std::string("transcribing");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Completed: return std::string("completed");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Failed: return std::string("failed");
+						case blazeclaw::core::speechrecognition::SpeechExecutionStage::Cancelled: return std::string("cancelled");
+						default: return std::string("unknown");
+						}
+					};
+
 					auto stageToString = [](blazeclaw::core::speechrecognition::SpeechSessionStage stage) {
 						switch (stage) {
 						case blazeclaw::core::speechrecognition::SpeechSessionStage::Idle: return std::string("idle");
@@ -527,7 +547,7 @@ namespace blazeclaw::gateway {
 								{ "speechSession", JsonObject({
 									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
 									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
-									{ "stage", JsonString("queued") },
+									{ "stage", JsonString(executionStageToString(busyState.stage)) },
 									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
 									{ "text", JsonString(busyState.transcriptText) },
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
@@ -537,7 +557,7 @@ namespace blazeclaw::gateway {
 								{ "executionState", JsonObject({
 									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
 									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
-									{ "stage", JsonString("transcribing") },
+									{ "stage", JsonString(executionStageToString(busyState.stage)) },
 									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
 									{ "text", JsonString(busyState.transcriptText) },
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },

@@ -541,6 +541,8 @@ namespace blazeclaw::gateway {
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 		void SetSpeechExecutionUpdateCallback(SpeechExecutionUpdateCallback callback);
+		void NotifySpeechExecutionUpdate(
+			const blazeclaw::core::speechrecognition::SpeechExecutionState& state) const;
 		void SetSpeechTranscribeAcceptedCallback(SpeechTranscribeAcceptedCallback callback);
 		[[nodiscard]] SpeechExecutionAccepted AcceptSpeechTranscription(
 			const SpeechExecutionRequest& request) const;

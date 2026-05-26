@@ -272,8 +272,44 @@ namespace blazeclaw::core {
 
 		manager.m_gatewayHost.SetSpeechExecutionUpdateCallback([&manager](
 			const speechrecognition::SpeechExecutionState& state) {
-				UNREFERENCED_PARAMETER(state);
-			});
+			UNREFERENCED_PARAMETER(state);
+		});
+
+		manager.m_speechTranscriptionCoordinator.SetExecutionUpdateCallback([&manager](
+			const speechrecognition::SpeechExecutionState& state) {
+			auto stageToString = [](speechrecognition::SpeechExecutionStage stage) {
+				switch (stage) {
+				case speechrecognition::SpeechExecutionStage::Queued: return std::string("queued");
+				case speechrecognition::SpeechExecutionStage::StartStream: return std::string("start_stream");
+				case speechrecognition::SpeechExecutionStage::Streaming: return std::string("streaming");
+				case speechrecognition::SpeechExecutionStage::SegmentFinalized: return std::string("segment_finalized");
+				case speechrecognition::SpeechExecutionStage::Recording: return std::string("recording");
+				case speechrecognition::SpeechExecutionStage::Stopped: return std::string("stopped");
+				case speechrecognition::SpeechExecutionStage::Transcribing: return std::string("transcribing");
+				case speechrecognition::SpeechExecutionStage::Completed: return std::string("completed");
+				case speechrecognition::SpeechExecutionStage::Failed: return std::string("failed");
+				case speechrecognition::SpeechExecutionStage::Cancelled: return std::string("cancelled");
+				default: return std::string("unknown");
+				}
+			};
+
+			manager.m_gatewayHost.NotifySpeechExecutionUpdate(state);
+			blazeclaw::gateway::EmitTelemetryEvent(
+				"gateway.speech.execution.update",
+				std::string("{\"runId\":") +
+				blazeclaw::gateway::JsonString(state.runId) +
+				",\"sessionId\":" +
+				blazeclaw::gateway::JsonString(state.sessionId) +
+				",\"stage\":" +
+				blazeclaw::gateway::JsonString(stageToString(state.stage)) +
+				",\"cancelRequested\":" +
+				(state.cancelRequested ? "true" : "false") +
+				",\"hasSegment\":" +
+				(state.segment.has_value() ? "true" : "false") +
+				",\"streamingInput\":" +
+				(state.streamingInput.has_value() ? "true" : "false") +
+				"}");
+		});
 
 		manager.m_gatewayHost.SetSpeechTranscribeAcceptedCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechExecutionRequest& request) {
