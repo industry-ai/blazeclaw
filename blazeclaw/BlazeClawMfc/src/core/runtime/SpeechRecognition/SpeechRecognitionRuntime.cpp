@@ -592,6 +592,59 @@ namespace blazeclaw::core::speechrecognition {
 			return fingerprint;
 		}
 
+		bool CopyExternalDataArtifactsForOfflineOptimization(
+			const std::filesystem::path& modelRoot,
+			std::string& outError) {
+			outError.clear();
+
+			std::error_code ec;
+			const auto optimizedDir = modelRoot / L"optimized";
+			std::filesystem::create_directories(optimizedDir, ec);
+			if (ec) {
+				outError = "failed to create optimized directory for external data artifacts";
+				return false;
+			}
+
+			ec.clear();
+			for (const auto& entry : std::filesystem::directory_iterator(modelRoot, ec)) {
+				if (ec) {
+					outError = "failed to enumerate model root for external data artifacts";
+					return false;
+				}
+
+				if (!entry.is_regular_file()) {
+					continue;
+				}
+
+				auto extension = entry.path().extension().wstring();
+				std::transform(
+					extension.begin(),
+					extension.end(),
+					extension.begin(),
+					[](const wchar_t ch) {
+						return static_cast<wchar_t>(std::towlower(ch));
+					});
+
+				if (extension != L".data") {
+					continue;
+				}
+
+				const auto destination = optimizedDir / entry.path().filename();
+				ec.clear();
+				std::filesystem::copy_file(
+					entry.path(),
+					destination,
+					std::filesystem::copy_options::overwrite_existing,
+					ec);
+				if (ec) {
+					outError = "failed to copy external data artifact to optimized directory";
+					return false;
+				}
+			}
+
+			return true;
+		}
+
 		bool RunOfflineGraphOptimization(
 			const std::filesystem::path& sourcePath,
 			const std::filesystem::path& optimizedPath,
@@ -3119,6 +3172,18 @@ namespace blazeclaw::core::speechrecognition {
 						"[SpeechRecognition][offline.optimize.no_variants] root=%S\n",
 						rootPath.c_str());
 				}
+				continue;
+			}
+
+			std::string externalDataError;
+			if (!CopyExternalDataArtifactsForOfflineOptimization(
+				rootPath,
+				externalDataError)) {
+				addFailedRoot(rootPath);
+				TRACE(
+					"[SpeechRecognition][offline.optimize.external_data_copy_failed] root=%S message=%S\n",
+					rootPath.c_str(),
+					externalDataError.c_str());
 				continue;
 			}
 
