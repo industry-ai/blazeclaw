@@ -188,6 +188,49 @@ bool AudioRingBuffer::ReadWindowBySequence(
     return ReadSnapshot(out, startSequence, count, maxSpinCount);
 }
 
+bool AudioRingBuffer::ReadWindowAndAdvance(
+    std::vector<float>& out,
+    uint64_t& nextSequence,
+    size_t count,
+    size_t maxSpinCount) const
+{
+    if (count == 0) {
+        out.clear();
+        return true;
+    }
+
+    if (maxSamples_ == 0 || count > maxSamples_) {
+        return false;
+    }
+
+    const uint64_t committed =
+        committedWriteCount_.load(std::memory_order_acquire);
+    const uint64_t oldestAvailable =
+        committed > static_cast<uint64_t>(maxSamples_)
+        ? committed - static_cast<uint64_t>(maxSamples_)
+        : 0;
+
+    if (nextSequence < oldestAvailable) {
+        nextSequence = oldestAvailable;
+    }
+
+    if (nextSequence >
+        (std::numeric_limits<uint64_t>::max)() - static_cast<uint64_t>(count)) {
+        return false;
+    }
+
+    if (nextSequence + static_cast<uint64_t>(count) > committed) {
+        return false;
+    }
+
+    if (!ReadSnapshot(out, nextSequence, count, maxSpinCount)) {
+        return false;
+    }
+
+    nextSequence += static_cast<uint64_t>(count);
+    return true;
+}
+
 bool AudioRingBuffer::ReadSnapshot(
     std::vector<float>& out,
     uint64_t startSequence,

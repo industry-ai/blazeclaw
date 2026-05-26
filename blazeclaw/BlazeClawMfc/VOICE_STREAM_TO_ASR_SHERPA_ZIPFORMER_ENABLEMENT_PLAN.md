@@ -27,6 +27,38 @@ This plan replaces the previous WAV-file-oriented approach for sherpa path.
 	- `model_layout_routed_unimplemented`
 	- (replaces generic `model_variant_missing` for sherpa model folders)
   - Added startup/capabilities visibility for detected `modelLayout`.
+- Completed: Phase 2 (streaming input contract based on AudioRingBuffer)
+  - Added explicit runtime streaming contract types:
+	- `SpeechStreamingSource`
+	- `SpeechStreamingCursor`
+	- `SpeechStreamingChunkPolicy`
+	- `SpeechStreamingInputContract`
+  - Extended runtime request/state contracts to carry optional
+	`streamingInput` alongside existing `audioArtifact`/`audioPath`.
+  - Added cursor helper API on `AudioRingBuffer`:
+	- `ReadWindowAndAdvance(...)`
+  - Wired gateway/coordinator mapping from `audioArtifact.handoffMode=pcm_stream`
+	to runtime `streamingInput` population (session/stream identity, cursor,
+	chunk policy).
+  - Preserved WAV-file path compatibility for non-sherpa/qwen flow.
+- Completed: Phase 3 (sherpa realtime streaming engine wiring)
+  - Added `SherpaZipformerStreamingEngine` and integrated it into
+	`SpeechRecognitionRuntime` load/transcribe routing for
+	`sherpa_zipformer_transducer` layout.
+  - Added transducer artifact load contract:
+	- `encoder*.onnx`
+	- `decoder*.onnx`
+	- `joiner*.onnx`
+	- `tokens.txt`
+  - Added `StreamingAudioSourceRegistry` and wired `CVoiceRecorder` to
+	register/unregister ring-buffer stream readers.
+  - Updated native recording stop path to return actual stream-sequence artifact
+	metadata from recorder instead of synthetic placeholders.
+  - Added streaming loop with chunked ring reads, cancellation checks, and
+	segment transitions in sherpa engine path.
+  - Current decode note: lexical transducer token decoding is staged for follow-up;
+	current Phase 3 returns segment-level speech detection output while preserving
+	realtime streaming and lifecycle execution flow.
 
 ## Current gap and root causes
 
@@ -86,6 +118,8 @@ Outcome:
 
 ### Phase 2: Introduce streaming input contract based on AudioRingBuffer
 
+Status: completed
+
 Target files:
 
 - `src/app/AudioRingBuffer.h`
@@ -111,6 +145,8 @@ Outcome:
 ---
 
 ### Phase 3: Implement sherpa realtime streaming engine with model-native VAD
+
+Status: completed
 
 Target files:
 

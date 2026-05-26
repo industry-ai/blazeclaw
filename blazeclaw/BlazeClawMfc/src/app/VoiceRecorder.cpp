@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "VoiceRecorder.h"
+#include "../core/runtime/SpeechRecognition/StreamingAudioSourceRegistry.h"
 
 #include <algorithm>
 #include <chrono>
@@ -74,6 +75,8 @@ uint64_t DurationMsToSamples(
     return (static_cast<uint64_t>(config.nSamplesPerSec) * durationMs) / 1000ULL;
 }
 
+const char* kVoiceRecorderStreamId = "voice_recorder";
+
 } // namespace
 
 CVoiceRecorder::CVoiceRecorder()
@@ -145,6 +148,8 @@ void CVoiceRecorder::Shutdown()
     }
 
     FreeBuffers();
+    blazeclaw::core::speechrecognition::UnregisterStreamingAudioSource(
+        kVoiceRecorderStreamId);
     m_bInitialized = FALSE;
 }
 
@@ -264,6 +269,23 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
 
     m_state = VoiceRecorderState::Recording;
 
+    blazeclaw::core::speechrecognition::RegisterStreamingAudioSource(
+        kVoiceRecorderStreamId,
+        blazeclaw::core::speechrecognition::StreamingAudioSourceReader{
+            .readBySequence = [this](
+                const std::uint64_t startSequence,
+                const std::size_t sampleCount,
+                std::vector<float>& outSamples) {
+                return ReadSamplesBySequence(outSamples, startSequence, sampleCount);
+            },
+            .latestSequence = [this]() {
+                return GetRingLatestSequence();
+            },
+            .oldestSequence = [this]() {
+                return GetRingOldestAvailableSequence();
+            },
+        });
+
     if (m_pCallback)
     {
         m_pCallback->OnVoiceStateChanged(m_state);
@@ -305,6 +327,8 @@ BOOL CVoiceRecorder::StopRecording()
     }
 
     FreeBuffers();
+    blazeclaw::core::speechrecognition::UnregisterStreamingAudioSource(
+        kVoiceRecorderStreamId);
 
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped;
     NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped);
@@ -652,9 +676,7 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
     artifact.handoffMode =
         blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
     artifact.path = ToNarrow(m_szFilePath);
-    artifact.streamId = m_sessionState.runId.empty()
-        ? m_sessionState.sessionId
-        : m_sessionState.runId;
+    artifact.streamId = kVoiceRecorderStreamId;
     artifact.mimeType = "audio/pcm";
     artifact.container = "pcm_s16le";
     artifact.sampleRate = m_config.nSamplesPerSec;

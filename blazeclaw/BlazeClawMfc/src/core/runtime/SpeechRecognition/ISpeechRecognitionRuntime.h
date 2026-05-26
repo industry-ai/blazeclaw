@@ -68,6 +68,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::string sessionId;
 		std::string audioPath;
 		std::optional<SpeechAudioArtifact> audioArtifact;
+		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string language;
 		std::string prompt;
 	};
@@ -88,6 +89,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::string sessionId;
 		std::string audioPath;
 		std::optional<SpeechAudioArtifact> audioArtifact;
+		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string language;
 		std::string prompt;
 	};

@@ -38,6 +38,11 @@ public:
         uint64_t startSequence,
         size_t count,
         size_t maxSpinCount = kDefaultReadSpinCount) const;
+    bool ReadWindowAndAdvance(
+        std::vector<float>& out,
+        uint64_t& nextSequence,
+        size_t count,
+        size_t maxSpinCount = kDefaultReadSpinCount) const;
 
     [[nodiscard]] size_t GetCapacitySamples() const { return maxSamples_; }
     [[nodiscard]] uint64_t GetDroppedSamples() const

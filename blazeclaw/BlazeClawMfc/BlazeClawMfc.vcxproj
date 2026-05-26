@@ -167,6 +167,8 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.h" />
     <ClInclude Include="src\cron\CronHygiene.h" />
     <ClInclude Include="src\cron\CronJsonCompat.h" />
     <ClInclude Include="src\cron\CronModels.h" />
@@ -374,6 +376,8 @@
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
+    <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
+    <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
@@ -692,3 +696,4 @@
     <Copy SourceFiles="@(BlazeClawLlamaCppRuntimeAssets)" DestinationFiles="@(BlazeClawLlamaCppRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>
+

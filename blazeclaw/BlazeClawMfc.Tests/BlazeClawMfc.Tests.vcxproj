@@ -212,6 +212,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechModelLayoutProbe.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\StreamingAudioSourceRegistry.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\engines\\SherpaZipformerStreamingEngine.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\PiEmbeddedService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />
@@ -239,4 +241,5 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+
 

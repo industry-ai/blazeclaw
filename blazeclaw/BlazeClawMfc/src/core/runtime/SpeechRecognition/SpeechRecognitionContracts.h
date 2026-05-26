@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -54,6 +55,34 @@ namespace blazeclaw::core::speechrecognition {
 		PcmStream,
 	};
 
+	struct SpeechStreamingSource {
+		std::string streamId;
+		std::string sessionId;
+		std::uint32_t sampleRate = 16000;
+		std::uint32_t channels = 1;
+		std::uint32_t bitsPerSample = 16;
+		std::uint64_t sequenceStart = 0;
+		std::uint64_t sequenceEnd = 0;
+	};
+
+	struct SpeechStreamingCursor {
+		std::uint64_t startSequence = 0;
+		std::uint64_t nextSequence = 0;
+	};
+
+	struct SpeechStreamingChunkPolicy {
+		std::uint32_t chunkMs = 20;
+		std::uint32_t overlapMs = 0;
+		std::uint32_t lookbackMs = 0;
+		std::size_t maxSpinCount = 64;
+	};
+
+	struct SpeechStreamingInputContract {
+		SpeechStreamingSource source;
+		SpeechStreamingCursor cursor;
+		SpeechStreamingChunkPolicy chunkPolicy;
+	};
+
 	struct SpeechAudioArtifact {
 		SpeechAudioHandoffMode handoffMode = SpeechAudioHandoffMode::WavFile;
 		std::string path;
@@ -81,6 +110,7 @@ namespace blazeclaw::core::speechrecognition {
 		SpeechSessionStage stage = SpeechSessionStage::Idle;
 		std::string audioPath;
 		std::optional<SpeechAudioArtifact> audioArtifact;
+		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string transcriptText;
 		std::string language;
 		std::uint32_t latencyMs = 0;
@@ -95,6 +125,7 @@ namespace blazeclaw::core::speechrecognition {
 		SpeechExecutionStage stage = SpeechExecutionStage::Queued;
 		std::string audioPath;
 		std::optional<SpeechAudioArtifact> audioArtifact;
+		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string transcriptText;
 		std::string language;
 		std::string prompt;

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SpeechRecognitionRuntime.h"
 #include "SpeechModelLayoutProbe.h"
+#include "engines/SherpaZipformerStreamingEngine.h"
 
 #include <algorithm>
 #include <array>
@@ -1418,6 +1419,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::unordered_map<char32_t, std::uint8_t> byteLevelCharToByte;
 		std::string tokenizerMode = "vocab_fallback";
 		bool initialized = false;
+		std::unique_ptr<engines::SherpaZipformerStreamingEngine> sherpaStreamingEngine;
 	};
 
 	SpeechRecognitionRuntime::SpeechRecognitionRuntime() = default;
@@ -1638,21 +1640,43 @@ namespace blazeclaw::core::speechrecognition {
 				std::string(),
 				"layout=sherpa_zipformer_transducer route=sherpa_streaming_engine");
 
-			m_snapshot.modelVariant = "sherpa_transducer";
-			m_snapshot.encoderModelPath = ToNarrow(layoutProbe.sherpaEncoderPath.wstring());
-			m_snapshot.decoderInitModelPath = ToNarrow(layoutProbe.sherpaDecoderPath.wstring());
-			m_snapshot.decoderStepModelPath = ToNarrow(layoutProbe.sherpaJoinerPath.wstring());
-			m_snapshot.tokenizerPath = ToNarrow(layoutProbe.sherpaTokensPath.wstring());
+			if (!m_sessionState->sherpaStreamingEngine) {
+				m_sessionState->sherpaStreamingEngine =
+					std::make_unique<engines::SherpaZipformerStreamingEngine>();
+			}
 
-			outResult.ok = false;
-			outResult.error = SpeechRecognitionError{
-				.code = SpeechRecognitionErrorCode::ModelLoadFailed,
-				.message = "sherpa zipformer transducer layout detected; sherpa streaming engine is not implemented yet",
-			};
-			m_snapshot.ready = false;
-			m_snapshot.status = "model_layout_routed_unimplemented";
-			m_snapshot.error = outResult.error;
-			return false;
+			std::string sherpaLoadError;
+			if (!m_sessionState->sherpaStreamingEngine->Load(
+				rootPath,
+				layoutProbe,
+				sherpaLoadError)) {
+				outResult.ok = false;
+				outResult.error = SpeechRecognitionError{
+					.code = SpeechRecognitionErrorCode::ModelLoadFailed,
+					.message = sherpaLoadError.empty()
+						? std::string("failed to load sherpa streaming artifacts")
+						: sherpaLoadError,
+				};
+				m_snapshot.ready = false;
+				m_snapshot.status = "sherpa_model_load_failed";
+				m_snapshot.error = outResult.error;
+				return false;
+			}
+
+			const auto& sherpaArtifacts =
+				m_sessionState->sherpaStreamingEngine->Artifacts();
+			m_snapshot.modelVariant = "sherpa_transducer";
+			m_snapshot.encoderModelPath = ToNarrow(sherpaArtifacts.encoderPath.wstring());
+			m_snapshot.decoderInitModelPath = ToNarrow(sherpaArtifacts.decoderPath.wstring());
+			m_snapshot.decoderStepModelPath = ToNarrow(sherpaArtifacts.joinerPath.wstring());
+			m_snapshot.tokenizerPath = ToNarrow(sherpaArtifacts.tokensPath.wstring());
+			m_snapshot.ready = true;
+			m_snapshot.status = "ready";
+			m_snapshot.error = std::nullopt;
+			SetLifecycleStateLocked("hot");
+			TouchRuntimeActivityLocked();
+			m_sessionState->initialized = true;
+			return true;
 		}
 
 		if (layoutProbe.kind != SpeechModelLayoutKind::QwenDecoderInitStep) {
@@ -2081,6 +2105,8 @@ namespace blazeclaw::core::speechrecognition {
 		result.sessionState.sessionId = request.sessionId;
 		result.sessionState.runId = request.runId;
 		result.sessionState.audioPath = request.audioPath;
+		result.sessionState.audioArtifact = request.audioArtifact;
+		result.sessionState.streamingInput = request.streamingInput;
 		result.sessionState.language = request.language.empty() ? ToNarrow(m_config.speechRecognition.language) : request.language;
 		result.sessionState.stage = SpeechSessionStage::Transcribing;
 		result.sessionState.segment = std::nullopt;
@@ -2091,7 +2117,12 @@ namespace blazeclaw::core::speechrecognition {
 			request.runId,
 			"sessionId=" + request.sessionId + " audioPath=" + request.audioPath);
 
-		if (request.audioPath.empty()) {
+		const bool isSherpaStreamingModel =
+			m_snapshot.modelLayout == "sherpa_zipformer_transducer";
+		const bool hasStreamingInput = request.streamingInput.has_value();
+		const bool requiresAudioPath = !(isSherpaStreamingModel && hasStreamingInput);
+
+		if (requiresAudioPath && request.audioPath.empty()) {
 			result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::InvalidInput,
@@ -2110,6 +2141,72 @@ namespace blazeclaw::core::speechrecognition {
 			result.sessionState.stage = SpeechSessionStage::Failed;
 			result.sessionState.error = result.error;
 			return result;
+		}
+
+		if (isSherpaStreamingModel && hasStreamingInput) {
+			if (!m_sessionState->sherpaStreamingEngine ||
+				!m_sessionState->sherpaStreamingEngine->IsLoaded()) {
+				result.ok = false;
+				result.error = SpeechRecognitionError{
+					.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
+					.message = "sherpa streaming engine is unavailable",
+				};
+				result.sessionState.stage = SpeechSessionStage::Failed;
+				result.sessionState.error = result.error;
+				++m_snapshot.transcribeRequestsFailed;
+				m_snapshot.status = "runtime_unavailable";
+				m_snapshot.error = result.error;
+				return result;
+			}
+
+			auto cancelledChecker = [this](const std::string& runId) {
+				std::lock_guard<std::mutex> cancelLock(m_cancelMutex);
+				const auto it = m_cancelFlagsByRunId.find(runId);
+				return it != m_cancelFlagsByRunId.end() && it->second;
+			};
+
+			auto streamingResult = m_sessionState->sherpaStreamingEngine->TranscribeStreaming(
+				request,
+				cancelledChecker);
+
+			streamingResult.sessionState.sessionId = request.sessionId;
+			streamingResult.sessionState.runId = request.runId;
+			streamingResult.sessionState.audioPath = request.audioPath;
+			streamingResult.sessionState.audioArtifact = request.audioArtifact;
+			streamingResult.sessionState.streamingInput = request.streamingInput;
+
+			const auto finishedAt = std::chrono::steady_clock::now();
+			const auto latencyMs = static_cast<std::uint32_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					finishedAt - startedAt)
+					.count());
+			if (streamingResult.latencyMs == 0) {
+				streamingResult.latencyMs = latencyMs;
+			}
+			if (streamingResult.sessionState.latencyMs == 0) {
+				streamingResult.sessionState.latencyMs = streamingResult.latencyMs;
+			}
+
+			if (streamingResult.ok) {
+				++m_snapshot.transcribeRequestsCompleted;
+				m_snapshot.status = "transcribed";
+				m_snapshot.error = std::nullopt;
+			}
+			else if (streamingResult.cancelled) {
+				++m_snapshot.transcribeRequestsCancelled;
+				m_snapshot.status = "cancelled";
+				m_snapshot.error = streamingResult.error;
+			}
+			else {
+				++m_snapshot.transcribeRequestsFailed;
+				m_snapshot.status = "inference_failed";
+				m_snapshot.error = streamingResult.error;
+			}
+
+			m_snapshot.lastLatencyMs = streamingResult.latencyMs;
+			m_snapshot.cumulativeLatencyMs += streamingResult.latencyMs;
+			TouchRuntimeActivityLocked();
+			return streamingResult;
 		}
 
 		const std::wstring audioPathWide = ToWideLocal(request.audioPath);

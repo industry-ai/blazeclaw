@@ -186,6 +186,7 @@ namespace blazeclaw::core {
 			rejected.sessionState.runId = accepted.executionState.runId;
 			rejected.sessionState.audioPath = accepted.executionState.audioPath;
 			rejected.sessionState.audioArtifact = accepted.executionState.audioArtifact;
+			rejected.sessionState.streamingInput = accepted.executionState.streamingInput;
 			rejected.sessionState.language = accepted.executionState.language;
 			rejected.sessionState.stage = speechrecognition::SpeechSessionStage::Failed;
 			rejected.error = accepted.error;
@@ -218,6 +219,7 @@ namespace blazeclaw::core {
 			.sessionId = request.sessionId,
 			.audioPath = request.audioPath,
 			.audioArtifact = request.audioArtifact,
+			.streamingInput = request.streamingInput,
 			.language = request.language,
 			.prompt = request.prompt,
 		});
@@ -372,6 +374,7 @@ namespace blazeclaw::core {
 		state.stage = SpeechExecutionStage::Queued;
 		state.audioPath = request.audioPath;
 		state.audioArtifact = request.audioArtifact;
+		state.streamingInput = request.streamingInput;
 		state.language = request.language;
 		state.prompt = request.prompt;
 		return state;
@@ -395,6 +398,9 @@ namespace blazeclaw::core {
 		state.audioArtifact = result->sessionState.audioArtifact.has_value()
 			? result->sessionState.audioArtifact
 			: baseline.audioArtifact;
+		state.streamingInput = result->sessionState.streamingInput.has_value()
+			? result->sessionState.streamingInput
+			: baseline.streamingInput;
 		state.transcriptText = !result->sessionState.transcriptText.empty()
 			? result->sessionState.transcriptText
 			: result->text;

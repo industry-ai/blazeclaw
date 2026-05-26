@@ -1160,9 +1160,11 @@ namespace blazeclaw::gateway {
 		}
 
 		CStringW lastPath;
+		std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> artifact;
 		CChatView* chat = main->GetActiveChatView();
 		if (chat != nullptr) {
 			lastPath = chat->StopRecordingAndGetPath();
+			artifact = chat->GetLastRecordingAudioArtifact();
 		}
 		else {
 			auto& fallback = GetFallbackRecordingState();
@@ -1170,6 +1172,7 @@ namespace blazeclaw::gateway {
 				fallback.recorder.StopRecording();
 			}
 			lastPath = fallback.lastFilePath;
+			artifact = fallback.recorder.BuildStreamingAudioArtifact();
 		}
 
 		if (lastPath.IsEmpty()) {
@@ -1183,13 +1186,10 @@ namespace blazeclaw::gateway {
 		std::string pathUtf8 = ToNarrow(lastPathWide);
 		result.ok = true;
 		result.audioPath = pathUtf8;
-		blazeclaw::core::speechrecognition::SpeechAudioArtifact audioArtifact;
-		audioArtifact.handoffMode = blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
-		audioArtifact.path = pathUtf8;
-		audioArtifact.streamId = "voice_recorder";
-		audioArtifact.mimeType = "audio/pcm";
-		audioArtifact.container = "pcm_s16le";
-		result.audioArtifact = audioArtifact;
+		if (artifact.has_value()) {
+			artifact->path = pathUtf8;
+			result.audioArtifact = artifact;
+		}
 		return result;
 	}
 

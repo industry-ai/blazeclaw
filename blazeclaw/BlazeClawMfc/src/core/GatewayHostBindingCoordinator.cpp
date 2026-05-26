@@ -66,6 +66,42 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		std::optional<speechrecognition::SpeechStreamingInputContract>
+		BuildStreamingInputContractFromArtifact(
+			const std::optional<speechrecognition::SpeechAudioArtifact>& audioArtifact,
+			const std::string& sessionId) {
+			if (!audioArtifact.has_value() ||
+				audioArtifact->handoffMode != speechrecognition::SpeechAudioHandoffMode::PcmStream) {
+				return std::nullopt;
+			}
+
+			speechrecognition::SpeechStreamingInputContract contract;
+			contract.source.streamId = audioArtifact->streamId;
+			contract.source.sessionId = sessionId;
+			contract.source.sampleRate = audioArtifact->sampleRate;
+			contract.source.channels = audioArtifact->channels;
+			contract.source.bitsPerSample = audioArtifact->bitsPerSample;
+			contract.source.sequenceStart = audioArtifact->sequenceStart;
+			contract.source.sequenceEnd = audioArtifact->sequenceEnd;
+
+			contract.cursor.startSequence = audioArtifact->sequenceStart;
+			contract.cursor.nextSequence = audioArtifact->sequenceStart;
+
+			if (audioArtifact->sampleRate > 0 && audioArtifact->frameSamples > 0) {
+				const std::uint64_t chunkMs =
+					(static_cast<std::uint64_t>(audioArtifact->frameSamples) * 1000ULL) /
+					static_cast<std::uint64_t>(audioArtifact->sampleRate);
+				contract.chunkPolicy.chunkMs = static_cast<std::uint32_t>((std::max)(
+					std::uint64_t{ 1 },
+					chunkMs));
+			}
+			contract.chunkPolicy.overlapMs = 0;
+			contract.chunkPolicy.lookbackMs = 0;
+			contract.chunkPolicy.maxSpinCount = 64;
+
+			return contract;
+		}
+
 		bool ContainsAnyWideFragment(
 			const std::wstring& text,
 			std::initializer_list<const wchar_t*> fragments) {
@@ -241,12 +277,16 @@ namespace blazeclaw::core {
 
 		manager.m_gatewayHost.SetSpeechTranscribeAcceptedCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechExecutionRequest& request) {
+			const auto streamingInput = BuildStreamingInputContractFromArtifact(
+				request.audioArtifact,
+				request.sessionId);
 				const auto accepted = manager.m_speechTranscriptionCoordinator.Accept(
 					speechrecognition::SpeechExecutionRequest{
 						.runId = request.runId,
 						.sessionId = request.sessionId,
 						.audioPath = request.audioPath,
 						.audioArtifact = request.audioArtifact,
+					.streamingInput = streamingInput,
 						.language = request.language,
 						.prompt = request.prompt,
 					});
@@ -281,6 +321,9 @@ namespace blazeclaw::core {
 
 		manager.m_gatewayHost.SetSpeechTranscribeCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechTranscribeRequest& request) {
+			const auto streamingInput = BuildStreamingInputContractFromArtifact(
+				request.audioArtifact,
+				request.sessionId);
 				const auto result = manager.m_speechTranscriptionCoordinator.Execute(
 					manager.m_speechRecognitionRuntime,
 					speechrecognition::SpeechExecutionRequest{
@@ -288,6 +331,7 @@ namespace blazeclaw::core {
 						.sessionId = request.sessionId,
 						.audioPath = request.audioPath,
 						.audioArtifact = request.audioArtifact,
+					.streamingInput = streamingInput,
 						.language = request.language,
 						.prompt = request.prompt,
 					});
