@@ -96,10 +96,22 @@
                 parts.push(`stage=${stage}`);
             }
             if (sessionState.segmentText) {
-                const suffix = sessionState.segmentFinal ? "final" : "interim";
+                const stageImpliesFinal =
+                    stage === "segment_finalized" ||
+                    stage === "stopped" ||
+                    stage === "completed" ||
+                    stage === "failed" ||
+                    stage === "cancelled";
+                const suffix = (sessionState.segmentFinal || stageImpliesFinal) ? "final" : "interim";
                 parts.push(`segment=${suffix}`);
             } else if (sessionState.text) {
-                parts.push("segment=final");
+                const textFinal =
+                    stage === "segment_finalized" ||
+                    stage === "stopped" ||
+                    stage === "completed" ||
+                    stage === "failed" ||
+                    stage === "cancelled";
+                parts.push(`segment=${textFinal ? "final" : "interim"}`);
             }
             if (sessionState.errorCode) {
                 parts.push(`err=${String(sessionState.errorCode)}`);

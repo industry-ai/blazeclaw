@@ -1442,7 +1442,8 @@ namespace {
 		const bool cancelled,
 		const std::string& errorCode,
 		const std::string& errorMessage,
-		const std::string& errorClass)
+		const std::string& errorClass,
+		const std::optional<std::string>& segmentJson = std::nullopt)
 	{
 		std::string payload = "{";
 		payload += "\"stage\":" + JsonString(stage);
@@ -1456,6 +1457,10 @@ namespace {
 		payload += ",\"errorCode\":" + JsonString(errorCode);
 		payload += ",\"errorMessage\":" + JsonString(errorMessage);
 		payload += ",\"errorClass\":" + JsonString(errorClass);
+		if (segmentJson.has_value() && !segmentJson->empty())
+		{
+			payload += ",\"segment\":" + segmentJson.value();
+		}
 		payload += "}";
 		return payload;
 	}
@@ -1496,6 +1501,17 @@ namespace {
 			blazeclaw::gateway::json::FindRawField(payloadJson, "speechSession", speechSessionRaw) &&
 			blazeclaw::gateway::json::IsJsonObjectShape(speechSessionRaw);
 		const std::string& stateSource = hasSpeechSession ? speechSessionRaw : payloadJson;
+
+		std::optional<std::string> segmentJson;
+		if (hasSpeechSession)
+		{
+			std::string segmentRaw;
+			if (blazeclaw::gateway::json::FindRawField(speechSessionRaw, "segment", segmentRaw) &&
+				blazeclaw::gateway::json::IsJsonObjectShape(segmentRaw))
+			{
+				segmentJson = segmentRaw;
+			}
+		}
 
 		std::string sessionId;
 		blazeclaw::gateway::json::FindStringField(stateSource, "sessionId", sessionId);
@@ -1541,7 +1557,8 @@ namespace {
 			cancelled,
 			errorCode,
 			errorMessage,
-			errorClass);
+			errorClass,
+			segmentJson);
 	}
 
 	bool IsToolExecuteMethod(const std::string& method)
@@ -3771,6 +3788,22 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "runId", runId);
 		}
 
+		bool streamingRequest = false;
+		if (paramsJson.has_value())
+		{
+			std::string audioArtifactRaw;
+			if (blazeclaw::gateway::json::FindRawField(
+				paramsJson.value(),
+				"audioArtifact",
+				audioArtifactRaw) &&
+				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
+			{
+				std::string handoffMode;
+				blazeclaw::gateway::json::FindStringField(audioArtifactRaw, "handoffMode", handoffMode);
+				streamingRequest = (handoffMode == "pcm_stream");
+			}
+		}
+
 		std::string audioPath;
 		if (paramsJson.has_value())
 		{
@@ -3790,7 +3823,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			"",
 			"status"));
 		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-			"transcribing",
+			streamingRequest ? "start_stream" : "transcribing",
 			sessionId,
 			runId,
 			audioPath,
@@ -3801,6 +3834,36 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			"",
 			"",
 			"status"));
+		if (streamingRequest)
+		{
+			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+				"streaming",
+				sessionId,
+				runId,
+				audioPath,
+				"",
+				"",
+				0,
+				false,
+				"",
+				"",
+				"status"));
+		}
+		else
+		{
+			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
+				"transcribing",
+			sessionId,
+			runId,
+			audioPath,
+			"",
+			"",
+			0,
+			false,
+			"",
+			"",
+			"status"));
+		}
 
 		std::thread(
 			[hwnd, request, correlationId]()

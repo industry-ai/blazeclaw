@@ -208,6 +208,8 @@ Outcome:
 
 ### Phase 5: WebView lifecycle and partial-result UX wiring
 
+Status: completed
+
 Target files:
 
 - `src/app/BlazeClawMFCView.h`
@@ -234,6 +236,19 @@ Outcome:
 
 - users see live recognition updates while speaking.
 - existing chat submission behavior remains consistent on final segment output.
+
+Implemented notes:
+
+- Native bridge speech lifecycle payload now carries `speechSession.segment` into
+	`speech.lifecycle` events when available.
+- `speech.transcribe` bridge pre-dispatch lifecycle now differentiates:
+	- streaming artifact (`pcm_stream`): `queued` → `start_stream` → `streaming`
+	- non-streaming path: `queued` → `transcribing`
+- WebView controller normalization now treats realtime lifecycle transitions
+	as segment-final states for:
+	`segment_finalized`, `stopped`, `completed`, `failed`, `cancelled`.
+- WebView speech status rendering now reflects realtime interim/final semantics
+	based on lifecycle stage and segment metadata.
 
 ---
 

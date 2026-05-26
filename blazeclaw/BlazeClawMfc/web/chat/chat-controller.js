@@ -760,11 +760,22 @@
                 segmentSequence = Number(segment.sequence);
             }
 
+            const stageImpliesSegmentFinal =
+                stage === "segment_finalized" ||
+                stage === "stopped" ||
+                stage === "completed" ||
+                stage === "failed" ||
+                stage === "cancelled";
+
+            const segmentFinal = segment
+                ? Boolean(segment.final)
+                : stageImpliesSegmentFinal;
+
             return {
                 stage,
                 text: sessionText,
                 segmentText,
-                segmentFinal: segment ? Boolean(segment.final) : true,
+                segmentFinal,
                 segmentSequence,
                 runId: String(speechSession.runId || source.runId || "").trim(),
                 sessionId: String(speechSession.sessionId || source.sessionId || "").trim(),
@@ -1955,9 +1966,21 @@
             const previous = state.speechSessionState && typeof state.speechSessionState === "object"
                 ? state.speechSessionState
                 : {};
+            let resolvedSegmentText = normalized.segmentText;
+            if (!resolvedSegmentText && normalized.stage === "segment_finalized") {
+                resolvedSegmentText = normalized.text;
+            }
+
+            let resolvedText = normalized.text;
+            if (!resolvedText && normalized.stage === "streaming") {
+                resolvedText = String(previous.text || "");
+            }
+
             state.speechSessionState = {
                 ...previous,
                 ...normalized,
+                text: resolvedText,
+                segmentText: resolvedSegmentText,
                 updatedAtMs: Date.now(),
             };
             return { ...state.speechSessionState };
