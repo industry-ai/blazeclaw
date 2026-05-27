@@ -551,6 +551,66 @@ Exit criteria:
   not remove noisy diagnostics until the comparison report shows acceptable
   decoded-text and token/frame-count deltas for representative clips.
 
+## Post-Phase 7 regression: all-blank output after cache-state corruption
+
+Status: baseline freeze implemented; root-cause fix pending
+
+Evidence from the finite `pcm_stream` utterance `请讲一个笑话` showed the stream
+was not blocked in recording, lifecycle, or final flush:
+
+- `runtimeCursorNextSequence` reached `requestSequenceEnd`.
+- `sherpaFinalDrainComplete=true` and `sherpaFinalFbankFlush=true`.
+- `sherpaSpeechActive=true`, so the input was not classified as silence.
+- The encoder/joiner ran, but all best tokens were blank:
+  `sherpaDecodedTokenCount=0`, `sherpaBlankTokenCount=216`, and
+  `sherpaJoinerCallCount=216`.
+
+Load-time binding traces then exposed the root cause: encoder state inputs such
+as `cached*` and `processed_lens` were classified as state tensors but never
+received unique `bufferIndex` values. As a result, every encoder state-cache
+mapping used `cacheIndex=0`, so independent Zipformer cache tensors overwrote
+the same per-stream cache slot.
+
+Fix:
+
+- `BuildTensorBindings(...)` now assigns unique cache buffer indexes to every
+  encoder state tensor by element type before deterministic input/output cache
+  mapping is built.
+- This is a model-contract fix, not a transcript fallback or final rescue path.
+- Later runtime traces confirmed cache mappings no longer all report
+  `cacheIndex=0`, but the all-blank no-output signature still persists, so the
+  unique-cache-index fix is necessary but not sufficient.
+
+Step 1 baseline freeze:
+
+- Added `tools/freeze_sherpa_no_output_baseline.py` to validate and archive the
+  current all-blank regression baseline before further fixes.
+- The utility checks final drain, final fbank flush, speech-active state,
+  encoder/joiner activity, zero decoded tokens, and blank-token count matching
+  joiner-call count.
+- The frozen baseline is the evidence gate for the remaining root-cause plan in
+  `VOICE_STREAM_TO_ASR_SHERPA_NO_OUTPUT_ROOT_CAUSE_PLAN.md`.
+
+Step 2 contract diagnostics:
+
+- Added bounded Sherpa contract diagnostics to expose feature input shape,
+  feature length, real/padded frame counts, first/last feature-frame stats,
+  encoder output shape and valid frame count, decoder context/output shape,
+  joiner input/output shapes, and top-5 joiner token scores.
+- The diagnostics are surfaced through `gateway.speech.debug.snapshot` and
+  sampled `[SherpaContract]` TRACE lines so the next failing run can identify
+  whether blanks originate before encoder, after encoder, or in decoder/joiner
+  contract handling.
+
+Validation target:
+
+- Use `python tools/freeze_sherpa_no_output_baseline.py --baseline <runId>.sherpa-baseline.json --archive-dir <archive-dir>`
+  to freeze the current all-blank evidence before changing the frontend,
+  encoder chunking, cache shape, or decoder/joiner contracts.
+- The final regression fix remains pending until runtime telemetry no longer
+  ends as `no_tokens_emitted` with
+  `sherpaBlankTokenCount == sherpaJoinerCallCount`.
+
 ## Recommended implementation order
 
 1. Build the reproducible baseline first.

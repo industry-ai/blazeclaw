@@ -26,6 +26,104 @@ namespace blazeclaw::core::speechrecognition::engines {
 		bool IsFiniteSample(float value) {
 			return std::isfinite(value) != 0;
 		}
+
+		std::string FormatShape(const std::vector<std::int64_t>& shape) {
+			std::ostringstream stream;
+			stream << '[';
+			for (std::size_t index = 0; index < shape.size(); ++index) {
+				if (index > 0) {
+					stream << ',';
+				}
+				stream << shape[index];
+			}
+			stream << ']';
+			return stream.str();
+		}
+
+		std::string FormatInt64Vector(
+			const std::vector<std::int64_t>& values,
+			std::size_t maxCount = 8) {
+			std::ostringstream stream;
+			stream << '[';
+			const std::size_t count = (std::min)(values.size(), maxCount);
+			for (std::size_t index = 0; index < count; ++index) {
+				if (index > 0) {
+					stream << ',';
+				}
+				stream << values[index];
+			}
+			if (values.size() > count) {
+				if (count > 0) {
+					stream << ',';
+				}
+				stream << "...";
+			}
+			stream << ']';
+			return stream.str();
+		}
+
+		std::string FormatFrameStats(
+			const float* frame,
+			std::size_t frameSize) {
+			if (frame == nullptr || frameSize == 0) {
+				return {};
+			}
+
+			double sum = 0.0;
+			float minValue = frame[0];
+			float maxValue = frame[0];
+			for (std::size_t index = 0; index < frameSize; ++index) {
+				const float value = frame[index];
+				if (!IsFiniteSample(value)) {
+					continue;
+				}
+				sum += value;
+				minValue = (std::min)(minValue, value);
+				maxValue = (std::max)(maxValue, value);
+			}
+
+			std::ostringstream stream;
+			stream << std::fixed << std::setprecision(6)
+				<< "mean=" << (sum / static_cast<double>(frameSize))
+				<< ",min=" << minValue
+				<< ",max=" << maxValue;
+			return stream.str();
+		}
+
+		std::string FormatTopTokens(
+			const float* logits,
+			std::size_t vocabSize,
+			std::size_t maxCount = 5) {
+			if (logits == nullptr || vocabSize == 0) {
+				return {};
+			}
+
+			std::vector<std::pair<float, std::int64_t>> top;
+			top.reserve((std::min)(vocabSize, maxCount));
+			for (std::size_t index = 0; index < vocabSize; ++index) {
+				const auto tokenId = static_cast<std::int64_t>(index);
+				const float score = logits[index];
+				if (top.size() < maxCount) {
+					top.emplace_back(score, tokenId);
+					std::sort(top.begin(), top.end(), std::greater<>());
+				}
+				else if (score > top.back().first) {
+					top.back() = std::make_pair(score, tokenId);
+					std::sort(top.begin(), top.end(), std::greater<>());
+				}
+			}
+
+			std::ostringstream stream;
+			stream << std::fixed << std::setprecision(6);
+			for (std::size_t index = 0; index < top.size(); ++index) {
+				if (index > 0) {
+					stream << ',';
+				}
+				stream << top[index].second << ':' << top[index].first;
+			}
+			return stream.str();
+		}
+
 		std::vector<float> BuildOnlineFbank(
 			const std::vector<float>& samples,
 			std::uint32_t sampleRate,
@@ -198,6 +296,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 				loweredName.find("processed_lens") != std::string::npos;
 		}
 
+
+#if BLAZECLAW_HAS_ONNXRUNTIME
 		SherpaZipformerStreamingEngine::TensorBindingKind ClassifyInputBindingKind(
 			const std::string& name,
 			bool isEncoder,
@@ -269,7 +369,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 				: SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat;
 		}
 
-#if BLAZECLAW_HAS_ONNXRUNTIME
 		std::vector<SherpaZipformerStreamingEngine::TensorBinding> BuildTensorBindings(
 			Ort::Session& session,
 			bool isEncoder,
@@ -281,6 +380,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			const auto inputCount = session.GetInputCount();
 			std::vector<SherpaZipformerStreamingEngine::TensorBinding> bindings;
 			bindings.reserve(inputCount);
+			std::size_t encoderInt64StateCount = 0;
+			std::size_t encoderFloatStateCount = 0;
 			std::size_t unknownInt64Count = 0;
 			std::size_t unknownFloatCount = 0;
 
@@ -300,6 +401,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 				binding.isStateTensor =
 					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState ||
 					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths;
+				if (binding.isStateTensor) {
+					if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+						binding.bufferIndex = encoderInt64StateCount++;
+					}
+					else {
+						binding.bufferIndex = encoderFloatStateCount++;
+					}
+				}
 
 				if (binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat ||
 					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::UnknownInt64) {
@@ -494,6 +603,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		m_blankId = 0;
 		m_eosId = 1;
 		m_unkId = 2;
+#if BLAZECLAW_HAS_ONNXRUNTIME
 		m_encoderInputBindings.clear();
 		m_encoderOutputBindings.clear();
 		m_encoderStateCacheBindings.clear();
@@ -502,6 +612,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		m_decoderOutputNames.clear();
 		m_joinerInputBindings.clear();
 		m_joinerOutputNames.clear();
+#endif
 
 		if (layout.kind != SpeechModelLayoutKind::SherpaZipformerTransducer) {
 			outError = "sherpa layout not detected";
@@ -1339,6 +1450,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 				return false;
 			}
 
+			streamState.contractDecoderInputContext = FormatInt64Vector(streamState.decoderContext);
+			streamState.contractDecoderOutputShape = FormatShape(shape);
+
 			std::size_t vectorSize = static_cast<std::size_t>((std::max)(std::int64_t{ 1 }, shape.back()));
 			if (vectorSize > total) {
 				vectorSize = total;
@@ -1474,6 +1588,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 					const float* featureDataPtr = featureInputBuffer.data();
 					const std::size_t featureElementCount = featureInputBuffer.size();
 					consumedFeatureFrames = copiedFrames;
+					streamState.contractFeatureFrameCount = static_cast<std::uint64_t>(effectiveFrames);
+					streamState.contractFeatureRealFrameCount = static_cast<std::uint64_t>(copiedFrames);
+					streamState.contractFeaturePaddedFrameCount = static_cast<std::uint64_t>(
+						effectiveFrames > copiedFrames ? effectiveFrames - copiedFrames : 0);
+					if (!featureInputBuffer.empty()) {
+						streamState.contractFeatureFirstFrameStats = FormatFrameStats(
+							featureInputBuffer.data(),
+							frameStride);
+						streamState.contractFeatureLastFrameStats = FormatFrameStats(
+							featureInputBuffer.data() + ((effectiveFrames - 1) * frameStride),
+							frameStride);
+					}
 
 					Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(
 						OrtArenaAllocator,
@@ -1509,6 +1635,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 							else {
 								shape = { 1, static_cast<std::int64_t>(effectiveFrames), 80 };
 							}
+							streamState.contractFeatureInputShape = FormatShape(shape);
 
 							encoderInputs.push_back(Ort::Value::CreateTensor<float>(
 								memoryInfo,
@@ -1519,6 +1646,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 						}
 						else if (binding.kind == TensorBindingKind::FeatureLengths) {
 							const std::int64_t featureLength = static_cast<std::int64_t>((std::max)(std::size_t{ 1 }, copiedFrames));
+							streamState.contractFeatureLengthValue = std::to_string(featureLength);
 							encoderInt64Buffers.push_back({ featureLength });
 							auto& lengths = encoderInt64Buffers.back();
 							if (shape.empty()) {
@@ -1757,6 +1885,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 							auto encoderInfo = encoderMain.GetTensorTypeAndShapeInfo();
 							if (encoderInfo.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
 								const auto encoderShape = encoderInfo.GetShape();
+								streamState.contractEncoderOutputShape = FormatShape(encoderShape);
 								const float* encoderData = encoderMain.GetTensorData<float>();
 								if (encoderData != nullptr) {
 									std::size_t encoderFrames = 0;
@@ -1775,6 +1904,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 									else if (hasModelLengthOutput) {
 										encoderFrames = 0;
 									}
+									streamState.contractEncoderValidFrameCount = static_cast<std::uint64_t>(encoderFrames);
 
 									if (encoderFrames > 0 && encoderDim > 0) {
 										streamState.encoderFrameCount += static_cast<std::uint64_t>(encoderFrames);
@@ -1821,6 +1951,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 														else {
 															shape = { 1, 1, static_cast<std::int64_t>(encoderFrame.size()) };
 														}
+														streamState.contractJoinerEncoderInputShape = FormatShape(shape);
 														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
 															memoryInfo,
 															encoderFrame.data(),
@@ -1836,6 +1967,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 														else {
 															shape = { 1, static_cast<std::int64_t>(decoderVector.size()) };
 														}
+														streamState.contractJoinerDecoderInputShape = FormatShape(shape);
 														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
 															memoryInfo,
 															decoderVector.data(),
@@ -1951,6 +2083,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 													? static_cast<std::size_t>(joinerInfo.GetElementCount())
 													: std::size_t{ 1 };
 												const auto joinerShape = joinerInfo.GetShape();
+													streamState.contractJoinerOutputShape = FormatShape(joinerShape);
 												const float* logits = joinerMain.GetTensorData<float>();
 															if (logits == nullptr || logitsCount == 0) {
 																advanceFrame = true;
@@ -1965,6 +2098,24 @@ namespace blazeclaw::core::speechrecognition::engines {
 													vocabSize = logitsCount;
 												}
 												const std::size_t logitsOffset = logitsCount - vocabSize;
+													streamState.contractJoinerTopTokens = FormatTopTokens(
+														logits + logitsOffset,
+														vocabSize);
+													if (streamState.joinerCallCount <= 3 || streamState.joinerCallCount % 50 == 0) {
+														TRACE(L"[SherpaContract] featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
+															streamState.contractFeatureInputShape.c_str(),
+															streamState.contractFeatureLengthValue.c_str(),
+															(unsigned long long)streamState.contractFeatureRealFrameCount,
+															(unsigned long long)streamState.contractFeaturePaddedFrameCount,
+															streamState.contractEncoderOutputShape.c_str(),
+															(unsigned long long)streamState.contractEncoderValidFrameCount,
+															streamState.contractDecoderInputContext.c_str(),
+															streamState.contractDecoderOutputShape.c_str(),
+															streamState.contractJoinerEncoderInputShape.c_str(),
+															streamState.contractJoinerDecoderInputShape.c_str(),
+															streamState.contractJoinerOutputShape.c_str(),
+															streamState.contractJoinerTopTokens.c_str());
+													}
 
 												const auto bestIt = std::max_element(
 													logits + logitsOffset,
@@ -2192,10 +2343,29 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaEncoderFrameCount = streamState.encoderFrameCount,
 			.sherpaJoinerCallCount = streamState.joinerCallCount,
 			.sherpaBlankTokenCount = streamState.blankTokenCount,
+			.sherpaContractFeatureFrameCount = streamState.contractFeatureFrameCount,
+			.sherpaContractFeatureRealFrameCount = streamState.contractFeatureRealFrameCount,
+			.sherpaContractFeaturePaddedFrameCount = streamState.contractFeaturePaddedFrameCount,
+			.sherpaContractFeatureInputShape = streamState.contractFeatureInputShape,
+			.sherpaContractFeatureLengthValue = streamState.contractFeatureLengthValue,
+			.sherpaContractFeatureFirstFrameStats = streamState.contractFeatureFirstFrameStats,
+			.sherpaContractFeatureLastFrameStats = streamState.contractFeatureLastFrameStats,
+			.sherpaContractEncoderOutputShape = streamState.contractEncoderOutputShape,
+			.sherpaContractEncoderValidFrameCount = streamState.contractEncoderValidFrameCount,
+			.sherpaContractDecoderInputContext = streamState.contractDecoderInputContext,
+			.sherpaContractDecoderOutputShape = streamState.contractDecoderOutputShape,
+			.sherpaContractJoinerEncoderInputShape = streamState.contractJoinerEncoderInputShape,
+			.sherpaContractJoinerDecoderInputShape = streamState.contractJoinerDecoderInputShape,
+			.sherpaContractJoinerOutputShape = streamState.contractJoinerOutputShape,
+			.sherpaContractJoinerTopTokens = streamState.contractJoinerTopTokens,
 			.sherpaLastBestTokenId = streamState.lastBestTokenId,
 			.sherpaLastSecondBestTokenId = streamState.lastSecondBestTokenId,
 			.sherpaSpeechActive = streamState.speechActive,
+#if BLAZECLAW_HAS_ONNXRUNTIME
 			.sherpaEncoderStateCacheBindingCount = static_cast<std::uint64_t>(m_encoderStateCacheBindings.size()),
+#else
+			.sherpaEncoderStateCacheBindingCount = 0,
+#endif
 			.sherpaEncoderStateCacheUpdateCount = streamState.encoderStateCacheUpdateCount,
 			.sherpaEncoderLengthOutputCount = streamState.encoderLengthOutputCount,
 			.sherpaEncoderLengthOutputUsed = streamState.encoderLengthOutputUsed,

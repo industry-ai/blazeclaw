@@ -176,6 +176,33 @@ Latest runtime telemetry root cause:
 	`status: reference_missing` while preserving BlazeClaw baseline metrics, so
 	debug telemetry should remain enabled until representative clips are compared
 	against a real reference decoder.
+17. Post-Phase 7 regression telemetry for `请讲一个笑话` proved the stream fully
+	drained and flushed but produced only blank joiner best tokens:
+	`sherpaDecodedTokenCount=0`, `sherpaBlankTokenCount=216`,
+	`sherpaJoinerCallCount=216`, `sherpaSpeechActive=true`, and
+	`sherpaFinalOutcome=no_tokens_emitted`. Load-time binding diagnostics exposed
+	a real state-cache bug: encoder state inputs were classified as state tensors
+	but kept the default `bufferIndex=0`, making every state-cache mapping use
+	`cacheIndex=0` and allowing independent Zipformer caches to overwrite one
+	another. `BuildTensorBindings(...)` now assigns unique state cache buffer
+	indexes by tensor type before deterministic state input/output mapping is
+	built.
+18. The unique-cache-index fix is necessary but not sufficient: later runtime
+	traces confirm distinct cache indexes while the all-blank no-output signature
+	still persists. Step 1 of the no-output root-cause plan is now implemented by
+	`tools/freeze_sherpa_no_output_baseline.py`, which validates final drain,
+	final fbank flush, speech-active state, encoder/joiner activity, zero decoded
+	tokens, and blank-token count matching joiner-call count, then optionally
+	archives the baseline JSON plus exported Visual Studio debug trace. This
+	preserves the Sherpa-only path and avoids any final transcript fallback/rescue
+	behavior.
+19. Step 2 of the no-output root-cause plan is now implemented: bounded contract
+	diagnostics record feature input shape/length, real versus padded frame counts,
+	first/last feature-frame stats, encoder output shape and valid frames, decoder
+	context/output shape, joiner input/output shapes, and top-5 joiner token
+	scores. These fields are exposed through `gateway.speech.debug.snapshot` and
+	sampled `[SherpaContract]` TRACE output to locate the all-blank failure stage
+	without changing recognition behavior.
 
 ## FunASR references to follow
 

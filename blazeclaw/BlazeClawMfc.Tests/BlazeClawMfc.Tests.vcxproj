@@ -24,7 +24,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(SolutionDir)FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -216,6 +216,27 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\engines\\SherpaZipformerStreamingEngine.cpp" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-functions.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-window.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\fftsg.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\mel-computations.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\online-feature.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\rfft.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\PiEmbeddedService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />
