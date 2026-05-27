@@ -65,7 +65,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::filesystem::path decoderPath;
 			std::filesystem::path joinerPath;
 			std::filesystem::path tokensPath;
+			std::filesystem::path bpeModelPath;
+			std::filesystem::path bpeVocabPath;
 			std::size_t tokenCount = 0;
+			bool bpeModelPresent = false;
+			bool bpeVocabPresent = false;
 		};
 
 		struct StreamState {
@@ -120,11 +124,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool isJoinerOutput = false);
 		[[nodiscard]] static std::string DecodeTokenPiece(
 			const std::string& piece);
+		[[nodiscard]] static bool IsSpecialTokenPiece(
+			const std::string& piece);
+		[[nodiscard]] static std::string NormalizeDecodedBpeText(
+			std::string text);
 		[[nodiscard]] static std::string EscapeJsonString(
 			const std::string& value);
 		[[nodiscard]] static std::string JoinTokenIds(
 			const std::vector<std::int64_t>& tokenIds);
 		[[nodiscard]] std::string JoinTokenPieces(
+			const std::vector<std::int64_t>& tokenIds) const;
+		[[nodiscard]] std::string DecodeTokenIdsToText(
 			const std::vector<std::int64_t>& tokenIds) const;
 		[[nodiscard]] static std::optional<std::filesystem::path> ResolveBaselineDiagnosticsDirectory();
 		[[nodiscard]] static std::string ResolveBaselineExpectedText();
@@ -140,10 +150,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool finalFlush,
 			const std::string& expectedText,
 			const std::string& decodedText) const;
-		[[nodiscard]] static std::string TokenIdsToText(
-			const std::vector<std::int64_t>& tokenIds,
-			const std::unordered_map<std::int64_t, std::string>& tokenById,
-			std::int64_t unkId);
 		void ClearStreamState(
 			const std::string& streamId) const;
 

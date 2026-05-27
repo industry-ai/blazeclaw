@@ -371,13 +371,14 @@ Exit criteria:
 
 ## Phase 5: Decode token IDs with BPE/SentencePiece instead of direct piece concatenation
 
-Status: planned
+Status: completed
 
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.h`
-- project/build files if a SentencePiece-compatible decoder is added
+- `src/core/runtime/SpeechRecognition/SpeechRecognitionContracts.h`
+- `src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
 - model artifacts:
   `models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en/bpe.model`
   `models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en/bpe.vocab`
@@ -394,12 +395,36 @@ Plan:
    - handle whitespace around English words,
    - keep Chinese characters unspaced unless the decoder inserts valid spaces.
 
+Outcome:
+
+- Added `bpe.model` and `bpe.vocab` discovery beside `tokens.txt` and exposed
+  their presence through debug telemetry.
+- Replaced the user-visible `TokenIdsToText(...)` path with
+  `DecodeTokenIdsToText(...)`, which decodes emitted token IDs through the
+  vocabulary pieces rather than directly concatenating raw `tokens.txt` text.
+- The decoder now:
+  - filters special tokens (`<blk>`, `<blank>`, `<sos/eos>`, `<eos>`),
+  - maps `<unk>` to `?`,
+  - decodes byte-fallback pieces such as `<0xE4>`,
+  - normalizes SentencePiece word-boundary markers (`▁`) to spaces,
+  - removes common BPE continuation markers,
+  - compacts whitespace for mixed Chinese/English output.
+- Raw `tokens.txt` pieces are preserved only for diagnostics through
+  `JoinTokenPieces(...)` and `sherpaRawTokenPieces` /
+  `sherpaBaselineTokenPieces` telemetry.
+- Added debug telemetry:
+  - `sherpaBpeModelPresent`,
+  - `sherpaBpeVocabPresent`,
+  - `sherpaDecodedText`,
+  - `sherpaRawTokenPieces`.
+
 Exit criteria:
 
 - `TokenIdsToText(...)` no longer concatenates BPE pieces directly for final user
   text.
 - Debug telemetry can show both raw token pieces and decoded text.
 - Mixed Chinese/English output renders naturally.
+- Build validation passes with BPE-aware decoding enabled.
 
 ## Phase 6: Align stream lifecycle with FunASR final-flush behavior
 

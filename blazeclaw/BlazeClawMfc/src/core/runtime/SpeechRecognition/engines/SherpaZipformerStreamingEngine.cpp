@@ -512,6 +512,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 		m_artifacts.decoderPath = layout.sherpaDecoderPath;
 		m_artifacts.joinerPath = layout.sherpaJoinerPath;
 		m_artifacts.tokensPath = layout.sherpaTokensPath;
+		m_artifacts.bpeModelPath = m_artifacts.tokensPath.parent_path() / L"bpe.model";
+		m_artifacts.bpeVocabPath = m_artifacts.tokensPath.parent_path() / L"bpe.vocab";
+		m_artifacts.bpeModelPresent = std::filesystem::exists(m_artifacts.bpeModelPath);
+		m_artifacts.bpeVocabPresent = std::filesystem::exists(m_artifacts.bpeVocabPath);
 
 		if (!std::filesystem::exists(m_artifacts.encoderPath) ||
 			!std::filesystem::exists(m_artifacts.decoderPath) ||
@@ -744,37 +748,76 @@ namespace blazeclaw::core::speechrecognition::engines {
 		return token;
 	}
 
-	std::string SherpaZipformerStreamingEngine::TokenIdsToText(
-		const std::vector<std::int64_t>& tokenIds,
-		const std::unordered_map<std::int64_t, std::string>& tokenById,
-		std::int64_t unkId) {
+	bool SherpaZipformerStreamingEngine::IsSpecialTokenPiece(
+		const std::string& piece) {
+		return piece == "<blk>" ||
+			piece == "<blank>" ||
+			piece == "<sos/eos>" ||
+			piece == "<eos>";
+	}
+
+	std::string SherpaZipformerStreamingEngine::NormalizeDecodedBpeText(
+		std::string text) {
+		auto replaceAll = [](std::string& value, const std::string& from, const std::string& to) {
+			std::size_t pos = 0;
+			while ((pos = value.find(from, pos)) != std::string::npos) {
+				value.replace(pos, from.size(), to);
+				pos += to.size();
+			}
+		};
+
+		replaceAll(text, "▁", " ");
+		replaceAll(text, "@@ ", "");
+		replaceAll(text, "@@", "");
+		replaceAll(text, " ##", "");
+		replaceAll(text, "##", "");
+
+		std::string compact;
+		compact.reserve(text.size());
+		bool previousWhitespace = false;
+		for (const unsigned char ch : text) {
+			const bool whitespace = ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+			if (whitespace) {
+				if (!previousWhitespace) {
+					compact.push_back(' ');
+				}
+				previousWhitespace = true;
+				continue;
+			}
+			compact.push_back(static_cast<char>(ch));
+			previousWhitespace = false;
+		}
+
+		while (!compact.empty() && std::isspace(static_cast<unsigned char>(compact.front()))) {
+			compact.erase(compact.begin());
+		}
+		while (!compact.empty() && std::isspace(static_cast<unsigned char>(compact.back()))) {
+			compact.pop_back();
+		}
+		return compact;
+	}
+
+	std::string SherpaZipformerStreamingEngine::DecodeTokenIdsToText(
+		const std::vector<std::int64_t>& tokenIds) const {
 		std::string text;
 		for (const auto tokenId : tokenIds) {
-			const auto it = tokenById.find(tokenId);
-			if (it == tokenById.end()) {
+			const auto it = m_tokenById.find(tokenId);
+			if (it == m_tokenById.end()) {
 				continue;
 			}
-			const auto decoded = DecodeTokenPiece(it->second);
-			if (decoded == "<blk>" ||
-				decoded == "<blank>" ||
-				decoded == "<sos/eos>" ||
-				decoded == "<eos>") {
+
+			const auto& piece = it->second;
+			if (IsSpecialTokenPiece(piece)) {
 				continue;
 			}
-			if (tokenId == unkId || decoded == "<unk>") {
+			if (tokenId == m_unkId || piece == "<unk>") {
 				text.push_back('?');
 				continue;
 			}
-			text += decoded;
+			text += DecodeTokenPiece(piece);
 		}
 
-		while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
-			text.erase(text.begin());
-		}
-		while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
-			text.pop_back();
-		}
-		return text;
+		return NormalizeDecodedBpeText(std::move(text));
 	}
 
 	std::string SherpaZipformerStreamingEngine::EscapeJsonString(
@@ -2009,10 +2052,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 				if (inferenceFailed) {
 					break;
 				}
-				streamState.partialText = TokenIdsToText(
-					streamState.emittedTokenIds,
-					m_tokenById,
-					m_unkId);
+				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
 				result.text = streamState.partialText;
 
 					std::size_t consumedSamples = consumedFeatureFrames * kSherpaFeatureHopSamples;
@@ -2136,6 +2176,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaRnntRepeatedTokenCount = streamState.rnntRepeatedTokenCount,
 			.sherpaRnntMultiSymbolFrameCount = streamState.rnntMultiSymbolFrameCount,
 			.sherpaRnntMaxSymbolsPerFrame = kSherpaMaxSymbolsPerFrame,
+			.sherpaBpeModelPresent = m_artifacts.bpeModelPresent,
+			.sherpaBpeVocabPresent = m_artifacts.bpeVocabPresent,
+			.sherpaDecodedText = baselineDecodedText,
+			.sherpaRawTokenPieces = JoinTokenPieces(streamState.baselineTokenIds),
 			.sherpaBaselineSampleRate = sampleRate,
 			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
 			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,

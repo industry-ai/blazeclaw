@@ -120,8 +120,9 @@ Latest runtime telemetry root cause:
    - greedy search emits at most one non-blank token per encoder frame instead
 	 of the standard RNN-T inner loop until the recognition-quality Phase 4
 	 update added bounded multi-symbol-per-frame greedy search,
-   - token reconstruction concatenates `tokens.txt` pieces directly and does
-	 not decode with the model's `bpe.model` SentencePiece/BPE decoder.
+	  - token reconstruction concatenated `tokens.txt` pieces directly until the
+	 recognition-quality Phase 5 update added BPE-aware token-piece decoding and
+	 preserved raw pieces only as diagnostics.
    These issues explain a plausible-but-wrong sequence like
    `个笑笑笑笑傲江湖火花华海黄瓜明日 N`: the model is running, but the
    frontend/decode/tokenizer contract is not Sherpa-equivalent.
@@ -153,8 +154,12 @@ Latest runtime telemetry root cause:
 	context and retries the same encoder frame; blank or `<sos/eos>` advances to
 	the next frame. Guardrails cap each frame at 8 emitted symbols and each
 	utterance at 512 emitted tokens, with telemetry for inner-loop count,
-	max-symbol hits, repeated tokens, and multi-symbol frames. Remaining quality
-	risk is now concentrated in BPE/SentencePiece text decoding.
+	max-symbol hits, repeated tokens, and multi-symbol frames.
+14. Recognition-quality Phase 5 is now implemented: the Sherpa engine discovers
+	`bpe.model` and `bpe.vocab`, decodes emitted token IDs through BPE-aware
+	token-piece normalization for user-visible text, and keeps raw `tokens.txt`
+	pieces only in diagnostics. Debug snapshots now expose BPE artifact presence,
+	decoded text, and raw token pieces for baseline comparison.
 
 ## FunASR references to follow
 
