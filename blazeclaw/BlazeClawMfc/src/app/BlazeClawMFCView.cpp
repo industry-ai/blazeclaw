@@ -4969,14 +4969,27 @@ std::wstring CBlazeClawMFCView::ResolveInitialNavigationUrl() const
 		return L"about:blank";
 	}
 
+	auto appendCacheBuster = [](const std::wstring& url) -> std::wstring
+	{
+		if (url.empty() || url == L"about:blank")
+		{
+			return url;
+		}
+
+		const std::wstring separator = (url.find(L'?') == std::wstring::npos)
+			? L"?"
+			: L"&";
+		return url + separator + L"_wv_refresh=" + std::to_wstring(::GetTickCount64());
+	};
+
 	if (!g_pendingStartupUrl.empty())
 	{
 		std::wstring startupUrl = g_pendingStartupUrl;
 		g_pendingStartupUrl.clear();
-		return startupUrl;
+		return appendCacheBuster(startupUrl);
 	}
 
-	return ResolveChatStartupUrl();
+	return appendCacheBuster(ResolveChatStartupUrl());
 }
 void CBlazeClawMFCView::OnBeginPrinting(CDC* /*pDC*/, CPrintInfo* /*pInfo*/)
 {

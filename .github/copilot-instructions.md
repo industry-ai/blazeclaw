@@ -26,3 +26,4 @@
 - Execute implementations autonomously in one shot when a plan is created; do not request permission, pause for confirmation, or seek additional approvals during the task — this is the user's stated preference.
 - Follow a task-delta decomposition pattern for embedded orchestration, utilizing ordered tool execution metadata and LLM-driven dynamic tool-call sequencing, avoiding hardcoded flow-specific orchestration logic.
 - Do not hard-code ordered-request phrase checks; use structural orchestration signals aligned with OpenClaw behavior.
+- Use native Sherpa streaming behavior only; explicitly avoid fallback transcription mechanisms.

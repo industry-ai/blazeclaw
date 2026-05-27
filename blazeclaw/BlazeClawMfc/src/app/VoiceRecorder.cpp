@@ -327,8 +327,8 @@ BOOL CVoiceRecorder::StopRecording()
     }
 
     FreeBuffers();
-    blazeclaw::core::speechrecognition::UnregisterStreamingAudioSource(
-        kVoiceRecorderStreamId);
+    //blazeclaw::core::speechrecognition::UnregisterStreamingAudioSource(
+    //    kVoiceRecorderStreamId);
 
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped;
     NotifySessionState(blazeclaw::core::speechrecognition::SpeechSessionStage::Stopped);

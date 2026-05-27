@@ -56,9 +56,15 @@ This plan replaces the previous WAV-file-oriented approach for sherpa path.
 	metadata from recorder instead of synthetic placeholders.
   - Added streaming loop with chunked ring reads, cancellation checks, and
 	segment transitions in sherpa engine path.
-  - Current decode note: lexical transducer token decoding is staged for follow-up;
-	current Phase 3 returns segment-level speech detection output while preserving
-	realtime streaming and lifecycle execution flow.
+	- Implemented transducer decode path:
+	- chunk log-mel feature extraction,
+	- encoder/decoder/joiner ONNX inference,
+	- greedy token selection and token->text assembly from `tokens.txt`,
+	- per-stream decode cache with decoder context and pending sample carry-over.
+  - Added partial/final segment contract in streaming result payload:
+	- partial segment updates (`segment.final=false`),
+	- final segment + transcript commit (`segment.final=true`) on end-of-speech/input-final.
+  - Added stream cache cleanup on cancel/final lifecycle.
 
 ## Current gap and root causes
 
@@ -71,6 +77,36 @@ From startup diagnostics and runtime structure:
    not continuous ring-buffer-fed decode.
 3. Speech lifecycle currently models queued/transcribing/completed at request
    granularity, not realtime partial-result streaming with speech segments.
+
+Latest runtime telemetry root cause:
+
+4. A stopped `pcm_stream` final transcription was still classified as a live
+   stream request. The Sherpa engine therefore kept the live polling loop budget
+   (`maxSpinCount=64`) and stopped after one 10240-sample budget even though the
+   request artifact exposed a bounded final `sequenceEnd` around 101569 samples.
+   This produced `ok=true`/`completed` with only partial cursor advancement and
+   no committed transcript.
+5. Dynamic ONNX input dimensions were normalized to `1` during binding capture.
+   This could make later frame-limit logic treat dynamic time dimensions as a
+   one-frame fixed shape and suppress effective encoder input size.
+6. Follow-up telemetry showed full cursor drain and active ONNX inference
+   (`sherpaEncoderFrameCount > 0`, `sherpaJoinerCallCount > 0`), but all joiner
+   argmax outputs were blank (`sherpaBlankTokenCount == sherpaJoinerCallCount`).
+   Local `tokens.txt` confirms `<blk>=0`, `<sos/eos>=1`, and `<unk>=2`, so token
+   ID parsing is not the cause. The next fix targets model-contract handling:
+   encoder cache inputs such as `cached*` / `processed_lens` must remain state
+   tensors rather than being classified as feature-length inputs.
+7. The all-blank state persisted with `sherpaLastBestTokenId=0` and a non-blank
+   second-best token. The hand-written frontend differed from Kaldi/Sherpa
+   defaults: Hann window, no DC removal, no preemphasis, 400-point FFT, and
+   `log10`. Sherpa-compatible fbank behavior requires Povey windowing, DC
+   removal, 0.97 preemphasis, padded 512-point FFT, and natural log energies.
+8. The latest blank-dominant state still needs exact model-contract visibility.
+   Load-time diagnostics now emit encoder/decoder/joiner binding names, shapes,
+   kinds, normalized cache-state names, output names, and selected main outputs.
+   Runtime cache refresh also avoids shape-incompatible state overwrites and
+   honors length-like encoder outputs to prevent padded encoder frames from
+   being decoded as real frames.
 
 ## FunASR references to follow
 

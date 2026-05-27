@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SpeechRecognitionRuntime.h"
 #include "SpeechModelLayoutProbe.h"
+#include "StreamingAudioSourceRegistry.h"
 #include "engines/SherpaZipformerStreamingEngine.h"
 
 #include <algorithm>
@@ -2122,7 +2123,34 @@ namespace blazeclaw::core::speechrecognition {
 
 		const bool isSherpaStreamingModel =
 			m_snapshot.modelLayout == "sherpa_zipformer_transducer";
-		const bool hasStreamingInput = request.streamingInput.has_value();
+		auto effectiveStreamingInput = request.streamingInput;
+		if (isSherpaStreamingModel && !effectiveStreamingInput.has_value()) {
+			constexpr const char* kDefaultVoiceStreamId = "voice_recorder";
+			const auto oldestSequence =
+				GetStreamingAudioOldestSequence(kDefaultVoiceStreamId);
+			const auto latestSequence =
+				GetStreamingAudioLatestSequence(kDefaultVoiceStreamId);
+			if (oldestSequence.has_value() &&
+				latestSequence.has_value() &&
+				*latestSequence > *oldestSequence) {
+				SpeechStreamingInputContract inferredStreamingInput;
+				inferredStreamingInput.source.streamId = kDefaultVoiceStreamId;
+				inferredStreamingInput.source.sessionId = request.sessionId;
+				inferredStreamingInput.source.sampleRate =
+					m_snapshot.sampleRate > 0 ? m_snapshot.sampleRate : 16000;
+				inferredStreamingInput.source.sequenceStart = *oldestSequence;
+				inferredStreamingInput.source.sequenceEnd = *latestSequence;
+				inferredStreamingInput.cursor.startSequence = *oldestSequence;
+				inferredStreamingInput.cursor.nextSequence = *oldestSequence;
+				inferredStreamingInput.chunkPolicy.chunkMs = 20;
+				inferredStreamingInput.chunkPolicy.overlapMs = 0;
+				inferredStreamingInput.chunkPolicy.lookbackMs = 0;
+				inferredStreamingInput.chunkPolicy.maxSpinCount = 64;
+				effectiveStreamingInput = std::move(inferredStreamingInput);
+				result.sessionState.streamingInput = effectiveStreamingInput;
+			}
+		}
+		const bool hasStreamingInput = effectiveStreamingInput.has_value();
 		const bool requiresAudioPath = !(isSherpaStreamingModel && hasStreamingInput);
 
 		if (requiresAudioPath && request.audioPath.empty()) {
@@ -2143,6 +2171,20 @@ namespace blazeclaw::core::speechrecognition {
 			++m_snapshot.transcribeRequestsFailed;
 			result.sessionState.stage = SpeechSessionStage::Failed;
 			result.sessionState.error = result.error;
+			return result;
+		}
+
+		if (isSherpaStreamingModel && !hasStreamingInput) {
+			result.ok = false;
+			result.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::InvalidInput,
+				.message = "sherpa_zipformer_transducer requires streamingInput",
+			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
+			++m_snapshot.transcribeRequestsFailed;
+			m_snapshot.status = "invalid_input";
+			m_snapshot.error = result.error;
 			return result;
 		}
 
@@ -2168,15 +2210,19 @@ namespace blazeclaw::core::speechrecognition {
 				return it != m_cancelFlagsByRunId.end() && it->second;
 			};
 
+			SpeechTranscribeRequest streamingRequest = request;
+			streamingRequest.streamingInput = effectiveStreamingInput;
 			auto streamingResult = m_sessionState->sherpaStreamingEngine->TranscribeStreaming(
-				request,
+				streamingRequest,
 				cancelledChecker);
 
 			streamingResult.sessionState.sessionId = request.sessionId;
 			streamingResult.sessionState.runId = request.runId;
 			streamingResult.sessionState.audioPath = request.audioPath;
 			streamingResult.sessionState.audioArtifact = request.audioArtifact;
-			streamingResult.sessionState.streamingInput = request.streamingInput;
+			if (!streamingResult.sessionState.streamingInput.has_value()) {
+				streamingResult.sessionState.streamingInput = effectiveStreamingInput;
+			}
 
 			const auto finishedAt = std::chrono::steady_clock::now();
 			const auto latencyMs = static_cast<std::uint32_t>(
@@ -2291,6 +2337,20 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.error = result.error;
 		return result;
 #else
+		if (!m_sessionState->encoder || !m_sessionState->decoderInit) {
+			result.ok = false;
+			result.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
+				.message = "onnx runtime sessions are not initialized for decode path",
+			};
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = result.error;
+			++m_snapshot.transcribeRequestsFailed;
+			m_snapshot.status = "runtime_unavailable";
+			m_snapshot.error = result.error;
+			return result;
+		}
+
 		auto isCancelled = [this, &request]() {
 			if (request.runId.empty()) {
 				return false;

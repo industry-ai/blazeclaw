@@ -107,6 +107,22 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint32_t sequence = 0;
 	};
 
+	struct SpeechRecognitionDebugInfo {
+		std::uint64_t sherpaChunkCount = 0;
+		std::uint64_t sherpaDecodedTokenCount = 0;
+		std::uint64_t sherpaEmittedTokenCount = 0;
+		std::uint64_t sherpaPendingSampleCount = 0;
+		std::uint64_t sherpaPartialTextLength = 0;
+		std::uint64_t sherpaLoopCount = 0;
+		std::uint64_t sherpaMaxLoopCount = 0;
+		std::uint64_t sherpaEncoderFrameCount = 0;
+		std::uint64_t sherpaJoinerCallCount = 0;
+		std::uint64_t sherpaBlankTokenCount = 0;
+		std::int64_t sherpaLastBestTokenId = -1;
+		std::int64_t sherpaLastSecondBestTokenId = -1;
+		bool sherpaSpeechActive = false;
+	};
+
 	struct SpeechSessionState {
 		std::string sessionId;
 		std::string runId;
@@ -120,6 +136,7 @@ namespace blazeclaw::core::speechrecognition {
 		bool cancelled = false;
 		std::optional<SpeechTranscriptSegment> segment;
 		std::optional<SpeechRecognitionError> error;
+		std::optional<SpeechRecognitionDebugInfo> debugInfo;
 	};
 
 	struct SpeechExecutionState {

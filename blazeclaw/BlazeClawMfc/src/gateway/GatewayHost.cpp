@@ -1193,6 +1193,46 @@ namespace blazeclaw::gateway {
 		return result;
 	}
 
+	std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+		GatewayHost::ResolveNativeRecordingArtifact(const std::string& audioPath) const
+	{
+		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (app == nullptr) {
+			return std::nullopt;
+		}
+
+		CMainFrame* main = dynamic_cast<CMainFrame*>(app->GetMainWnd());
+		if (main == nullptr) {
+			return std::nullopt;
+		}
+
+		std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> artifact;
+		CChatView* chat = main->GetActiveChatView();
+		if (chat != nullptr) {
+			artifact = chat->GetLastRecordingAudioArtifact();
+		}
+		else {
+			auto& fallback = GetFallbackRecordingState();
+			artifact = fallback.recorder.BuildStreamingAudioArtifact();
+		}
+
+		if (!artifact.has_value()) {
+			return std::nullopt;
+		}
+
+		if (!audioPath.empty()) {
+			artifact->path = audioPath;
+		}
+
+		if (artifact->handoffMode != blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream ||
+			artifact->streamId.empty() ||
+			artifact->sequenceEnd <= artifact->sequenceStart) {
+			return std::nullopt;
+		}
+
+		return artifact;
+	}
+
 	bool GatewayHost::StartLocalDispatchOnly() {
 		if (m_dispatchInitialized) {
 			m_running = true;

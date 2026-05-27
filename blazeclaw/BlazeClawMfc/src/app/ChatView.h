@@ -142,6 +142,7 @@ protected:
 	void AddStatusMessage(const CString& message);
 	void StartVoiceTranscriptionNative(
 		const std::string& audioPath,
+		const std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>& audioArtifact,
 		const std::string& sessionId,
 		const std::string& runId,
 		std::uint64_t generation);

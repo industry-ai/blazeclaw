@@ -2111,6 +2111,7 @@
             const sendOptions = options && typeof options === "object"
                 ? options
                 : {};
+            const livePreviewOnly = sendOptions.livePreviewOnly === true;
             if (!state.bridgeAvailable) {
                 return;
             }
@@ -2169,8 +2170,39 @@
                 const payload = response && response.payload && typeof response.payload === "object"
                     ? response.payload
                     : {};
-                state.speechSessionState = normalizeSpeechSessionPayload(payload);
-                const transcriptText = String(payload.text || payload.transcript || "").trim();
+                const previousSpeechSessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+                    ? state.speechSessionState
+                    : {};
+                const normalizedSpeechSessionState = normalizeSpeechSessionPayload(payload);
+                const previousStage = String(previousSpeechSessionState.stage || "").trim();
+                const keepLiveStreamingState =
+                    livePreviewOnly === true &&
+                    (previousStage === "recording" || previousStage === "streaming") &&
+                    normalizedSpeechSessionState.stage === "completed" &&
+                    !normalizedSpeechSessionState.segmentText &&
+                    !normalizedSpeechSessionState.text &&
+                    !normalizedSpeechSessionState.errorCode;
+
+                state.speechSessionState = keepLiveStreamingState
+                    ? {
+                        ...previousSpeechSessionState,
+                        runId: String(normalizedSpeechSessionState.runId || previousSpeechSessionState.runId || "").trim(),
+                        sessionId: String(normalizedSpeechSessionState.sessionId || previousSpeechSessionState.sessionId || "").trim(),
+                        audioPath: String(normalizedSpeechSessionState.audioPath || previousSpeechSessionState.audioPath || "").trim(),
+                        latencyMs: Number.isFinite(Number(normalizedSpeechSessionState.latencyMs))
+                            ? Number(normalizedSpeechSessionState.latencyMs)
+                            : Number(previousSpeechSessionState.latencyMs || 0),
+                        updatedAtMs: Date.now(),
+                    }
+                    : normalizedSpeechSessionState;
+                const transcriptText = String(
+                    payload.text ||
+                    payload.transcript ||
+                    state.speechSessionState.segmentText ||
+                    state.speechSessionState.text ||
+                    previousSpeechSessionState.segmentText ||
+                    previousSpeechSessionState.text ||
+                    "").trim();
                 if (transcriptText) {
                     const quality = assessTranscriptQuality(transcriptText);
                     if (!quality.accepted) {
@@ -2190,6 +2222,23 @@
                     }
 
                     const cleanedTranscriptText = String(quality.cleanedText || transcriptText).trim();
+                    if (livePreviewOnly) {
+                        applySpeechLifecycleUpdate({
+                            stage: "streaming",
+                            sessionId: transcriptRequest.sessionId,
+                            runId: transcriptRequest.runId,
+                            audioPath,
+                            text: cleanedTranscriptText,
+                            language: String(payload.language || state.speechSessionState.language || "").trim(),
+                            latencyMs: Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : 0,
+                            errorCode: "",
+                            errorMessage: "",
+                            errorClass: "status",
+                        });
+                        updateComposerState();
+                        return;
+                    }
+
                     await sendPayload(cleanedTranscriptText, [], false, {
                         detached: false,
                         requestOverride,

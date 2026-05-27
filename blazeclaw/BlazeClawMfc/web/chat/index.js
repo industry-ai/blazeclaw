@@ -2439,8 +2439,9 @@
                 : "";
             const speechBusy = speechStage === "queued" ||
                 speechStage === "recording" ||
+                speechStage === "streaming" ||
                 speechStage === "transcribing";
-            const recordingActive = speechStage === "recording";
+            const recordingActive = speechStage === "recording" || speechStage === "streaming";
             state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || (speechBusy && !recordingActive);
             if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
                 state.speechTranscribeBtn.disabled = true;
@@ -2546,6 +2547,57 @@
 
     if (state.speechTranscribeBtn) {
         let recordingBusy = false;
+        let liveSpeechPollTimer = null;
+        let liveSpeechPollBusy = false;
+        const stopLiveSpeechPoll = () => {
+            if (liveSpeechPollTimer !== null) {
+                window.clearInterval(liveSpeechPollTimer);
+                liveSpeechPollTimer = null;
+            }
+            liveSpeechPollBusy = false;
+        };
+        const startLiveSpeechPoll = (audioPath, audioArtifact, prompt) => {
+            stopLiveSpeechPoll();
+            if (!audioPath) {
+                return;
+            }
+
+            const pollOnce = async () => {
+                if (liveSpeechPollBusy) {
+                    return;
+                }
+                const speechSnapshot = state.speechSessionState && typeof state.speechSessionState === "object"
+                    ? state.speechSessionState
+                    : null;
+                const stage = String(speechSnapshot && speechSnapshot.stage || "").trim();
+                if (stage !== "recording" && stage !== "streaming") {
+                    stopLiveSpeechPoll();
+                    return;
+                }
+
+                liveSpeechPollBusy = true;
+                try {
+                    await controller.transcribeSpeech({
+                        audioPath,
+                        audioArtifact,
+                        prompt,
+                        timeoutMs: 8000,
+                        livePreviewOnly: true,
+                    });
+                    if (typeof controller.getSpeechSessionStateSnapshot === "function") {
+                        state.speechSessionState = controller.getSpeechSessionStateSnapshot();
+                        updateComposerState();
+                    }
+                } catch (_error) {
+                    // Keep polling; final error will be surfaced on explicit stop transcribe.
+                } finally {
+                    liveSpeechPollBusy = false;
+                }
+            };
+
+            liveSpeechPollTimer = window.setInterval(pollOnce, 1200);
+            void pollOnce();
+        };
         state.speechTranscribeBtn.addEventListener("click", async () => {
             if (recordingBusy) {
                 return;
@@ -2557,27 +2609,41 @@
             const speechStage = speechSessionState
                 ? String(speechSessionState.stage || "").trim()
                 : "";
+            const recordingActive = speechStage === "recording" || speechStage === "streaming";
 
             recordingBusy = true;
             try {
-                if (speechStage !== "recording") {
-                    await controller.request("gateway.speech.startRecording", {
+                if (!recordingActive) {
+                    const startResponse = await controller.request("gateway.speech.startRecording", {
                         sessionId: state.sessionKey,
                     });
+                    const startPayload = startResponse && typeof startResponse.payload === "object"
+                        ? startResponse.payload
+                        : {};
+                    const startAudioPath = String(startPayload.audioPath || "").trim();
+                    const startAudioArtifact = startPayload.audioArtifact && typeof startPayload.audioArtifact === "object"
+                        ? startPayload.audioArtifact
+                        : null;
                     if (typeof controller.applySpeechLifecycleUpdate === "function") {
                         controller.applySpeechLifecycleUpdate({
                             stage: "recording",
                             sessionId: state.sessionKey,
                             runId: "",
+                            audioPath: startAudioPath,
+                            audioArtifact: startAudioArtifact,
                             text: "",
                             errorCode: "",
                             errorMessage: "",
                             errorClass: "status",
                         });
                     }
+                    const prompt = String(state.inputEl.value || "").trim();
+                    startLiveSpeechPoll(startAudioPath, startAudioArtifact, prompt);
                     updateComposerState();
                     return;
                 }
+
+                stopLiveSpeechPoll();
 
                 const stopResponse = await controller.request("gateway.speech.stopRecording", {
                     sessionId: state.sessionKey,
@@ -2620,6 +2686,7 @@
                 }
                 updateComposerState();
             } catch (e) {
+                stopLiveSpeechPoll();
                 const message = String(e || "speech recording failed");
                 addMessage(`speech recording error: ${message}`, "error");
                 if (typeof controller.applySpeechLifecycleUpdate === "function") {

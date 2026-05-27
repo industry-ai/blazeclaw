@@ -582,8 +582,10 @@ void CChatView::OnVoiceClicked()
 		if (!m_strLastVoiceFilePath.IsEmpty())
 		{
 			const auto generation = ++m_voiceTranscribeGeneration;
+			const auto audioArtifact = GetLastRecordingAudioArtifact();
 			StartVoiceTranscriptionNative(
 				std::string(CW2A(m_strLastVoiceFilePath.GetString(), CP_UTF8)),
+				audioArtifact,
 				m_chatState.sessionKey,
 				"voice-" + std::to_string(CurrentEpochMs()),
 				generation);
@@ -761,6 +763,7 @@ void CChatView::UpdateVoiceSessionState(
 
 void CChatView::StartVoiceTranscriptionNative(
 	const std::string& audioPath,
+	const std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>& audioArtifact,
 	const std::string& sessionId,
 	const std::string& runId,
 	std::uint64_t generation)
@@ -785,7 +788,7 @@ void CChatView::StartVoiceTranscriptionNative(
 	}
 
 	std::thread(
-		[this, app, audioPath, sessionId, runId, generation, hwnd = GetSafeHwnd()]()
+		[this, app, audioPath, audioArtifact, sessionId, runId, generation, hwnd = GetSafeHwnd()]()
 		{
 			std::string params =
 				std::string("{\"audioPath\":\"") +
@@ -795,6 +798,36 @@ void CChatView::StartVoiceTranscriptionNative(
 				"\",\"runId\":\"" +
 				EscapeJson(runId) +
 				"\"}";
+
+			if (audioArtifact.has_value())
+			{
+				const auto handoffMode =
+					audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream
+					? "pcm_stream"
+					: "wav_file";
+
+				params =
+					std::string("{\"audioPath\":\"") +
+					EscapeJson(audioPath) +
+					"\",\"sessionId\":\"" +
+					EscapeJson(sessionId) +
+					"\",\"runId\":\"" +
+					EscapeJson(runId) +
+					"\",\"audioArtifact\":{" +
+					"\"handoffMode\":\"" + handoffMode + "\"," +
+					"\"path\":\"" + EscapeJson(audioArtifact->path) + "\"," +
+					"\"streamId\":\"" + EscapeJson(audioArtifact->streamId) + "\"," +
+					"\"mimeType\":\"" + EscapeJson(audioArtifact->mimeType) + "\"," +
+					"\"container\":\"" + EscapeJson(audioArtifact->container) + "\"," +
+					"\"sampleRate\":" + std::to_string(audioArtifact->sampleRate) + "," +
+					"\"channels\":" + std::to_string(audioArtifact->channels) + "," +
+					"\"bitsPerSample\":" + std::to_string(audioArtifact->bitsPerSample) + "," +
+					"\"frameSamples\":" + std::to_string(audioArtifact->frameSamples) + "," +
+					"\"sequenceStart\":" + std::to_string(audioArtifact->sequenceStart) + "," +
+					"\"sequenceEnd\":" + std::to_string(audioArtifact->sequenceEnd) + "," +
+					"\"durationMs\":" + std::to_string(audioArtifact->durationMs) +
+					"}}";
+			}
 
 			const blazeclaw::gateway::protocol::RequestFrame request{
 				.id = runId,

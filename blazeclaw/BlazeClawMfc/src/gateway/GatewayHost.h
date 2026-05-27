@@ -577,6 +577,8 @@ namespace blazeclaw::gateway {
 
 		NativeRecordingResult StartNativeRecording();
 		NativeRecordingResult StopNativeRecording();
+		[[nodiscard]] std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
+			ResolveNativeRecordingArtifact(const std::string& audioPath) const;
 		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
 		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
 		[[nodiscard]] const GatewayRuntimeContext& RuntimeContext() const noexcept {

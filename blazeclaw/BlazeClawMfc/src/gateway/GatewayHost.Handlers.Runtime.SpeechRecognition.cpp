@@ -266,13 +266,19 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.startRecording",
-				[&host](const protocol::RequestFrame& request) {
+				[&host, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
 					// Start native recording and return an object { ok: bool }
 					const auto result = host.StartNativeRecording();
 					if (!result.ok) {
 						return protocol::ErrorResponse(request, std::string("start_recording_failed"), result.errorMessage);
 					}
-					const std::string payload = JsonObject({ { "ok", JsonBool(true) } });
+					auto currentArtifact = host.ResolveNativeRecordingArtifact(std::string{});
+					const std::string payload = currentArtifact.has_value()
+						? JsonObject({
+							{ "ok", JsonBool(true) },
+							{ "audioArtifact", buildAudioArtifactJson(*currentArtifact) },
+						})
+						: JsonObject({ { "ok", JsonBool(true) } });
 					return protocol::OkResponse(request, payload);
 				});
 
@@ -526,8 +532,20 @@ namespace blazeclaw::gateway {
 					const std::string runId = params.GetString("runId");
 					auto audioArtifact =
 						tryParseAudioArtifact(params.GetObject("audioArtifact"));
-					if (!ringStreamingEnabled) {
-						audioArtifact.reset();
+					if (audioArtifact.has_value()) {
+						const bool isPcmStream =
+							audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
+						if (isPcmStream) {
+							auto refreshedArtifact = host.ResolveNativeRecordingArtifact(audioPath);
+							if (refreshedArtifact.has_value() &&
+								refreshedArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream &&
+								!refreshedArtifact->streamId.empty()) {
+								audioArtifact = std::move(refreshedArtifact);
+							}
+						}
+					}
+					else {
+						audioArtifact = host.ResolveNativeRecordingArtifact(audioPath);
 					}
 
 					const auto accepted = host.AcceptSpeechTranscription(
@@ -645,7 +663,21 @@ namespace blazeclaw::gateway {
 						!transcribe.sessionState.runId.empty()
 						? transcribe.sessionState.runId
 						: runId;
-					const bool hasSegment = transcribe.sessionState.segment.has_value();
+					const bool hasNativeSegment = transcribe.sessionState.segment.has_value();
+					const bool shouldSynthesizeFinalSegment =
+						!hasNativeSegment &&
+						normalizedStage == "completed" &&
+						!normalizedText.empty();
+					const bool hasSegment = hasNativeSegment || shouldSynthesizeFinalSegment;
+					const std::string effectiveSegmentText = hasNativeSegment
+						? transcribe.sessionState.segment->text
+						: normalizedText;
+					const bool effectiveSegmentFinal = hasNativeSegment
+						? transcribe.sessionState.segment->final
+						: true;
+					const std::uint32_t effectiveSegmentSequence = hasNativeSegment
+						? transcribe.sessionState.segment->sequence
+						: 1U;
 					const std::string audioArtifactJson =
 						transcribe.sessionState.audioArtifact.has_value()
 						? buildAudioArtifactJson(*transcribe.sessionState.audioArtifact)
@@ -669,6 +701,95 @@ namespace blazeclaw::gateway {
 						return normalized;
 					};
 					const std::string normalizedErrorCode = normalizeSpeechErrorCode(transcribe.errorCode);
+
+					const bool requestArtifactPresent = audioArtifact.has_value();
+					const bool runtimeArtifactPresent = transcribe.sessionState.audioArtifact.has_value();
+					const bool runtimeStreamingInputPresent = transcribe.sessionState.streamingInput.has_value();
+
+					const std::string requestArtifactMode = requestArtifactPresent
+						? (audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream
+							? std::string("pcm_stream")
+							: std::string("wav_file"))
+						: std::string();
+					const std::string runtimeArtifactMode = runtimeArtifactPresent
+						? (transcribe.sessionState.audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream
+							? std::string("pcm_stream")
+							: std::string("wav_file"))
+						: std::string();
+
+					const std::uint64_t requestSequenceStart = requestArtifactPresent
+						? audioArtifact->sequenceStart
+						: 0ULL;
+					const std::uint64_t requestSequenceEnd = requestArtifactPresent
+						? audioArtifact->sequenceEnd
+						: 0ULL;
+					const std::uint64_t runtimeSequenceStart = runtimeArtifactPresent
+						? transcribe.sessionState.audioArtifact->sequenceStart
+						: 0ULL;
+					const std::uint64_t runtimeSequenceEnd = runtimeArtifactPresent
+						? transcribe.sessionState.audioArtifact->sequenceEnd
+						: 0ULL;
+					const std::uint64_t runtimeCursorStart = runtimeStreamingInputPresent
+						? transcribe.sessionState.streamingInput->cursor.startSequence
+						: 0ULL;
+					const std::uint64_t runtimeCursorNext = runtimeStreamingInputPresent
+						? transcribe.sessionState.streamingInput->cursor.nextSequence
+						: 0ULL;
+					const std::uint64_t runtimeInputStart = runtimeStreamingInputPresent
+						? transcribe.sessionState.streamingInput->source.sequenceStart
+						: 0ULL;
+					const std::uint64_t runtimeInputEnd = runtimeStreamingInputPresent
+						? transcribe.sessionState.streamingInput->source.sequenceEnd
+						: 0ULL;
+					const std::uint64_t normalizedTextLength = static_cast<std::uint64_t>(normalizedText.size());
+					const std::uint64_t segmentTextLength = static_cast<std::uint64_t>(effectiveSegmentText.size());
+					const auto& debugInfo = transcribe.sessionState.debugInfo;
+
+					EmitTelemetryEvent(
+						"gateway.speech.debug.snapshot",
+						JsonObject({
+							{ "runId", JsonString(effectiveRunId) },
+							{ "sessionId", JsonString(effectiveSessionId) },
+							{ "stage", JsonString(normalizedStage) },
+							{ "ok", JsonBool(transcribe.ok) },
+							{ "hasNativeSegment", JsonBool(hasNativeSegment) },
+							{ "hasSegmentEffective", JsonBool(hasSegment) },
+							{ "normalizedTextLength", JsonNumber(normalizedTextLength) },
+							{ "segmentTextLength", JsonNumber(segmentTextLength) },
+							{ "requestArtifactPresent", JsonBool(requestArtifactPresent) },
+							{ "requestArtifactMode", JsonString(requestArtifactMode) },
+							{ "requestStreamId", JsonString(requestArtifactPresent ? audioArtifact->streamId : std::string()) },
+							{ "requestSequenceStart", JsonNumber(requestSequenceStart) },
+							{ "requestSequenceEnd", JsonNumber(requestSequenceEnd) },
+							{ "runtimeArtifactPresent", JsonBool(runtimeArtifactPresent) },
+							{ "runtimeArtifactMode", JsonString(runtimeArtifactMode) },
+							{ "runtimeStreamId", JsonString(runtimeArtifactPresent ? transcribe.sessionState.audioArtifact->streamId : std::string()) },
+							{ "runtimeSequenceStart", JsonNumber(runtimeSequenceStart) },
+							{ "runtimeSequenceEnd", JsonNumber(runtimeSequenceEnd) },
+							{ "runtimeStreamingInputPresent", JsonBool(runtimeStreamingInputPresent) },
+							{ "runtimeInputStreamId", JsonString(runtimeStreamingInputPresent ? transcribe.sessionState.streamingInput->source.streamId : std::string()) },
+							{ "runtimeInputSequenceStart", JsonNumber(runtimeInputStart) },
+							{ "runtimeInputSequenceEnd", JsonNumber(runtimeInputEnd) },
+							{ "runtimeCursorStartSequence", JsonNumber(runtimeCursorStart) },
+							{ "runtimeCursorNextSequence", JsonNumber(runtimeCursorNext) },
+							{ "sherpaDebugPresent", JsonBool(debugInfo.has_value()) },
+							{ "sherpaChunkCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkCount : 0ULL) },
+							{ "sherpaDecodedTokenCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaDecodedTokenCount : 0ULL) },
+							{ "sherpaEmittedTokenCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaEmittedTokenCount : 0ULL) },
+							{ "sherpaPendingSampleCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaPendingSampleCount : 0ULL) },
+							{ "sherpaPartialTextLength", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaPartialTextLength : 0ULL) },
+							{ "sherpaLoopCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaLoopCount : 0ULL) },
+							{ "sherpaMaxLoopCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaMaxLoopCount : 0ULL) },
+							{ "sherpaEncoderFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaEncoderFrameCount : 0ULL) },
+							{ "sherpaJoinerCallCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaJoinerCallCount : 0ULL) },
+							{ "sherpaBlankTokenCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaBlankTokenCount : 0ULL) },
+							{ "sherpaLastBestTokenId", JsonNumber(debugInfo.has_value() ? static_cast<std::uint64_t>((std::max)(std::int64_t{ 0 }, debugInfo->sherpaLastBestTokenId)) : 0ULL) },
+							{ "sherpaLastSecondBestTokenId", JsonNumber(debugInfo.has_value() ? static_cast<std::uint64_t>((std::max)(std::int64_t{ 0 }, debugInfo->sherpaLastSecondBestTokenId)) : 0ULL) },
+							{ "sherpaSpeechActive", JsonBool(debugInfo.has_value() && debugInfo->sherpaSpeechActive) },
+							{ "errorCode", JsonString(transcribe.errorCode) },
+							{ "errorMessage", JsonString(transcribe.errorMessage) },
+						}));
+
 					auto resolveErrorClass = [&](const std::string& errorCode, const bool cancelled) {
 						if (cancelled || errorCode == "cancelled") {
 							return std::string("status");
@@ -712,8 +833,8 @@ namespace blazeclaw::gateway {
 								{ "runId", JsonString(effectiveRunId) },
 								{ "sessionId", JsonString(effectiveSessionId) },
 								{ "stage", JsonString(normalizedStage) },
-								{ "final", JsonBool(transcribe.sessionState.segment->final) },
-								{ "sequence", JsonNumber(static_cast<std::uint64_t>(transcribe.sessionState.segment->sequence)) },
+								{ "final", JsonBool(effectiveSegmentFinal) },
+								{ "sequence", JsonNumber(static_cast<std::uint64_t>(effectiveSegmentSequence)) },
 							}));
 					}
 
@@ -722,7 +843,7 @@ namespace blazeclaw::gateway {
 					const std::string forwardedPayload = "{}";
 
 					const std::string speechSessionJson =
-						transcribe.sessionState.segment.has_value()
+						hasSegment
 						? JsonObject({
 							{ "sessionId", JsonString(transcribe.sessionState.sessionId) },
 							{ "runId", JsonString(transcribe.sessionState.runId) },
@@ -734,9 +855,9 @@ namespace blazeclaw::gateway {
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
 							{ "audioArtifact", audioArtifactJson },
 							{ "segment", JsonObject({
-								{ "text", JsonString(transcribe.sessionState.segment->text) },
-								{ "final", JsonBool(transcribe.sessionState.segment->final) },
-								{ "sequence", JsonNumber(static_cast<std::uint64_t>(transcribe.sessionState.segment->sequence)) },
+								{ "text", JsonString(effectiveSegmentText) },
+								{ "final", JsonBool(effectiveSegmentFinal) },
+								{ "sequence", JsonNumber(static_cast<std::uint64_t>(effectiveSegmentSequence)) },
 							}) },
 						})
 						: JsonObject({
