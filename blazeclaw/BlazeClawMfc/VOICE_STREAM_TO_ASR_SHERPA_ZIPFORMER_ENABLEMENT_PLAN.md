@@ -107,6 +107,31 @@ Latest runtime telemetry root cause:
    Runtime cache refresh also avoids shape-incompatible state overwrites and
    honors length-like encoder outputs to prevent padded encoder frames from
    being decoded as real frames.
+9. After token emission started, the transcript remained low quality and
+   repetitive (for example `请讲一个笑话` decoded as unrelated/repeated BPE
+   pieces). This indicates the remaining blocker is recognition quality, not
+   transport/UI. Root causes in the current implementation are:
+   - frontend parity is still approximate instead of using kaldi-native-fbank /
+	 sherpa-onnx's online feature pipeline exactly,
+   - ONNX streaming cache/state binding is heuristic rather than generated from
+	 the model's exact Sherpa metadata contract,
+   - greedy search emits at most one non-blank token per encoder frame instead
+	 of the standard RNN-T inner loop that can emit multiple labels per frame
+	 until blank or a max-symbol limit,
+   - token reconstruction concatenates `tokens.txt` pieces directly and does
+	 not decode with the model's `bpe.model` SentencePiece/BPE decoder.
+   These issues explain a plausible-but-wrong sequence like
+   `个笑笑笑笑傲江湖火花华海黄瓜明日 N`: the model is running, but the
+   frontend/decode/tokenizer contract is not Sherpa-equivalent.
+10. Recognition-quality Phase 1 is now implemented in
+	`VOICE_STREAM_TO_ASR_SHERPA_RECOGNITION_QUALITY_PLAN.md`: the Sherpa path can
+	persist reproducible baseline diagnostics for a finite `pcm_stream` request.
+	Set `BLAZECLAW_SHERPA_BASELINE_DIR` to write `<runId>.sherpa-baseline.json`
+	and optionally set `BLAZECLAW_SHERPA_BASELINE_EXPECTED_TEXT` to the known
+	transcript. The JSON captures sample rate, chunk size, stream range, final
+	flush state, encoder/fbank frame counts, token IDs, token pieces, and decoded
+	text so later frontend/cache/decode fixes can be compared against the same
+	fixed clip.
 
 ## FunASR references to follow
 

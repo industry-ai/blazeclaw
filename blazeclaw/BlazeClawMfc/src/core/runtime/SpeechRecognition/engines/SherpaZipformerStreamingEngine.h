@@ -57,6 +57,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint32_t segmentSequence = 0;
 			std::vector<std::int64_t> decoderContext;
 			std::vector<std::int64_t> emittedTokenIds;
+			std::vector<std::int64_t> baselineTokenIds;
 			std::vector<float> pendingSamples;
 			std::vector<std::vector<std::int64_t>> encoderInt64StateCaches;
 			std::vector<std::vector<float>> encoderFloatStateCaches;
@@ -95,6 +96,26 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool isJoinerOutput = false);
 		[[nodiscard]] static std::string DecodeTokenPiece(
 			const std::string& piece);
+		[[nodiscard]] static std::string EscapeJsonString(
+			const std::string& value);
+		[[nodiscard]] static std::string JoinTokenIds(
+			const std::vector<std::int64_t>& tokenIds);
+		[[nodiscard]] std::string JoinTokenPieces(
+			const std::vector<std::int64_t>& tokenIds) const;
+		[[nodiscard]] static std::optional<std::filesystem::path> ResolveBaselineDiagnosticsDirectory();
+		[[nodiscard]] static std::string ResolveBaselineExpectedText();
+		[[nodiscard]] static bool IsBaselinePersistenceEnabled();
+		[[nodiscard]] std::optional<std::filesystem::path> PersistBaselineDiagnostics(
+			const SpeechTranscribeRequest& request,
+			const SpeechStreamingInputContract& streamingInput,
+			const StreamState& streamState,
+			std::uint32_t sampleRate,
+			std::size_t chunkSamples,
+			std::uint64_t loopGuard,
+			std::uint64_t maxLoops,
+			bool finalFlush,
+			const std::string& expectedText,
+			const std::string& decodedText) const;
 		[[nodiscard]] static std::string TokenIdsToText(
 			const std::vector<std::int64_t>& tokenIds,
 			const std::unordered_map<std::int64_t, std::string>& tokenById,

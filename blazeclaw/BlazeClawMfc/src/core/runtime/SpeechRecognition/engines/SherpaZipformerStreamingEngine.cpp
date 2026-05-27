@@ -5,9 +5,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <numeric>
 #include <sstream>
+#include <iomanip>
 
 namespace blazeclaw::core::speechrecognition::engines {
 
@@ -713,6 +715,174 @@ namespace blazeclaw::core::speechrecognition::engines {
 		return text;
 	}
 
+	std::string SherpaZipformerStreamingEngine::EscapeJsonString(
+		const std::string& value) {
+		std::ostringstream stream;
+		for (const unsigned char ch : value) {
+			switch (ch) {
+			case '\\': stream << "\\\\"; break;
+			case '"': stream << "\\\""; break;
+			case '\b': stream << "\\b"; break;
+			case '\f': stream << "\\f"; break;
+			case '\n': stream << "\\n"; break;
+			case '\r': stream << "\\r"; break;
+			case '\t': stream << "\\t"; break;
+			default:
+				if (ch < 0x20) {
+					stream << "\\u"
+						<< std::hex
+						<< std::setw(4)
+						<< std::setfill('0')
+						<< static_cast<int>(ch)
+						<< std::dec;
+				}
+				else {
+					stream << static_cast<char>(ch);
+				}
+				break;
+			}
+		}
+		return stream.str();
+	}
+
+	std::string SherpaZipformerStreamingEngine::JoinTokenIds(
+		const std::vector<std::int64_t>& tokenIds) {
+		std::ostringstream stream;
+		for (std::size_t i = 0; i < tokenIds.size(); ++i) {
+			if (i > 0) {
+				stream << ' ';
+			}
+			stream << tokenIds[i];
+		}
+		return stream.str();
+	}
+
+	std::string SherpaZipformerStreamingEngine::JoinTokenPieces(
+		const std::vector<std::int64_t>& tokenIds) const {
+		std::ostringstream stream;
+		for (std::size_t i = 0; i < tokenIds.size(); ++i) {
+			if (i > 0) {
+				stream << ' ';
+			}
+			const auto it = m_tokenById.find(tokenIds[i]);
+			if (it == m_tokenById.end()) {
+				stream << "<missing:" << tokenIds[i] << ">";
+				continue;
+			}
+			stream << it->second;
+		}
+		return stream.str();
+	}
+
+	std::optional<std::filesystem::path> SherpaZipformerStreamingEngine::ResolveBaselineDiagnosticsDirectory() {
+		char* raw = nullptr;
+		size_t size = 0;
+		const int readStatus = _dupenv_s(&raw, &size, "BLAZECLAW_SHERPA_BASELINE_DIR");
+		if (readStatus != 0 || raw == nullptr) {
+			return std::nullopt;
+		}
+
+		std::string value(raw);
+		free(raw);
+		if (value.empty()) {
+			return std::nullopt;
+		}
+
+		return std::filesystem::path(value);
+	}
+
+	std::string SherpaZipformerStreamingEngine::ResolveBaselineExpectedText() {
+		char* raw = nullptr;
+		size_t size = 0;
+		const int readStatus = _dupenv_s(&raw, &size, "BLAZECLAW_SHERPA_BASELINE_EXPECTED_TEXT");
+		if (readStatus != 0 || raw == nullptr) {
+			return {};
+		}
+
+		std::string value(raw);
+		free(raw);
+		return value;
+	}
+
+	bool SherpaZipformerStreamingEngine::IsBaselinePersistenceEnabled() {
+		return ResolveBaselineDiagnosticsDirectory().has_value();
+	}
+
+	std::optional<std::filesystem::path> SherpaZipformerStreamingEngine::PersistBaselineDiagnostics(
+		const SpeechTranscribeRequest& request,
+		const SpeechStreamingInputContract& streamingInput,
+		const StreamState& streamState,
+		std::uint32_t sampleRate,
+		std::size_t chunkSamples,
+		std::uint64_t loopGuard,
+		std::uint64_t maxLoops,
+		bool finalFlush,
+		const std::string& expectedText,
+		const std::string& decodedText) const {
+		const auto directory = ResolveBaselineDiagnosticsDirectory();
+		if (!directory.has_value()) {
+			return std::nullopt;
+		}
+
+		std::error_code ec;
+		std::filesystem::create_directories(*directory, ec);
+		if (ec) {
+			return std::nullopt;
+		}
+
+		std::string fileStem = request.runId.empty() ? request.sessionId : request.runId;
+		if (fileStem.empty()) {
+			fileStem = streamingInput.source.streamId.empty() ? "sherpa-baseline" : streamingInput.source.streamId;
+		}
+		for (auto& ch : fileStem) {
+			const bool safe =
+				(ch >= 'a' && ch <= 'z') ||
+				(ch >= 'A' && ch <= 'Z') ||
+				(ch >= '0' && ch <= '9') ||
+				ch == '-' ||
+				ch == '_';
+			if (!safe) {
+				ch = '_';
+			}
+		}
+
+		const auto path = *directory / (fileStem + ".sherpa-baseline.json");
+		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		if (!stream.is_open()) {
+			return std::nullopt;
+		}
+
+		const std::string tokenIds = JoinTokenIds(streamState.baselineTokenIds);
+		const std::string tokenPieces = JoinTokenPieces(streamState.baselineTokenIds);
+		stream << "{\n";
+		stream << "  \"runId\": \"" << EscapeJsonString(request.runId) << "\",\n";
+		stream << "  \"sessionId\": \"" << EscapeJsonString(request.sessionId) << "\",\n";
+		stream << "  \"streamId\": \"" << EscapeJsonString(streamingInput.source.streamId) << "\",\n";
+		stream << "  \"audioPath\": \"" << EscapeJsonString(request.audioPath) << "\",\n";
+		stream << "  \"expectedText\": \"" << EscapeJsonString(expectedText) << "\",\n";
+		stream << "  \"decodedText\": \"" << EscapeJsonString(decodedText) << "\",\n";
+		stream << "  \"sampleRate\": " << sampleRate << ",\n";
+		stream << "  \"chunkSamples\": " << static_cast<std::uint64_t>(chunkSamples) << ",\n";
+		stream << "  \"sequenceStart\": " << streamingInput.source.sequenceStart << ",\n";
+		stream << "  \"sequenceEnd\": " << streamingInput.source.sequenceEnd << ",\n";
+		stream << "  \"cursorNextSequence\": " << streamState.nextSequence << ",\n";
+		stream << "  \"loopCount\": " << loopGuard << ",\n";
+		stream << "  \"maxLoopCount\": " << maxLoops << ",\n";
+		stream << "  \"finalFlush\": " << (finalFlush ? "true" : "false") << ",\n";
+		stream << "  \"fbankFrameCount\": " << streamState.encoderFrameCount << ",\n";
+		stream << "  \"encoderFrameCount\": " << streamState.encoderFrameCount << ",\n";
+		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
+		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
+		stream << "  \"decodedTokenCount\": " << streamState.decodedTokenCount << ",\n";
+		stream << "  \"pendingSampleCount\": " << streamState.pendingSamples.size() << ",\n";
+		stream << "  \"tokenIds\": \"" << EscapeJsonString(tokenIds) << "\",\n";
+		stream << "  \"tokenPieces\": \"" << EscapeJsonString(tokenPieces) << "\"\n";
+		stream << "}\n";
+		stream.close();
+
+		return path;
+	}
+
 	void SherpaZipformerStreamingEngine::ClearStreamState(
 		const std::string& streamId) const {
 		std::lock_guard<std::mutex> lock(m_streamMutex);
@@ -832,6 +1002,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const bool isFinalStreamRequest =
 			IsFinalStreamRequest(streamingInput, request.audioArtifact);
 		const bool isLivePcmStream = isPcmStream && !isFinalStreamRequest;
+		const std::string baselineExpectedText = ResolveBaselineExpectedText();
+		const bool baselinePersistenceEnabled = IsBaselinePersistenceEnabled();
 
 		StreamState streamState;
 		{
@@ -1693,6 +1865,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 												}
 
 												streamState.emittedTokenIds.push_back(tokenId);
+										streamState.baselineTokenIds.push_back(tokenId);
 												++streamState.decodedTokenCount;
 												streamState.decoderContext.push_back(tokenId);
 												const std::size_t contextSize = (std::max)(std::size_t{ 1 }, m_decoderContextSize);
@@ -1769,6 +1942,24 @@ namespace blazeclaw::core::speechrecognition::engines {
 		if (!streamState.partialText.empty() && shouldTreatInputAsFinal) {
 			result.sessionState.transcriptText = streamState.partialText;
 		}
+		const std::string baselineDecodedText = !result.sessionState.transcriptText.empty()
+			? result.sessionState.transcriptText
+			: streamState.partialText;
+		std::optional<std::filesystem::path> baselineDiagnosticPath;
+		if (baselinePersistenceEnabled && shouldTreatInputAsFinal) {
+			streamState.nextSequence = nextSequence;
+			baselineDiagnosticPath = PersistBaselineDiagnostics(
+				request,
+				streamingInput,
+				streamState,
+				sampleRate,
+				chunkSamples,
+				loopGuard,
+				maxLoops,
+				shouldTreatInputAsFinal,
+				baselineExpectedText,
+				baselineDecodedText);
+		}
 
 		if (!streamState.partialText.empty()) {
 			SpeechTranscriptSegment segment;
@@ -1814,7 +2005,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		result.sessionState.debugInfo = SpeechRecognitionDebugInfo{
 			.sherpaChunkCount = streamState.chunkCount,
 			.sherpaDecodedTokenCount = streamState.decodedTokenCount,
-			.sherpaEmittedTokenCount = static_cast<std::uint64_t>(streamState.emittedTokenIds.size()),
+			.sherpaEmittedTokenCount = static_cast<std::uint64_t>(streamState.baselineTokenIds.size()),
 			.sherpaPendingSampleCount = static_cast<std::uint64_t>(streamState.pendingSamples.size()),
 			.sherpaPartialTextLength = static_cast<std::uint64_t>(streamState.partialText.size()),
 			.sherpaLoopCount = loopGuard,
@@ -1825,6 +2016,20 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaLastBestTokenId = streamState.lastBestTokenId,
 			.sherpaLastSecondBestTokenId = streamState.lastSecondBestTokenId,
 			.sherpaSpeechActive = streamState.speechActive,
+			.sherpaBaselineSampleRate = sampleRate,
+			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
+			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,
+			.sherpaBaselineInputEndSequence = streamingInput.source.sequenceEnd,
+			.sherpaBaselineCursorNextSequence = nextSequence,
+			.sherpaBaselineFinalFlush = shouldTreatInputAsFinal,
+			.sherpaBaselinePersisted = baselineDiagnosticPath.has_value(),
+			.sherpaBaselineExpectedText = baselineExpectedText,
+			.sherpaBaselineDecodedText = baselineDecodedText,
+			.sherpaBaselineTokenIds = JoinTokenIds(streamState.baselineTokenIds),
+			.sherpaBaselineTokenPieces = JoinTokenPieces(streamState.baselineTokenIds),
+			.sherpaBaselineDiagnosticPath = baselineDiagnosticPath.has_value()
+				? baselineDiagnosticPath->string()
+				: std::string{},
 		};
 
 		streamState.nextSequence = nextSequence;
