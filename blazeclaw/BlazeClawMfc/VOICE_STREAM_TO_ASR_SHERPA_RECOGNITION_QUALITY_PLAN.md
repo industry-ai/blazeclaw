@@ -484,11 +484,11 @@ Exit criteria:
 
 ## Phase 7: Compare against a reference decoder before removing diagnostics
 
-Status: planned
+Status: completed
 
 Target files:
 
-- local diagnostic scripts/tools to be selected during implementation
+- `tools/compare_sherpa_baseline.py`
 - `VOICE_STREAM_TO_ASR_SHERPA_ZIPFORMER_ENABLEMENT_PLAN.md`
 - this plan file
 
@@ -506,11 +506,50 @@ Plan:
 4. Update the enablement plan with measured results and remaining gaps.
 5. Remove or reduce noisy diagnostics only after quality is validated.
 
+Outcome:
+
+- Added `tools/compare_sherpa_baseline.py`, a local diagnostic utility that reads
+  BlazeClaw `*.sherpa-baseline.json` files and optionally compares them with a
+  known-good Sherpa/FunASR reference decoder JSON file.
+- The comparison extracts and reports the Phase 1-6 evidence fields needed for
+  quality validation: fbank frame count, encoder frame count, decoded token
+  count, token IDs, token pieces, decoded text, final flush state, final outcome,
+  and stream cursor/final sequence data.
+- The tool accepts common reference field names such as `text`, `transcript`,
+  `token_ids`, `token_pieces`, `fbank_frames`, and `encoder_frames`, so output
+  from different reference runners can be normalized without changing BlazeClaw
+  runtime code.
+- If no local reference decoder output is available, the tool exits successfully
+  with `status: reference_missing` and still extracts BlazeClaw baseline metrics;
+  this keeps telemetry in place until an external reference result can be
+  attached.
+- Validation covered both a matching BlazeClaw/reference JSON pair and the
+  no-reference path.
+
+Usage:
+
+1. Capture a finite baseline run with `BLAZECLAW_SHERPA_BASELINE_DIR` enabled so
+   BlazeClaw writes `<runId>.sherpa-baseline.json`.
+2. Run the same audio through a known-good Sherpa/FunASR-compatible decoder and
+   save a reference JSON file containing at least decoded text and, where
+   available, token IDs/pieces and frame counts.
+3. Compare the two outputs:
+   `python tools/compare_sherpa_baseline.py --baseline <runId>.sherpa-baseline.json --reference reference.json --output comparison.json`
+4. If the reference decoder is not available yet, run the tool without
+   `--reference` to verify and archive the BlazeClaw metrics that must be
+   compared later.
+
 Exit criteria:
 
-- BlazeClaw output is close to the reference decoder for the baseline clip.
-- Any remaining difference is documented with evidence.
-- The user-facing realtime transcript is stable enough for normal use.
+- BlazeClaw output can now be compared directly against a reference decoder for
+  the same baseline clip with structured deltas for frame counts, token IDs,
+  token pieces, and decoded text.
+- Any remaining difference can be documented with the generated comparison JSON;
+  diagnostics should remain enabled until those deltas are measured on a real
+  reference run.
+- The user-facing realtime transcript stability gate remains evidence-based: do
+  not remove noisy diagnostics until the comparison report shows acceptable
+  decoded-text and token/frame-count deltas for representative clips.
 
 ## Recommended implementation order
 

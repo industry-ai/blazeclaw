@@ -378,13 +378,34 @@
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-functions.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-window.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\fftsg.c"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\mel-computations.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\online-feature.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\rfft.cc"><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader><PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-functions.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-window.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\fftsg.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\mel-computations.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\online-feature.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\rfft.cc">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
@@ -568,6 +589,7 @@
     <None Include="..\docs\readme.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
+    <None Include="tools\compare_sherpa_baseline.py" />
     <None Include="VOICE_STREAM_TO_ASR_SHERPA_RECOGNITION_QUALITY_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP11_ROOT_CAUSE_AND_FIX_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP12_ROOT_CAUSE_AND_FIX_PLAN.md" />

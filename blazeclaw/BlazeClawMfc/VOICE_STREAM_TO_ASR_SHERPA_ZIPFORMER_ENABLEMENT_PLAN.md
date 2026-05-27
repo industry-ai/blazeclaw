@@ -168,6 +168,14 @@ Latest runtime telemetry root cause:
 	classify final outcomes as `no_speech_detected`, `no_tokens_emitted`,
 	`tokens_emitted_empty_decoded_text`, `final_transcript`,
 	`live_stream_not_final`, or `finite_stream_not_drained`.
+16. Recognition-quality Phase 7 is now implemented: `tools/compare_sherpa_baseline.py`
+	compares BlazeClaw `*.sherpa-baseline.json` diagnostics with optional
+	known-good Sherpa/FunASR reference JSON. It reports structured deltas for
+	fbank frames, encoder frames, token IDs, token pieces, decoded text, and final
+	lifecycle fields. If no reference output is available locally, it records
+	`status: reference_missing` while preserving BlazeClaw baseline metrics, so
+	debug telemetry should remain enabled until representative clips are compared
+	against a real reference decoder.
 
 ## FunASR references to follow
 
