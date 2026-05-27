@@ -193,6 +193,23 @@ after encoder, or at decoder/joiner combination time.
 
 ### Step 3: Replace per-call fbank reconstruction with persistent online fbank state
 
+Status: implemented
+
+Implementation notes:
+
+- `StreamState` now owns a persistent `SherpaOnlineFbankFrontend` wrapper around
+  `knf::OnlineFbank` for each active stream.
+- The streaming loop feeds only newly read ring-buffer chunks into
+  `AcceptWaveform(...)`.
+- The frontend tracks how many frames were already extracted from
+  `NumFramesReady()` and returns only newly available frames.
+- The finite-stream final chunk calls `InputFinished()` through a one-shot guard,
+  preserving final flush behavior without repeating EOF signaling.
+- New fbank frames are buffered as pending feature frames, and encoder assembly
+  consumes frames from that buffer directly.
+- The old retained-sample path and `featureFrames * 160` sample-erasure heuristic
+  have been removed from the Sherpa path.
+
 Change `StreamState` so each stream owns persistent online frontend state instead
 of rebuilding a new `OnlineFbank` from `pendingSamples` each loop.
 

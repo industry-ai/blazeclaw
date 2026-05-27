@@ -20,6 +20,8 @@
 
 namespace blazeclaw::core::speechrecognition::engines {
 
+	struct SherpaOnlineFbankFrontend;
+
 	class SherpaZipformerStreamingEngine {
 	public:
 		enum class TensorBindingKind {
@@ -78,7 +80,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::vector<std::int64_t> decoderContext;
 			std::vector<std::int64_t> emittedTokenIds;
 			std::vector<std::int64_t> baselineTokenIds;
-			std::vector<float> pendingSamples;
+			std::shared_ptr<SherpaOnlineFbankFrontend> onlineFbank;
+			std::vector<float> pendingFeatureFrames;
+			std::size_t pendingFeatureFrameCount = 0;
 			std::vector<std::vector<std::int64_t>> encoderInt64StateCaches;
 			std::vector<std::vector<float>> encoderFloatStateCaches;
 			std::uint64_t chunkCount = 0;

@@ -203,6 +203,13 @@ Latest runtime telemetry root cause:
 	scores. These fields are exposed through `gateway.speech.debug.snapshot` and
 	sampled `[SherpaContract]` TRACE output to locate the all-blank failure stage
 	without changing recognition behavior.
+20. Step 3 of the no-output root-cause plan is now implemented: each active
+	Sherpa stream owns a persistent `SherpaOnlineFbankFrontend` around
+	`knf::OnlineFbank`. The engine feeds only newly read audio chunks into the
+	frontend, extracts only newly ready frames, performs final
+	`InputFinished()` once for finite input, and consumes pending feature frames
+	directly instead of translating processed frames back into retained sample
+	counts.
 
 ## FunASR references to follow
 

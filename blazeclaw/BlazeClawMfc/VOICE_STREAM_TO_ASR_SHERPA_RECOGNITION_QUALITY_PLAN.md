@@ -206,8 +206,14 @@ Outcome:
   - `snip_edges=true`,
   - log-power fbank output,
   - 80 mel bins for the current encoder path.
-- Preserved the existing `pendingSamples` remainder mechanism and passed the
-  finite-stream final condition into `OnlineFbank::InputFinished()`.
+- Step 3 of the no-output root-cause plan superseded the temporary
+  `pendingSamples` reconstruction path: each active Sherpa stream now owns a
+  persistent `SherpaOnlineFbankFrontend`, feeds only newly read samples into
+  `AcceptWaveform(...)`, tracks consumed `NumFramesReady()` frames, and calls
+  `InputFinished()` once on finite final input.
+- New online fbank frames are buffered as feature frames until the encoder path
+  consumes them; no code now maps consumed feature frames back to
+  `featureFrames * 160` retained waveform samples.
 - Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
   samples are treated as normalized floats and scaled by `32768` before
   `OnlineFbank::AcceptWaveform(...)`.

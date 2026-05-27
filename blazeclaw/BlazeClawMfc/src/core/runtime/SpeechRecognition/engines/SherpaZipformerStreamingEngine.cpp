@@ -19,7 +19,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
-		constexpr std::size_t kSherpaFeatureHopSamples = 160;
 		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
 		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
 
@@ -124,17 +123,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			return stream.str();
 		}
 
-		std::vector<float> BuildOnlineFbank(
-			const std::vector<float>& samples,
+		knf::FbankOptions CreateOnlineFbankOptions(
 			std::uint32_t sampleRate,
-			std::size_t nMels,
-			bool inputFinished,
-			std::size_t& outFrames) {
-			outFrames = 0;
-			if (samples.empty() || nMels == 0) {
-				return {};
-			}
-
+			std::size_t nMels) {
 			knf::FbankOptions options;
 			options.frame_opts.samp_freq = static_cast<float>(sampleRate == 0 ? 16000U : sampleRate);
 			options.frame_opts.frame_length_ms = 25.0f;
@@ -151,7 +142,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 			options.use_energy = false;
 			options.use_log_fbank = true;
 			options.use_power = true;
+			return options;
+		}
 
+		std::vector<float> ScaleSamplesForOnlineFbank(
+			const std::vector<float>& samples) {
 			std::vector<float> scaledSamples(samples.size(), 0.0f);
 			std::transform(
 				samples.begin(),
@@ -160,22 +155,72 @@ namespace blazeclaw::core::speechrecognition::engines {
 				[](float sample) {
 					return sample * 32768.0f;
 				});
+			return scaledSamples;
+		}
 
-			knf::OnlineFbank fbank(options);
+	} // namespace
+
+	struct SherpaOnlineFbankFrontend {
+		SherpaOnlineFbankFrontend(
+			std::uint32_t initialSampleRate,
+			std::size_t initialMelBinCount)
+			: sampleRate(initialSampleRate == 0 ? 16000U : initialSampleRate),
+			melBinCount(initialMelBinCount),
+			options(CreateOnlineFbankOptions(sampleRate, melBinCount)),
+			fbank(options) {
+		}
+
+		void AcceptSamples(
+			const std::vector<float>& samples) {
+			if (samples.empty()) {
+				return;
+			}
+
+			const auto scaledSamples = ScaleSamplesForOnlineFbank(samples);
 			fbank.AcceptWaveform(options.frame_opts.samp_freq, scaledSamples.data(), static_cast<int32_t>(scaledSamples.size()));
-			if (inputFinished) {
+		}
+
+		void FinishInputOnce() {
+			if (!inputFinished) {
 				fbank.InputFinished();
+				inputFinished = true;
+			}
+		}
+
+		std::vector<float> ExtractNewFrames(
+			std::size_t& outFrames) {
+			outFrames = 0;
+			if (melBinCount == 0) {
+				return {};
 			}
 
-			outFrames = static_cast<std::size_t>((std::max)(0, fbank.NumFramesReady()));
-			std::vector<float> output(nMels * outFrames, 0.0f);
+			const auto readyFrames = static_cast<std::size_t>((std::max)(0, fbank.NumFramesReady()));
+			if (readyFrames <= consumedFrameCount) {
+				return {};
+			}
+
+			outFrames = readyFrames - consumedFrameCount;
+			std::vector<float> output(melBinCount * outFrames, 0.0f);
 			for (std::size_t frame = 0; frame < outFrames; ++frame) {
-				const float* data = fbank.GetFrame(static_cast<int32_t>(frame));
-				std::copy(data, data + static_cast<std::ptrdiff_t>(nMels), output.begin() + static_cast<std::ptrdiff_t>(frame * nMels));
+				const float* data = fbank.GetFrame(static_cast<int32_t>(consumedFrameCount + frame));
+				std::copy(
+					data,
+					data + static_cast<std::ptrdiff_t>(melBinCount),
+					output.begin() + static_cast<std::ptrdiff_t>(frame * melBinCount));
 			}
-
+			consumedFrameCount = readyFrames;
 			return output;
 		}
+
+		std::uint32_t sampleRate = 16000U;
+		std::size_t melBinCount = 0;
+		knf::FbankOptions options;
+		knf::OnlineFbank fbank;
+		std::size_t consumedFrameCount = 0;
+		bool inputFinished = false;
+	};
+
+	namespace {
 
 		float ComputeFrameEnergy(const std::vector<float>& samples) {
 			if (samples.empty()) {
@@ -1090,7 +1135,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
 		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
 		stream << "  \"decodedTokenCount\": " << streamState.decodedTokenCount << ",\n";
-		stream << "  \"pendingSampleCount\": " << streamState.pendingSamples.size() << ",\n";
+		stream << "  \"pendingSampleCount\": 0,\n";
 		stream << "  \"tokenIds\": \"" << EscapeJsonString(tokenIds) << "\",\n";
 		stream << "  \"tokenPieces\": \"" << EscapeJsonString(tokenPieces) << "\"\n";
 		stream << "}\n";
@@ -1250,7 +1295,20 @@ namespace blazeclaw::core::speechrecognition::engines {
 			GetStreamingAudioOldestSequence(streamingInput.source.streamId);
 		if (oldestOpt.has_value() && nextSequence < *oldestOpt) {
 			nextSequence = *oldestOpt;
-			streamState.pendingSamples.clear();
+			streamState.pendingFeatureFrames.clear();
+			streamState.pendingFeatureFrameCount = 0;
+			streamState.onlineFbank.reset();
+		}
+
+		constexpr std::size_t sherpaMelBinCount = 80;
+		if (!streamState.onlineFbank ||
+			streamState.onlineFbank->sampleRate != (sampleRate == 0 ? 16000U : sampleRate) ||
+			streamState.onlineFbank->melBinCount != sherpaMelBinCount) {
+			streamState.onlineFbank = std::make_shared<SherpaOnlineFbankFrontend>(
+				sampleRate,
+				sherpaMelBinCount);
+			streamState.pendingFeatureFrames.clear();
+			streamState.pendingFeatureFrameCount = 0;
 		}
 
 		std::uint64_t loopGuard = 0;
@@ -1512,10 +1570,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 
 			++streamState.chunkCount;
-			streamState.pendingSamples.insert(
-				streamState.pendingSamples.end(),
-				chunk.begin(),
-				chunk.end());
 
 			const float energy = ComputeFrameEnergy(chunk);
 			const bool frameSpeech = energy >= kSpeechEnergyThreshold;
@@ -1531,20 +1585,30 @@ namespace blazeclaw::core::speechrecognition::engines {
 				++streamState.silenceChunkCount;
 			}
 
-			std::size_t featureFrames = 0;
+			std::size_t newFeatureFrames = 0;
 			std::size_t consumedFeatureFrames = 0;
 			const bool forceFlushFeatures = !isLivePcmStream &&
 				streamingInput.source.sequenceEnd > 0 &&
 				nextSequence + static_cast<std::uint64_t>(requestSamples) >= streamingInput.source.sequenceEnd;
-			const auto logMel = BuildOnlineFbank(
-				streamState.pendingSamples,
-				sampleRate,
-				80,
-				forceFlushFeatures,
-				featureFrames);
+			streamState.onlineFbank->AcceptSamples(chunk);
+			if (forceFlushFeatures) {
+				streamState.onlineFbank->FinishInputOnce();
+			}
+			const auto newLogMel = streamState.onlineFbank->ExtractNewFrames(newFeatureFrames);
+			if (!newLogMel.empty() && newFeatureFrames > 0) {
+				streamState.pendingFeatureFrames.insert(
+					streamState.pendingFeatureFrames.end(),
+					newLogMel.begin(),
+					newLogMel.end());
+				streamState.pendingFeatureFrameCount += newFeatureFrames;
+			}
+			const std::size_t featureFrames = streamState.pendingFeatureFrameCount;
+			const auto& logMel = streamState.pendingFeatureFrames;
 			if (streamState.chunkCount % 10 == 1) {
-				TRACE(L"[SherpaStreaming] pendingSamples=%llu featureFrames=%llu\n",
-					(unsigned long long)streamState.pendingSamples.size(), (unsigned long long)featureFrames);
+				TRACE(L"[SherpaStreaming] onlineFbankNewFrames=%llu pendingFeatureFrames=%llu finalFlush=%d\n",
+					(unsigned long long)newFeatureFrames,
+					(unsigned long long)featureFrames,
+					forceFlushFeatures ? 1 : 0);
 			}
 
 			if (!logMel.empty() &&
@@ -1578,8 +1642,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 					std::vector<float> featureInputBuffer(effectiveFrames * frameStride, 0.0f);
 					const std::size_t copiedFrames = (std::min)(featureFrames, effectiveFrames);
 					if (copiedFrames > 0) {
-						const std::size_t sourceOffset = (featureFrames - copiedFrames) * frameStride;
-						const std::size_t destOffset = (effectiveFrames - copiedFrames) * frameStride;
+						const std::size_t sourceOffset = 0;
+						const std::size_t destOffset = copiedFrames < effectiveFrames
+							? (effectiveFrames - copiedFrames) * frameStride
+							: 0;
 						std::copy(
 							logMel.begin() + static_cast<std::ptrdiff_t>(sourceOffset),
 							logMel.begin() + static_cast<std::ptrdiff_t>(sourceOffset + (copiedFrames * frameStride)),
@@ -2206,16 +2272,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
 				result.text = streamState.partialText;
 
-					std::size_t consumedSamples = consumedFeatureFrames * kSherpaFeatureHopSamples;
-					if (!isLivePcmStream &&
-						streamingInput.source.sequenceEnd > 0 &&
-						nextSequence >= streamingInput.source.sequenceEnd) {
-						consumedSamples = streamState.pendingSamples.size();
-					}
-				if (consumedSamples > 0 && consumedSamples <= streamState.pendingSamples.size()) {
-					streamState.pendingSamples.erase(
-						streamState.pendingSamples.begin(),
-						streamState.pendingSamples.begin() + static_cast<std::ptrdiff_t>(consumedSamples));
+				if (consumedFeatureFrames > 0 &&
+					consumedFeatureFrames <= streamState.pendingFeatureFrameCount) {
+					const std::size_t consumedFeatureElements = consumedFeatureFrames * 80;
+					streamState.pendingFeatureFrames.erase(
+						streamState.pendingFeatureFrames.begin(),
+						streamState.pendingFeatureFrames.begin() + static_cast<std::ptrdiff_t>(consumedFeatureElements));
+					streamState.pendingFeatureFrameCount -= consumedFeatureFrames;
 				}
 			}
 
@@ -2313,7 +2376,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 #endif
 					),
 					m_blankId);
-				streamState.pendingSamples.clear();
+				streamState.pendingFeatureFrames.clear();
+				streamState.pendingFeatureFrameCount = 0;
+				streamState.onlineFbank.reset();
 				streamState.silenceChunkCount = 0;
 				streamState.speechActive = false;
 			}
@@ -2336,7 +2401,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaChunkCount = streamState.chunkCount,
 			.sherpaDecodedTokenCount = streamState.decodedTokenCount,
 			.sherpaEmittedTokenCount = static_cast<std::uint64_t>(streamState.baselineTokenIds.size()),
-			.sherpaPendingSampleCount = static_cast<std::uint64_t>(streamState.pendingSamples.size()),
+			.sherpaPendingSampleCount = 0,
 			.sherpaPartialTextLength = static_cast<std::uint64_t>(streamState.partialText.size()),
 			.sherpaLoopCount = loopGuard,
 			.sherpaMaxLoopCount = maxLoops,
