@@ -2087,6 +2087,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const bool inputFinal = streamingInput.source.sequenceEnd > 0 &&
 			nextSequence >= streamingInput.source.sequenceEnd;
 		const bool shouldTreatInputAsFinal = inputFinal && !isLivePcmStream;
+		const bool finalDrainComplete = !isLivePcmStream &&
+			streamingInput.source.sequenceEnd > 0 &&
+			nextSequence >= streamingInput.source.sequenceEnd;
+		const std::uint64_t finalRemainingSamples =
+			streamingInput.source.sequenceEnd > nextSequence
+			? streamingInput.source.sequenceEnd - nextSequence
+			: 0ULL;
 		const bool shouldFinalizeByVad =
 			streamState.speechActive && streamState.silenceChunkCount >= 3;
 		const bool shouldFinalize = shouldFinalizeByVad || shouldTreatInputAsFinal;
@@ -2096,6 +2103,27 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const std::string baselineDecodedText = !result.sessionState.transcriptText.empty()
 			? result.sessionState.transcriptText
 			: streamState.partialText;
+		std::string finalOutcome;
+		if (shouldTreatInputAsFinal) {
+			if (!streamState.speechActive && streamState.decodedTokenCount == 0) {
+				finalOutcome = "no_speech_detected";
+			}
+			else if (streamState.decodedTokenCount == 0) {
+				finalOutcome = "no_tokens_emitted";
+			}
+			else if (baselineDecodedText.empty()) {
+				finalOutcome = "tokens_emitted_empty_decoded_text";
+			}
+			else {
+				finalOutcome = "final_transcript";
+			}
+		}
+		else if (isLivePcmStream) {
+			finalOutcome = "live_stream_not_final";
+		}
+		else {
+			finalOutcome = "finite_stream_not_drained";
+		}
 		std::optional<std::filesystem::path> baselineDiagnosticPath;
 		if (baselinePersistenceEnabled && shouldTreatInputAsFinal) {
 			streamState.nextSequence = nextSequence;
@@ -2180,6 +2208,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaBpeVocabPresent = m_artifacts.bpeVocabPresent,
 			.sherpaDecodedText = baselineDecodedText,
 			.sherpaRawTokenPieces = JoinTokenPieces(streamState.baselineTokenIds),
+			.sherpaFinalStreamRequest = isFinalStreamRequest,
+			.sherpaLivePcmStream = isLivePcmStream,
+			.sherpaFinalDrainComplete = finalDrainComplete,
+			.sherpaFinalFbankFlush = shouldTreatInputAsFinal,
+			.sherpaFinalSequenceEnd = streamingInput.source.sequenceEnd,
+			.sherpaFinalCursorNext = nextSequence,
+			.sherpaFinalRemainingSamples = finalRemainingSamples,
+			.sherpaFinalOutcome = finalOutcome,
 			.sherpaBaselineSampleRate = sampleRate,
 			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
 			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,

@@ -134,6 +134,14 @@ namespace blazeclaw::core::speechrecognition {
 		bool sherpaBpeVocabPresent = false;
 		std::string sherpaDecodedText;
 		std::string sherpaRawTokenPieces;
+		bool sherpaFinalStreamRequest = false;
+		bool sherpaLivePcmStream = false;
+		bool sherpaFinalDrainComplete = false;
+		bool sherpaFinalFbankFlush = false;
+		std::uint64_t sherpaFinalSequenceEnd = 0;
+		std::uint64_t sherpaFinalCursorNext = 0;
+		std::uint64_t sherpaFinalRemainingSamples = 0;
+		std::string sherpaFinalOutcome;
 		std::uint32_t sherpaBaselineSampleRate = 0;
 		std::uint64_t sherpaBaselineChunkSamples = 0;
 		std::uint64_t sherpaBaselineInputStartSequence = 0;

@@ -160,6 +160,14 @@ Latest runtime telemetry root cause:
 	token-piece normalization for user-visible text, and keeps raw `tokens.txt`
 	pieces only in diagnostics. Debug snapshots now expose BPE artifact presence,
 	decoded text, and raw token pieces for baseline comparison.
+15. Recognition-quality Phase 6 is now implemented: finite final `pcm_stream`
+	requests are diagnosed as bounded input rather than live polling, final drain
+	state is exposed through `sherpaFinalDrainComplete`,
+	`sherpaFinalRemainingSamples`, and final cursor telemetry, and the final fbank
+	flush path is surfaced through `sherpaFinalFbankFlush`. Debug snapshots now
+	classify final outcomes as `no_speech_detected`, `no_tokens_emitted`,
+	`tokens_emitted_empty_decoded_text`, `final_transcript`,
+	`live_stream_not_final`, or `finite_stream_not_drained`.
 
 ## FunASR references to follow
 

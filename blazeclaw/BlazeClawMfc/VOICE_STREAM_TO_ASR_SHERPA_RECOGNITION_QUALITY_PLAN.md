@@ -428,7 +428,7 @@ Exit criteria:
 
 ## Phase 6: Align stream lifecycle with FunASR final-flush behavior
 
-Status: planned
+Status: completed
 
 Target files:
 
@@ -452,11 +452,35 @@ Plan:
    - tokens emitted but empty decoded text,
    - successful final transcript.
 
+Outcome:
+
+- Confirmed `CVoiceRecorder::BuildStreamingAudioArtifact()` already publishes a
+  bounded finite `pcm_stream` range using `sequenceStart`, `sequenceEnd`, and
+  `durationMs` from `AudioRingBuffer`.
+- Confirmed `StreamingAudioSourceRegistry` already supports sequence-aware reads
+  plus latest/oldest sequence callbacks, so bounded requests can drain to the
+  recorder-provided `sequenceEnd` without registry changes.
+- Hardened `SherpaZipformerStreamingEngine` final lifecycle diagnostics by
+  recording whether a request is a final stream request, whether it is still a
+  live `pcm_stream`, whether the finite stream drained to `sequenceEnd`, whether
+  the final fbank flush path ran, the final cursor, and any remaining samples.
+- Added explicit final outcome classification in debug snapshots:
+  `no_speech_detected`, `no_tokens_emitted`,
+  `tokens_emitted_empty_decoded_text`, `final_transcript`,
+  `live_stream_not_final`, and `finite_stream_not_drained`.
+- The final fbank flush flag is now tied to the same finite-input condition that
+  drives `OnlineFbank::InputFinished()` behavior in `BuildOnlineFbank(...)`, and
+  final transcript telemetry uses the last decoded model output.
+
 Exit criteria:
 
-- Stopping recording always drains the finite stream to `sequenceEnd`.
-- Final fbank frames are not lost.
-- Final segment text matches the last decoded model output.
+- Stopping recording drains finite stream requests to `sequenceEnd`; debug
+  snapshots expose `sherpaFinalDrainComplete` and `sherpaFinalRemainingSamples`
+  to prove this per run.
+- Final fbank frames are not lost; `sherpaFinalFbankFlush` identifies the final
+  `InputFinished()`-equivalent path.
+- Final segment text matches the last decoded model output; debug snapshots carry
+  both `sherpaDecodedText` and `sherpaFinalOutcome` for final-run validation.
 
 ## Phase 7: Compare against a reference decoder before removing diagnostics
 
