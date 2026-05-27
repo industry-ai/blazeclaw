@@ -111,8 +111,9 @@ Latest runtime telemetry root cause:
    repetitive (for example `请讲一个笑话` decoded as unrelated/repeated BPE
    pieces). This indicates the remaining blocker is recognition quality, not
    transport/UI. Root causes in the current implementation are:
-   - frontend parity is still approximate instead of using kaldi-native-fbank /
-	 sherpa-onnx's online feature pipeline exactly,
+	  - frontend parity was approximate until the recognition-quality Phase 2
+	 update replaced the active Sherpa path with `knf::OnlineFbank` from the
+	 local FunASR `kaldi-native-fbank` reference,
    - ONNX streaming cache/state binding is heuristic rather than generated from
 	 the model's exact Sherpa metadata contract,
    - greedy search emits at most one non-blank token per encoder frame instead
@@ -132,6 +133,15 @@ Latest runtime telemetry root cause:
 	flush state, encoder/fbank frame counts, token IDs, token pieces, and decoded
 	text so later frontend/cache/decode fixes can be compared against the same
 	fixed clip.
+11. Recognition-quality Phase 2 is now implemented: `BlazeClawMfc.vcxproj`
+	compiles the local FunASR `kaldi-native-fbank` sources and
+	`SherpaZipformerStreamingEngine` uses `knf::OnlineFbank` instead of the
+	hand-written FFT/mel frontend. The active frontend now uses 25 ms frames,
+	10 ms shift, Povey window, 0.97 preemphasis, DC removal, padded FFT,
+	`snip_edges=true`, log-power fbank, and the FunASR-observed `sample * 32768`
+	scaling convention before `AcceptWaveform(...)`. Remaining quality risks are
+	now concentrated in exact ONNX cache/state binding, RNN-T inner-loop search,
+	and BPE/SentencePiece text decoding.
 
 ## FunASR references to follow
 

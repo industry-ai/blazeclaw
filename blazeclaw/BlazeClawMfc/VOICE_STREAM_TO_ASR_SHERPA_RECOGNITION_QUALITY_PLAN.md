@@ -148,13 +148,13 @@ Exit criteria:
 
 ## Phase 2: Replace hand-written fbank with kaldi-native-fbank online frontend
 
-Status: planned
+Status: completed
 
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.h`
-- project/build files that include third-party native sources
+- `BlazeClawMfc.vcxproj`
 - local reference:
   `FunASR/runtime/onnxruntime/third_party/kaldi-native-fbank/kaldi-native-fbank/csrc/*`
 
@@ -180,6 +180,38 @@ Plan:
    Kaldi-style scaled samples as used by FunASR (`sample * 32768`), then use one
    convention consistently and document it.
 
+Outcome:
+
+- Added the local FunASR `kaldi-native-fbank` include root to the MFC Debug and
+  Release x64 project settings.
+- Added the required `kaldi-native-fbank` source files to `BlazeClawMfc.vcxproj`
+  with precompiled headers disabled:
+  - `feature-fbank.cc`,
+  - `feature-functions.cc`,
+  - `feature-window.cc`,
+  - `fftsg.c`,
+  - `mel-computations.cc`,
+  - `online-feature.cc`,
+  - `rfft.cc`.
+- Replaced the active Sherpa `BuildLogMel(...)` path with
+  `knf::OnlineFbank`.
+- Configured the frontend with the intended Sherpa/FunASR-compatible settings:
+  - 16 kHz input sample rate from the stream contract,
+  - 25 ms frame length,
+  - 10 ms frame shift,
+  - Povey window,
+  - 0.97 preemphasis,
+  - DC offset removal,
+  - power-of-two padded FFT,
+  - `snip_edges=true`,
+  - log-power fbank output,
+  - 80 mel bins for the current encoder path.
+- Preserved the existing `pendingSamples` remainder mechanism and passed the
+  finite-stream final condition into `OnlineFbank::InputFinished()`.
+- Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
+  samples are treated as normalized floats and scaled by `32768` before
+  `OnlineFbank::AcceptWaveform(...)`.
+
 Exit criteria:
 
 - Feature frame counts match Kaldi/Sherpa expectations for the same waveform.
@@ -187,6 +219,7 @@ Exit criteria:
   temporary diagnostic switch.
 - Recognition output improves or changes in a direction consistent with the
   reference decoder.
+- Build validation passes with `kaldi-native-fbank` compiled into the MFC app.
 
 ## Phase 3: Make streaming cache/state binding model-contract driven
 

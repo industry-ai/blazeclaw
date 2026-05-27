@@ -3,6 +3,8 @@
 
 #include "../StreamingAudioSourceRegistry.h"
 
+#include <kaldi-native-fbank/csrc/online-feature.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -22,149 +24,54 @@ namespace blazeclaw::core::speechrecognition::engines {
 		bool IsFiniteSample(float value) {
 			return std::isfinite(value) != 0;
 		}
-		float PoveyWindow(std::size_t idx, std::size_t n) {
-			if (n <= 1) {
-				return 1.0f;
-			}
-			const float angle = static_cast<float>(2.0 * 3.14159265358979323846 * idx / (n - 1));
-			const float hann = 0.5f - 0.5f * std::cos(angle);
-			return std::pow((std::max)(0.0f, hann), 0.85f);
-		}
-
-		float HzToMelSlaney(float hz) {
-			constexpr float kFSp = 200.0f / 3.0f;
-			constexpr float kMinLogHz = 1000.0f;
-			constexpr float kMinLogMel = kMinLogHz / kFSp;
-			constexpr float kLogStep = 0.06875177742094912f;
-			if (hz < kMinLogHz) {
-				return hz / kFSp;
-			}
-			return kMinLogMel + std::log(hz / kMinLogHz) / kLogStep;
-		}
-
-		float MelToHzSlaney(float mel) {
-			constexpr float kFSp = 200.0f / 3.0f;
-			constexpr float kMinLogHz = 1000.0f;
-			constexpr float kMinLogMel = kMinLogHz / kFSp;
-			constexpr float kLogStep = 0.06875177742094912f;
-			if (mel < kMinLogMel) {
-				return mel * kFSp;
-			}
-			return kMinLogHz * std::exp(kLogStep * (mel - kMinLogMel));
-		}
-
-		std::vector<float> BuildMelFilterbank(
-			std::uint32_t sampleRate,
-			std::size_t nFft,
-			std::size_t nMels,
-			float fMin,
-			float fMax) {
-			const std::size_t nBins = (nFft / 2) + 1;
-			std::vector<float> filters(nMels * nBins, 0.0f);
-			const float melMin = HzToMelSlaney(fMin);
-			const float melMax = HzToMelSlaney(fMax);
-			std::vector<float> melPoints(nMels + 2, 0.0f);
-			for (std::size_t i = 0; i < melPoints.size(); ++i) {
-				melPoints[i] = melMin + (melMax - melMin) *
-					static_cast<float>(i) /
-					static_cast<float>(melPoints.size() - 1);
-			}
-			std::vector<float> hzPoints(melPoints.size(), 0.0f);
-			for (std::size_t i = 0; i < melPoints.size(); ++i) {
-				hzPoints[i] = MelToHzSlaney(melPoints[i]);
-			}
-
-			for (std::size_t m = 1; m <= nMels; ++m) {
-				const float leftHz = hzPoints[m - 1];
-				const float centerHz = hzPoints[m];
-				const float rightHz = hzPoints[m + 1];
-				if (centerHz <= leftHz || rightHz <= centerHz) {
-					continue;
-				}
-				const float scale = 2.0f / (rightHz - leftHz);
-				for (std::size_t b = 0; b < nBins; ++b) {
-					const float hz = static_cast<float>(sampleRate) *
-						static_cast<float>(b) /
-						static_cast<float>(nFft);
-					float weight = 0.0f;
-					if (hz >= leftHz && hz < centerHz) {
-						weight = (hz - leftHz) / (centerHz - leftHz);
-					}
-					else if (hz >= centerHz && hz <= rightHz) {
-						weight = (rightHz - hz) / (rightHz - centerHz);
-					}
-					filters[(m - 1) * nBins + b] = weight * scale;
-				}
-			}
-
-			return filters;
-		}
-
-		std::vector<float> BuildLogMel(
+		std::vector<float> BuildOnlineFbank(
 			const std::vector<float>& samples,
 			std::uint32_t sampleRate,
 			std::size_t nMels,
+			bool inputFinished,
 			std::size_t& outFrames) {
-			constexpr std::size_t kFrameLength = 400;
-			constexpr std::size_t kNfft = 512;
-			constexpr std::size_t kHop = 160;
-			constexpr std::size_t kMinSamples = kFrameLength;
 			outFrames = 0;
-			if (samples.size() < kMinSamples) {
+			if (samples.empty() || nMels == 0) {
 				return {};
 			}
 
-			const auto filters = BuildMelFilterbank(sampleRate, kNfft, nMels, 0.0f, 8000.0f);
-			const std::size_t nBins = (kNfft / 2) + 1;
-			outFrames = 1 + ((samples.size() - kFrameLength) / kHop);
-			std::vector<float> output(nMels * outFrames, 0.0f);
-			std::vector<float> window(kFrameLength, 0.0f);
-			for (std::size_t i = 0; i < kFrameLength; ++i) {
-				window[i] = PoveyWindow(i, kFrameLength);
+			knf::FbankOptions options;
+			options.frame_opts.samp_freq = static_cast<float>(sampleRate == 0 ? 16000U : sampleRate);
+			options.frame_opts.frame_length_ms = 25.0f;
+			options.frame_opts.frame_shift_ms = 10.0f;
+			options.frame_opts.dither = 0.0f;
+			options.frame_opts.preemph_coeff = 0.97f;
+			options.frame_opts.remove_dc_offset = true;
+			options.frame_opts.window_type = "povey";
+			options.frame_opts.round_to_power_of_two = true;
+			options.frame_opts.snip_edges = true;
+			options.mel_opts.num_bins = static_cast<int32_t>(nMels);
+			options.mel_opts.low_freq = 0.0f;
+			options.mel_opts.high_freq = -400.0f;
+			options.use_energy = false;
+			options.use_log_fbank = true;
+			options.use_power = true;
+
+			std::vector<float> scaledSamples(samples.size(), 0.0f);
+			std::transform(
+				samples.begin(),
+				samples.end(),
+				scaledSamples.begin(),
+				[](float sample) {
+					return sample * 32768.0f;
+				});
+
+			knf::OnlineFbank fbank(options);
+			fbank.AcceptWaveform(options.frame_opts.samp_freq, scaledSamples.data(), static_cast<int32_t>(scaledSamples.size()));
+			if (inputFinished) {
+				fbank.InputFinished();
 			}
 
-			std::vector<float> spectrum(nBins, 0.0f);
-			std::vector<float> frameBuffer(kNfft, 0.0f);
+			outFrames = static_cast<std::size_t>((std::max)(0, fbank.NumFramesReady()));
+			std::vector<float> output(nMels * outFrames, 0.0f);
 			for (std::size_t frame = 0; frame < outFrames; ++frame) {
-				const std::size_t base = frame * kHop;
-				frameBuffer.assign(kNfft, 0.0f);
-				double mean = 0.0;
-				for (std::size_t n = 0; n < kFrameLength; ++n) {
-					mean += static_cast<double>(samples[base + n]);
-				}
-				mean /= static_cast<double>(kFrameLength);
-
-				float previous = 0.0f;
-				for (std::size_t n = 0; n < kFrameLength; ++n) {
-					const float current = static_cast<float>(static_cast<double>(samples[base + n]) - mean);
-					const float emphasized = n == 0
-						? current
-						: current - (0.97f * previous);
-					frameBuffer[n] = emphasized * window[n];
-					previous = current;
-				}
-
-				for (std::size_t k = 0; k < nBins; ++k) {
-					double real = 0.0;
-					double imag = 0.0;
-					for (std::size_t n = 0; n < kNfft; ++n) {
-						const double x = static_cast<double>(frameBuffer[n]);
-						const double angle = (2.0 * 3.14159265358979323846 * static_cast<double>(k * n)) /
-							static_cast<double>(kNfft);
-						real += x * std::cos(angle);
-						imag -= x * std::sin(angle);
-					}
-					spectrum[k] = static_cast<float>(real * real + imag * imag);
-				}
-
-				for (std::size_t m = 0; m < nMels; ++m) {
-					double melEnergy = 0.0;
-					for (std::size_t b = 0; b < nBins; ++b) {
-						melEnergy += static_cast<double>(filters[m * nBins + b]) *
-							static_cast<double>(spectrum[b]);
-					}
-					output[frame * nMels + m] = static_cast<float>(std::log((std::max)(1e-10, melEnergy)));
-				}
+				const float* data = fbank.GetFrame(static_cast<int32_t>(frame));
+				std::copy(data, data + static_cast<std::ptrdiff_t>(nMels), output.begin() + static_cast<std::ptrdiff_t>(frame * nMels));
 			}
 
 			return output;
@@ -1314,19 +1221,20 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			std::size_t featureFrames = 0;
 			std::size_t consumedFeatureFrames = 0;
-			const auto logMel = BuildLogMel(
+			const bool forceFlushFeatures = !isLivePcmStream &&
+				streamingInput.source.sequenceEnd > 0 &&
+				nextSequence + static_cast<std::uint64_t>(requestSamples) >= streamingInput.source.sequenceEnd;
+			const auto logMel = BuildOnlineFbank(
 				streamState.pendingSamples,
 				sampleRate,
 				80,
+				forceFlushFeatures,
 				featureFrames);
 			if (streamState.chunkCount % 10 == 1) {
 				TRACE(L"[SherpaStreaming] pendingSamples=%llu featureFrames=%llu\n",
 					(unsigned long long)streamState.pendingSamples.size(), (unsigned long long)featureFrames);
 			}
 
-			const bool forceFlushFeatures = !isLivePcmStream &&
-				streamingInput.source.sequenceEnd > 0 &&
-				nextSequence + static_cast<std::uint64_t>(requestSamples) >= streamingInput.source.sequenceEnd;
 			if (!logMel.empty() &&
 				featureFrames > 0 &&
 				(featureFrames >= kMinSherpaFeatureFrames || forceFlushFeatures)) {
