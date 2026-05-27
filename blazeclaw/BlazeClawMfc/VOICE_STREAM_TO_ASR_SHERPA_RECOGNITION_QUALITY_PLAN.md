@@ -214,6 +214,12 @@ Outcome:
 - New online fbank frames are buffered as feature frames until the encoder path
   consumes them; no code now maps consumed feature frames back to
   `featureFrames * 160` retained waveform samples.
+- Step 4 of the no-output root-cause plan now enforces deterministic encoder
+  chunk assembly: fixed encoder time dimensions from ONNX metadata are treated
+  as required chunk sizes, streaming inference waits for full chunks, pending
+  full chunks are drained before more audio is read, and final finite input pads
+  only one remaining partial chunk while preserving the real frame count in the
+  feature-length tensor.
 - Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
   samples are treated as normalized floats and scaled by `32768` before
   `OnlineFbank::AcceptWaveform(...)`.

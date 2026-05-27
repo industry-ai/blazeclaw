@@ -1602,37 +1602,49 @@ namespace blazeclaw::core::speechrecognition::engines {
 					newLogMel.end());
 				streamState.pendingFeatureFrameCount += newFeatureFrames;
 			}
-			const std::size_t featureFrames = streamState.pendingFeatureFrameCount;
-			const auto& logMel = streamState.pendingFeatureFrames;
 			if (streamState.chunkCount % 10 == 1) {
 				TRACE(L"[SherpaStreaming] onlineFbankNewFrames=%llu pendingFeatureFrames=%llu finalFlush=%d\n",
 					(unsigned long long)newFeatureFrames,
-					(unsigned long long)featureFrames,
+					(unsigned long long)streamState.pendingFeatureFrameCount,
 					forceFlushFeatures ? 1 : 0);
 			}
 
-			if (!logMel.empty() &&
-				featureFrames > 0 &&
-				(featureFrames >= kMinSherpaFeatureFrames || forceFlushFeatures)) {
+			bool processMorePendingFeatureChunks = true;
+			while (processMorePendingFeatureChunks) {
+				processMorePendingFeatureChunks = false;
+				consumedFeatureFrames = 0;
+				const std::size_t featureFrames = streamState.pendingFeatureFrameCount;
+				const auto& logMel = streamState.pendingFeatureFrames;
+				if (logMel.empty() || featureFrames == 0) {
+					break;
+				}
 #if BLAZECLAW_HAS_ONNXRUNTIME
 				try {
-					std::size_t frameLimit = featureFrames;
+					std::size_t fixedEncoderChunkFrames = 0;
 					for (const auto& binding : m_encoderInputBindings) {
 						if (binding.kind == TensorBindingKind::Features &&
 							binding.shape.size() >= 2 &&
 							binding.shape[1] > 0) {
-							frameLimit = static_cast<std::size_t>(binding.shape[1]);
+							fixedEncoderChunkFrames = static_cast<std::size_t>(binding.shape[1]);
 							break;
 						}
 					}
 
-					if (frameLimit == 0) {
-						frameLimit = featureFrames;
+					const bool hasFixedEncoderChunk = fixedEncoderChunkFrames > 0;
+					const bool hasFullFixedChunk = hasFixedEncoderChunk && featureFrames >= fixedEncoderChunkFrames;
+					const bool hasEnoughDynamicFrames = !hasFixedEncoderChunk &&
+						(featureFrames >= kMinSherpaFeatureFrames || forceFlushFeatures);
+					const bool hasFinalPartialChunk = forceFlushFeatures && featureFrames > 0;
+					const bool shouldRunEncoder = hasFixedEncoderChunk
+						? (hasFullFixedChunk || hasFinalPartialChunk)
+						: hasEnoughDynamicFrames;
+					if (!shouldRunEncoder) {
+						break;
 					}
 
 					std::size_t effectiveFrames = featureFrames;
-					if (frameLimit > 0) {
-						effectiveFrames = frameLimit;
+					if (hasFixedEncoderChunk) {
+						effectiveFrames = fixedEncoderChunkFrames;
 					}
 					if (effectiveFrames == 0) {
 						break;
@@ -1643,9 +1655,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 					const std::size_t copiedFrames = (std::min)(featureFrames, effectiveFrames);
 					if (copiedFrames > 0) {
 						const std::size_t sourceOffset = 0;
-						const std::size_t destOffset = copiedFrames < effectiveFrames
-							? (effectiveFrames - copiedFrames) * frameStride
-							: 0;
+						const std::size_t destOffset = 0;
 						std::copy(
 							logMel.begin() + static_cast<std::ptrdiff_t>(sourceOffset),
 							logMel.begin() + static_cast<std::ptrdiff_t>(sourceOffset + (copiedFrames * frameStride)),
@@ -2279,6 +2289,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 						streamState.pendingFeatureFrames.begin(),
 						streamState.pendingFeatureFrames.begin() + static_cast<std::ptrdiff_t>(consumedFeatureElements));
 					streamState.pendingFeatureFrameCount -= consumedFeatureFrames;
+					processMorePendingFeatureChunks = true;
 				}
 			}
 

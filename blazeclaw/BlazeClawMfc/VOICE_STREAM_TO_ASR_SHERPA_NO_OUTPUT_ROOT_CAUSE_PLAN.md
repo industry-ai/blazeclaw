@@ -229,6 +229,22 @@ online frontend for the same waveform.
 
 ### Step 4: Enforce exact encoder chunk assembly
 
+Status: implemented
+
+Implementation notes:
+
+- The encoder feature input metadata now determines whether the model has a
+  fixed chunk size, for example `[1,39,80]`.
+- For fixed-size encoders, normal streaming waits until at least one full chunk
+  is available before invoking the encoder.
+- The runtime drains all available full fixed chunks from the pending feature
+  buffer before reading additional audio.
+- On final finite input, exactly one remaining partial chunk may be padded.
+- Feature frames are copied in deterministic left-to-right order and padded on
+  the right for final partial chunks.
+- The feature-length tensor continues to carry the real copied-frame count, so
+  padded frames are not advertised as real input.
+
 Use the encoder input metadata and Sherpa model config to define chunk behavior.
 
 Implementation direction:

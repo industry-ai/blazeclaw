@@ -210,6 +210,11 @@ Latest runtime telemetry root cause:
 	`InputFinished()` once for finite input, and consumes pending feature frames
 	directly instead of translating processed frames back into retained sample
 	counts.
+21. Step 4 of the no-output root-cause plan is now implemented: encoder feature
+	metadata drives chunk assembly. Fixed encoder time dimensions are treated as
+	required chunk sizes for normal streaming, pending full chunks are drained in
+	order, and final finite input pads only the remaining partial chunk while the
+	feature-length tensor reports the real frame count.
 
 ## FunASR references to follow
 
