@@ -303,12 +303,14 @@ Exit criteria:
 
 ## Phase 4: Implement standard RNN-T greedy search inner loop
 
-Status: planned
+Status: completed
 
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.h`
+- `src/core/runtime/SpeechRecognition/SpeechRecognitionContracts.h`
+- `src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
 
 Plan:
 
@@ -330,6 +332,33 @@ Plan:
 4. Validate that decoder state/context updates happen only after non-blank token
    emission.
 
+Outcome:
+
+- Replaced the active one-token-per-frame joiner path with a bounded RNN-T greedy
+  inner loop.
+- Each encoder frame now runs joiner repeatedly until:
+  - blank is emitted,
+  - `<sos/eos>` is emitted,
+  - `max_symbols_per_frame` is reached,
+  - the utterance token cap is reached,
+  - or the joiner output is unusable.
+- Non-blank tokens are appended before decoder context is updated, and the
+  decoder is rerun before retrying the same encoder frame.
+- Blank and `<sos/eos>` advance to the next encoder frame without mutating the
+  decoder context.
+- Added guardrails:
+  - `max_symbols_per_frame = 8`,
+  - max total emitted tokens per utterance = 512,
+  - repeated-token counter,
+  - multi-symbol-frame counter,
+  - max-symbol-hit counter.
+- Added debug telemetry in `gateway.speech.debug.snapshot`:
+  - `sherpaRnntInnerLoopCount`,
+  - `sherpaRnntMaxSymbolsHitCount`,
+  - `sherpaRnntRepeatedTokenCount`,
+  - `sherpaRnntMultiSymbolFrameCount`,
+  - `sherpaRnntMaxSymbolsPerFrame`.
+
 Exit criteria:
 
 - Multiple symbols can be emitted from one encoder frame when the model requires
@@ -338,6 +367,7 @@ Exit criteria:
   one-token-per-frame behavior.
 - Token sequences are closer to Sherpa/FunASR reference output on the baseline
   clip.
+- Build validation passes with the RNN-T inner loop enabled.
 
 ## Phase 5: Decode token IDs with BPE/SentencePiece instead of direct piece concatenation
 

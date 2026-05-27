@@ -20,6 +20,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
 		constexpr std::size_t kSherpaFeatureHopSamples = 160;
+		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
+		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
 
 		bool IsFiniteSample(float value) {
 			return std::isfinite(value) != 0;
@@ -1736,8 +1738,15 @@ namespace blazeclaw::core::speechrecognition::engines {
 										std::vector<float> decoderVector;
 										if (updateDecoderFromContext(decoderVector)) {
 											for (std::size_t frameIdx = 0; frameIdx < encoderFrames; ++frameIdx) {
+												if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
+													break;
+												}
 												const float* framePtr = encoderData + (frameIdx * encoderDim);
 												std::vector<float> encoderFrame(framePtr, framePtr + encoderDim);
+												std::size_t symbolsThisFrame = 0;
+												bool advanceFrame = false;
+												while (!advanceFrame && symbolsThisFrame < kSherpaMaxSymbolsPerFrame) {
+													++streamState.rnntInnerLoopCount;
 
 												std::vector<Ort::Value> joinerInputs;
 												std::vector<const char*> joinerInputNames;
@@ -1842,7 +1851,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 													joinerOutputNames.data(),
 													joinerOutputNames.size());
 
-											if (joinerOutputs.empty()) {
+													if (joinerOutputs.empty()) {
+														advanceFrame = true;
 													continue;
 												}
 
@@ -1874,19 +1884,22 @@ namespace blazeclaw::core::speechrecognition::engines {
 													 bestLastDim = lastDim;
 												 }
 											 }
-											 if (bestIndex == static_cast<std::size_t>(-1)) {
+														 if (bestIndex == static_cast<std::size_t>(-1)) {
+															 advanceFrame = true;
 												 continue;
 											 }
 											 joinerMainIndex = bestIndex;
 										 }
 
 										 auto& joinerMain = joinerOutputs[joinerMainIndex];
-												if (!joinerMain.IsTensor()) {
+															if (!joinerMain.IsTensor()) {
+																advanceFrame = true;
 													continue;
 												}
 
 												auto joinerInfo = joinerMain.GetTensorTypeAndShapeInfo();
 												if (joinerInfo.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+																advanceFrame = true;
 													continue;
 												}
 
@@ -1896,7 +1909,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 													: std::size_t{ 1 };
 												const auto joinerShape = joinerInfo.GetShape();
 												const float* logits = joinerMain.GetTensorData<float>();
-												if (logits == nullptr || logitsCount == 0) {
+															if (logits == nullptr || logitsCount == 0) {
+																advanceFrame = true;
 													continue;
 												}
 
@@ -1912,7 +1926,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 												const auto bestIt = std::max_element(
 													logits + logitsOffset,
 													logits + logitsOffset + vocabSize);
-												if (bestIt == logits + logitsOffset + vocabSize) {
+															if (bestIt == logits + logitsOffset + vocabSize) {
+																advanceFrame = true;
 													continue;
 												}
 
@@ -1940,12 +1955,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 													if (tokenId == m_blankId) {
 														++streamState.blankTokenCount;
 													}
+													advanceFrame = true;
 													continue;
 												}
 
+												if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
+													++streamState.rnntRepeatedTokenCount;
+												}
 												streamState.emittedTokenIds.push_back(tokenId);
 										streamState.baselineTokenIds.push_back(tokenId);
 												++streamState.decodedTokenCount;
+												++symbolsThisFrame;
 												streamState.decoderContext.push_back(tokenId);
 												const std::size_t contextSize = (std::max)(std::size_t{ 1 }, m_decoderContextSize);
 												if (streamState.decoderContext.size() > contextSize) {
@@ -1954,7 +1974,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 														streamState.decoderContext.end() - static_cast<std::ptrdiff_t>(contextSize));
 												}
 
-												updateDecoderFromContext(decoderVector);
+												if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
+													advanceFrame = true;
+												}
+												else {
+													updateDecoderFromContext(decoderVector);
+												}
+											}
+											if (symbolsThisFrame > 1) {
+												++streamState.rnntMultiSymbolFrameCount;
+											}
+											if (!advanceFrame && symbolsThisFrame >= kSherpaMaxSymbolsPerFrame) {
+												++streamState.rnntMaxSymbolsHitCount;
 											}
 										}
 									}
@@ -1962,6 +1993,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 							}
 						}
 					}
+				}
 				}
 				catch (const std::exception& ex) {
 					inferenceFailed = true;
@@ -2099,6 +2131,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaEncoderStateCacheUpdateCount = streamState.encoderStateCacheUpdateCount,
 			.sherpaEncoderLengthOutputCount = streamState.encoderLengthOutputCount,
 			.sherpaEncoderLengthOutputUsed = streamState.encoderLengthOutputUsed,
+			.sherpaRnntInnerLoopCount = streamState.rnntInnerLoopCount,
+			.sherpaRnntMaxSymbolsHitCount = streamState.rnntMaxSymbolsHitCount,
+			.sherpaRnntRepeatedTokenCount = streamState.rnntRepeatedTokenCount,
+			.sherpaRnntMultiSymbolFrameCount = streamState.rnntMultiSymbolFrameCount,
+			.sherpaRnntMaxSymbolsPerFrame = kSherpaMaxSymbolsPerFrame,
 			.sherpaBaselineSampleRate = sampleRate,
 			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
 			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,

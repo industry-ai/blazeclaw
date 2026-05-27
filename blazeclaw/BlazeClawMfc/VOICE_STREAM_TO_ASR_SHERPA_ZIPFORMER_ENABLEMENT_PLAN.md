@@ -118,8 +118,8 @@ Latest runtime telemetry root cause:
 	 recognition-quality Phase 3 update added model-order tensor metadata and
 	 deterministic state input/output cache mapping,
    - greedy search emits at most one non-blank token per encoder frame instead
-	 of the standard RNN-T inner loop that can emit multiple labels per frame
-	 until blank or a max-symbol limit,
+	 of the standard RNN-T inner loop until the recognition-quality Phase 4
+	 update added bounded multi-symbol-per-frame greedy search,
    - token reconstruction concatenates `tokens.txt` pieces directly and does
 	 not decode with the model's `bpe.model` SentencePiece/BPE decoder.
    These issues explain a plausible-but-wrong sequence like
@@ -147,8 +147,14 @@ Latest runtime telemetry root cause:
 	output names, and refreshes cache tensors only from compatible mapped outputs.
 	Length-like encoder outputs are treated as authoritative valid-frame metadata
 	so padded encoder frames are not decoded when the model exposes a length
-	output. Remaining quality risks are now concentrated in RNN-T inner-loop
-	search and BPE/SentencePiece text decoding.
+	output.
+13. Recognition-quality Phase 4 is now implemented: joiner decoding uses a
+	standard bounded RNN-T greedy inner loop. A non-blank token updates decoder
+	context and retries the same encoder frame; blank or `<sos/eos>` advances to
+	the next frame. Guardrails cap each frame at 8 emitted symbols and each
+	utterance at 512 emitted tokens, with telemetry for inner-loop count,
+	max-symbol hits, repeated tokens, and multi-symbol frames. Remaining quality
+	risk is now concentrated in BPE/SentencePiece text decoding.
 
 ## FunASR references to follow
 
