@@ -114,8 +114,9 @@ Latest runtime telemetry root cause:
 	  - frontend parity was approximate until the recognition-quality Phase 2
 	 update replaced the active Sherpa path with `knf::OnlineFbank` from the
 	 local FunASR `kaldi-native-fbank` reference,
-   - ONNX streaming cache/state binding is heuristic rather than generated from
-	 the model's exact Sherpa metadata contract,
+	  - ONNX streaming cache/state binding was heuristic until the
+	 recognition-quality Phase 3 update added model-order tensor metadata and
+	 deterministic state input/output cache mapping,
    - greedy search emits at most one non-blank token per encoder frame instead
 	 of the standard RNN-T inner loop that can emit multiple labels per frame
 	 until blank or a max-symbol limit,
@@ -139,9 +140,15 @@ Latest runtime telemetry root cause:
 	hand-written FFT/mel frontend. The active frontend now uses 25 ms frames,
 	10 ms shift, Povey window, 0.97 preemphasis, DC removal, padded FFT,
 	`snip_edges=true`, log-power fbank, and the FunASR-observed `sample * 32768`
-	scaling convention before `AcceptWaveform(...)`. Remaining quality risks are
-	now concentrated in exact ONNX cache/state binding, RNN-T inner-loop search,
-	and BPE/SentencePiece text decoding.
+	scaling convention before `AcceptWaveform(...)`.
+12. Recognition-quality Phase 3 is now implemented: the Sherpa engine records
+	exact ONNX input/output metadata, classifies encoder feature/length/state
+	tensors, builds a deterministic state-cache mapping by normalized input and
+	output names, and refreshes cache tensors only from compatible mapped outputs.
+	Length-like encoder outputs are treated as authoritative valid-frame metadata
+	so padded encoder frames are not decoded when the model exposes a length
+	output. Remaining quality risks are now concentrated in RNN-T inner-loop
+	search and BPE/SentencePiece text decoding.
 
 ## FunASR references to follow
 

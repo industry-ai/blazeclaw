@@ -165,12 +165,106 @@ namespace blazeclaw::core::speechrecognition::engines {
 			case SherpaZipformerStreamingEngine::TensorBindingKind::Features: return L"features";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::FeatureLengths: return L"feature_lengths";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOut: return L"encoder_out";
+			case SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOutLengths: return L"encoder_out_lengths";
+			case SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState: return L"encoder_state";
+			case SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths: return L"processed_lengths";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::DecoderInputTokens: return L"decoder_input_tokens";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::DecoderOut: return L"decoder_out";
+			case SherpaZipformerStreamingEngine::TensorBindingKind::JoinerLogits: return L"joiner_logits";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::UnknownInt64: return L"unknown_int64";
 			case SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat: return L"unknown_float";
 			default: return L"unknown";
 			}
+		}
+
+		bool ShapeHasDynamicDimension(const std::vector<std::int64_t>& shape) {
+			return std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) {
+				return dim <= 0;
+			});
+		}
+
+		bool IsLengthLikeName(const std::string& loweredName) {
+			return loweredName.find("x_lens") != std::string::npos ||
+				loweredName.find("processed_lens") != std::string::npos ||
+				loweredName.find("length") != std::string::npos ||
+				loweredName.find("lens") != std::string::npos;
+		}
+
+		bool IsStateLikeName(const std::string& loweredName) {
+			return loweredName.find("cached") != std::string::npos ||
+				loweredName.find("cache") != std::string::npos ||
+				loweredName.find("processed_lens") != std::string::npos;
+		}
+
+		SherpaZipformerStreamingEngine::TensorBindingKind ClassifyInputBindingKind(
+			const std::string& name,
+			bool isEncoder,
+			bool isJoiner,
+			ONNXTensorElementDataType elementType) {
+			const auto lowered = ToLowerCopy(name);
+			if (isEncoder) {
+				if (lowered.find("processed_lens") != std::string::npos) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths;
+				}
+				if (IsStateLikeName(lowered)) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState;
+				}
+				if (IsLengthLikeName(lowered)) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::FeatureLengths;
+				}
+				if (lowered == "x" ||
+					lowered.find("speech") != std::string::npos ||
+					lowered.find("feat") != std::string::npos ||
+					lowered.find("input") != std::string::npos) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::Features;
+				}
+			}
+
+			if (!isEncoder && !isJoiner &&
+				(lowered == "y" || lowered.find("token") != std::string::npos || lowered.find("decoder_input") != std::string::npos)) {
+				return SherpaZipformerStreamingEngine::TensorBindingKind::DecoderInputTokens;
+			}
+			if (lowered.find("encoder_out") != std::string::npos || lowered.find("encoder") != std::string::npos) {
+				return SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOut;
+			}
+			if (lowered.find("decoder_out") != std::string::npos || lowered.find("decoder") != std::string::npos) {
+				return SherpaZipformerStreamingEngine::TensorBindingKind::DecoderOut;
+			}
+
+			return elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64
+				? SherpaZipformerStreamingEngine::TensorBindingKind::UnknownInt64
+				: SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat;
+		}
+
+		SherpaZipformerStreamingEngine::TensorBindingKind ClassifyOutputBindingKind(
+			const std::string& name,
+			bool isEncoder,
+			bool isJoiner,
+			ONNXTensorElementDataType elementType) {
+			const auto lowered = ToLowerCopy(name);
+			if (isEncoder) {
+				if (lowered.find("processed_lens") != std::string::npos) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths;
+				}
+				if (IsLengthLikeName(lowered)) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOutLengths;
+				}
+				if (IsStateLikeName(lowered)) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState;
+				}
+				if (elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+					return SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOut;
+				}
+			}
+			if (isJoiner && (lowered.find("logit") != std::string::npos || lowered.find("out") != std::string::npos)) {
+				return SherpaZipformerStreamingEngine::TensorBindingKind::JoinerLogits;
+			}
+			if (!isEncoder && !isJoiner && elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+				return SherpaZipformerStreamingEngine::TensorBindingKind::DecoderOut;
+			}
+			return elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64
+				? SherpaZipformerStreamingEngine::TensorBindingKind::UnknownInt64
+				: SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat;
 		}
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
@@ -179,7 +273,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool isEncoder,
 			bool isJoiner,
 			std::size_t& outLikelyMainOutputIndex,
-			std::vector<std::string>& outOutputNames) {
+			std::vector<std::string>& outOutputNames,
+			std::vector<SherpaZipformerStreamingEngine::TensorBinding>* outOutputBindings = nullptr) {
 			Ort::AllocatorWithDefaultOptions allocator;
 			const auto inputCount = session.GetInputCount();
 			std::vector<SherpaZipformerStreamingEngine::TensorBinding> bindings;
@@ -191,39 +286,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 				auto inputNameAlloc = session.GetInputNameAllocated(i, allocator);
 				SherpaZipformerStreamingEngine::TensorBinding binding;
 				binding.name = inputNameAlloc.get();
+				binding.ordinal = i;
 				binding.normalizedStateName = NormalizeEncoderStateName(binding.name);
 				auto tensorInfo = session.GetInputTypeInfo(i).GetTensorTypeAndShapeInfo();
 				binding.shape = tensorInfo.GetShape();
 				binding.elementType = tensorInfo.GetElementType();
+				binding.hasDynamicShape = ShapeHasDynamicDimension(binding.shape);
 				const auto lowered = ToLowerCopy(binding.name);
-				const bool looksLikeEncoderCache =
-					lowered.find("cached") != std::string::npos ||
-					lowered.find("cache") != std::string::npos ||
-					lowered.find("processed_lens") != std::string::npos;
-				if (isEncoder) {
-					if (!looksLikeEncoderCache &&
-						(lowered.find("x_lens") != std::string::npos ||
-						lowered.find("lens") != std::string::npos ||
-						lowered.find("length") != std::string::npos)) {
-						binding.kind = SherpaZipformerStreamingEngine::TensorBindingKind::FeatureLengths;
-					}
-					else if (!looksLikeEncoderCache &&
-						(lowered == "x" ||
-						lowered.find("speech") != std::string::npos ||
-						lowered.find("feat") != std::string::npos ||
-						lowered.find("input") != std::string::npos)) {
-						binding.kind = SherpaZipformerStreamingEngine::TensorBindingKind::Features;
-					}
-				}
-				else if (lowered == "y" || lowered.find("token") != std::string::npos) {
-					binding.kind = SherpaZipformerStreamingEngine::TensorBindingKind::DecoderInputTokens;
-				}
-				else if (lowered.find("encoder") != std::string::npos) {
-					binding.kind = SherpaZipformerStreamingEngine::TensorBindingKind::EncoderOut;
-				}
-				else if (lowered.find("decoder") != std::string::npos) {
-					binding.kind = SherpaZipformerStreamingEngine::TensorBindingKind::DecoderOut;
-				}
+				binding.isLengthLike = IsLengthLikeName(lowered);
+				binding.kind = ClassifyInputBindingKind(binding.name, isEncoder, isJoiner, binding.elementType);
+				binding.isStateTensor =
+					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState ||
+					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths;
 
 				if (binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::UnknownFloat ||
 					binding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::UnknownInt64) {
@@ -243,18 +317,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 			const auto outputCount = session.GetOutputCount();
 			outOutputNames.clear();
 			outOutputNames.reserve(outputCount);
+			if (outOutputBindings != nullptr) {
+				outOutputBindings->clear();
+				outOutputBindings->reserve(outputCount);
+			}
 			outLikelyMainOutputIndex = 0;
 			int bestMainScore = (std::numeric_limits<int>::min)();
 			for (std::size_t i = 0; i < outputCount; ++i) {
 				auto outputNameAlloc = session.GetOutputNameAllocated(i, allocator);
 				outOutputNames.push_back(outputNameAlloc.get());
+				SherpaZipformerStreamingEngine::TensorBinding outputBinding;
+				outputBinding.name = outOutputNames.back();
+				outputBinding.ordinal = i;
+				outputBinding.normalizedStateName = NormalizeEncoderStateName(outputBinding.name);
 
 				int score = 0;
 				const std::string lowered = ToLowerCopy(outOutputNames.back());
-				const bool isLens =
-					lowered.find("_lens") != std::string::npos ||
-					lowered.find("length") != std::string::npos ||
-					lowered.find("lens") != std::string::npos;
+				const bool isLens = IsLengthLikeName(lowered);
 				if (isLens) {
 					score -= 30;
 				}
@@ -262,6 +341,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 				try {
 					auto outInfo = session.GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo();
 					const auto outType = outInfo.GetElementType();
+					outputBinding.shape = outInfo.GetShape();
+					outputBinding.elementType = outType;
+					outputBinding.hasDynamicShape = ShapeHasDynamicDimension(outputBinding.shape);
+					outputBinding.isLengthLike = isLens;
+					outputBinding.kind = ClassifyOutputBindingKind(outputBinding.name, isEncoder, isJoiner, outType);
+					outputBinding.isStateTensor =
+						outputBinding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::EncoderState ||
+						outputBinding.kind == SherpaZipformerStreamingEngine::TensorBindingKind::ProcessedLengths;
 					if (outType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
 						score += 20;
 					}
@@ -271,6 +358,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 				}
 				catch (...) {
 					// Keep heuristic-name based score only.
+				}
+				if (outOutputBindings != nullptr) {
+					outOutputBindings->push_back(std::move(outputBinding));
 				}
 
 				if (isJoiner) {
@@ -340,6 +430,53 @@ namespace blazeclaw::core::speechrecognition::engines {
 					i == mainOutputIndex ? L" main" : L"");
 			}
 		}
+
+		std::vector<SherpaZipformerStreamingEngine::EncoderStateCacheBinding> BuildEncoderStateCacheBindings(
+			const std::vector<SherpaZipformerStreamingEngine::TensorBinding>& inputBindings,
+			const std::vector<SherpaZipformerStreamingEngine::TensorBinding>& outputBindings) {
+			std::vector<SherpaZipformerStreamingEngine::EncoderStateCacheBinding> mappings;
+			for (std::size_t inputIndex = 0; inputIndex < inputBindings.size(); ++inputIndex) {
+				const auto& input = inputBindings[inputIndex];
+				if (!input.isStateTensor) {
+					continue;
+				}
+				for (std::size_t outputIndex = 0; outputIndex < outputBindings.size(); ++outputIndex) {
+					const auto& output = outputBindings[outputIndex];
+					if (!output.isStateTensor || output.normalizedStateName != input.normalizedStateName) {
+						continue;
+					}
+					if (output.elementType != input.elementType) {
+						continue;
+					}
+					SherpaZipformerStreamingEngine::EncoderStateCacheBinding mapping;
+					mapping.inputBindingIndex = inputIndex;
+					mapping.outputBindingIndex = outputIndex;
+					mapping.cacheIndex = input.bufferIndex;
+					mapping.normalizedStateName = input.normalizedStateName;
+					mapping.isInt64 = input.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
+					mappings.push_back(std::move(mapping));
+					break;
+				}
+			}
+			return mappings;
+		}
+
+		void TraceEncoderStateCacheBindings(
+			const std::vector<SherpaZipformerStreamingEngine::TensorBinding>& inputBindings,
+			const std::vector<SherpaZipformerStreamingEngine::TensorBinding>& outputBindings,
+			const std::vector<SherpaZipformerStreamingEngine::EncoderStateCacheBinding>& mappings) {
+			TRACE(L"[SherpaStreaming][CacheMap] mappingCount=%llu\n", static_cast<unsigned long long>(mappings.size()));
+			for (const auto& mapping : mappings) {
+				const auto& input = inputBindings[mapping.inputBindingIndex];
+				const auto& output = outputBindings[mapping.outputBindingIndex];
+				TRACE(L"[SherpaStreaming][CacheMap] input=%s output=%s normalized=%s cacheIndex=%llu type=%s\n",
+					ToWideString(input.name).c_str(),
+					ToWideString(output.name).c_str(),
+					ToWideString(mapping.normalizedStateName).c_str(),
+					static_cast<unsigned long long>(mapping.cacheIndex),
+					mapping.isInt64 ? L"int64" : L"float");
+			}
+		}
 #endif
 
 	} // namespace
@@ -355,6 +492,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 		m_blankId = 0;
 		m_eosId = 1;
 		m_unkId = 2;
+		m_encoderInputBindings.clear();
+		m_encoderOutputBindings.clear();
+		m_encoderStateCacheBindings.clear();
+		m_encoderOutputNames.clear();
+		m_decoderInputBindings.clear();
+		m_decoderOutputNames.clear();
+		m_joinerInputBindings.clear();
+		m_joinerOutputNames.clear();
 
 		if (layout.kind != SpeechModelLayoutKind::SherpaZipformerTransducer) {
 			outError = "sherpa layout not detected";
@@ -449,7 +594,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 				true,
 				false,
 				m_encoderMainOutputIndex,
-				m_encoderOutputNames);
+				m_encoderOutputNames,
+				&m_encoderOutputBindings);
 			m_decoderInputBindings = BuildTensorBindings(
 				*m_decoderSession,
 				false,
@@ -468,6 +614,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 				m_encoderInputBindings,
 				m_encoderOutputNames,
 				m_encoderMainOutputIndex);
+			m_encoderStateCacheBindings = BuildEncoderStateCacheBindings(
+				m_encoderInputBindings,
+				m_encoderOutputBindings);
+			TraceEncoderStateCacheBindings(
+				m_encoderInputBindings,
+				m_encoderOutputBindings,
+				m_encoderStateCacheBindings);
 			TraceTensorBindings(
 				L"decoder",
 				m_decoderInputBindings,
@@ -1285,18 +1438,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 					std::vector<const char*> encoderInputNames;
 					std::vector<std::vector<std::int64_t>> encoderInt64Buffers;
 					std::vector<std::vector<float>> encoderFloatBuffers;
-					std::vector<std::size_t> encoderInt64BindingIndexes;
-					std::vector<std::size_t> encoderFloatBindingIndexes;
-					std::vector<std::string> encoderInt64StateNames;
-					std::vector<std::string> encoderFloatStateNames;
 					encoderInputs.reserve(m_encoderInputBindings.size());
 					encoderInputNames.reserve(m_encoderInputBindings.size());
 					encoderInt64Buffers.reserve(m_encoderInputBindings.size());
 					encoderFloatBuffers.reserve(m_encoderInputBindings.size());
-					encoderInt64BindingIndexes.reserve(m_encoderInputBindings.size());
-					encoderFloatBindingIndexes.reserve(m_encoderInputBindings.size());
-					encoderInt64StateNames.reserve(m_encoderInputBindings.size());
-					encoderFloatStateNames.reserve(m_encoderInputBindings.size());
 
 					for (const auto& binding : m_encoderInputBindings) {
 						std::vector<std::int64_t> shape = binding.shape;
@@ -1341,7 +1486,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 								shape.data(),
 								shape.size()));
 						}
-						else {
+						else if (binding.isStateTensor) {
 							const std::size_t elements = static_cast<std::size_t>((std::max)(
 								std::int64_t{ 1 },
 								std::accumulate(
@@ -1361,8 +1506,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 									cache.assign(elements, 0);
 								}
 								encoderInt64Buffers.push_back(cache);
-								encoderInt64BindingIndexes.push_back(binding.bufferIndex);
-								encoderInt64StateNames.push_back(binding.normalizedStateName);
 								auto& stateRef = encoderInt64Buffers.back();
 								encoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
 									memoryInfo,
@@ -1380,13 +1523,42 @@ namespace blazeclaw::core::speechrecognition::engines {
 									cache.assign(elements, 0.0f);
 								}
 								encoderFloatBuffers.push_back(cache);
-								encoderFloatBindingIndexes.push_back(binding.bufferIndex);
-								encoderFloatStateNames.push_back(binding.normalizedStateName);
 								auto& stateRef = encoderFloatBuffers.back();
 								encoderInputs.push_back(Ort::Value::CreateTensor<float>(
 									memoryInfo,
 									stateRef.data(),
 									stateRef.size(),
+									shape.data(),
+									shape.size()));
+							}
+						}
+						else {
+							const std::size_t elements = static_cast<std::size_t>((std::max)(
+								std::int64_t{ 1 },
+								std::accumulate(
+									shape.begin(),
+									shape.end(),
+									std::int64_t{ 1 },
+									[](std::int64_t a, std::int64_t b) {
+										return a * ((std::max)(std::int64_t{ 1 }, b));
+									})));
+							if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+								encoderInt64Buffers.emplace_back(elements, 0);
+								auto& zeros = encoderInt64Buffers.back();
+								encoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
+									memoryInfo,
+									zeros.data(),
+									zeros.size(),
+									shape.data(),
+									shape.size()));
+							}
+							else {
+								encoderFloatBuffers.emplace_back(elements, 0.0f);
+								auto& zeros = encoderFloatBuffers.back();
+								encoderInputs.push_back(Ort::Value::CreateTensor<float>(
+									memoryInfo,
+									zeros.data(),
+									zeros.size(),
 									shape.data(),
 									shape.size()));
 							}
@@ -1410,19 +1582,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 					if (!encoderOutputs.empty()) {
 						std::optional<std::size_t> encoderOutputFrameLimit;
-						std::size_t nextInt64StateOutput = 0;
-						std::size_t nextFloatStateOutput = 0;
-						auto findStateIndexByName = [](const std::vector<std::string>& names, const std::string& outputName) -> std::optional<std::size_t> {
-							if (outputName.empty()) {
-								return std::nullopt;
-							}
-							for (std::size_t i = 0; i < names.size(); ++i) {
-								if (!names[i].empty() && names[i] == outputName) {
-									return i;
-								}
-							}
-							return std::nullopt;
-						};
+						bool hasModelLengthOutput = false;
 						auto isCompatibleStateShape = [](const std::vector<std::int64_t>& expectedShape, std::size_t actualElements) {
 							if (expectedShape.empty()) {
 								return actualElements > 0;
@@ -1439,19 +1599,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 							return hasDynamicDim || expectedElements == static_cast<std::uint64_t>(actualElements);
 						};
 						for (std::size_t outputIndex = 0; outputIndex < encoderOutputs.size(); ++outputIndex) {
-							if (outputIndex == m_encoderMainOutputIndex || !encoderOutputs[outputIndex].IsTensor()) {
+							if (!encoderOutputs[outputIndex].IsTensor()) {
 								continue;
 							}
 
 							auto outputInfo = encoderOutputs[outputIndex].GetTensorTypeAndShapeInfo();
 							const auto outputType = outputInfo.GetElementType();
-							const std::string normalizedOutputName = outputIndex < m_encoderOutputNames.size()
-								? NormalizeEncoderStateName(m_encoderOutputNames[outputIndex])
-								: std::string();
-							const bool looksLikeLengthOutput =
-								normalizedOutputName.find("len") != std::string::npos ||
-								normalizedOutputName.find("length") != std::string::npos ||
-								normalizedOutputName.find("processed_lens") != std::string::npos;
+							const auto* outputBinding = outputIndex < m_encoderOutputBindings.size()
+								? &m_encoderOutputBindings[outputIndex]
+								: nullptr;
+							const bool looksLikeLengthOutput = outputBinding != nullptr && outputBinding->isLengthLike;
+							if (looksLikeLengthOutput) {
+								hasModelLengthOutput = true;
+							}
 							if (outputType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
 								const auto rawElementCount = outputInfo.GetElementCount();
 								const std::size_t elements = rawElementCount > 0
@@ -1459,50 +1619,58 @@ namespace blazeclaw::core::speechrecognition::engines {
 									: std::size_t{ 0 };
 								const auto* data = encoderOutputs[outputIndex].GetTensorData<std::int64_t>();
 								if (looksLikeLengthOutput && data != nullptr && elements > 0 && data[0] > 0) {
+									++streamState.encoderLengthOutputCount;
+									streamState.encoderLengthOutputUsed = true;
 									encoderOutputFrameLimit = static_cast<std::size_t>(data[0]);
 								}
-								if (nextInt64StateOutput >= encoderInt64BindingIndexes.size()) {
-									continue;
-								}
 								if (data != nullptr && elements > 0) {
-									const auto matchedIndex = findStateIndexByName(encoderInt64StateNames, normalizedOutputName);
-									const std::size_t bindingVectorIndex = matchedIndex.value_or(nextInt64StateOutput++);
-									if (bindingVectorIndex >= encoderInt64BindingIndexes.size()) {
+									const auto mappingIt = std::find_if(
+										m_encoderStateCacheBindings.begin(),
+										m_encoderStateCacheBindings.end(),
+										[outputIndex](const EncoderStateCacheBinding& mapping) {
+											return mapping.outputBindingIndex == outputIndex && mapping.isInt64;
+										});
+									if (mappingIt == m_encoderStateCacheBindings.end()) {
 										continue;
 									}
-									const std::size_t stateIndex = encoderInt64BindingIndexes[bindingVectorIndex];
-									if (stateIndex >= m_encoderInputBindings.size() ||
-										!isCompatibleStateShape(m_encoderInputBindings[stateIndex].shape, elements)) {
+									const std::size_t stateIndex = mappingIt->cacheIndex;
+									const auto& inputBinding = m_encoderInputBindings[mappingIt->inputBindingIndex];
+									if (!isCompatibleStateShape(inputBinding.shape, elements)) {
 										continue;
 									}
 									if (streamState.encoderInt64StateCaches.size() <= stateIndex) {
 										streamState.encoderInt64StateCaches.resize(stateIndex + 1);
 									}
 									streamState.encoderInt64StateCaches[stateIndex].assign(data, data + elements);
+									++streamState.encoderStateCacheUpdateCount;
 								}
 							}
-							else if (outputType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT &&
-								nextFloatStateOutput < encoderFloatBindingIndexes.size()) {
+							else if (outputType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
 								const auto rawElementCount = outputInfo.GetElementCount();
 								const std::size_t elements = rawElementCount > 0
 									? static_cast<std::size_t>(rawElementCount)
 									: std::size_t{ 0 };
 								const auto* data = encoderOutputs[outputIndex].GetTensorData<float>();
 								if (data != nullptr && elements > 0) {
-									const auto matchedIndex = findStateIndexByName(encoderFloatStateNames, normalizedOutputName);
-									const std::size_t bindingVectorIndex = matchedIndex.value_or(nextFloatStateOutput++);
-									if (bindingVectorIndex >= encoderFloatBindingIndexes.size()) {
+									const auto mappingIt = std::find_if(
+										m_encoderStateCacheBindings.begin(),
+										m_encoderStateCacheBindings.end(),
+										[outputIndex](const EncoderStateCacheBinding& mapping) {
+											return mapping.outputBindingIndex == outputIndex && !mapping.isInt64;
+										});
+									if (mappingIt == m_encoderStateCacheBindings.end()) {
 										continue;
 									}
-									const std::size_t stateIndex = encoderFloatBindingIndexes[bindingVectorIndex];
-									if (stateIndex >= m_encoderInputBindings.size() ||
-										!isCompatibleStateShape(m_encoderInputBindings[stateIndex].shape, elements)) {
+									const std::size_t stateIndex = mappingIt->cacheIndex;
+									const auto& inputBinding = m_encoderInputBindings[mappingIt->inputBindingIndex];
+									if (!isCompatibleStateShape(inputBinding.shape, elements)) {
 										continue;
 									}
 									if (streamState.encoderFloatStateCaches.size() <= stateIndex) {
 										streamState.encoderFloatStateCaches.resize(stateIndex + 1);
 									}
 									streamState.encoderFloatStateCaches[stateIndex].assign(data, data + elements);
+									++streamState.encoderStateCacheUpdateCount;
 								}
 							}
 						}
@@ -1556,8 +1724,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 										encoderFrames = static_cast<std::size_t>((std::max)(std::int64_t{ 0 }, encoderShape[0]));
 										encoderDim = static_cast<std::size_t>((std::max)(std::int64_t{ 0 }, encoderShape[1]));
 									}
-									if (encoderOutputFrameLimit.has_value() && *encoderOutputFrameLimit < encoderFrames) {
-										encoderFrames = *encoderOutputFrameLimit;
+									if (encoderOutputFrameLimit.has_value()) {
+										encoderFrames = (std::min)(encoderFrames, *encoderOutputFrameLimit);
+									}
+									else if (hasModelLengthOutput) {
+										encoderFrames = 0;
 									}
 
 									if (encoderFrames > 0 && encoderDim > 0) {
@@ -1924,6 +2095,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaLastBestTokenId = streamState.lastBestTokenId,
 			.sherpaLastSecondBestTokenId = streamState.lastSecondBestTokenId,
 			.sherpaSpeechActive = streamState.speechActive,
+			.sherpaEncoderStateCacheBindingCount = static_cast<std::uint64_t>(m_encoderStateCacheBindings.size()),
+			.sherpaEncoderStateCacheUpdateCount = streamState.encoderStateCacheUpdateCount,
+			.sherpaEncoderLengthOutputCount = streamState.encoderLengthOutputCount,
+			.sherpaEncoderLengthOutputUsed = streamState.encoderLengthOutputUsed,
 			.sherpaBaselineSampleRate = sampleRate,
 			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
 			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,

@@ -223,13 +223,14 @@ Exit criteria:
 
 ## Phase 3: Make streaming cache/state binding model-contract driven
 
-Status: planned
+Status: completed
 
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.h`
-- optional new metadata helper under `src/core/runtime/SpeechRecognition/`
+- `src/core/runtime/SpeechRecognition/SpeechRecognitionContracts.h`
+- `src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp`
 
 Plan:
 
@@ -259,12 +260,46 @@ Plan:
 6. Treat length-like outputs as frame-validity metadata and never decode padded
    encoder frames.
 
+Outcome:
+
+- Extended Sherpa tensor metadata to retain exact model-order `ordinal`, element
+  type, shape, dynamic-shape flag, normalized state name, state/cache flag, and
+  length-like flag.
+- Built explicit encoder output bindings at model load instead of keeping only
+  output names.
+- Classified tensors into the Sherpa streaming contract categories used by the
+  current engine:
+  - feature input,
+  - feature length input,
+  - encoder output,
+  - encoder output lengths,
+  - encoder state/cache tensors,
+  - processed length/state tensors,
+  - decoder token context input,
+  - decoder output,
+  - joiner logits.
+- Added deterministic encoder cache mapping from each state input to its matching
+  state output by normalized name and element type.
+- Removed positional fallback cache refresh: encoder state caches are now updated
+  only when a mapped output tensor exists and its element count is compatible
+  with the mapped input tensor shape.
+- Made length-like encoder outputs authoritative frame-validity metadata. If a
+  model exposes a length output but no valid positive length is available, padded
+  encoder frames are not decoded.
+- Added diagnostics in both native TRACE output and
+  `gateway.speech.debug.snapshot`:
+  - `sherpaEncoderStateCacheBindingCount`,
+  - `sherpaEncoderStateCacheUpdateCount`,
+  - `sherpaEncoderLengthOutputCount`,
+  - `sherpaEncoderLengthOutputUsed`.
+
 Exit criteria:
 
 - Runtime diagnostics show a stable, explicit cache mapping.
 - No shape-incompatible cache update is attempted.
 - Encoder valid-frame count is derived from the model outputs/metadata instead
   of guessed from tensor dimensions.
+- Build validation passes with deterministic encoder cache mapping enabled.
 
 ## Phase 4: Implement standard RNN-T greedy search inner loop
 

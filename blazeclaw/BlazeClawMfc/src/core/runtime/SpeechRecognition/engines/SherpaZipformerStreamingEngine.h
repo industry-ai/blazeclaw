@@ -26,8 +26,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 			Features,
 			FeatureLengths,
 			EncoderOut,
+			EncoderOutLengths,
+			EncoderState,
+			ProcessedLengths,
 			DecoderInputTokens,
 			DecoderOut,
+			JoinerLogits,
 			UnknownInt64,
 			UnknownFloat,
 		};
@@ -37,11 +41,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::string normalizedStateName;
 			TensorBindingKind kind = TensorBindingKind::UnknownFloat;
 			std::vector<std::int64_t> shape;
+			std::size_t ordinal = 0;
+			bool hasDynamicShape = false;
+			bool isStateTensor = false;
+			bool isLengthLike = false;
 #if BLAZECLAW_HAS_ONNXRUNTIME
 			ONNXTensorElementDataType elementType =
 				ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
 #endif
 			std::size_t bufferIndex = 0;
+		};
+
+		struct EncoderStateCacheBinding {
+			std::size_t inputBindingIndex = 0;
+			std::size_t outputBindingIndex = 0;
+			std::size_t cacheIndex = 0;
+			std::string normalizedStateName;
+			bool isInt64 = false;
 		};
 
 		struct LoadedArtifacts {
@@ -66,6 +82,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint64_t encoderFrameCount = 0;
 			std::uint64_t joinerCallCount = 0;
 			std::uint64_t blankTokenCount = 0;
+			std::uint64_t encoderStateCacheUpdateCount = 0;
+			std::uint64_t encoderLengthOutputCount = 0;
+			bool encoderLengthOutputUsed = false;
 			std::int64_t lastBestTokenId = -1;
 			float lastBestTokenScore = 0.0f;
 			std::int64_t lastSecondBestTokenId = -1;
@@ -137,6 +156,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		std::unique_ptr<Ort::Session> m_decoderSession;
 		std::unique_ptr<Ort::Session> m_joinerSession;
 		std::vector<TensorBinding> m_encoderInputBindings;
+		std::vector<TensorBinding> m_encoderOutputBindings;
+		std::vector<EncoderStateCacheBinding> m_encoderStateCacheBindings;
 		std::vector<std::string> m_encoderOutputNames;
 		std::vector<TensorBinding> m_decoderInputBindings;
 		std::vector<std::string> m_decoderOutputNames;
