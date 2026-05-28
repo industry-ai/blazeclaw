@@ -261,30 +261,33 @@ namespace blazeclaw::core {
 			.prompt = request.prompt,
 		});
 
-		if (isStreamingRequest &&
-			result.sessionState.segment.has_value() &&
-			result.sessionState.segment->final) {
+		if (isStreamingRequest && result.sessionState.segment.has_value()) {
+			const auto segmentStage = result.sessionState.segment->final
+				? SpeechExecutionStage::SegmentFinalized
+				: SpeechExecutionStage::Streaming;
+			ExecutionState segmentState = BuildState(
+				accepted.executionState,
+				segmentStage,
+				&result);
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				const auto current = m_executionByRunId.find(accepted.executionState.runId);
 				if (current != m_executionByRunId.end()) {
-					current->second.stage = SpeechExecutionStage::SegmentFinalized;
-					current->second.segment = result.sessionState.segment;
-					current->second.transcriptText = result.sessionState.transcriptText.empty()
-						? result.text
-						: result.sessionState.transcriptText;
+					current->second = segmentState;
 				}
 			}
 			emitStageUpdate();
 
-			{
-				std::lock_guard<std::mutex> lock(m_mutex);
-				const auto current = m_executionByRunId.find(accepted.executionState.runId);
-				if (current != m_executionByRunId.end()) {
-					current->second.stage = SpeechExecutionStage::Stopped;
+			if (result.sessionState.segment->final) {
+				{
+					std::lock_guard<std::mutex> lock(m_mutex);
+					const auto current = m_executionByRunId.find(accepted.executionState.runId);
+					if (current != m_executionByRunId.end()) {
+						current->second.stage = SpeechExecutionStage::Stopped;
+					}
 				}
+				emitStageUpdate();
 			}
-			emitStageUpdate();
 		}
 
 		ExecutionState completedState = BuildState(

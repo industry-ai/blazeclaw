@@ -153,6 +153,11 @@ Acceptance criteria:
 - completed: WAV-file fallback and final finite-range transcription remain available after stop.
 
 ### Step 4: Emit interim segments from the coordinator
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP4_COORDINATOR_INTERIM_SEGMENTS.md`
+
 Update `SpeechTranscriptionCoordinator::Execute(...)` so streaming requests with a non-empty non-final segment update the tracked execution state and emit callbacks.
 
 Current gap:
@@ -167,10 +172,17 @@ Planned behavior:
   - emit `SpeechExecutionStage::SegmentFinalized` for `segment.final == true`
 - Preserve the existing terminal completion callback.
 
+Implemented behavior:
+- `SpeechTranscriptionCoordinator::Execute(...)` now promotes every streaming result with `result.sessionState.segment` into an execution update.
+- non-final segments emit a `SpeechExecutionStage::Streaming` callback with the segment copied into `SpeechExecutionState::segment`.
+- final segments emit `SpeechExecutionStage::SegmentFinalized`, then preserve the existing `Stopped` update and terminal completion callback behavior.
+- segment text, transcript text, audio artifact, streaming input, language, latency, and error fields flow through the existing `BuildState(...)` mapping.
+
 Acceptance criteria:
-- Every preview decode with new text can produce a lifecycle update.
-- Non-final text is distinguishable from final text.
-- Duplicate unchanged interim text can be suppressed either here or in the UI layer.
+- completed: every streaming result containing a segment can produce a coordinator execution callback.
+- completed: non-final text is distinguishable by `SpeechExecutionStage::Streaming` and `segment.final == false`.
+- completed: final text is distinguishable by `SpeechExecutionStage::SegmentFinalized` and `segment.final == true`.
+- completed: duplicate suppression is left to downstream gateway/UI logic so no valid interim callback opportunity is lost.
 
 ### Step 5: Include segment data in gateway lifecycle payloads
 Ensure lifecycle and response JSON include segment data for interim updates.
