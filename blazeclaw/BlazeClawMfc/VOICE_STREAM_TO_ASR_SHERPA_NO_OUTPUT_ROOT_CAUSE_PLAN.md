@@ -384,6 +384,24 @@ reference decoder, or any remaining delta is documented.
 
 ### Step 8: Restore non-blank regression behavior
 
+Status: implemented.
+
+Implementation notes:
+
+- `tools/compare_sherpa_baseline.py` now supports
+  `--require-step8-pass` and optional `--debug-log` input. The gate evaluates
+  the exact Step 8 pass conditions from baseline JSON plus gateway telemetry.
+- Persisted Sherpa baseline JSON now records `finalOutcome`, `hasSegment`, and
+  `fallbackUsed` after native segment finalization so a rerun can prove the
+  transcript came from Sherpa tokens rather than a fallback handoff.
+- Automated coverage in `SherpaStep8BaselineToolTests.cpp` accepts a native
+  non-blank `final_transcript` fixture and rejects the all-blank
+  `no_tokens_emitted` signature.
+- The historical frozen artifact remains useful regression evidence: it already
+  demonstrates non-blank token emission and `hasSegment=true`, but predates
+  `finalOutcome` persistence, so rerun the baseline capture to satisfy the full
+  Step 8 gate.
+
 Run the fixed engine on the frozen `请讲一个笑话` baseline.
 
 Pass conditions:
@@ -395,7 +413,9 @@ Pass conditions:
 5. gateway emits `hasSegment=true`,
 6. user-visible transcript is produced without fallback.
 
-Exit gate: the app produces a Sherpa-native transcript for the utterance.
+Exit gate: the app produces a Sherpa-native transcript for the utterance and
+`python tools/compare_sherpa_baseline.py --baseline <runId>.sherpa-baseline.json --debug-log <debug-log.txt> --require-step8-pass`
+returns success.
 
 ### Step 9: Compare with reference output
 

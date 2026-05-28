@@ -188,7 +188,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint64_t maxLoops,
 			bool finalFlush,
 			const std::string& expectedText,
-			const std::string& decodedText) const;
+			const std::string& decodedText,
+			const std::string& finalOutcome,
+			bool hasSegment,
+			bool fallbackUsed) const;
 		void ClearStreamState(
 			const std::string& streamId) const;
 

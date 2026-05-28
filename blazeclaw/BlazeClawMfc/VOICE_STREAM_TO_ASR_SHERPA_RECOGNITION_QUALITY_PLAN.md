@@ -642,6 +642,20 @@ Validation target:
   ends as `no_tokens_emitted` with
   `sherpaBlankTokenCount == sherpaJoinerCallCount`.
 
+Step 8 non-blank restoration gate:
+
+- `tools/compare_sherpa_baseline.py` now accepts `--require-step8-pass` and an
+  optional `--debug-log` argument to validate the restored non-blank behavior.
+- The gate requires decoded tokens, blank-token count below joiner-call count,
+  `sherpaFinalOutcome="final_transcript"`, non-empty `sherpaDecodedText`,
+  gateway `hasSegment=true`, and no fallback handoff.
+- Sherpa baseline JSON now persists `finalOutcome`, `hasSegment`, and
+  `fallbackUsed` after native segment creation, enabling a captured
+  `请讲一个笑话` rerun to prove user-visible transcript restoration without
+  synthetic rescue text.
+- Tool-level regression coverage accepts a native non-blank final transcript
+  fixture and rejects the historical all-blank no-output signature.
+
 ## Recommended implementation order
 
 1. Build the reproducible baseline first.

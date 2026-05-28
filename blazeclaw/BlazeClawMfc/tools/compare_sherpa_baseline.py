@@ -28,6 +28,8 @@ BLAZECLAW_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "cursor_next": ("cursorNextSequence", "sherpaBaselineCursorNextSequence", "sherpaFinalCursorNext"),
     "final_flush": ("finalFlush", "sherpaBaselineFinalFlush", "sherpaFinalFbankFlush"),
     "final_outcome": ("finalOutcome", "sherpaFinalOutcome"),
+    "has_segment": ("hasSegment", "hasSegmentEffective"),
+    "fallback_used": ("fallbackUsed", "sherpaFallbackUsed"),
 }
 
 REFERENCE_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
@@ -90,6 +92,42 @@ def normalize_scalar(value: Any) -> Any:
     return value
 
 
+def as_bool(value: Any) -> bool | None:
+    if value is MISSING or value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    return None
+
+
+def as_int(value: Any) -> int | None:
+    if value is MISSING or value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
+
+
 def extract_metrics(data: dict[str, Any], aliases: dict[str, tuple[str, ...]]) -> dict[str, Any]:
     metrics: dict[str, Any] = {}
     for key, field_aliases in aliases.items():
@@ -101,19 +139,160 @@ def extract_metrics(data: dict[str, Any], aliases: dict[str, tuple[str, ...]]) -
     return metrics
 
 
+def parse_telemetry_payload(line: str) -> tuple[str, dict[str, Any]] | None:
+    marker = "[Telemetry]"
+    if marker in line:
+        line = line.split(marker, 1)[1].strip()
+    if not line.startswith("{"):
+        return None
+    try:
+        envelope = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    event = payload.get("event")
+    nested_payload = payload.get("payload")
+    if not isinstance(event, str) or not isinstance(nested_payload, dict):
+        return None
+    return event, nested_payload
+
+
+def extract_gateway_metrics(debug_log: Path | None) -> dict[str, Any]:
+    metrics: dict[str, Any] = {
+        "has_segment": None,
+        "fallback_used": False,
+        "user_visible_transcript": "",
+    }
+    if debug_log is None:
+        return metrics
+    with debug_log.open("r", encoding="utf-8-sig", errors="replace") as stream:
+        for line in stream:
+            parsed = parse_telemetry_payload(line)
+            if parsed is None:
+                continue
+            event, payload = parsed
+            if event == "gateway.speech.handoff.fallback":
+                metrics["fallback_used"] = True
+            if event in {"gateway.speech.execution.update", "gateway.speech.lifecycle"}:
+                has_segment = as_bool(payload.get("hasSegment"))
+                if has_segment is not None:
+                    metrics["has_segment"] = has_segment
+            if event == "gateway.speech.debug.snapshot":
+                has_segment = as_bool(payload.get("hasSegmentEffective"))
+                if has_segment is not None:
+                    metrics["has_segment"] = has_segment
+                fallback_used = as_bool(payload.get("fallbackUsed"))
+                if fallback_used is True:
+                    metrics["fallback_used"] = True
+                text = payload.get("sherpaDecodedText") or payload.get("sherpaBaselineDecodedText")
+                if isinstance(text, str) and text.strip():
+                    metrics["user_visible_transcript"] = text.strip()
+    return metrics
+
+
+def evaluate_step8_regression(
+    blazeclaw: dict[str, Any],
+    gateway: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    gateway = gateway or {}
+    decoded_text = blazeclaw.get("decoded_text")
+    decoded_token_count = as_int(blazeclaw.get("decoded_token_count"))
+    blank_tokens = as_int(blazeclaw.get("blank_tokens"))
+    joiner_calls = as_int(blazeclaw.get("joiner_calls"))
+    final_outcome = blazeclaw.get("final_outcome")
+
+    has_segment = as_bool(blazeclaw.get("has_segment"))
+    if has_segment is None:
+        has_segment = as_bool(gateway.get("has_segment"))
+
+    fallback_used = as_bool(blazeclaw.get("fallback_used"))
+    if fallback_used is None:
+        fallback_used = as_bool(gateway.get("fallback_used"))
+    if fallback_used is None:
+        fallback_used = False
+
+    user_visible_transcript = gateway.get("user_visible_transcript")
+    if not isinstance(user_visible_transcript, str) or not user_visible_transcript.strip():
+        user_visible_transcript = decoded_text if isinstance(decoded_text, str) else ""
+
+    checks = [
+        {
+            "name": "decoded_tokens_present",
+            "pass": decoded_token_count is not None and decoded_token_count > 0,
+            "details": {"sherpaDecodedTokenCount": decoded_token_count},
+        },
+        {
+            "name": "not_all_joiner_calls_blank",
+            "pass": blank_tokens is not None
+            and joiner_calls is not None
+            and blank_tokens < joiner_calls,
+            "details": {
+                "sherpaBlankTokenCount": blank_tokens,
+                "sherpaJoinerCallCount": joiner_calls,
+            },
+        },
+        {
+            "name": "final_outcome_transcript",
+            "pass": final_outcome == "final_transcript",
+            "details": {"sherpaFinalOutcome": final_outcome},
+        },
+        {
+            "name": "decoded_text_present",
+            "pass": isinstance(decoded_text, str) and bool(decoded_text.strip()),
+            "details": {"sherpaDecodedTextLength": len(decoded_text or "")},
+        },
+        {
+            "name": "gateway_has_segment",
+            "pass": has_segment is True,
+            "details": {"hasSegment": has_segment},
+        },
+        {
+            "name": "native_transcript_without_fallback",
+            "pass": bool(str(user_visible_transcript).strip()) and fallback_used is False,
+            "details": {
+                "userVisibleTranscriptLength": len(str(user_visible_transcript).strip()),
+                "fallbackUsed": fallback_used,
+            },
+        },
+    ]
+    return {
+        "status": "passed" if all(check["pass"] for check in checks) else "failed",
+        "checks": checks,
+    }
+
+
 def text_similarity(left: str | None, right: str | None) -> float | None:
     if left is None or right is None:
         return None
     return difflib.SequenceMatcher(a=left, b=right).ratio()
 
 
-def compare_metrics(blazeclaw: dict[str, Any], reference: dict[str, Any] | None) -> dict[str, Any]:
+def compare_metrics(
+    blazeclaw: dict[str, Any],
+    reference: dict[str, Any] | None,
+    gateway: dict[str, Any] | None = None,
+    require_step8_pass: bool = False,
+) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "reference_missing" if reference is None else "compared",
         "blazeclaw": blazeclaw,
     }
+    if gateway:
+        result["gateway"] = gateway
+    if require_step8_pass:
+        step8 = evaluate_step8_regression(blazeclaw, gateway)
+        result["step8"] = step8
+        if step8["status"] != "passed":
+            result["status"] = "step8_failed"
+            return result
     if reference is None:
         result["message"] = "No reference JSON was supplied; BlazeClaw baseline metrics were extracted only."
+        if require_step8_pass:
+            result["status"] = "step8_passed"
         return result
 
     result["reference"] = reference
@@ -178,6 +357,14 @@ def print_summary(comparison: dict[str, Any]) -> None:
     if final_outcome:
         print(f"blazeclaw final outcome: {final_outcome}")
 
+    step8 = comparison.get("step8")
+    if isinstance(step8, dict):
+        print(f"step8 status: {step8.get('status')}")
+        for check in step8.get("checks", []):
+            if isinstance(check, dict):
+                state = "pass" if check.get("pass") else "fail"
+                print(f"step8 {check.get('name')}: {state}")
+
     reference = comparison.get("reference")
     if reference:
         print(f"reference decoded text: {reference.get('decoded_text') or ''}")
@@ -202,7 +389,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--baseline", required=True, type=Path, help="Path to *.sherpa-baseline.json")
     parser.add_argument("--reference", type=Path, help="Optional known-good Sherpa/FunASR reference JSON")
+    parser.add_argument("--debug-log", type=Path, help="Optional debug log containing gateway speech telemetry")
     parser.add_argument("--output", type=Path, help="Optional path for comparison JSON output")
+    parser.add_argument(
+        "--require-step8-pass",
+        action="store_true",
+        help="Fail unless the baseline and optional debug log satisfy Step 8 non-blank regression criteria.",
+    )
     return parser.parse_args(argv)
 
 
@@ -214,10 +407,18 @@ def main(argv: list[str]) -> int:
         reference_metrics = None
         if args.reference is not None:
             reference_metrics = extract_metrics(load_json(args.reference), REFERENCE_FIELD_ALIASES)
-        comparison = compare_metrics(blazeclaw_metrics, reference_metrics)
+        gateway_metrics = extract_gateway_metrics(args.debug_log)
+        comparison = compare_metrics(
+            blazeclaw_metrics,
+            reference_metrics,
+            gateway_metrics,
+            args.require_step8_pass,
+        )
         if args.output is not None:
             write_json(args.output, comparison)
         print_summary(comparison)
+        if args.require_step8_pass and comparison.get("step8", {}).get("status") != "passed":
+            return 1
         return 0
     except Exception as ex:
         print(f"error: {ex}", file=sys.stderr)

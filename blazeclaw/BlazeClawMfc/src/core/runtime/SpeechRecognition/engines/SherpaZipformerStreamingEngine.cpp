@@ -1371,7 +1371,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 		std::uint64_t maxLoops,
 		bool finalFlush,
 		const std::string& expectedText,
-		const std::string& decodedText) const {
+		const std::string& decodedText,
+		const std::string& finalOutcome,
+		bool hasSegment,
+		bool fallbackUsed) const {
 		const auto directory = ResolveBaselineDiagnosticsDirectory();
 		if (!directory.has_value()) {
 			return std::nullopt;
@@ -1423,6 +1426,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"loopCount\": " << loopGuard << ",\n";
 		stream << "  \"maxLoopCount\": " << maxLoops << ",\n";
 		stream << "  \"finalFlush\": " << (finalFlush ? "true" : "false") << ",\n";
+		stream << "  \"finalOutcome\": \"" << EscapeJsonString(finalOutcome) << "\",\n";
+		stream << "  \"hasSegment\": " << (hasSegment ? "true" : "false") << ",\n";
+		stream << "  \"fallbackUsed\": " << (fallbackUsed ? "true" : "false") << ",\n";
 		stream << "  \"fbankFrameCount\": " << streamState.encoderFrameCount << ",\n";
 		stream << "  \"encoderFrameCount\": " << streamState.encoderFrameCount << ",\n";
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
@@ -2888,22 +2894,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 		else {
 			finalOutcome = "finite_stream_not_drained";
 		}
-		std::optional<std::filesystem::path> baselineDiagnosticPath;
-		if (baselinePersistenceEnabled && shouldTreatInputAsFinal) {
-			streamState.nextSequence = nextSequence;
-			baselineDiagnosticPath = PersistBaselineDiagnostics(
-				request,
-				streamingInput,
-				streamState,
-				sampleRate,
-				chunkSamples,
-				loopGuard,
-				maxLoops,
-				shouldTreatInputAsFinal,
-				baselineExpectedText,
-				baselineDecodedText);
-		}
-
 		if (!streamState.partialText.empty()) {
 			SpeechTranscriptSegment segment;
 			segment.text = streamState.partialText;
@@ -2932,6 +2922,25 @@ namespace blazeclaw::core::speechrecognition::engines {
 				streamState.silenceChunkCount = 0;
 				streamState.speechActive = false;
 			}
+		}
+
+		std::optional<std::filesystem::path> baselineDiagnosticPath;
+		if (baselinePersistenceEnabled && shouldTreatInputAsFinal) {
+			streamState.nextSequence = nextSequence;
+			baselineDiagnosticPath = PersistBaselineDiagnostics(
+				request,
+				streamingInput,
+				streamState,
+				sampleRate,
+				chunkSamples,
+				loopGuard,
+				maxLoops,
+				shouldTreatInputAsFinal,
+				baselineExpectedText,
+				baselineDecodedText,
+				finalOutcome,
+				result.sessionState.segment.has_value(),
+				false);
 		}
 
 		result.ok = true;

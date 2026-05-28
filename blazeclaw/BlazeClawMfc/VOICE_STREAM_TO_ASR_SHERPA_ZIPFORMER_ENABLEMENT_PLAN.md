@@ -239,6 +239,15 @@ Latest runtime telemetry root cause:
 	vocabulary axis and top-token scores. Contract mismatches now produce explicit
 	Sherpa inference diagnostics, and baseline/debug JSON carries the selected
 	decoder/joiner shapes, slices, validated-call count, and last contract error.
+25. Step 8 of the no-output root-cause plan is now implemented as an explicit
+	non-blank restoration gate. `tools/compare_sherpa_baseline.py` supports
+	`--require-step8-pass` with optional gateway `--debug-log` evidence and checks
+	decoded-token count, blank-token count versus joiner calls,
+	`final_transcript`, non-empty decoded text, `hasSegment=true`, and absence of
+	fallback handoff. Sherpa baseline JSON now persists `finalOutcome`,
+	`hasSegment`, and `fallbackUsed` after native segment creation, and the tests
+	cover both a passing native transcript fixture and the rejected all-blank
+	`no_tokens_emitted` signature.
 
 ## FunASR references to follow
 

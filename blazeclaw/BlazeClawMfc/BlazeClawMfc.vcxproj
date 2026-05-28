@@ -576,6 +576,7 @@
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
+    <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />

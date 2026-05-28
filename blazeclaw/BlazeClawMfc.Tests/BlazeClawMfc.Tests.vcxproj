@@ -95,6 +95,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionOfflineOptimizationTests.cpp" />
    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionModelLayoutDetectionTests.cpp" />
    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionRealtimeStreamingTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\VoiceRecorderRingArtifactIntegrationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
