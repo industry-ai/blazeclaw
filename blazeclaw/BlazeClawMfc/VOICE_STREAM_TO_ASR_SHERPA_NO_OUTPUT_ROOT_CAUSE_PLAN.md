@@ -343,6 +343,29 @@ stable across the whole utterance.
 
 ### Step 7: Verify decoder and joiner tensor contracts
 
+Status: implemented.
+
+Implementation notes:
+
+- Decoder token input shapes now resolve from decoder ONNX input metadata and
+  the active decoder context size, with element-count validation before session
+  execution.
+- Decoder output slicing now records the selected vector offset, vector size,
+  and total element count so the extracted context/time position is visible in
+  diagnostics.
+- Joiner encoder and decoder inputs now resolve from joiner ONNX input metadata
+  instead of hard-coded rank assumptions, while preserving `[1,dim]` and
+  `[1,1,dim]` model contracts as declared by the exported model.
+- Joiner output handling validates the vocabulary axis from the output shape,
+  records the logits slice used for argmax, and keeps top-token IDs/scores in
+  debug snapshots for reference-runtime comparison.
+- Decoder/joiner contract failures now fail the Sherpa inference path with
+  explicit diagnostics instead of silently continuing with an ambiguous tensor
+  shape.
+- Debug snapshots and baseline JSON expose decoder input shape, decoder vector
+  slice, joiner input/output shapes, logits slice, validated call count,
+  contract failure count, contract summary, and last contract error.
+
 Compare BlazeClaw decoder/joiner invocations against a known-good Sherpa runtime
 or the exported ONNX model metadata.
 

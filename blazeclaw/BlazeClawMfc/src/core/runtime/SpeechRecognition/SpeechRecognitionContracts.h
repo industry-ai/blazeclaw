@@ -129,11 +129,18 @@ namespace blazeclaw::core::speechrecognition {
 		std::string sherpaContractEncoderOutputShape;
 		std::uint64_t sherpaContractEncoderValidFrameCount = 0;
 		std::string sherpaContractDecoderInputContext;
+		std::string sherpaContractDecoderInputShape;
 		std::string sherpaContractDecoderOutputShape;
+		std::string sherpaContractDecoderVectorSlice;
 		std::string sherpaContractJoinerEncoderInputShape;
 		std::string sherpaContractJoinerDecoderInputShape;
 		std::string sherpaContractJoinerOutputShape;
+		std::string sherpaContractJoinerLogitsSlice;
 		std::string sherpaContractJoinerTopTokens;
+		std::string sherpaDecoderJoinerContractSummary;
+		std::string sherpaDecoderJoinerLastError;
+		std::uint64_t sherpaDecoderJoinerContractFailureCount = 0;
+		std::uint64_t sherpaDecoderJoinerValidatedCallCount = 0;
 		std::int64_t sherpaLastBestTokenId = -1;
 		std::int64_t sherpaLastSecondBestTokenId = -1;
 		bool sherpaSpeechActive = false;

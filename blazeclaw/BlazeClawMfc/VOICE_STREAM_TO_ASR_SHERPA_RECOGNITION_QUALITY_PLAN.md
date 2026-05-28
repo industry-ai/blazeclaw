@@ -233,6 +233,12 @@ Outcome:
   from the mapped output contract or existing cache size; updates validate actual
   output element counts; and contract failures now surface as explicit Sherpa
   inference diagnostics instead of silent cache-skip behavior.
+- Step 7 of the no-output root-cause plan now verifies decoder and joiner tensor
+  contracts at runtime. Decoder token input shapes are derived from decoder ONNX
+  metadata and context size, decoder output slicing records the selected vector
+  window, joiner encoder/decoder inputs preserve the exported model rank, and
+  joiner logits slicing records the vocabulary axis and top-token scores for
+  reference comparison.
 - Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
   samples are treated as normalized floats and scaled by `32768` before
   `OnlineFbank::AcceptWaveform(...)`.

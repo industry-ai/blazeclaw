@@ -476,6 +476,121 @@ namespace blazeclaw::core::speechrecognition::engines {
 			return count == 0 ? 0 : count;
 		}
 
+		std::size_t CountDynamicDimensions(
+			const std::vector<std::int64_t>& shape,
+			std::size_t* dynamicIndex = nullptr,
+			std::int64_t* knownProduct = nullptr) {
+			std::size_t dynamicCount = 0;
+			std::int64_t product = 1;
+			std::size_t lastDynamicIndex = shape.size();
+			for (std::size_t index = 0; index < shape.size(); ++index) {
+				if (shape[index] <= 0) {
+					lastDynamicIndex = index;
+					++dynamicCount;
+				}
+				else {
+					product *= shape[index];
+				}
+			}
+
+			if (dynamicIndex != nullptr) {
+				*dynamicIndex = lastDynamicIndex;
+			}
+			if (knownProduct != nullptr) {
+				*knownProduct = product;
+			}
+			return dynamicCount;
+		}
+
+		std::optional<std::vector<std::int64_t>> ResolveTensorShapeForElementCount(
+			std::vector<std::int64_t> shape,
+			std::size_t elementCount) {
+			if (shape.empty()) {
+				return std::nullopt;
+			}
+
+			const auto staticElements = ComputeStaticElementCount(shape);
+			if (staticElements > 0) {
+				return staticElements == elementCount ? std::optional{ shape } : std::nullopt;
+			}
+
+			std::size_t dynamicIndex = shape.size();
+			std::int64_t knownProduct = 1;
+			const auto dynamicCount = CountDynamicDimensions(shape, &dynamicIndex, &knownProduct);
+			if (dynamicCount == 1 && knownProduct > 0) {
+				const auto known = static_cast<std::size_t>(knownProduct);
+				if (known > 0 && elementCount % known == 0) {
+					shape[dynamicIndex] = static_cast<std::int64_t>(elementCount / known);
+					return shape;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::vector<std::int64_t>> ResolveDecoderInputShape(
+			const SherpaZipformerStreamingEngine::TensorBinding& binding,
+			std::size_t contextSize) {
+			std::vector<std::int64_t> shape = binding.shape;
+			if (shape.empty()) {
+				shape = { 1, static_cast<std::int64_t>(contextSize) };
+			}
+
+			if (shape.size() == 1) {
+				shape[0] = static_cast<std::int64_t>(contextSize);
+				return shape;
+			}
+
+			shape[0] = 1;
+			shape[shape.size() - 1] = static_cast<std::int64_t>(contextSize);
+			for (std::size_t index = 1; index + 1 < shape.size(); ++index) {
+				if (shape[index] <= 0) {
+					shape[index] = 1;
+				}
+			}
+			return shape;
+		}
+
+		std::optional<std::vector<std::int64_t>> ResolveJoinerInputShape(
+			const SherpaZipformerStreamingEngine::TensorBinding& binding,
+			std::size_t vectorSize) {
+			std::vector<std::int64_t> shape = binding.shape;
+			if (shape.empty()) {
+				shape = { 1, static_cast<std::int64_t>(vectorSize) };
+			}
+
+			if (shape.size() == 1) {
+				shape[0] = static_cast<std::int64_t>(vectorSize);
+				return shape;
+			}
+
+			shape[0] = 1;
+			shape[shape.size() - 1] = static_cast<std::int64_t>(vectorSize);
+			for (std::size_t index = 1; index + 1 < shape.size(); ++index) {
+				if (shape[index] <= 0) {
+					shape[index] = 1;
+				}
+			}
+			return shape;
+		}
+
+		std::string FormatDecoderJoinerContractError(
+			const char* operation,
+			const std::string& name,
+			const std::vector<std::int64_t>& modelShape,
+			const std::vector<std::int64_t>& resolvedShape,
+			std::size_t expectedElements,
+			std::size_t actualElements) {
+			std::ostringstream stream;
+			stream << "decoder/joiner " << operation
+				<< " mismatch name=" << name
+				<< " modelShape=" << FormatShape(modelShape)
+				<< " resolvedShape=" << FormatShape(resolvedShape)
+				<< " expectedElements=" << expectedElements
+				<< " actualElements=" << actualElements;
+			return stream.str();
+		}
+
 		std::string FormatStateCacheContractError(
 			const char* operation,
 			const SherpaZipformerStreamingEngine::EncoderStateCacheBinding& mapping,
@@ -1317,6 +1432,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"encoderStateCacheContractFailureCount\": " << streamState.encoderStateCacheContractFailureCount << ",\n";
 		stream << "  \"encoderStateCacheSummary\": \"" << EscapeJsonString(streamState.contractStateCacheSummary) << "\",\n";
 		stream << "  \"encoderStateCacheLastError\": \"" << EscapeJsonString(streamState.contractStateCacheLastError) << "\",\n";
+		stream << "  \"decoderInputContext\": \"" << EscapeJsonString(streamState.contractDecoderInputContext) << "\",\n";
+		stream << "  \"decoderInputShape\": \"" << EscapeJsonString(streamState.contractDecoderInputShape) << "\",\n";
+		stream << "  \"decoderOutputShape\": \"" << EscapeJsonString(streamState.contractDecoderOutputShape) << "\",\n";
+		stream << "  \"decoderVectorSlice\": \"" << EscapeJsonString(streamState.contractDecoderVectorSlice) << "\",\n";
+		stream << "  \"joinerEncoderInputShape\": \"" << EscapeJsonString(streamState.contractJoinerEncoderInputShape) << "\",\n";
+		stream << "  \"joinerDecoderInputShape\": \"" << EscapeJsonString(streamState.contractJoinerDecoderInputShape) << "\",\n";
+		stream << "  \"joinerOutputShape\": \"" << EscapeJsonString(streamState.contractJoinerOutputShape) << "\",\n";
+		stream << "  \"joinerLogitsSlice\": \"" << EscapeJsonString(streamState.contractJoinerLogitsSlice) << "\",\n";
+		stream << "  \"decoderJoinerContractFailureCount\": " << streamState.decoderJoinerContractFailureCount << ",\n";
+		stream << "  \"decoderJoinerValidatedCallCount\": " << streamState.decoderJoinerValidatedCallCount << ",\n";
+		stream << "  \"decoderJoinerContractSummary\": \"" << EscapeJsonString(streamState.contractDecoderJoinerSummary) << "\",\n";
+		stream << "  \"decoderJoinerLastError\": \"" << EscapeJsonString(streamState.contractDecoderJoinerLastError) << "\",\n";
 		stream << "  \"featureFirstFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureFirstFrameStats) << "\",\n";
 		stream << "  \"featureLastFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureLastFrameStats) << "\",\n";
 		stream << "  \"joinerTopTokens\": \"" << EscapeJsonString(streamState.contractJoinerTopTokens) << "\",\n";
@@ -1453,8 +1580,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const auto sampleScalingPolicy = ResolveSherpaFbankSampleScalingPolicy();
 #if BLAZECLAW_HAS_ONNXRUNTIME
 		const std::string encoderStateCacheSummary = FormatStateCacheSummary(m_encoderStateCacheBindings);
+		std::ostringstream decoderJoinerSummaryStream;
+		decoderJoinerSummaryStream
+			<< "decoderInputs=" << m_decoderInputBindings.size()
+			<< ";decoderOutputs=" << m_decoderOutputNames.size()
+			<< ";decoderContextSize=" << m_decoderContextSize
+			<< ";joinerInputs=" << m_joinerInputBindings.size()
+			<< ";joinerOutputs=" << m_joinerOutputNames.size()
+			<< ";blankId=" << m_blankId
+			<< ";eosId=" << m_eosId;
+		const std::string decoderJoinerContractSummary = decoderJoinerSummaryStream.str();
 #else
 		const std::string encoderStateCacheSummary;
+		const std::string decoderJoinerContractSummary;
 #endif
 
 		StreamState streamState;
@@ -1478,6 +1616,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 					: streamingInput.source.sequenceStart;
 			}
 			cachedState.contractStateCacheSummary = encoderStateCacheSummary;
+			cachedState.contractDecoderJoinerSummary = decoderJoinerContractSummary;
 			streamState = cachedState;
 		}
 
@@ -1526,7 +1665,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		std::string inferenceFailureMessage;
 
 		auto updateDecoderFromContext =
-			[&streamState, this](std::vector<float>& decoderVector) -> bool {
+			[&streamState, &inferenceFailed, &inferenceFailureMessage, this](std::vector<float>& decoderVector) -> bool {
 #if !BLAZECLAW_HAS_ONNXRUNTIME
 			UNREFERENCED_PARAMETER(decoderVector);
 			return false;
@@ -1553,16 +1692,25 @@ namespace blazeclaw::core::speechrecognition::engines {
 				}
 
 				if (binding.kind == TensorBindingKind::DecoderInputTokens) {
-					if (shape.empty()) {
-						shape = { 1, static_cast<std::int64_t>(streamState.decoderContext.size()) };
+					const auto resolvedShape = ResolveDecoderInputShape(
+						binding,
+						streamState.decoderContext.size());
+					if (!resolvedShape.has_value()) {
+						++streamState.decoderJoinerContractFailureCount;
+						streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+							"decoder input resolve",
+							binding.name,
+							binding.shape,
+							{},
+							streamState.decoderContext.size(),
+							0);
+						inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+						inferenceFailed = true;
+						return false;
 					}
-					if (shape.size() == 1) {
-						shape[0] = static_cast<std::int64_t>(streamState.decoderContext.size());
-					}
-					else {
-						shape[0] = 1;
-						shape[shape.size() - 1] = static_cast<std::int64_t>(streamState.decoderContext.size());
-					}
+
+					shape = *resolvedShape;
+					streamState.contractDecoderInputShape = FormatShape(shape);
 
 					const std::size_t elements = static_cast<std::size_t>(
 						(std::max)(std::int64_t{ 1 },
@@ -1573,6 +1721,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 								[](std::int64_t a, std::int64_t b) {
 									return a * ((std::max)(std::int64_t{ 1 }, b));
 								}))); 
+					if (elements != streamState.decoderContext.size()) {
+						++streamState.decoderJoinerContractFailureCount;
+						streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+							"decoder input elements",
+							binding.name,
+							binding.shape,
+							shape,
+							streamState.decoderContext.size(),
+							elements);
+						inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+						inferenceFailed = true;
+						return false;
+					}
 
 					std::vector<std::int64_t> tokenBuffer(elements, m_blankId);
 					const std::size_t copyCount = (std::min)(elements, streamState.decoderContext.size());
@@ -1687,6 +1848,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			const auto shape = info.GetShape();
 			if (shape.empty()) {
+				++streamState.decoderJoinerContractFailureCount;
+				streamState.contractDecoderJoinerLastError = "decoder/joiner decoder output mismatch: empty output shape";
+				inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+				inferenceFailed = true;
 				return false;
 			}
 
@@ -1695,6 +1860,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 				? static_cast<std::size_t>(info.GetElementCount())
 				: std::size_t{ 1 };
 			if (total == 0) {
+				++streamState.decoderJoinerContractFailureCount;
+				streamState.contractDecoderJoinerLastError = "decoder/joiner decoder output mismatch: zero output elements";
+				inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+				inferenceFailed = true;
 				return false;
 			}
 
@@ -1708,10 +1877,29 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			std::size_t vectorSize = static_cast<std::size_t>((std::max)(std::int64_t{ 1 }, shape.back()));
 			if (vectorSize > total) {
-				vectorSize = total;
+				++streamState.decoderJoinerContractFailureCount;
+				streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+					"decoder output slice",
+					m_decoderOutputNames.empty() ? std::string{} : m_decoderOutputNames[decoderMainIndex],
+					shape,
+					shape,
+					vectorSize,
+					total);
+				inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+				inferenceFailed = true;
+				return false;
 			}
 
-			decoderVector.assign(data + (total - vectorSize), data + total);
+			const std::size_t vectorOffset = total - vectorSize;
+			{
+				std::ostringstream slice;
+				slice << "offset=" << vectorOffset
+					<< ",size=" << vectorSize
+					<< ",total=" << total;
+				streamState.contractDecoderVectorSlice = slice.str();
+			}
+
+			decoderVector.assign(data + vectorOffset, data + total);
 			return !decoderVector.empty();
 #endif
 			};
@@ -2287,14 +2475,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 												while (!advanceFrame && symbolsThisFrame < kSherpaMaxSymbolsPerFrame) {
 													++streamState.rnntInnerLoopCount;
 
-												std::vector<Ort::Value> joinerInputs;
-												std::vector<const char*> joinerInputNames;
-							std::vector<std::vector<std::int64_t>> joinerInt64Buffers;
-							std::vector<std::vector<float>> joinerFloatBuffers;
+									std::vector<Ort::Value> joinerInputs;
+									std::vector<const char*> joinerInputNames;
+									std::vector<std::vector<std::int64_t>> joinerInt64Buffers;
+									std::vector<std::vector<float>> joinerFloatBuffers;
 												joinerInputs.reserve(m_joinerInputBindings.size());
 												joinerInputNames.reserve(m_joinerInputBindings.size());
-							joinerInt64Buffers.reserve(m_joinerInputBindings.size());
-							joinerFloatBuffers.reserve(m_joinerInputBindings.size());
+									joinerInt64Buffers.reserve(m_joinerInputBindings.size());
+									joinerFloatBuffers.reserve(m_joinerInputBindings.size());
 
 												for (const auto& binding : m_joinerInputBindings) {
 													std::vector<std::int64_t> shape = binding.shape;
@@ -2305,18 +2493,35 @@ namespace blazeclaw::core::speechrecognition::engines {
 													}
 
 													if (binding.kind == TensorBindingKind::EncoderOut) {
-														if (shape.size() >= 3) {
-															shape[0] = 1;
-															shape[1] = 1;
-															shape[2] = static_cast<std::int64_t>(encoderFrame.size());
-														}
-														else if (shape.size() == 2) {
-															shape[0] = 1;
-															shape[1] = static_cast<std::int64_t>(encoderFrame.size());
-														}
-														else {
-															shape = { 1, 1, static_cast<std::int64_t>(encoderFrame.size()) };
-														}
+											const auto resolvedShape = ResolveJoinerInputShape(binding, encoderFrame.size());
+											if (!resolvedShape.has_value()) {
+												++streamState.decoderJoinerContractFailureCount;
+												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+													"joiner encoder input resolve",
+													binding.name,
+													binding.shape,
+													{},
+													encoderFrame.size(),
+													0);
+												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+												inferenceFailed = true;
+												break;
+											}
+											shape = *resolvedShape;
+											const auto expectedElements = ComputeResolvedElementCount(shape);
+											if (expectedElements != encoderFrame.size()) {
+												++streamState.decoderJoinerContractFailureCount;
+												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+													"joiner encoder input elements",
+													binding.name,
+													binding.shape,
+													shape,
+													encoderFrame.size(),
+													static_cast<std::size_t>(expectedElements));
+												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+												inferenceFailed = true;
+												break;
+											}
 														streamState.contractJoinerEncoderInputShape = FormatShape(shape);
 														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
 															memoryInfo,
@@ -2326,13 +2531,35 @@ namespace blazeclaw::core::speechrecognition::engines {
 															shape.size()));
 													}
 													else if (binding.kind == TensorBindingKind::DecoderOut) {
-														if (shape.size() >= 2) {
-															shape[0] = 1;
-															shape[shape.size() - 1] = static_cast<std::int64_t>(decoderVector.size());
-														}
-														else {
-															shape = { 1, static_cast<std::int64_t>(decoderVector.size()) };
-														}
+											const auto resolvedShape = ResolveJoinerInputShape(binding, decoderVector.size());
+											if (!resolvedShape.has_value()) {
+												++streamState.decoderJoinerContractFailureCount;
+												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+													"joiner decoder input resolve",
+													binding.name,
+													binding.shape,
+													{},
+													decoderVector.size(),
+													0);
+												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+												inferenceFailed = true;
+												break;
+											}
+											shape = *resolvedShape;
+											const auto expectedElements = ComputeResolvedElementCount(shape);
+											if (expectedElements != decoderVector.size()) {
+												++streamState.decoderJoinerContractFailureCount;
+												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+													"joiner decoder input elements",
+													binding.name,
+													binding.shape,
+													shape,
+													decoderVector.size(),
+													static_cast<std::size_t>(expectedElements));
+												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+												inferenceFailed = true;
+												break;
+											}
 														streamState.contractJoinerDecoderInputShape = FormatShape(shape);
 														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
 															memoryInfo,
@@ -2376,6 +2603,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 													joinerInputNames.push_back(binding.name.c_str());
 												}
+									if (inferenceFailed) {
+										break;
+									}
 
 												std::vector<const char*> joinerOutputNames;
 												joinerOutputNames.reserve(m_joinerOutputNames.size());
@@ -2461,9 +2691,27 @@ namespace blazeclaw::core::speechrecognition::engines {
 													vocabSize = static_cast<std::size_t>(joinerShape.back());
 												}
 												if (vocabSize == 0 || vocabSize > logitsCount) {
-													vocabSize = logitsCount;
+											++streamState.decoderJoinerContractFailureCount;
+											streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+												"joiner logits vocab axis",
+												m_joinerOutputNames.empty() ? std::string{} : m_joinerOutputNames[joinerMainIndex],
+												joinerShape,
+												joinerShape,
+												vocabSize,
+												logitsCount);
+											inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+											inferenceFailed = true;
+											break;
 												}
 												const std::size_t logitsOffset = logitsCount - vocabSize;
+										{
+											std::ostringstream slice;
+											slice << "offset=" << logitsOffset
+												<< ",vocabSize=" << vocabSize
+												<< ",total=" << logitsCount;
+											streamState.contractJoinerLogitsSlice = slice.str();
+										}
+										++streamState.decoderJoinerValidatedCallCount;
 													streamState.contractJoinerTopTokens = FormatTopTokens(
 														logits + logitsOffset,
 														vocabSize);
@@ -2721,11 +2969,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaContractEncoderOutputShape = streamState.contractEncoderOutputShape,
 			.sherpaContractEncoderValidFrameCount = streamState.contractEncoderValidFrameCount,
 			.sherpaContractDecoderInputContext = streamState.contractDecoderInputContext,
+			.sherpaContractDecoderInputShape = streamState.contractDecoderInputShape,
 			.sherpaContractDecoderOutputShape = streamState.contractDecoderOutputShape,
+			.sherpaContractDecoderVectorSlice = streamState.contractDecoderVectorSlice,
 			.sherpaContractJoinerEncoderInputShape = streamState.contractJoinerEncoderInputShape,
 			.sherpaContractJoinerDecoderInputShape = streamState.contractJoinerDecoderInputShape,
 			.sherpaContractJoinerOutputShape = streamState.contractJoinerOutputShape,
+			.sherpaContractJoinerLogitsSlice = streamState.contractJoinerLogitsSlice,
 			.sherpaContractJoinerTopTokens = streamState.contractJoinerTopTokens,
+			.sherpaDecoderJoinerContractSummary = streamState.contractDecoderJoinerSummary,
+			.sherpaDecoderJoinerLastError = streamState.contractDecoderJoinerLastError,
+			.sherpaDecoderJoinerContractFailureCount = streamState.decoderJoinerContractFailureCount,
+			.sherpaDecoderJoinerValidatedCallCount = streamState.decoderJoinerValidatedCallCount,
 			.sherpaLastBestTokenId = streamState.lastBestTokenId,
 			.sherpaLastSecondBestTokenId = streamState.lastSecondBestTokenId,
 			.sherpaSpeechActive = streamState.speechActive,

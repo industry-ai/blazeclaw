@@ -231,6 +231,14 @@ Latest runtime telemetry root cause:
 	sizes, and output refreshes validate element counts before updating. Any
 	unresolved or mismatched cache contract now fails with explicit diagnostics
 	instead of being silently skipped.
+24. Step 7 of the no-output root-cause plan is now implemented: decoder and
+	joiner tensor contracts are validated against exported ONNX metadata during
+	streaming inference. Decoder token inputs resolve from the decoder context
+	size, decoder output vector slicing is recorded, joiner encoder/decoder input
+	shapes preserve the declared rank, and joiner logits slicing records the
+	vocabulary axis and top-token scores. Contract mismatches now produce explicit
+	Sherpa inference diagnostics, and baseline/debug JSON carries the selected
+	decoder/joiner shapes, slices, validated-call count, and last contract error.
 
 ## FunASR references to follow
 
