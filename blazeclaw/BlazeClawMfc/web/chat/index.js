@@ -128,6 +128,21 @@
         speechStatusEl.textContent = `speech: ${parts.join(" | ")}`;
     }
 
+    function isSpeechPreviewRunId(runId) {
+        return String(runId || "").trim().startsWith("speech-preview-");
+    }
+
+    function isRecordingSpeechStage(stage, runId) {
+        const normalizedStage = String(stage || "").trim();
+        const previewRun = isSpeechPreviewRunId(runId);
+        return normalizedStage === "recording" ||
+            normalizedStage === "start_stream" ||
+            normalizedStage === "streaming" ||
+            (normalizedStage === "queued" && previewRun) ||
+            (normalizedStage === "segment_finalized" && previewRun) ||
+            (normalizedStage === "completed" && previewRun);
+    }
+
     function renderSpeechLivePreview() {
         if (!speechLivePreviewEl || !speechLivePreviewLabelEl || !speechLivePreviewTextEl) {
             return;
@@ -170,6 +185,9 @@
         if (stage === "streaming" && text) {
             label = "Recognizing...";
             modeClass = sessionState.segmentFinal ? "final" : "interim";
+        } else if ((stage === "segment_finalized" || stage === "completed") && isSpeechPreviewRunId(sessionState.runId)) {
+            label = "Recognizing...";
+            modeClass = "interim";
         } else if (stage === "queued" || stage === "stopped" || stage === "transcribing") {
             label = "Finalizing...";
             modeClass = "finalizing";
@@ -2506,11 +2524,15 @@
             const speechStage = speechSessionState
                 ? String(speechSessionState.stage || "").trim()
                 : "";
+            const speechRunId = speechSessionState
+                ? String(speechSessionState.runId || "").trim()
+                : "";
             const speechBusy = speechStage === "queued" ||
                 speechStage === "recording" ||
+                speechStage === "start_stream" ||
                 speechStage === "streaming" ||
                 speechStage === "transcribing";
-            const recordingActive = speechStage === "recording" || speechStage === "streaming";
+            const recordingActive = isRecordingSpeechStage(speechStage, speechRunId);
             state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || (speechBusy && !recordingActive);
             if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
                 state.speechTranscribeBtn.disabled = true;
@@ -2670,7 +2692,8 @@
                     ? state.speechSessionState
                     : null;
                 const stage = String(speechSnapshot && speechSnapshot.stage || "").trim();
-                if (stage !== "recording" && stage !== "streaming") {
+                const activeRunId = String(speechSnapshot && speechSnapshot.runId || stablePreviewRunId).trim();
+                if (!isRecordingSpeechStage(stage, activeRunId)) {
                     emitSpeechPreviewDiagnostic("speech.preview.stop_inactive_stage", {
                         runId: stablePreviewRunId,
                         generation: pollGeneration,
@@ -2748,7 +2771,10 @@
             const speechStage = speechSessionState
                 ? String(speechSessionState.stage || "").trim()
                 : "";
-            const recordingActive = speechStage === "recording" || speechStage === "streaming";
+            const speechRunId = speechSessionState
+                ? String(speechSessionState.runId || "").trim()
+                : "";
+            const recordingActive = isRecordingSpeechStage(speechStage, speechRunId);
 
             recordingBusy = true;
             try {

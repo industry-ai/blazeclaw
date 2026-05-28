@@ -891,6 +891,49 @@
                 nextText === previousText;
         }
 
+        function isEmptyTerminalPreviewUpdate(normalized, previous) {
+            const next = normalized && typeof normalized === "object"
+                ? normalized
+                : {};
+            const current = previous && typeof previous === "object"
+                ? previous
+                : {};
+            const nextStage = String(next.stage || "").trim();
+            if (nextStage !== "completed" && nextStage !== "segment_finalized") {
+                return false;
+            }
+
+            if (!isSpeechPreviewRunId(next.runId)) {
+                return false;
+            }
+
+            const previousStage = String(current.stage || "").trim();
+            if (!isActiveSpeechPreviewStage(previousStage)) {
+                return false;
+            }
+
+            return !String(next.segmentText || next.text || "").trim() &&
+                !String(next.errorCode || "").trim();
+        }
+
+        function isPreviewTerminalUpdateWhileRecording(normalized, previous) {
+            const next = normalized && typeof normalized === "object"
+                ? normalized
+                : {};
+            const current = previous && typeof previous === "object"
+                ? previous
+                : {};
+            const nextStage = String(next.stage || "").trim();
+            if (nextStage !== "completed" && nextStage !== "segment_finalized") {
+                return false;
+            }
+            if (!isSpeechPreviewRunId(next.runId)) {
+                return false;
+            }
+
+            return isActiveSpeechPreviewStage(String(current.stage || "").trim());
+        }
+
         function classifySpeechError(errorCode, fallbackClass) {
             const normalizedCode = normalizeSpeechErrorCode(errorCode);
             const policy = state.speechErrorPolicy && typeof state.speechErrorPolicy === "object"
@@ -2044,8 +2087,16 @@
             const previous = state.speechSessionState && typeof state.speechSessionState === "object"
                 ? state.speechSessionState
                 : {};
+            if (isEmptyTerminalPreviewUpdate(normalized, previous)) {
+                return { ...previous };
+            }
             if (isStaleSpeechPreviewUpdate(normalized, previous)) {
                 return { ...previous };
+            }
+
+            if (isPreviewTerminalUpdateWhileRecording(normalized, previous)) {
+                normalized.stage = "streaming";
+                normalized.segmentFinal = false;
             }
 
             let resolvedSegmentText = normalized.segmentText;
