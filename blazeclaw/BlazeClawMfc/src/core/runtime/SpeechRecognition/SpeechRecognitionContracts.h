@@ -164,6 +164,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint64_t sherpaRepeatedDecodedUnitLength = 0;
 		std::uint64_t sherpaRepeatedDecodedUnitCount = 0;
 		double sherpaRepeatedDecodedUnitCoverage = 0.0;
+		bool sherpaDecodedRepeatFinalRejected = false;
 		std::string sherpaRepeatGuardAction;
 		bool sherpaBpeModelPresent = false;
 		bool sherpaBpeVocabPresent = false;

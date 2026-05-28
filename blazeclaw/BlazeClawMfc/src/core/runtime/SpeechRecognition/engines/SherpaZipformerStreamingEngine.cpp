@@ -224,6 +224,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 				repeat.repeatedUnitCount >= kSherpaRepeatGuardMinRepeatCount;
 		}
 
+		void ApplyDecodedRepeatDiagnostics(
+			SherpaZipformerStreamingEngine::StreamState& streamState,
+			const DecodedRepeatClassification& decodedRepeat,
+			const std::string& action) {
+			if (decodedRepeat.repeatedUnitCount == 0 && decodedRepeat.longestRepeatedCharRun == 0) {
+				return;
+			}
+
+			streamState.repeatedDecodedUnit = decodedRepeat.repeatedUnit;
+			streamState.repeatedDecodedUnitLength =
+				static_cast<std::uint64_t>(decodedRepeat.repeatedUnitLength);
+			streamState.repeatedDecodedUnitCount =
+				static_cast<std::uint64_t>(decodedRepeat.repeatedUnitCount);
+			streamState.repeatedDecodedUnitCoverage = decodedRepeat.repeatedUnitCoverage;
+			streamState.repeatGuardAction = action;
+		}
+
 		DecodedRepeatClassification ClassifyDecodedRepeats(const std::string& decodedText) {
 			DecodedRepeatClassification result;
 			std::vector<Utf8Symbol> symbols;
@@ -1763,6 +1780,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 				<< streamState.repeatedDecodedUnitCoverage;
 			stream << "  \"repeatedDecodedUnitCoverage\": " << runtimeRepeatCoverageStream.str() << ",\n";
 		}
+		stream << "  \"decodedRepeatFinalRejected\": " << (streamState.decodedRepeatFinalRejected ? "true" : "false") << ",\n";
 		stream << "  \"repeatGuardAction\": \"" << EscapeJsonString(streamState.repeatGuardAction) << "\",\n";
 		stream << "  \"decodedRepeatDegenerate\": " << (repeatClassification.degenerate ? "true" : "false") << ",\n";
 		stream << "  \"decodedRepeatUnit\": \"" << EscapeJsonString(repeatClassification.repeatedUnit) << "\",\n";
@@ -3230,15 +3248,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
 				{
 					const auto decodedRepeat = ClassifyDecodedRepeats(streamState.partialText);
-					if (decodedRepeat.repeatedUnitCount > 0) {
-						streamState.repeatedDecodedUnit = decodedRepeat.repeatedUnit;
-						streamState.repeatedDecodedUnitLength =
-							static_cast<std::uint64_t>(decodedRepeat.repeatedUnitLength);
-						streamState.repeatedDecodedUnitCount =
-							static_cast<std::uint64_t>(decodedRepeat.repeatedUnitCount);
-						streamState.repeatedDecodedUnitCoverage = decodedRepeat.repeatedUnitCoverage;
-						streamState.repeatGuardAction = "diagnostic_only";
-					}
+					ApplyDecodedRepeatDiagnostics(streamState, decodedRepeat, "diagnostic_only");
 				}
 				result.text = streamState.partialText;
 
@@ -3281,8 +3291,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 			: 0ULL;
 		const bool shouldFinalizeByVad =
 			streamState.speechActive && streamState.silenceChunkCount >= 3;
-		const bool shouldFinalize = shouldFinalizeByVad || shouldTreatInputAsFinal;
-		if (!streamState.partialText.empty() && shouldTreatInputAsFinal) {
+		const auto finalDecodedRepeat = ClassifyDecodedRepeats(streamState.partialText);
+		const bool decodedRepeatGuardApplies =
+			!streamState.partialText.empty() &&
+			shouldTreatInputAsFinal &&
+			finalDecodedRepeat.degenerate;
+		if (decodedRepeatGuardApplies) {
+			ApplyDecodedRepeatDiagnostics(streamState, finalDecodedRepeat, "decoded_repeat_final_rejected");
+			streamState.decodedRepeatFinalRejected = true;
+		}
+		const bool shouldFinalize = !decodedRepeatGuardApplies &&
+			(shouldFinalizeByVad || shouldTreatInputAsFinal);
+		if (!streamState.partialText.empty() && shouldTreatInputAsFinal && !decodedRepeatGuardApplies) {
 			result.sessionState.transcriptText = streamState.partialText;
 		}
 		const std::string baselineDecodedText = !result.sessionState.transcriptText.empty()
@@ -3299,6 +3319,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			else if (baselineDecodedText.empty()) {
 				finalOutcome = "tokens_emitted_empty_decoded_text";
 			}
+			else if (decodedRepeatGuardApplies) {
+				finalOutcome = "decoded_repeat_rejected";
+			}
 			else {
 				finalOutcome = "final_transcript";
 			}
@@ -3309,7 +3332,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		else {
 			finalOutcome = "finite_stream_not_drained";
 		}
-		if (!streamState.partialText.empty()) {
+		if (!streamState.partialText.empty() && !decodedRepeatGuardApplies) {
 			SpeechTranscriptSegment segment;
 			segment.text = streamState.partialText;
 			segment.sequence = streamState.segmentSequence + 1;
@@ -3432,6 +3455,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaRepeatedDecodedUnitLength = streamState.repeatedDecodedUnitLength,
 			.sherpaRepeatedDecodedUnitCount = streamState.repeatedDecodedUnitCount,
 			.sherpaRepeatedDecodedUnitCoverage = streamState.repeatedDecodedUnitCoverage,
+			.sherpaDecodedRepeatFinalRejected = streamState.decodedRepeatFinalRejected,
 			.sherpaRepeatGuardAction = streamState.repeatGuardAction,
 			.sherpaBpeModelPresent = m_artifacts.bpeModelPresent,
 			.sherpaBpeVocabPresent = m_artifacts.bpeVocabPresent,

@@ -494,6 +494,8 @@ state once they reach the conservative repeat threshold.
 
 ### Phase 4: Add decoded CJK phrase-repeat guard before final segment publication
 
+Status: implemented.
+
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
@@ -513,9 +515,38 @@ Plan:
 5. Keep this logic generic and structural. Do not hard-code `描述`, `色素`, or the
    reported utterance.
 
+Implementation notes:
+
+- The runtime reuses `ClassifyDecodedRepeats(...)` after decoding Sherpa token IDs
+  into `partialText`.
+- The guard is evaluated when finite-stream input is final, before assigning
+  `sessionState.transcriptText` or publishing a final `SpeechTranscriptSegment`.
+- A decoded transcript is rejected when the existing structural repeat classifier
+  marks it degenerate:
+  - 2-character CJK unit repeated 5 or more times,
+  - 3-6 character CJK unit repeated 4 or more times,
+  - or repeated-unit coverage above the conservative threshold.
+- When the guard fires, the runtime:
+  - records `repeatGuardAction="decoded_repeat_final_rejected"`,
+  - sets `decodedRepeatFinalRejected=true`,
+  - preserves the repeated decoded unit diagnostics,
+  - sets `sherpaFinalOutcome="decoded_repeat_rejected"`,
+  - does not assign the degenerate text as final transcript text,
+  - does not emit it as a final valid segment,
+  - does not rewrite the user text.
+- `decodedRepeatFinalRejected` is persisted in Sherpa baseline JSON, exposed in
+  `SpeechRecognitionDebugInfo` as `sherpaDecodedRepeatFinalRejected`, and surfaced
+  through `gateway.speech.debug.snapshot`.
+- The logic remains generic and structural; it does not hard-code `描述`, `色素`,
+  `色彩`, or any full reported utterance.
+
 Exit gate:
 
 - A repeated CJK phrase transcript is not emitted as a final valid segment.
+
+Result: implemented. Repeated decoded CJK phrase output is now held/rejected at
+final publication time with explicit diagnostics instead of being forwarded as a
+valid final segment.
 
 ### Phase 5: Review RNN-T per-frame emission limits
 

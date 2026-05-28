@@ -139,6 +139,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint64_t repeatedDecodedUnitLength = 0;
 			std::uint64_t repeatedDecodedUnitCount = 0;
 			double repeatedDecodedUnitCoverage = 0.0;
+			bool decodedRepeatFinalRejected = false;
 			std::string repeatGuardAction;
 			bool encoderLengthOutputUsed = false;
 			std::int64_t lastBestTokenId = -1;

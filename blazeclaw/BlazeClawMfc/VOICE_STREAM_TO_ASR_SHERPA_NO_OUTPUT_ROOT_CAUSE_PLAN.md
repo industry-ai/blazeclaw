@@ -515,6 +515,13 @@ Implementation notes:
   appended to emitted/baseline token IDs, is not fed back into `decoderContext`,
   and the current encoder frame advances. `repeatGuardAction="ngram_suppressed"`
   identifies this guard in runtime diagnostics and persisted baselines.
+- Follow-up decoded CJK final guard: before finite-stream final publication, the
+  Sherpa runtime now rejects decoded transcripts whose repeated CJK phrase units
+  are classified as degenerate. The guard records
+  `repeatGuardAction="decoded_repeat_final_rejected"`, sets
+  `decodedRepeatFinalRejected=true`, uses final outcome
+  `decoded_repeat_rejected`, and does not publish the repeated text as final
+  transcript text or as a final valid segment.
 
 After non-blank output is restored and reference comparison is acceptable:
 

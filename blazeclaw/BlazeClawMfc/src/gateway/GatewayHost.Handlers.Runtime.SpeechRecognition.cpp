@@ -829,6 +829,7 @@ namespace blazeclaw::gateway {
 							{ "sherpaRepeatedDecodedUnitLength", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRepeatedDecodedUnitLength : 0ULL) },
 							{ "sherpaRepeatedDecodedUnitCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRepeatedDecodedUnitCount : 0ULL) },
 							{ "sherpaRepeatedDecodedUnitCoveragePermille", JsonNumber(debugInfo.has_value() ? static_cast<std::uint64_t>(debugInfo->sherpaRepeatedDecodedUnitCoverage * 1000.0) : 0ULL) },
+							{ "sherpaDecodedRepeatFinalRejected", JsonBool(debugInfo.has_value() && debugInfo->sherpaDecodedRepeatFinalRejected) },
 							{ "sherpaRepeatGuardAction", JsonString(debugInfo.has_value() ? debugInfo->sherpaRepeatGuardAction : std::string()) },
 							{ "sherpaBpeModelPresent", JsonBool(debugInfo.has_value() && debugInfo->sherpaBpeModelPresent) },
 							{ "sherpaBpeVocabPresent", JsonBool(debugInfo.has_value() && debugInfo->sherpaBpeVocabPresent) },
