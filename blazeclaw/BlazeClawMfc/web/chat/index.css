@@ -144,6 +144,66 @@ body {
     gap: 8px;
 }
 
+.speech-live-preview {
+    margin: 0 10px;
+    padding: 8px 10px;
+    border-top: 1px solid #2b2b2b;
+    border-right: 1px solid #263448;
+    border-bottom: 1px solid #263448;
+    border-left: 3px solid #7fb4ff;
+    border-radius: 8px 8px 0 0;
+    background: #181f2b;
+    color: #dcecff;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    min-height: 20px;
+}
+
+    .speech-live-preview[hidden] {
+        display: none;
+    }
+
+.speech-live-preview-label {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: #9cc8ff;
+    white-space: nowrap;
+}
+
+.speech-live-preview-text {
+    min-width: 0;
+    font-size: 13px;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.speech-live-preview.interim .speech-live-preview-text,
+.speech-live-preview.listening .speech-live-preview-text,
+.speech-live-preview.finalizing .speech-live-preview-text {
+    color: #b9c7d9;
+    font-style: italic;
+}
+
+.speech-live-preview.final {
+    border-left-color: #8cd98c;
+    background: #18261f;
+}
+
+    .speech-live-preview.final .speech-live-preview-label {
+        color: #a8e8a8;
+    }
+
+.speech-live-preview.error {
+    border-left-color: #ff9a9a;
+    background: #2b1a1a;
+}
+
+    .speech-live-preview.error .speech-live-preview-label {
+        color: #ffb8b8;
+    }
+
 .msg {
     max-width: 78%;
     padding: 8px 10px;

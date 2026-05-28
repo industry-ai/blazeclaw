@@ -28,6 +28,13 @@
     const approvalQueueEl = document.getElementById("approvalQueue");
     const messagesEl = document.getElementById("messages");
     const detachedNoticesEl = document.getElementById("detachedNotices");
+    const speechLivePreviewEl = document.getElementById("speechLivePreview");
+    const speechLivePreviewLabelEl = speechLivePreviewEl
+        ? speechLivePreviewEl.querySelector(".speech-live-preview-label")
+        : null;
+    const speechLivePreviewTextEl = speechLivePreviewEl
+        ? speechLivePreviewEl.querySelector(".speech-live-preview-text")
+        : null;
     const structuredTranscriptRenderEnabled = resolveStructuredTranscriptRenderEnabled();
     state.inputEl = document.getElementById("input");
     state.sendBtn = document.getElementById("sendBtn");
@@ -119,6 +126,68 @@
         }
 
         speechStatusEl.textContent = `speech: ${parts.join(" | ")}`;
+    }
+
+    function renderSpeechLivePreview() {
+        if (!speechLivePreviewEl || !speechLivePreviewLabelEl || !speechLivePreviewTextEl) {
+            return;
+        }
+
+        const sessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+            ? state.speechSessionState
+            : null;
+        if (!sessionState) {
+            speechLivePreviewEl.hidden = true;
+            speechLivePreviewEl.className = "speech-live-preview";
+            speechLivePreviewLabelEl.textContent = "";
+            speechLivePreviewTextEl.textContent = "";
+            return;
+        }
+
+        const stage = String(sessionState.stage || "").trim();
+        const text = String(sessionState.segmentText || sessionState.text || "").trim();
+        const errorMessage = String(sessionState.errorMessage || "").trim();
+        const liveStages = new Set(["recording", "start_stream", "streaming"]);
+        const finalizingStages = new Set(["queued", "stopped", "transcribing"]);
+        const finalStages = new Set(["segment_finalized", "completed"]);
+        const failedStages = new Set(["failed", "cancelled"]);
+        const shouldShow =
+            liveStages.has(stage) ||
+            finalizingStages.has(stage) ||
+            finalStages.has(stage) ||
+            (failedStages.has(stage) && (text || errorMessage));
+
+        if (!shouldShow) {
+            speechLivePreviewEl.hidden = true;
+            speechLivePreviewEl.className = "speech-live-preview";
+            speechLivePreviewLabelEl.textContent = "";
+            speechLivePreviewTextEl.textContent = "";
+            return;
+        }
+
+        let label = "Listening...";
+        let modeClass = "listening";
+        if (stage === "streaming" && text) {
+            label = "Recognizing...";
+            modeClass = sessionState.segmentFinal ? "final" : "interim";
+        } else if (stage === "queued" || stage === "stopped" || stage === "transcribing") {
+            label = "Finalizing...";
+            modeClass = "finalizing";
+        } else if (stage === "segment_finalized" || stage === "completed") {
+            label = "Recognized";
+            modeClass = "final";
+        } else if (stage === "failed") {
+            label = "Recognition failed";
+            modeClass = "error";
+        } else if (stage === "cancelled") {
+            label = "Recognition cancelled";
+            modeClass = "error";
+        }
+
+        speechLivePreviewEl.hidden = false;
+        speechLivePreviewEl.className = `speech-live-preview ${modeClass}`;
+        speechLivePreviewLabelEl.textContent = label;
+        speechLivePreviewTextEl.textContent = text || errorMessage || "Speak now";
     }
 
     function renderApprovalQueue() {
@@ -2492,6 +2561,7 @@
 
         renderAssistantIdentity();
         renderSpeechStatus();
+        renderSpeechLivePreview();
         renderSessionControls();
         if (state.agentsControlPlaneEl) {
             state.agentsControlPlaneEl.hidden = !agentsController;

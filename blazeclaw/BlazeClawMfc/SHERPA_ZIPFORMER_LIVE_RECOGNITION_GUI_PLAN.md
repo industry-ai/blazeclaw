@@ -223,12 +223,26 @@ Acceptance criteria:
 - completed: final responses remain backward compatible with existing `speechSession`, `speechArtifact`, `transcriptInjection`, and chat send behavior.
 
 ### Step 6: Render live recognition in the WebView GUI
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP6_WEBVIEW_LIVE_PREVIEW.md`
+
 Update the WebView chat UI to show interim transcript text clearly while recording.
 
 Files to review/update:
 - `web/chat/chat-controller.js`
 - `web/chat/index.js`
 - `web/chat/index.css`
+- `web/chat/index.html`
+
+Implemented behavior:
+- added a dedicated `speechLivePreview` region between the message list and composer.
+- `web/chat/index.js` now renders the current `speechSessionState.segmentText` or `speechSessionState.text` into that region whenever speech/composer state refreshes.
+- live text is replaced in the same DOM node, so interim updates do not append duplicate messages.
+- recording, recognizing, finalizing, final, failure, and cancellation states have explicit labels and CSS classes.
+- interim/listening/finalizing text is styled as muted italic, while final and error states have distinct border/background colors.
+- the preview remains separate from the message list and does not alter the existing final transcript send path.
 
 Recommended UX:
 - Add a dedicated live transcript preview area near the composer or voice button.
@@ -240,10 +254,10 @@ Recommended UX:
 - Keep preview text out of the message list until final transcript acceptance.
 
 Acceptance criteria:
-- Users see changing transcript text while speaking.
-- Interim text is replaced in place rather than appended repeatedly.
-- Empty interim results do not flicker the UI.
-- Final transcript can still be sent through the existing chat path.
+- completed: users see changing transcript text while speaking when preview or lifecycle state carries segment text.
+- completed: interim text is replaced in place rather than appended repeatedly.
+- completed: empty idle interim results do not flicker the UI; active empty states use stable `Speak now` text.
+- completed: final transcript can still be sent through the existing chat path because preview rendering is separate from composer injection and `messages`.
 
 ### Step 7: Render live recognition through CBlazeClawMFCView
 Route native live recognition updates through `CBlazeClawMFCView`, which is the current output surface for speech recognition results.
