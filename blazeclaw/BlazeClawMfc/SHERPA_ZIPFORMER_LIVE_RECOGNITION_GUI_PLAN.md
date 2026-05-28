@@ -292,7 +292,19 @@ Acceptance criteria:
 - completed: speech RPC UI updates remain posted through the MFC view message path, with existing owned-payload cleanup for stale view posts.
 
 ### Step 8: Prevent overlapping preview inference from piling up
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP8_PREVIEW_CONCURRENCY.md`
+
 Add concurrency protection for preview requests.
+
+Implemented behavior:
+- the WebView preview loop keeps the existing one-in-flight `liveSpeechPollBusy` guard and now tracks the active preview run id with `liveSpeechPollInFlightRunId`.
+- `stopLiveSpeechPoll()` increments the preview generation, clears the timer, clears busy state, and clears in-flight preview ownership before final transcription starts.
+- `chat-controller.js` now identifies active preview stages and `speech-preview-*` run ids consistently.
+- stale non-final `streaming` updates are rejected when they arrive after active preview stages, belong to an older preview run id, switch session ids, regress segment sequence, or repeat the same sequence/text.
+- live-preview transcription timeout/failure no longer marks the whole speech session failed; explicit final transcription remains authoritative for user-visible errors.
 
 Implementation options:
 - Allow only one preview request in flight per speech session.
@@ -300,9 +312,9 @@ Implementation options:
 - Drop stale preview responses based on `runId`, `sequence`, or a monotonically increasing preview generation.
 
 Acceptance criteria:
-- Slow inference does not create an unbounded backlog.
-- Stale partial text cannot overwrite newer text.
-- Stop/final transcription cancels or ignores outstanding preview results.
+- completed: slow inference does not create an unbounded backlog because preview ticks are skipped while a request is busy.
+- completed: stale partial text cannot overwrite newer text because lifecycle and preview response merges are filtered by active stage, preview run id, session id, sequence, and duplicate text.
+- completed: stop/final transcription cancels or ignores outstanding preview results through generation invalidation, in-flight run clearing, and active-stage stale response checks.
 
 ### Step 9: Finalize cleanly on stop
 When the user stops recording:

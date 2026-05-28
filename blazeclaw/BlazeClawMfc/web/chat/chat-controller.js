@@ -835,6 +835,62 @@
             };
         }
 
+        function isActiveSpeechPreviewStage(stage) {
+            return stage === "recording" ||
+                stage === "start_stream" ||
+                stage === "streaming" ||
+                stage === "queued";
+        }
+
+        function isSpeechPreviewRunId(runId) {
+            return String(runId || "").trim().startsWith("speech-preview-");
+        }
+
+        function isStaleSpeechPreviewUpdate(normalized, previous) {
+            const next = normalized && typeof normalized === "object"
+                ? normalized
+                : {};
+            const current = previous && typeof previous === "object"
+                ? previous
+                : {};
+            if (next.stage !== "streaming" || next.segmentFinal) {
+                return false;
+            }
+
+            const previousStage = String(current.stage || "").trim();
+            if (previousStage && !isActiveSpeechPreviewStage(previousStage)) {
+                return true;
+            }
+
+            const nextRunId = String(next.runId || "").trim();
+            const previousRunId = String(current.runId || "").trim();
+            if (isSpeechPreviewRunId(nextRunId) &&
+                isSpeechPreviewRunId(previousRunId) &&
+                nextRunId !== previousRunId) {
+                return true;
+            }
+
+            const nextSessionId = String(next.sessionId || "").trim();
+            const previousSessionId = String(current.sessionId || "").trim();
+            if (nextSessionId && previousSessionId && nextSessionId !== previousSessionId) {
+                return true;
+            }
+
+            const nextSequence = Number(next.segmentSequence || 0);
+            const previousSequence = Number(current.segmentSequence || 0);
+            if (nextSequence > 0 && previousSequence > 0 && nextSequence < previousSequence) {
+                return true;
+            }
+
+            const nextText = String(next.segmentText || next.text || "").trim();
+            const previousText = String(current.segmentText || current.text || "").trim();
+            return nextSequence > 0 &&
+                previousSequence > 0 &&
+                nextSequence === previousSequence &&
+                nextText !== "" &&
+                nextText === previousText;
+        }
+
         function classifySpeechError(errorCode, fallbackClass) {
             const normalizedCode = normalizeSpeechErrorCode(errorCode);
             const policy = state.speechErrorPolicy && typeof state.speechErrorPolicy === "object"
@@ -1988,6 +2044,10 @@
             const previous = state.speechSessionState && typeof state.speechSessionState === "object"
                 ? state.speechSessionState
                 : {};
+            if (isStaleSpeechPreviewUpdate(normalized, previous)) {
+                return { ...previous };
+            }
+
             let resolvedSegmentText = normalized.segmentText;
             if (!resolvedSegmentText && normalized.stage === "segment_finalized") {
                 resolvedSegmentText = normalized.text;
@@ -2228,12 +2288,12 @@
                     : {};
                 const normalizedSpeechSessionState = normalizeSpeechSessionPayload(payload);
                 const previousStage = String(previousSpeechSessionState.stage || "").trim();
-                const livePreviewStillActive =
-                    previousStage === "recording" ||
-                    previousStage === "start_stream" ||
-                    previousStage === "streaming" ||
-                    previousStage === "queued";
+                const livePreviewStillActive = isActiveSpeechPreviewStage(previousStage);
                 if (livePreviewOnly && !livePreviewStillActive) {
+                    return;
+                }
+                if (livePreviewOnly && isStaleSpeechPreviewUpdate(normalizedSpeechSessionState, previousSpeechSessionState)) {
+                    updateComposerState();
                     return;
                 }
                 const keepLiveStreamingState =
@@ -2389,6 +2449,11 @@
             } catch (error) {
                 const errorMessage = String(error && error.message ? error.message : error || "speech transcribe failed");
                 const isTimeout = /timed out/i.test(errorMessage);
+                if (livePreviewOnly) {
+                    updateComposerState();
+                    return;
+                }
+
                 const classified = classifySpeechError(isTimeout ? "transcribe_timeout" : "transcribe_failed", "toast");
                 state.speechSessionState = {
                     stage: "failed",

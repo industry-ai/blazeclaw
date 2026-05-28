@@ -2620,6 +2620,7 @@
         let liveSpeechPollTimer = null;
         let liveSpeechPollBusy = false;
         let liveSpeechPollGeneration = 0;
+        let liveSpeechPollInFlightRunId = "";
         const liveSpeechPollIntervalMs = 1200;
         const liveSpeechPollTimeoutMs = 8000;
         const stopLiveSpeechPoll = () => {
@@ -2629,6 +2630,7 @@
                 liveSpeechPollTimer = null;
             }
             liveSpeechPollBusy = false;
+            liveSpeechPollInFlightRunId = "";
         };
         const startLiveSpeechPoll = (audioPath, audioArtifact, prompt, previewRunId) => {
             stopLiveSpeechPoll();
@@ -2652,6 +2654,7 @@
                 }
 
                 liveSpeechPollBusy = true;
+                liveSpeechPollInFlightRunId = stablePreviewRunId;
                 try {
                     await controller.transcribeSpeech({
                         audioPath,
@@ -2673,6 +2676,9 @@
                 } finally {
                     if (pollGeneration === liveSpeechPollGeneration) {
                         liveSpeechPollBusy = false;
+                        liveSpeechPollInFlightRunId = "";
+                    } else if (liveSpeechPollInFlightRunId === stablePreviewRunId) {
+                        liveSpeechPollInFlightRunId = "";
                     }
                 }
             };
