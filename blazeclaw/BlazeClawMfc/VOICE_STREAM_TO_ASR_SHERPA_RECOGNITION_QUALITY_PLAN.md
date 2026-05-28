@@ -220,6 +220,13 @@ Outcome:
   full chunks are drained before more audio is read, and final finite input pads
   only one remaining partial chunk while preserving the real frame count in the
   feature-length tensor.
+- Step 5 of the no-output root-cause plan now adds a diagnostic-only frontend
+  amplitude switch. Set `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING=normalized_float`
+  or `normalized` to feed normalized BlazeClaw samples directly into
+  `OnlineFbank`; leave it unset or set `reference`/`default` to keep the
+  FunASR-observed `sample * 32768` path. Debug snapshots, `[SherpaContract]`
+  traces, and persisted baseline JSON report the selected scaling mode plus
+  feature stats and joiner top-token diagnostics for A/B comparison.
 - Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
   samples are treated as normalized floats and scaled by `32768` before
   `OnlineFbank::AcceptWaveform(...)`.

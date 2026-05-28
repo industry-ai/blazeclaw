@@ -265,6 +265,26 @@ partial chunk is padded.
 
 ### Step 5: Verify sample scaling and fbank options against Sherpa reference
 
+Status: implemented.
+
+Implementation notes:
+
+- Added the diagnostic environment switch
+  `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING`.
+- Default, `default`, and `reference` keep the current Sherpa/FunASR-style
+  `sample * 32768` path and report `reference_kaldi_int16`.
+- `normalized`, `normalized_float`, `float`, `none`, and `unscaled` feed the
+  normalized BlazeClaw ring-buffer samples directly into `OnlineFbank` and
+  report `normalized_float`.
+- The switch only changes frontend amplitude for diagnostics; it does not add
+  fallback transcripts, token rescue logic, or workflow-specific behavior.
+- The selected mode is exposed in `SpeechRecognitionDebugInfo`,
+  `gateway.speech.debug.snapshot`, sampled `[SherpaContract]` TRACE output, and
+  persisted `*.sherpa-baseline.json` files.
+- Baseline JSON now also records first/last feature-frame stats and top joiner
+  tokens so A/B runs can compare frame count, feature mean/range, top tokens,
+  decoded token count, and decoded text from the same finite clip.
+
 Run an A/B diagnostic switch for frontend amplitude only; keep it diagnostic
 until a clear winner is proven.
 

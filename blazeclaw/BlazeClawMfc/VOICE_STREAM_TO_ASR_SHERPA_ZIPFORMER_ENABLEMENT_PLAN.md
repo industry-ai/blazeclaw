@@ -215,6 +215,14 @@ Latest runtime telemetry root cause:
 	required chunk sizes for normal streaming, pending full chunks are drained in
 	order, and final finite input pads only the remaining partial chunk while the
 	feature-length tensor reports the real frame count.
+22. Step 5 of the no-output root-cause plan is now implemented as a
+	diagnostic-only frontend amplitude switch. `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING`
+	selects between the default/reference `sample * 32768` path and normalized
+	float input into `OnlineFbank`. The chosen mode is included in debug snapshots,
+	Sherpa contract traces, and persisted baseline JSON alongside feature stats and
+	top joiner tokens so A/B runs can compare fbank frame count, feature
+	mean/range, token scores, decoded token count, and decoded text without adding
+	fallback transcript behavior.
 
 ## FunASR references to follow
 

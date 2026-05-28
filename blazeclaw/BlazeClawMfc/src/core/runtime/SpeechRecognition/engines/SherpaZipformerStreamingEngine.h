@@ -96,6 +96,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint64_t contractFeatureRealFrameCount = 0;
 			std::uint64_t contractFeaturePaddedFrameCount = 0;
 			std::uint64_t contractEncoderValidFrameCount = 0;
+			std::string contractFbankSampleScalingMode;
 			std::string contractFeatureInputShape;
 			std::string contractFeatureLengthValue;
 			std::string contractFeatureFirstFrameStats;

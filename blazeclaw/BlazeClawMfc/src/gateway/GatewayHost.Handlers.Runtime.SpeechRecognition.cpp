@@ -783,6 +783,7 @@ namespace blazeclaw::gateway {
 							{ "sherpaEncoderFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaEncoderFrameCount : 0ULL) },
 							{ "sherpaJoinerCallCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaJoinerCallCount : 0ULL) },
 							{ "sherpaBlankTokenCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaBlankTokenCount : 0ULL) },
+							{ "sherpaFbankSampleScalingMode", JsonString(debugInfo.has_value() ? debugInfo->sherpaFbankSampleScalingMode : std::string()) },
 							{ "sherpaContractFeatureFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaContractFeatureFrameCount : 0ULL) },
 							{ "sherpaContractFeatureRealFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaContractFeatureRealFrameCount : 0ULL) },
 							{ "sherpaContractFeaturePaddedFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaContractFeaturePaddedFrameCount : 0ULL) },

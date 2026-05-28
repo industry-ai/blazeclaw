@@ -6,6 +6,7 @@
 #include <kaldi-native-fbank/csrc/online-feature.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -22,6 +23,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
 		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
 
+		enum class SherpaFbankSampleScalingMode {
+			KaldiInt16,
+			NormalizedFloat,
+		};
+
+		struct SherpaFbankSampleScalingPolicy {
+			SherpaFbankSampleScalingMode mode = SherpaFbankSampleScalingMode::KaldiInt16;
+			std::string diagnosticName = "reference_kaldi_int16";
+		};
+
 		bool IsFiniteSample(float value) {
 			return std::isfinite(value) != 0;
 		}
@@ -37,6 +48,54 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 			stream << ']';
 			return stream.str();
+		}
+
+		std::string ToLowerAscii(std::string value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return value;
+		}
+
+		std::string ReadEnvironmentString(const char* name) {
+			char* raw = nullptr;
+			size_t size = 0;
+			const int readStatus = _dupenv_s(&raw, &size, name);
+			if (readStatus != 0 || raw == nullptr) {
+				return {};
+			}
+
+			std::string value(raw);
+			free(raw);
+			return value;
+		}
+
+		SherpaFbankSampleScalingPolicy ResolveSherpaFbankSampleScalingPolicy() {
+			const auto configuredValue = ToLowerAscii(ReadEnvironmentString(
+				"BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING"));
+			if (configuredValue == "normalized" ||
+				configuredValue == "normalized_float" ||
+				configuredValue == "float" ||
+				configuredValue == "none" ||
+				configuredValue == "unscaled") {
+				return SherpaFbankSampleScalingPolicy{
+					.mode = SherpaFbankSampleScalingMode::NormalizedFloat,
+					.diagnosticName = "normalized_float",
+				};
+			}
+
+			return SherpaFbankSampleScalingPolicy{
+				.mode = SherpaFbankSampleScalingMode::KaldiInt16,
+				.diagnosticName = configuredValue.empty() ||
+					configuredValue == "reference" ||
+					configuredValue == "default"
+					? "reference_kaldi_int16"
+					: "kaldi_int16",
+			};
 		}
 
 		std::string FormatInt64Vector(
@@ -146,7 +205,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 		}
 
 		std::vector<float> ScaleSamplesForOnlineFbank(
-			const std::vector<float>& samples) {
+			const std::vector<float>& samples,
+			SherpaFbankSampleScalingMode scalingMode) {
+			if (scalingMode == SherpaFbankSampleScalingMode::NormalizedFloat) {
+				return samples;
+			}
+
 			std::vector<float> scaledSamples(samples.size(), 0.0f);
 			std::transform(
 				samples.begin(),
@@ -163,9 +227,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 	struct SherpaOnlineFbankFrontend {
 		SherpaOnlineFbankFrontend(
 			std::uint32_t initialSampleRate,
-			std::size_t initialMelBinCount)
+			std::size_t initialMelBinCount,
+			SherpaFbankSampleScalingPolicy initialSampleScalingPolicy)
 			: sampleRate(initialSampleRate == 0 ? 16000U : initialSampleRate),
 			melBinCount(initialMelBinCount),
+			sampleScalingPolicy(std::move(initialSampleScalingPolicy)),
 			options(CreateOnlineFbankOptions(sampleRate, melBinCount)),
 			fbank(options) {
 		}
@@ -176,7 +242,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 				return;
 			}
 
-			const auto scaledSamples = ScaleSamplesForOnlineFbank(samples);
+			const auto scaledSamples = ScaleSamplesForOnlineFbank(
+				samples,
+				sampleScalingPolicy.mode);
 			fbank.AcceptWaveform(options.frame_opts.samp_freq, scaledSamples.data(), static_cast<int32_t>(scaledSamples.size()));
 		}
 
@@ -214,6 +282,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		std::uint32_t sampleRate = 16000U;
 		std::size_t melBinCount = 0;
+		SherpaFbankSampleScalingPolicy sampleScalingPolicy;
 		knf::FbankOptions options;
 		knf::OnlineFbank fbank;
 		std::size_t consumedFrameCount = 0;
@@ -1036,15 +1105,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 	}
 
 	std::optional<std::filesystem::path> SherpaZipformerStreamingEngine::ResolveBaselineDiagnosticsDirectory() {
-		char* raw = nullptr;
-		size_t size = 0;
-		const int readStatus = _dupenv_s(&raw, &size, "BLAZECLAW_SHERPA_BASELINE_DIR");
-		if (readStatus != 0 || raw == nullptr) {
-			return std::nullopt;
-		}
-
-		std::string value(raw);
-		free(raw);
+		std::string value = ReadEnvironmentString("BLAZECLAW_SHERPA_BASELINE_DIR");
 		if (value.empty()) {
 			return std::nullopt;
 		}
@@ -1053,16 +1114,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 	}
 
 	std::string SherpaZipformerStreamingEngine::ResolveBaselineExpectedText() {
-		char* raw = nullptr;
-		size_t size = 0;
-		const int readStatus = _dupenv_s(&raw, &size, "BLAZECLAW_SHERPA_BASELINE_EXPECTED_TEXT");
-		if (readStatus != 0 || raw == nullptr) {
-			return {};
-		}
-
-		std::string value(raw);
-		free(raw);
-		return value;
+		return ReadEnvironmentString("BLAZECLAW_SHERPA_BASELINE_EXPECTED_TEXT");
 	}
 
 	bool SherpaZipformerStreamingEngine::IsBaselinePersistenceEnabled() {
@@ -1122,6 +1174,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"audioPath\": \"" << EscapeJsonString(request.audioPath) << "\",\n";
 		stream << "  \"expectedText\": \"" << EscapeJsonString(expectedText) << "\",\n";
 		stream << "  \"decodedText\": \"" << EscapeJsonString(decodedText) << "\",\n";
+		stream << "  \"fbankSampleScalingMode\": \"" << EscapeJsonString(streamState.contractFbankSampleScalingMode) << "\",\n";
 		stream << "  \"sampleRate\": " << sampleRate << ",\n";
 		stream << "  \"chunkSamples\": " << static_cast<std::uint64_t>(chunkSamples) << ",\n";
 		stream << "  \"sequenceStart\": " << streamingInput.source.sequenceStart << ",\n";
@@ -1135,6 +1188,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
 		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
 		stream << "  \"decodedTokenCount\": " << streamState.decodedTokenCount << ",\n";
+		stream << "  \"featureFirstFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureFirstFrameStats) << "\",\n";
+		stream << "  \"featureLastFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureLastFrameStats) << "\",\n";
+		stream << "  \"joinerTopTokens\": \"" << EscapeJsonString(streamState.contractJoinerTopTokens) << "\",\n";
 		stream << "  \"pendingSampleCount\": 0,\n";
 		stream << "  \"tokenIds\": \"" << EscapeJsonString(tokenIds) << "\",\n";
 		stream << "  \"tokenPieces\": \"" << EscapeJsonString(tokenPieces) << "\"\n";
@@ -1265,6 +1321,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const bool isLivePcmStream = isPcmStream && !isFinalStreamRequest;
 		const std::string baselineExpectedText = ResolveBaselineExpectedText();
 		const bool baselinePersistenceEnabled = IsBaselinePersistenceEnabled();
+		const auto sampleScalingPolicy = ResolveSherpaFbankSampleScalingPolicy();
 
 		StreamState streamState;
 		{
@@ -1303,13 +1360,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 		constexpr std::size_t sherpaMelBinCount = 80;
 		if (!streamState.onlineFbank ||
 			streamState.onlineFbank->sampleRate != (sampleRate == 0 ? 16000U : sampleRate) ||
-			streamState.onlineFbank->melBinCount != sherpaMelBinCount) {
+			streamState.onlineFbank->melBinCount != sherpaMelBinCount ||
+			streamState.onlineFbank->sampleScalingPolicy.diagnosticName != sampleScalingPolicy.diagnosticName) {
 			streamState.onlineFbank = std::make_shared<SherpaOnlineFbankFrontend>(
 				sampleRate,
-				sherpaMelBinCount);
+				sherpaMelBinCount,
+				sampleScalingPolicy);
 			streamState.pendingFeatureFrames.clear();
 			streamState.pendingFeatureFrameCount = 0;
 		}
+		streamState.contractFbankSampleScalingMode = streamState.onlineFbank->sampleScalingPolicy.diagnosticName;
 
 		std::uint64_t loopGuard = 0;
 		std::vector<float> chunk;
@@ -2178,7 +2238,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 														logits + logitsOffset,
 														vocabSize);
 													if (streamState.joinerCallCount <= 3 || streamState.joinerCallCount % 50 == 0) {
-														TRACE(L"[SherpaContract] featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
+				TRACE(L"[SherpaContract] fbankScaling=%S featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
+					streamState.contractFbankSampleScalingMode.c_str(),
 															streamState.contractFeatureInputShape.c_str(),
 															streamState.contractFeatureLengthValue.c_str(),
 															(unsigned long long)streamState.contractFeatureRealFrameCount,
@@ -2419,6 +2480,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaEncoderFrameCount = streamState.encoderFrameCount,
 			.sherpaJoinerCallCount = streamState.joinerCallCount,
 			.sherpaBlankTokenCount = streamState.blankTokenCount,
+			.sherpaFbankSampleScalingMode = streamState.contractFbankSampleScalingMode,
 			.sherpaContractFeatureFrameCount = streamState.contractFeatureFrameCount,
 			.sherpaContractFeatureRealFrameCount = streamState.contractFeatureRealFrameCount,
 			.sherpaContractFeaturePaddedFrameCount = streamState.contractFeaturePaddedFrameCount,

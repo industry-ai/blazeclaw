@@ -118,6 +118,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint64_t sherpaEncoderFrameCount = 0;
 		std::uint64_t sherpaJoinerCallCount = 0;
 		std::uint64_t sherpaBlankTokenCount = 0;
+		std::string sherpaFbankSampleScalingMode;
 		std::uint64_t sherpaContractFeatureFrameCount = 0;
 		std::uint64_t sherpaContractFeatureRealFrameCount = 0;
 		std::uint64_t sherpaContractFeaturePaddedFrameCount = 0;
