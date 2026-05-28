@@ -508,6 +508,13 @@ Implementation notes:
   `gateway.speech.debug.snapshot`, and persisted Sherpa baseline JSON. The
   current guard action is `diagnostic_only`, so this follow-up improves root-cause
   visibility without changing transcript publication behavior.
+- Follow-up RNN-T n-gram repeat guard: the Sherpa greedy decode loop now checks a
+  bounded candidate token tail before accepting each non-blank token. Repeated
+  token n-grams of length 2-8 are suppressed after 3 consecutive repeats, using
+  the same successful pattern as the immediate-token guard: the candidate is not
+  appended to emitted/baseline token IDs, is not fed back into `decoderContext`,
+  and the current encoder frame advances. `repeatGuardAction="ngram_suppressed"`
+  identifies this guard in runtime diagnostics and persisted baselines.
 
 After non-blank output is restored and reference comparison is acceptable:
 

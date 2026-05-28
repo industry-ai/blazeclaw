@@ -43,6 +43,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 		constexpr std::size_t kSherpaFinalPartialMinRealFrames = 16;
 		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
 		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
+		constexpr std::size_t kSherpaRepeatGuardMinNgramLength = 2;
+		constexpr std::size_t kSherpaRepeatGuardMaxNgramLength = 8;
+		constexpr std::size_t kSherpaRepeatGuardMinRepeatCount = 3;
 
 		enum class SherpaFbankSampleScalingMode {
 			KaldiInt16,
@@ -193,6 +196,32 @@ namespace blazeclaw::core::speechrecognition::engines {
 				result = TokenRepeatClassification{};
 			}
 			return result;
+		}
+
+		TokenRepeatClassification ClassifyCandidateTokenRepeat(
+			const std::vector<std::int64_t>& emittedTokenIds,
+			std::int64_t candidateTokenId) {
+			std::vector<std::int64_t> candidateTokenIds;
+			const std::size_t maxHistory = kSherpaRepeatGuardMaxNgramLength * kSherpaRepeatGuardMinRepeatCount;
+			if (emittedTokenIds.size() > maxHistory) {
+				candidateTokenIds.assign(
+					emittedTokenIds.end() - static_cast<std::ptrdiff_t>(maxHistory),
+					emittedTokenIds.end());
+			}
+			else {
+				candidateTokenIds = emittedTokenIds;
+			}
+			candidateTokenIds.push_back(candidateTokenId);
+			return ClassifyTrailingTokenRepeats(
+				candidateTokenIds,
+				kSherpaRepeatGuardMinNgramLength,
+				kSherpaRepeatGuardMaxNgramLength);
+		}
+
+		bool IsSuppressibleTokenRepeat(const TokenRepeatClassification& repeat) {
+			return repeat.repeatedUnitLength >= kSherpaRepeatGuardMinNgramLength &&
+				repeat.repeatedUnitLength <= kSherpaRepeatGuardMaxNgramLength &&
+				repeat.repeatedUnitCount >= kSherpaRepeatGuardMinRepeatCount;
 		}
 
 		DecodedRepeatClassification ClassifyDecodedRepeats(const std::string& decodedText) {
@@ -3111,9 +3140,32 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 										if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
 											++streamState.rnntRepeatedTokenCount;
+								streamState.repeatedTokenNgramLength = 1;
+								streamState.repeatedTokenNgramCount = 2;
+								streamState.repeatedTokenNgramUnit = JoinTokenNgramUnit(
+									streamState.emittedTokenIds,
+									streamState.emittedTokenIds.size() - 1,
+									1);
+								streamState.repeatGuardAction = "immediate_token_suppressed";
 											advanceFrame = true;
 											continue;
 										}
+							{
+								const auto candidateRepeat = ClassifyCandidateTokenRepeat(
+									streamState.emittedTokenIds,
+									tokenId);
+								if (IsSuppressibleTokenRepeat(candidateRepeat)) {
+									++streamState.rnntRepeatedTokenCount;
+									streamState.repeatedTokenNgramLength =
+										static_cast<std::uint64_t>(candidateRepeat.repeatedUnitLength);
+									streamState.repeatedTokenNgramCount =
+										static_cast<std::uint64_t>(candidateRepeat.repeatedUnitCount);
+									streamState.repeatedTokenNgramUnit = candidateRepeat.repeatedUnit;
+									streamState.repeatGuardAction = "ngram_suppressed";
+									advanceFrame = true;
+									continue;
+								}
+							}
 										streamState.emittedTokenIds.push_back(tokenId);
 								streamState.baselineTokenIds.push_back(tokenId);
 								{

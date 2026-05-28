@@ -434,6 +434,8 @@ until Phase 3 and Phase 4 add guards.
 
 ### Phase 3: Generalize the historical RNN-T repeat guard to n-grams
 
+Status: implemented.
+
 Target file:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
@@ -458,10 +460,37 @@ Plan:
    persists across many frames.
 6. Make thresholds constants first; only expose config after baseline validation.
 
+Implementation notes:
+
+- The immediate same-token guard remains active and now records
+  `repeatGuardAction="immediate_token_suppressed"` when it fires.
+- Before accepting a non-blank/non-EOS candidate token, the runtime now builds a
+  bounded candidate token tail and checks for repeated token n-grams.
+- The Phase 3 guard uses constants:
+  - minimum n-gram length: 2,
+  - maximum n-gram length: 8,
+  - minimum consecutive repeat count before suppression: 3.
+- When a suppressible n-gram is detected, the runtime:
+  - increments `rnntRepeatedTokenCount`,
+  - records repeated token n-gram length/count/unit,
+  - records `repeatGuardAction="ngram_suppressed"`,
+  - does not append the candidate token to `emittedTokenIds`,
+  - does not append the candidate token to baseline token IDs,
+  - does not feed the candidate token into `decoderContext`,
+  - advances the current encoder frame.
+- The guard is token-structural and does not hard-code `描述`, `色素`, `色彩`, or
+  the reported utterance.
+- Decoded CJK phrase holding/rejection remains Phase 4; Phase 3 only prevents
+  repeated token n-gram loops from growing inside the RNN-T decoder state.
+
 Exit gate:
 
 - The engine cannot emit unbounded alternating token patterns that decode to
   repeated words such as `色素色素色素...`.
+
+Result: implemented. Candidate repeated token n-grams such as the measured
+`1251 768` loop are suppressed before they enter emitted-token or decoder-context
+state once they reach the conservative repeat threshold.
 
 ### Phase 4: Add decoded CJK phrase-repeat guard before final segment publication
 
