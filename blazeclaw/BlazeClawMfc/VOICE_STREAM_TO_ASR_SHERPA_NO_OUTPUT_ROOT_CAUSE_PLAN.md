@@ -419,6 +419,22 @@ returns success.
 
 ### Step 9: Compare with reference output
 
+Status: implemented.
+
+Implementation notes:
+
+- `tools/compare_sherpa_baseline.py` now normalizes reference aliases for final
+  timing and drain-state fields, including sequence start/end, cursor next,
+  final remaining samples, final fbank flush, final drain completion, final
+  outcome, latency, and loop counts.
+- Comparison JSON now includes structured `finalTiming` and `finalDrainState`
+  sections in addition to frame, token, token-piece, and decoded-text deltas.
+- Sherpa baseline JSON now persists `finalRemainingSamples` and
+  `finalDrainComplete` so Step 9 reports can prove whether a finite clip drained
+  to `sequenceEnd` before comparing text quality.
+- Automated Step 9 coverage exercises both a matched BlazeClaw/reference fixture
+  and a fixture with measurable text, token, timing, and drain-state deltas.
+
 Use `tools/compare_sherpa_baseline.py` to compare BlazeClaw output against a
 known-good reference result for the same clip.
 
@@ -431,7 +447,9 @@ Compare:
 5. decoded text,
 6. final timing and drain state.
 
-Exit gate: remaining quality differences are measurable and no longer present as
+Exit gate: `python tools/compare_sherpa_baseline.py --baseline <runId>.sherpa-baseline.json --reference <reference.json> --output <comparison.json>`
+produces structured frame, token, text, final timing, and final drain-state
+deltas, so remaining quality differences are measurable and no longer present as
 a no-output regression.
 
 ### Step 10: Retire only noisy diagnostics

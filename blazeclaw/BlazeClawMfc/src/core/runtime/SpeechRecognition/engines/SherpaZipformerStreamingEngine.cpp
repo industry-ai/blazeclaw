@@ -1423,9 +1423,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"sequenceStart\": " << streamingInput.source.sequenceStart << ",\n";
 		stream << "  \"sequenceEnd\": " << streamingInput.source.sequenceEnd << ",\n";
 		stream << "  \"cursorNextSequence\": " << streamState.nextSequence << ",\n";
+		stream << "  \"finalRemainingSamples\": "
+			<< (streamingInput.source.sequenceEnd > streamState.nextSequence
+				? streamingInput.source.sequenceEnd - streamState.nextSequence
+				: 0ULL) << ",\n";
 		stream << "  \"loopCount\": " << loopGuard << ",\n";
 		stream << "  \"maxLoopCount\": " << maxLoops << ",\n";
 		stream << "  \"finalFlush\": " << (finalFlush ? "true" : "false") << ",\n";
+		stream << "  \"finalDrainComplete\": "
+			<< (!streamingInput.source.sequenceEnd || streamState.nextSequence >= streamingInput.source.sequenceEnd
+				? "true"
+				: "false") << ",\n";
 		stream << "  \"finalOutcome\": \"" << EscapeJsonString(finalOutcome) << "\",\n";
 		stream << "  \"hasSegment\": " << (hasSegment ? "true" : "false") << ",\n";
 		stream << "  \"fallbackUsed\": " << (fallbackUsed ? "true" : "false") << ",\n";

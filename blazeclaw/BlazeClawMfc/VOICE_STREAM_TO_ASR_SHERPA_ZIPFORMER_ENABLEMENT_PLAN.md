@@ -248,6 +248,13 @@ Latest runtime telemetry root cause:
 	`hasSegment`, and `fallbackUsed` after native segment creation, and the tests
 	cover both a passing native transcript fixture and the rejected all-blank
 	`no_tokens_emitted` signature.
+26. Step 9 of the no-output root-cause plan is now implemented: reference
+	comparison reports include structured frame, token, token-piece, decoded-text,
+	`finalTiming`, and `finalDrainState` deltas. Baseline JSON now persists
+	`finalRemainingSamples` and `finalDrainComplete`, and reference aliases accept
+	common Sherpa/FunASR field names for sequence/cursor drain state, final flush,
+	final outcome, latency, and loop counts. Tests cover both matched reference
+	fixtures and measurable quality/lifecycle deltas.
 
 ## FunASR references to follow
 

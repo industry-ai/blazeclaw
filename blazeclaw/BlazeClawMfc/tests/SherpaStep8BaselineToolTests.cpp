@@ -137,6 +137,138 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Sherpa Step 9 comparison reports matched reference timing and drain state",
+	"[speech][sherpa][step9]")
+{
+	const auto tempRoot = CreateUniqueTempDirectory();
+	const auto baselinePath = tempRoot / "step9-pass.sherpa-baseline.json";
+	const auto referencePath = tempRoot / "step9-reference.json";
+	const auto outputPath = tempRoot / "comparison.json";
+
+	WriteTextFile(
+		baselinePath,
+		"{\n"
+		"  \"decodedText\": \"请讲一个笑话\",\n"
+		"  \"sampleRate\": 16000,\n"
+		"  \"fbankFrameCount\": 176,\n"
+		"  \"encoderFrameCount\": 176,\n"
+		"  \"decodedTokenCount\": 4,\n"
+		"  \"tokenIds\": \"601 499 838 2508\",\n"
+		"  \"tokenPieces\": \"请 讲 一 个\",\n"
+		"  \"sequenceStart\": 0,\n"
+		"  \"sequenceEnd\": 55329,\n"
+		"  \"cursorNextSequence\": 55329,\n"
+		"  \"finalRemainingSamples\": 0,\n"
+		"  \"finalFlush\": true,\n"
+		"  \"finalDrainComplete\": true,\n"
+		"  \"finalOutcome\": \"final_transcript\",\n"
+		"  \"latencyMs\": 3460,\n"
+		"  \"loopCount\": 347,\n"
+		"  \"maxLoopCount\": 348\n"
+		"}\n");
+
+	WriteTextFile(
+		referencePath,
+		"{\n"
+		"  \"text\": \"请讲一个笑话\",\n"
+		"  \"sample_rate\": 16000,\n"
+		"  \"fbank_frames\": 176,\n"
+		"  \"encoder_frames\": 176,\n"
+		"  \"token_count\": 4,\n"
+		"  \"token_ids\": [601, 499, 838, 2508],\n"
+		"  \"token_pieces\": [\"请\", \"讲\", \"一\", \"个\"],\n"
+		"  \"sequence_start\": 0,\n"
+		"  \"sequence_end\": 55329,\n"
+		"  \"cursor_next\": 55329,\n"
+		"  \"final_remaining_samples\": 0,\n"
+		"  \"final_flush\": true,\n"
+		"  \"final_drain_complete\": true,\n"
+		"  \"final_outcome\": \"final_transcript\",\n"
+		"  \"latency_ms\": 3460,\n"
+		"  \"loop_count\": 347,\n"
+		"  \"max_loop_count\": 348\n"
+		"}\n");
+
+	const auto scriptPath = ResolveProjectPath(
+		std::filesystem::path("BlazeClawMfc") / "tools" / "compare_sherpa_baseline.py");
+	REQUIRE(std::filesystem::exists(scriptPath));
+
+	const std::string command =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(baselinePath) +
+		" --reference " + QuotePath(referencePath) +
+		" --output " + QuotePath(outputPath);
+
+	REQUIRE(RunCommand(command) == 0);
+	REQUIRE(std::filesystem::exists(outputPath));
+
+	std::filesystem::remove_all(tempRoot);
+}
+
+TEST_CASE(
+	"Sherpa Step 9 comparison reports reference output differences",
+	"[speech][sherpa][step9]")
+{
+	const auto tempRoot = CreateUniqueTempDirectory();
+	const auto baselinePath = tempRoot / "step9-different.sherpa-baseline.json";
+	const auto referencePath = tempRoot / "step9-reference.json";
+	const auto outputPath = tempRoot / "comparison.json";
+
+	WriteTextFile(
+		baselinePath,
+		"{\n"
+		"  \"decodedText\": \"请讲一个笑话\",\n"
+		"  \"sampleRate\": 16000,\n"
+		"  \"fbankFrameCount\": 176,\n"
+		"  \"encoderFrameCount\": 176,\n"
+		"  \"decodedTokenCount\": 4,\n"
+		"  \"tokenIds\": \"601 499 838 2508\",\n"
+		"  \"tokenPieces\": \"请 讲 一 个\",\n"
+		"  \"sequenceEnd\": 55329,\n"
+		"  \"cursorNextSequence\": 55329,\n"
+		"  \"finalRemainingSamples\": 0,\n"
+		"  \"finalFlush\": true,\n"
+		"  \"finalDrainComplete\": true,\n"
+		"  \"finalOutcome\": \"final_transcript\",\n"
+		"  \"latencyMs\": 3460\n"
+		"}\n");
+
+	WriteTextFile(
+		referencePath,
+		"{\n"
+		"  \"text\": \"请讲一个故事\",\n"
+		"  \"sample_rate\": 16000,\n"
+		"  \"fbank_frames\": 175,\n"
+		"  \"encoder_frames\": 176,\n"
+		"  \"token_count\": 4,\n"
+		"  \"token_ids\": [601, 499, 838, 3000],\n"
+		"  \"token_pieces\": [\"请\", \"讲\", \"一\", \"故事\"],\n"
+		"  \"sequence_end\": 55329,\n"
+		"  \"cursor_next\": 55000,\n"
+		"  \"final_remaining_samples\": 329,\n"
+		"  \"final_flush\": true,\n"
+		"  \"final_drain_complete\": false,\n"
+		"  \"final_outcome\": \"finite_stream_not_drained\",\n"
+		"  \"latency_ms\": 3400\n"
+		"}\n");
+
+	const auto scriptPath = ResolveProjectPath(
+		std::filesystem::path("BlazeClawMfc") / "tools" / "compare_sherpa_baseline.py");
+	REQUIRE(std::filesystem::exists(scriptPath));
+
+	const std::string command =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(baselinePath) +
+		" --reference " + QuotePath(referencePath) +
+		" --output " + QuotePath(outputPath);
+
+	REQUIRE(RunCommand(command) == 0);
+	REQUIRE(std::filesystem::exists(outputPath));
+
+	std::filesystem::remove_all(tempRoot);
+}
+
+TEST_CASE(
 	"Sherpa Step 8 checker rejects all-blank no-output baselines",
 	"[speech][sherpa][step8]")
 {

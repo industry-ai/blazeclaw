@@ -26,8 +26,13 @@ BLAZECLAW_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "sequence_start": ("sequenceStart", "sherpaBaselineInputStartSequence"),
     "sequence_end": ("sequenceEnd", "sherpaBaselineInputEndSequence", "sherpaFinalSequenceEnd"),
     "cursor_next": ("cursorNextSequence", "sherpaBaselineCursorNextSequence", "sherpaFinalCursorNext"),
+    "final_remaining_samples": ("finalRemainingSamples", "sherpaFinalRemainingSamples"),
     "final_flush": ("finalFlush", "sherpaBaselineFinalFlush", "sherpaFinalFbankFlush"),
     "final_outcome": ("finalOutcome", "sherpaFinalOutcome"),
+    "final_drain_complete": ("finalDrainComplete", "sherpaFinalDrainComplete"),
+    "latency_ms": ("latencyMs", "finalMs", "final_ms"),
+    "loop_count": ("loopCount", "sherpaLoopCount"),
+    "max_loop_count": ("maxLoopCount", "sherpaMaxLoopCount"),
     "has_segment": ("hasSegment", "hasSegmentEffective"),
     "fallback_used": ("fallbackUsed", "sherpaFallbackUsed"),
 }
@@ -40,7 +45,16 @@ REFERENCE_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "decoded_token_count": ("decodedTokenCount", "tokenCount", "token_count"),
     "token_ids": ("tokenIds", "tokens", "token_ids"),
     "token_pieces": ("tokenPieces", "pieces", "token_pieces"),
-    "final_ms": ("finalMs", "final_ms", "latencyMs", "latency_ms"),
+    "sequence_start": ("sequenceStart", "sequence_start", "inputStartSequence", "input_start_sequence"),
+    "sequence_end": ("sequenceEnd", "sequence_end", "inputEndSequence", "input_end_sequence"),
+    "cursor_next": ("cursorNextSequence", "cursor_next", "finalCursorNext", "final_cursor_next"),
+    "final_remaining_samples": ("finalRemainingSamples", "final_remaining_samples"),
+    "final_flush": ("finalFlush", "final_flush", "finalFbankFlush", "final_fbank_flush"),
+    "final_outcome": ("finalOutcome", "final_outcome"),
+    "final_drain_complete": ("finalDrainComplete", "final_drain_complete"),
+    "latency_ms": ("finalMs", "final_ms", "latencyMs", "latency_ms"),
+    "loop_count": ("loopCount", "loop_count"),
+    "max_loop_count": ("maxLoopCount", "max_loop_count"),
 }
 
 COMPARISON_KEYS = (
@@ -51,6 +65,22 @@ COMPARISON_KEYS = (
     "token_ids",
     "token_pieces",
     "decoded_text",
+)
+
+FINAL_TIMING_KEYS = (
+    "latency_ms",
+    "loop_count",
+    "max_loop_count",
+)
+
+FINAL_DRAIN_KEYS = (
+    "sequence_start",
+    "sequence_end",
+    "cursor_next",
+    "final_remaining_samples",
+    "final_flush",
+    "final_drain_complete",
+    "final_outcome",
 )
 
 
@@ -321,9 +351,56 @@ def compare_metrics(
     if similarity is not None:
         deltas["decoded_text"]["similarity"] = similarity
 
+    final_timing = compare_named_fields(blazeclaw, reference, FINAL_TIMING_KEYS)
+    final_drain = compare_named_fields(blazeclaw, reference, FINAL_DRAIN_KEYS)
+    result["finalTiming"] = final_timing
+    result["finalDrainState"] = final_drain
+    matched = matched and final_timing["matched"] and final_drain["matched"]
+
     result["status"] = "matched" if matched else "different"
     result["deltas"] = deltas
     return result
+
+
+def compare_named_fields(
+    blazeclaw: dict[str, Any],
+    reference: dict[str, Any],
+    keys: Iterable[str],
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    matched = True
+    comparable_count = 0
+    for key in keys:
+        left = blazeclaw.get(key)
+        right = reference.get(key)
+        both_missing = left is None and right is None
+        if both_missing:
+            fields[key] = {
+                "match": True,
+                "blazeclaw": left,
+                "reference": right,
+                "available": False,
+            }
+            continue
+
+        comparable_count += 1
+        equal = left == right
+        field: dict[str, Any] = {
+            "match": equal,
+            "blazeclaw": left,
+            "reference": right,
+            "available": True,
+        }
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            field["delta"] = left - right
+        fields[key] = field
+        matched = matched and equal
+
+    return {
+        "matched": matched,
+        "comparableCount": comparable_count,
+        "fields": fields,
+    }
 
 
 def first_difference(left: list[str], right: list[str]) -> dict[str, Any] | None:
@@ -378,6 +455,20 @@ def print_summary(comparison: dict[str, Any]) -> None:
             print(
                 "first token difference: "
                 f"index={diff['index']} blazeclaw={diff['blazeclaw']} reference={diff['reference']}"
+            )
+        final_timing = comparison.get("finalTiming")
+        if isinstance(final_timing, dict):
+            print(
+                "final timing matched: "
+                f"{str(final_timing.get('matched')).lower()} "
+                f"({final_timing.get('comparableCount')} comparable fields)"
+            )
+        final_drain = comparison.get("finalDrainState")
+        if isinstance(final_drain, dict):
+            print(
+                "final drain matched: "
+                f"{str(final_drain.get('matched')).lower()} "
+                f"({final_drain.get('comparableCount')} comparable fields)"
             )
     elif comparison.get("message"):
         print(comparison["message"])

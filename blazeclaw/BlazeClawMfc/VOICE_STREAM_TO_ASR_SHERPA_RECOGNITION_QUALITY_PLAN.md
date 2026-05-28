@@ -545,7 +545,8 @@ Outcome:
 - The comparison extracts and reports the Phase 1-6 evidence fields needed for
   quality validation: fbank frame count, encoder frame count, decoded token
   count, token IDs, token pieces, decoded text, final flush state, final outcome,
-  and stream cursor/final sequence data.
+  final drain completion, final remaining samples, latency, loop counts, and
+  stream cursor/final sequence data.
 - The tool accepts common reference field names such as `text`, `transcript`,
   `token_ids`, `token_pieces`, `fbank_frames`, and `encoder_frames`, so output
   from different reference runners can be normalized without changing BlazeClaw
@@ -554,8 +555,8 @@ Outcome:
   with `status: reference_missing` and still extracts BlazeClaw baseline metrics;
   this keeps telemetry in place until an external reference result can be
   attached.
-- Validation covered both a matching BlazeClaw/reference JSON pair and the
-  no-reference path.
+- Validation covered matching and different BlazeClaw/reference JSON pairs, final
+  timing/drain-state comparison output, and the no-reference path.
 
 Usage:
 
@@ -580,7 +581,8 @@ Exit criteria:
   reference run.
 - The user-facing realtime transcript stability gate remains evidence-based: do
   not remove noisy diagnostics until the comparison report shows acceptable
-  decoded-text and token/frame-count deltas for representative clips.
+	decoded-text, token/frame-count, final timing, and drain-state deltas for
+  representative clips.
 
 ## Post-Phase 7 regression: all-blank output after cache-state corruption
 
@@ -655,6 +657,19 @@ Step 8 non-blank restoration gate:
   synthetic rescue text.
 - Tool-level regression coverage accepts a native non-blank final transcript
   fixture and rejects the historical all-blank no-output signature.
+
+Step 9 reference comparison gate:
+
+- `tools/compare_sherpa_baseline.py` now emits structured `finalTiming` and
+  `finalDrainState` sections when a known-good reference JSON is supplied.
+- Reference aliases cover `sequence_start`, `sequence_end`, `cursor_next`,
+  `final_remaining_samples`, `final_flush`, `final_drain_complete`,
+  `final_outcome`, `latency_ms`, `loop_count`, and `max_loop_count`.
+- BlazeClaw baseline JSON now persists `finalRemainingSamples` and
+  `finalDrainComplete`, so a comparison report can separate remaining text/token
+  quality deltas from lifecycle or finite-drain regressions.
+- Step 9 tests cover both matched reference output and measurable differences in
+  decoded text, token IDs/pieces, timing, and drain state.
 
 ## Recommended implementation order
 
