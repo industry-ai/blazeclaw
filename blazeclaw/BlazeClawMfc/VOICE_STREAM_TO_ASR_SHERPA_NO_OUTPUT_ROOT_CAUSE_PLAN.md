@@ -469,6 +469,11 @@ Implementation notes:
   model metadata rather than per-frame runtime volume.
 - Step 10 coverage verifies the retained bounded Sherpa debug fields and the
   verbose trace gate.
+- Follow-up runtime regression fix: initial dynamic encoder cache inputs are now
+  materialized as valid zero-initialized tensors before ONNX execution, and an
+  encoder input completeness guard stops before `Run(...)` if cache assembly is
+  incomplete. This prevents ONNX `Missing Input` failures for required cache
+  tensors such as `cached_conv2_4`.
 
 After non-blank output is restored and reference comparison is acceptable:
 

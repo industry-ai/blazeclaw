@@ -683,6 +683,10 @@ Step 10 diagnostic retirement gate:
 - Load-time binding/cache-map TRACE output remains available because it is
   bounded by model metadata and is useful for future contract regressions.
 - Step 10 tests verify the retained debug fields and the verbose trace gate.
+- Post-Step 10 regression handling now initializes dynamic encoder cache inputs
+  before ONNX execution and fails early with a bounded contract error if encoder
+  input assembly is incomplete, avoiding runtime `Missing Input` errors such as
+  `cached_conv2_4`.
 
 ## Recommended implementation order
 

@@ -450,10 +450,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 				return shape;
 			}
 
-			if (cachedElementCount == 0) {
-				return std::nullopt;
-			}
-
 			std::int64_t knownProduct = 1;
 			std::size_t dynamicIndex = shape.size();
 			std::size_t dynamicCount = 0;
@@ -469,6 +465,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			if (dynamicCount == 1 && knownProduct > 0) {
 				const auto known = static_cast<std::size_t>(knownProduct);
+				if (cachedElementCount == 0) {
+					shape[dynamicIndex] = 1;
+					return shape;
+				}
 				if (cachedElementCount % known != 0) {
 					return std::nullopt;
 				}
@@ -477,8 +477,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 
 			if (shape.size() == 1 && shape[0] <= 0) {
+				if (cachedElementCount == 0) {
+					shape[0] = 1;
+					return shape;
+				}
 				shape[0] = static_cast<std::int64_t>(cachedElementCount);
 				return shape;
+			}
+
+			if (cachedElementCount == 0) {
+				for (auto& dim : shape) {
+					if (dim <= 0) {
+						dim = 1;
+					}
+				}
+				return ComputeStaticElementCount(shape) > 0
+					? std::optional{ shape }
+					: std::nullopt;
 			}
 
 			return std::nullopt;
@@ -2297,6 +2312,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 							}
 						}
 						encoderInputNames.push_back(binding.name.c_str());
+					}
+
+					if (inferenceFailed) {
+						break;
+					}
+
+					if (encoderInputs.size() != m_encoderInputBindings.size() ||
+						encoderInputNames.size() != m_encoderInputBindings.size()) {
+						++streamState.encoderStateCacheContractFailureCount;
+						std::ostringstream stream;
+						stream << "encoder input assembly incomplete expected="
+							<< m_encoderInputBindings.size()
+							<< " actual=" << encoderInputs.size();
+						streamState.contractStateCacheLastError = stream.str();
+						inferenceFailed = true;
+						inferenceFailureMessage = streamState.contractStateCacheLastError;
+						break;
 					}
 
 					std::vector<const char*> encoderOutputNames;

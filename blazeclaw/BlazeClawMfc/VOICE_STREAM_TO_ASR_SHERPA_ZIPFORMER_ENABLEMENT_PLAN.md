@@ -262,6 +262,10 @@ Latest runtime telemetry root cause:
 	through debug snapshots, baseline JSON, final outcome classification, cache
 	binding/update counts, contract failure counts, and top-level model-contract
 	shape summaries.
+28. A post-Step 10 runtime regression fix initializes dynamic encoder cache
+	inputs before ONNX execution and adds an encoder-input completeness guard.
+	Required cache tensors such as `cached_conv2_4` now get valid zero-filled
+	initial inputs instead of surfacing as ONNX Runtime `Missing Input` failures.
 
 ## FunASR references to follow
 
