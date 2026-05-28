@@ -397,6 +397,121 @@ namespace blazeclaw::core::speechrecognition::engines {
 			});
 		}
 
+		std::uint64_t ComputeStaticElementCount(
+			const std::vector<std::int64_t>& shape) {
+			if (shape.empty()) {
+				return 0;
+			}
+
+			std::uint64_t elements = 1;
+			for (const auto dim : shape) {
+				if (dim <= 0) {
+					return 0;
+				}
+				elements *= static_cast<std::uint64_t>(dim);
+			}
+			return elements;
+		}
+
+		std::optional<std::vector<std::int64_t>> ResolveStateCacheInputShape(
+			const SherpaZipformerStreamingEngine::EncoderStateCacheBinding& mapping,
+			std::size_t cachedElementCount) {
+			std::vector<std::int64_t> shape = mapping.inputShape;
+			if (shape.empty()) {
+				shape = mapping.outputShape;
+			}
+
+			if (shape.empty()) {
+				return std::nullopt;
+			}
+
+			const std::uint64_t inputElements = ComputeStaticElementCount(shape);
+			if (inputElements > 0) {
+				return shape;
+			}
+
+			const std::uint64_t outputElements = ComputeStaticElementCount(mapping.outputShape);
+			if (outputElements > 0) {
+				shape = mapping.outputShape;
+				return shape;
+			}
+
+			if (cachedElementCount == 0) {
+				return std::nullopt;
+			}
+
+			std::int64_t knownProduct = 1;
+			std::size_t dynamicIndex = shape.size();
+			std::size_t dynamicCount = 0;
+			for (std::size_t index = 0; index < shape.size(); ++index) {
+				if (shape[index] <= 0) {
+					dynamicIndex = index;
+					++dynamicCount;
+				}
+				else {
+					knownProduct *= shape[index];
+				}
+			}
+
+			if (dynamicCount == 1 && knownProduct > 0) {
+				const auto known = static_cast<std::size_t>(knownProduct);
+				if (cachedElementCount % known != 0) {
+					return std::nullopt;
+				}
+				shape[dynamicIndex] = static_cast<std::int64_t>(cachedElementCount / known);
+				return shape;
+			}
+
+			if (shape.size() == 1 && shape[0] <= 0) {
+				shape[0] = static_cast<std::int64_t>(cachedElementCount);
+				return shape;
+			}
+
+			return std::nullopt;
+		}
+
+		std::uint64_t ComputeResolvedElementCount(
+			const std::vector<std::int64_t>& shape) {
+			const auto count = ComputeStaticElementCount(shape);
+			return count == 0 ? 0 : count;
+		}
+
+		std::string FormatStateCacheContractError(
+			const char* operation,
+			const SherpaZipformerStreamingEngine::EncoderStateCacheBinding& mapping,
+			const std::vector<std::int64_t>& shape,
+			std::size_t expectedElements,
+			std::size_t actualElements) {
+			std::ostringstream stream;
+			stream << "state cache " << operation
+				<< " mismatch normalized=" << mapping.normalizedStateName
+				<< " cacheIndex=" << mapping.cacheIndex
+				<< " inputShape=" << FormatShape(mapping.inputShape)
+				<< " outputShape=" << FormatShape(mapping.outputShape)
+				<< " resolvedShape=" << FormatShape(shape)
+				<< " expectedElements=" << expectedElements
+				<< " actualElements=" << actualElements;
+			return stream.str();
+		}
+
+		std::string FormatStateCacheSummary(
+			const std::vector<SherpaZipformerStreamingEngine::EncoderStateCacheBinding>& mappings) {
+			std::ostringstream stream;
+			stream << "mappings=" << mappings.size();
+			for (std::size_t index = 0; index < mappings.size(); ++index) {
+				const auto& mapping = mappings[index];
+				stream << (index == 0 ? ";" : "|")
+					<< mapping.normalizedStateName
+					<< ":type=" << (mapping.isInt64 ? "int64" : "float")
+					<< ",cacheIndex=" << mapping.cacheIndex
+					<< ",input=" << FormatShape(mapping.inputShape)
+					<< ",output=" << FormatShape(mapping.outputShape)
+					<< ",inputElements=" << mapping.inputStaticElementCount
+					<< ",outputElements=" << mapping.outputStaticElementCount;
+			}
+			return stream.str();
+		}
+
 		bool IsLengthLikeName(const std::string& loweredName) {
 			return loweredName.find("x_lens") != std::string::npos ||
 				loweredName.find("processed_lens") != std::string::npos ||
@@ -678,6 +793,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 					mapping.outputBindingIndex = outputIndex;
 					mapping.cacheIndex = input.bufferIndex;
 					mapping.normalizedStateName = input.normalizedStateName;
+					mapping.inputShape = input.shape;
+					mapping.outputShape = output.shape;
+					mapping.inputStaticElementCount = ComputeStaticElementCount(input.shape);
+					mapping.outputStaticElementCount = ComputeStaticElementCount(output.shape);
+					mapping.inputHasDynamicShape = input.hasDynamicShape;
+					mapping.outputHasDynamicShape = output.hasDynamicShape;
 					mapping.isInt64 = input.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
 					mappings.push_back(std::move(mapping));
 					break;
@@ -694,12 +815,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 			for (const auto& mapping : mappings) {
 				const auto& input = inputBindings[mapping.inputBindingIndex];
 				const auto& output = outputBindings[mapping.outputBindingIndex];
-				TRACE(L"[SherpaStreaming][CacheMap] input=%s output=%s normalized=%s cacheIndex=%llu type=%s\n",
+				TRACE(L"[SherpaStreaming][CacheMap] input=%s output=%s normalized=%s cacheIndex=%llu type=%s inputShape=%s outputShape=%s inputElements=%llu outputElements=%llu\n",
 					ToWideString(input.name).c_str(),
 					ToWideString(output.name).c_str(),
 					ToWideString(mapping.normalizedStateName).c_str(),
 					static_cast<unsigned long long>(mapping.cacheIndex),
-					mapping.isInt64 ? L"int64" : L"float");
+					mapping.isInt64 ? L"int64" : L"float",
+					ShapeToWideString(mapping.inputShape).c_str(),
+					ShapeToWideString(mapping.outputShape).c_str(),
+					static_cast<unsigned long long>(mapping.inputStaticElementCount),
+					static_cast<unsigned long long>(mapping.outputStaticElementCount));
 			}
 		}
 #endif
@@ -1188,6 +1313,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
 		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
 		stream << "  \"decodedTokenCount\": " << streamState.decodedTokenCount << ",\n";
+		stream << "  \"encoderStateCacheValidatedUpdateCount\": " << streamState.encoderStateCacheValidatedUpdateCount << ",\n";
+		stream << "  \"encoderStateCacheContractFailureCount\": " << streamState.encoderStateCacheContractFailureCount << ",\n";
+		stream << "  \"encoderStateCacheSummary\": \"" << EscapeJsonString(streamState.contractStateCacheSummary) << "\",\n";
+		stream << "  \"encoderStateCacheLastError\": \"" << EscapeJsonString(streamState.contractStateCacheLastError) << "\",\n";
 		stream << "  \"featureFirstFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureFirstFrameStats) << "\",\n";
 		stream << "  \"featureLastFrameStats\": \"" << EscapeJsonString(streamState.contractFeatureLastFrameStats) << "\",\n";
 		stream << "  \"joinerTopTokens\": \"" << EscapeJsonString(streamState.contractJoinerTopTokens) << "\",\n";
@@ -1322,6 +1451,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const std::string baselineExpectedText = ResolveBaselineExpectedText();
 		const bool baselinePersistenceEnabled = IsBaselinePersistenceEnabled();
 		const auto sampleScalingPolicy = ResolveSherpaFbankSampleScalingPolicy();
+#if BLAZECLAW_HAS_ONNXRUNTIME
+		const std::string encoderStateCacheSummary = FormatStateCacheSummary(m_encoderStateCacheBindings);
+#else
+		const std::string encoderStateCacheSummary;
+#endif
 
 		StreamState streamState;
 		{
@@ -1343,6 +1477,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 					? streamingInput.cursor.nextSequence
 					: streamingInput.source.sequenceStart;
 			}
+			cachedState.contractStateCacheSummary = encoderStateCacheSummary;
 			streamState = cachedState;
 		}
 
@@ -1750,6 +1885,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 					encoderInt64Buffers.reserve(m_encoderInputBindings.size());
 					encoderFloatBuffers.reserve(m_encoderInputBindings.size());
 
+					auto findStateMappingForInput = [this](std::size_t inputIndex) -> const EncoderStateCacheBinding* {
+						const auto mappingIt = std::find_if(
+							m_encoderStateCacheBindings.begin(),
+							m_encoderStateCacheBindings.end(),
+							[inputIndex](const EncoderStateCacheBinding& mapping) {
+								return mapping.inputBindingIndex == inputIndex;
+							});
+						return mappingIt == m_encoderStateCacheBindings.end() ? nullptr : &(*mappingIt);
+					};
+
 					for (const auto& binding : m_encoderInputBindings) {
 						std::vector<std::int64_t> shape = binding.shape;
 						for (auto& dim : shape) {
@@ -1796,24 +1941,55 @@ namespace blazeclaw::core::speechrecognition::engines {
 								shape.size()));
 						}
 						else if (binding.isStateTensor) {
-							const std::size_t elements = static_cast<std::size_t>((std::max)(
-								std::int64_t{ 1 },
-								std::accumulate(
-									shape.begin(),
-									shape.end(),
-									std::int64_t{ 1 },
-									[](std::int64_t a, std::int64_t b) {
-										return a * ((std::max)(std::int64_t{ 1 }, b));
-									})));
+							const auto* mapping = findStateMappingForInput(binding.ordinal);
+							if (mapping == nullptr) {
+								++streamState.encoderStateCacheContractFailureCount;
+								streamState.contractStateCacheLastError = "state cache input has no mapped output: " + binding.name;
+								inferenceFailed = true;
+								inferenceFailureMessage = streamState.contractStateCacheLastError;
+								break;
+							}
 
 							if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
 								if (streamState.encoderInt64StateCaches.size() <= binding.bufferIndex) {
 									streamState.encoderInt64StateCaches.resize(binding.bufferIndex + 1);
 								}
-								auto& cache = streamState.encoderInt64StateCaches[binding.bufferIndex];
-								if (cache.size() != elements) {
-									cache.assign(elements, 0);
+								if (streamState.encoderInt64StateCacheShapes.size() <= binding.bufferIndex) {
+									streamState.encoderInt64StateCacheShapes.resize(binding.bufferIndex + 1);
 								}
+								auto& cache = streamState.encoderInt64StateCaches[binding.bufferIndex];
+								auto& cacheShape = streamState.encoderInt64StateCacheShapes[binding.bufferIndex];
+								const auto resolvedShape = ResolveStateCacheInputShape(*mapping, cache.size());
+								if (!resolvedShape.has_value()) {
+									++streamState.encoderStateCacheContractFailureCount;
+									streamState.contractStateCacheLastError = FormatStateCacheContractError(
+										"initialize",
+										*mapping,
+										shape,
+										0,
+										cache.size());
+									inferenceFailed = true;
+									inferenceFailureMessage = streamState.contractStateCacheLastError;
+									break;
+								}
+								shape = *resolvedShape;
+								const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(shape));
+								if (expectedElements == 0) {
+									++streamState.encoderStateCacheContractFailureCount;
+									streamState.contractStateCacheLastError = FormatStateCacheContractError(
+										"initialize",
+										*mapping,
+										shape,
+									expectedElements,
+										cache.size());
+									inferenceFailed = true;
+									inferenceFailureMessage = streamState.contractStateCacheLastError;
+									break;
+								}
+								if (cache.size() != expectedElements) {
+									cache.assign(expectedElements, 0);
+								}
+								cacheShape = shape;
 								encoderInt64Buffers.push_back(cache);
 								auto& stateRef = encoderInt64Buffers.back();
 								encoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
@@ -1827,10 +2003,42 @@ namespace blazeclaw::core::speechrecognition::engines {
 								if (streamState.encoderFloatStateCaches.size() <= binding.bufferIndex) {
 									streamState.encoderFloatStateCaches.resize(binding.bufferIndex + 1);
 								}
-								auto& cache = streamState.encoderFloatStateCaches[binding.bufferIndex];
-								if (cache.size() != elements) {
-									cache.assign(elements, 0.0f);
+								if (streamState.encoderFloatStateCacheShapes.size() <= binding.bufferIndex) {
+									streamState.encoderFloatStateCacheShapes.resize(binding.bufferIndex + 1);
 								}
+								auto& cache = streamState.encoderFloatStateCaches[binding.bufferIndex];
+								auto& cacheShape = streamState.encoderFloatStateCacheShapes[binding.bufferIndex];
+								const auto resolvedShape = ResolveStateCacheInputShape(*mapping, cache.size());
+								if (!resolvedShape.has_value()) {
+									++streamState.encoderStateCacheContractFailureCount;
+									streamState.contractStateCacheLastError = FormatStateCacheContractError(
+										"initialize",
+										*mapping,
+										shape,
+										0,
+										cache.size());
+									inferenceFailed = true;
+									inferenceFailureMessage = streamState.contractStateCacheLastError;
+									break;
+								}
+								shape = *resolvedShape;
+								const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(shape));
+								if (expectedElements == 0) {
+									++streamState.encoderStateCacheContractFailureCount;
+									streamState.contractStateCacheLastError = FormatStateCacheContractError(
+										"initialize",
+										*mapping,
+										shape,
+									expectedElements,
+										cache.size());
+									inferenceFailed = true;
+									inferenceFailureMessage = streamState.contractStateCacheLastError;
+									break;
+								}
+								if (cache.size() != expectedElements) {
+									cache.assign(expectedElements, 0.0f);
+								}
+								cacheShape = shape;
 								encoderFloatBuffers.push_back(cache);
 								auto& stateRef = encoderFloatBuffers.back();
 								encoderInputs.push_back(Ort::Value::CreateTensor<float>(
@@ -1892,21 +2100,6 @@ namespace blazeclaw::core::speechrecognition::engines {
 					if (!encoderOutputs.empty()) {
 						std::optional<std::size_t> encoderOutputFrameLimit;
 						bool hasModelLengthOutput = false;
-						auto isCompatibleStateShape = [](const std::vector<std::int64_t>& expectedShape, std::size_t actualElements) {
-							if (expectedShape.empty()) {
-								return actualElements > 0;
-							}
-							std::uint64_t expectedElements = 1;
-							bool hasDynamicDim = false;
-							for (const auto dim : expectedShape) {
-								if (dim <= 0) {
-									hasDynamicDim = true;
-									continue;
-								}
-								expectedElements *= static_cast<std::uint64_t>(dim);
-							}
-							return hasDynamicDim || expectedElements == static_cast<std::uint64_t>(actualElements);
-						};
 						for (std::size_t outputIndex = 0; outputIndex < encoderOutputs.size(); ++outputIndex) {
 							if (!encoderOutputs[outputIndex].IsTensor()) {
 								continue;
@@ -1943,15 +2136,30 @@ namespace blazeclaw::core::speechrecognition::engines {
 										continue;
 									}
 									const std::size_t stateIndex = mappingIt->cacheIndex;
-									const auto& inputBinding = m_encoderInputBindings[mappingIt->inputBindingIndex];
-									if (!isCompatibleStateShape(inputBinding.shape, elements)) {
-										continue;
+									const auto outputShape = outputInfo.GetShape();
+									const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(outputShape));
+									if (expectedElements == 0 || expectedElements != elements) {
+										++streamState.encoderStateCacheContractFailureCount;
+										streamState.contractStateCacheLastError = FormatStateCacheContractError(
+											"update",
+											*mappingIt,
+											outputShape,
+											expectedElements,
+											elements);
+										inferenceFailed = true;
+										inferenceFailureMessage = streamState.contractStateCacheLastError;
+										break;
 									}
 									if (streamState.encoderInt64StateCaches.size() <= stateIndex) {
 										streamState.encoderInt64StateCaches.resize(stateIndex + 1);
 									}
+									if (streamState.encoderInt64StateCacheShapes.size() <= stateIndex) {
+										streamState.encoderInt64StateCacheShapes.resize(stateIndex + 1);
+									}
 									streamState.encoderInt64StateCaches[stateIndex].assign(data, data + elements);
+									streamState.encoderInt64StateCacheShapes[stateIndex] = outputShape;
 									++streamState.encoderStateCacheUpdateCount;
+									++streamState.encoderStateCacheValidatedUpdateCount;
 								}
 							}
 							else if (outputType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
@@ -1971,17 +2179,39 @@ namespace blazeclaw::core::speechrecognition::engines {
 										continue;
 									}
 									const std::size_t stateIndex = mappingIt->cacheIndex;
-									const auto& inputBinding = m_encoderInputBindings[mappingIt->inputBindingIndex];
-									if (!isCompatibleStateShape(inputBinding.shape, elements)) {
-										continue;
+									const auto outputShape = outputInfo.GetShape();
+									const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(outputShape));
+									if (expectedElements == 0 || expectedElements != elements) {
+										++streamState.encoderStateCacheContractFailureCount;
+										streamState.contractStateCacheLastError = FormatStateCacheContractError(
+											"update",
+											*mappingIt,
+											outputShape,
+											expectedElements,
+											elements);
+										inferenceFailed = true;
+										inferenceFailureMessage = streamState.contractStateCacheLastError;
+										break;
 									}
 									if (streamState.encoderFloatStateCaches.size() <= stateIndex) {
 										streamState.encoderFloatStateCaches.resize(stateIndex + 1);
 									}
+									if (streamState.encoderFloatStateCacheShapes.size() <= stateIndex) {
+										streamState.encoderFloatStateCacheShapes.resize(stateIndex + 1);
+									}
 									streamState.encoderFloatStateCaches[stateIndex].assign(data, data + elements);
+									streamState.encoderFloatStateCacheShapes[stateIndex] = outputShape;
 									++streamState.encoderStateCacheUpdateCount;
+									++streamState.encoderStateCacheValidatedUpdateCount;
 								}
 							}
+							if (inferenceFailed) {
+								break;
+							}
+						}
+
+						if (inferenceFailed) {
+							break;
 						}
 
 						auto isUsableEncoderTensor = [](const Ort::Value& value) {
@@ -2505,6 +2735,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaEncoderStateCacheBindingCount = 0,
 #endif
 			.sherpaEncoderStateCacheUpdateCount = streamState.encoderStateCacheUpdateCount,
+			.sherpaEncoderStateCacheValidatedUpdateCount = streamState.encoderStateCacheValidatedUpdateCount,
+			.sherpaEncoderStateCacheContractFailureCount = streamState.encoderStateCacheContractFailureCount,
+			.sherpaEncoderStateCacheSummary = streamState.contractStateCacheSummary,
+			.sherpaEncoderStateCacheLastError = streamState.contractStateCacheLastError,
 			.sherpaEncoderLengthOutputCount = streamState.encoderLengthOutputCount,
 			.sherpaEncoderLengthOutputUsed = streamState.encoderLengthOutputUsed,
 			.sherpaRnntInnerLoopCount = streamState.rnntInnerLoopCount,

@@ -308,6 +308,27 @@ non-blank token emission without fallback logic.
 
 ### Step 6: Correct state-cache initialization from model outputs/config
 
+Status: implemented.
+
+Implementation notes:
+
+- Each mapped encoder state cache now records input shape, output shape,
+  element type, static element counts, dynamic-shape flags, normalized cache
+  name, and cache index in the load-time cache map trace.
+- Dynamic cache input shapes are resolved from the mapped output shape when the
+  output contract is static. If both sides remain dynamic, the existing runtime
+  cache size is used only when it can resolve a single dynamic dimension.
+- First-use cache buffers are initialized from the resolved model-contract shape,
+  not by replacing every dynamic dimension with `1`.
+- Encoder output cache updates validate the actual output element count against
+  the model output shape before refreshing the cached tensor.
+- Cache initialization/update contract failures now fail the Sherpa inference
+  path with `InferenceFailed` diagnostics instead of silently skipping the bad
+  cache update.
+- Debug snapshots and persisted baseline JSON expose validated update counts,
+  contract failure counts, the cache contract summary, and the last cache
+  contract error.
+
 Audit every encoder state input/output pair:
 
 1. Record input shape, output shape, element type, and element count.

@@ -223,6 +223,14 @@ Latest runtime telemetry root cause:
 	top joiner tokens so A/B runs can compare fbank frame count, feature
 	mean/range, token scores, decoded token count, and decoded text without adding
 	fallback transcript behavior.
+23. Step 6 of the no-output root-cause plan is now implemented: encoder
+	state-cache initialization and refresh are driven by mapped model contracts.
+	Cache map telemetry records input/output shapes, static element counts, dynamic
+	flags, element type, and cache index for every state pair. Runtime cache inputs
+	are initialized from resolved output-contract shapes or valid existing cache
+	sizes, and output refreshes validate element counts before updating. Any
+	unresolved or mismatched cache contract now fails with explicit diagnostics
+	instead of being silently skipped.
 
 ## FunASR references to follow
 

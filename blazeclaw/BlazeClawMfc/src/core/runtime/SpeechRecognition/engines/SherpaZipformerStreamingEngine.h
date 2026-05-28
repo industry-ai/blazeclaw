@@ -59,6 +59,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::size_t outputBindingIndex = 0;
 			std::size_t cacheIndex = 0;
 			std::string normalizedStateName;
+			std::vector<std::int64_t> inputShape;
+			std::vector<std::int64_t> outputShape;
+			std::uint64_t inputStaticElementCount = 0;
+			std::uint64_t outputStaticElementCount = 0;
+			bool inputHasDynamicShape = false;
+			bool outputHasDynamicShape = false;
 			bool isInt64 = false;
 		};
 
@@ -85,12 +91,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::size_t pendingFeatureFrameCount = 0;
 			std::vector<std::vector<std::int64_t>> encoderInt64StateCaches;
 			std::vector<std::vector<float>> encoderFloatStateCaches;
+			std::vector<std::vector<std::int64_t>> encoderInt64StateCacheShapes;
+			std::vector<std::vector<std::int64_t>> encoderFloatStateCacheShapes;
 			std::uint64_t chunkCount = 0;
 			std::uint64_t decodedTokenCount = 0;
 			std::uint64_t encoderFrameCount = 0;
 			std::uint64_t joinerCallCount = 0;
 			std::uint64_t blankTokenCount = 0;
 			std::uint64_t encoderStateCacheUpdateCount = 0;
+			std::uint64_t encoderStateCacheValidatedUpdateCount = 0;
+			std::uint64_t encoderStateCacheContractFailureCount = 0;
 			std::uint64_t encoderLengthOutputCount = 0;
 			std::uint64_t contractFeatureFrameCount = 0;
 			std::uint64_t contractFeatureRealFrameCount = 0;
@@ -108,6 +118,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::string contractJoinerDecoderInputShape;
 			std::string contractJoinerOutputShape;
 			std::string contractJoinerTopTokens;
+			std::string contractStateCacheSummary;
+			std::string contractStateCacheLastError;
 			std::uint64_t rnntInnerLoopCount = 0;
 			std::uint64_t rnntMaxSymbolsHitCount = 0;
 			std::uint64_t rnntRepeatedTokenCount = 0;

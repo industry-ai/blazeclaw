@@ -227,6 +227,12 @@ Outcome:
   FunASR-observed `sample * 32768` path. Debug snapshots, `[SherpaContract]`
   traces, and persisted baseline JSON report the selected scaling mode plus
   feature stats and joiner top-token diagnostics for A/B comparison.
+- Step 6 of the no-output root-cause plan now makes encoder state-cache
+  initialization model-contract driven. Each mapped state input/output pair
+  records input/output shapes and element counts; dynamic input shapes resolve
+  from the mapped output contract or existing cache size; updates validate actual
+  output element counts; and contract failures now surface as explicit Sherpa
+  inference diagnostics instead of silent cache-skip behavior.
 - Adopted the FunASR-observed sample convention for this phase: BlazeClaw ring
   samples are treated as normalized floats and scaled by `32768` before
   `OnlineFbank::AcceptWaveform(...)`.

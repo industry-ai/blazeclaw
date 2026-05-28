@@ -139,6 +139,10 @@ namespace blazeclaw::core::speechrecognition {
 		bool sherpaSpeechActive = false;
 		std::uint64_t sherpaEncoderStateCacheBindingCount = 0;
 		std::uint64_t sherpaEncoderStateCacheUpdateCount = 0;
+		std::uint64_t sherpaEncoderStateCacheValidatedUpdateCount = 0;
+		std::uint64_t sherpaEncoderStateCacheContractFailureCount = 0;
+		std::string sherpaEncoderStateCacheSummary;
+		std::string sherpaEncoderStateCacheLastError;
 		std::uint64_t sherpaEncoderLengthOutputCount = 0;
 		bool sherpaEncoderLengthOutputUsed = false;
 		std::uint64_t sherpaRnntInnerLoopCount = 0;
