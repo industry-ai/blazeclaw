@@ -275,6 +275,8 @@ TEST_CASE(
 	const auto tempRoot = CreateUniqueTempDirectory();
 	const auto cleanBaselinePath = tempRoot / "repeat-clean.sherpa-baseline.json";
 	const auto repeatedBaselinePath = tempRoot / "repeat-degenerate.sherpa-baseline.json";
+	const auto reportedBaselinePath = tempRoot / "repeat-reported.sherpa-baseline.json";
+	const auto seSuBaselinePath = tempRoot / "repeat-sesu.sherpa-baseline.json";
 	const auto cleanOutputPath = tempRoot / "repeat-clean-comparison.json";
 
 	WriteTextFile(
@@ -301,6 +303,34 @@ TEST_CASE(
 		"  \"rnntMultiSymbolFrameCount\": 8\n"
 		"}\n");
 
+	WriteTextFile(
+		reportedBaselinePath,
+		"{\n"
+		"  \"expectedText\": \"写一首诗用它来描述春天的色彩\",\n"
+		"  \"decodedText\": \"写一首是用他来描述春天的色彩色彩色彩色彩色彩\",\n"
+		"  \"decodedTokenCount\": 22,\n"
+		"  \"tokenIds\": \"101 102 1251 768 1251 768 1251 768 1251 768 1251 768\",\n"
+		"  \"repeatedTokenNgramLength\": 2,\n"
+		"  \"repeatedTokenNgramCount\": 5,\n"
+		"  \"repeatedTokenNgramUnit\": \"1251 768\",\n"
+		"  \"repeatedDecodedUnit\": \"色彩\",\n"
+		"  \"repeatedDecodedUnitCount\": 5,\n"
+		"  \"decodedRepeatFinalRejected\": true,\n"
+		"  \"repeatGuardAction\": \"decoded_repeat_final_rejected\"\n"
+		"}\n");
+
+	WriteTextFile(
+		seSuBaselinePath,
+		"{\n"
+		"  \"expectedText\": \"写一首诗用它来描述春天的色彩\",\n"
+		"  \"decodedText\": \"色素色素色素色素色素色素色素色素\",\n"
+		"  \"decodedTokenCount\": 16,\n"
+		"  \"tokenIds\": \"301 302 301 302 301 302 301 302 301 302 301 302\",\n"
+		"  \"rnntRepeatedTokenCount\": 0,\n"
+		"  \"rnntMaxSymbolsHitCount\": 2,\n"
+		"  \"rnntMultiSymbolFrameCount\": 6\n"
+		"}\n");
+
 	const auto scriptPath = ResolveProjectPath(
 		std::filesystem::path("BlazeClawMfc") / "tools" / "compare_sherpa_baseline.py");
 	REQUIRE(std::filesystem::exists(scriptPath));
@@ -318,6 +348,18 @@ TEST_CASE(
 		" --baseline " + QuotePath(repeatedBaselinePath) +
 		" --require-no-repeat";
 	REQUIRE(RunCommand(repeatedCommand) != 0);
+
+	const std::string reportedCommand =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(reportedBaselinePath) +
+		" --require-no-repeat";
+	REQUIRE(RunCommand(reportedCommand) != 0);
+
+	const std::string seSuCommand =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(seSuBaselinePath) +
+		" --require-no-repeat";
+	REQUIRE(RunCommand(seSuCommand) != 0);
 
 	std::filesystem::remove_all(tempRoot);
 }

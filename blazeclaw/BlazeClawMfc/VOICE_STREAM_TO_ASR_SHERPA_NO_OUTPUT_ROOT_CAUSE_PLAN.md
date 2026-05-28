@@ -534,6 +534,11 @@ Implementation notes:
   `chat.send`. The WebView keeps this as a containment layer only: it emits
   `transcript_rejected` with reason `repetitive phrase transcript pattern
   detected` and does not rewrite repeated text.
+- Follow-up regression coverage: `SherpaStep8BaselineToolTests.cpp` now covers
+  clean CJK output, repeated `描述`, the reported repeated `色彩`/token n-gram
+  pattern, and repeated `色素`. The WebView in-file regression harness now checks
+  that `assessTranscriptQuality` accepts the clean utterance and rejects the
+  repeated CJK transcript before `chat.send`.
 
 After non-blank output is restored and reference comparison is acceptable:
 

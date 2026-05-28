@@ -2950,6 +2950,7 @@
             loadSpeechErrorPolicy,
             getSpeechCapabilitiesSnapshot,
             getSpeechSessionStateSnapshot,
+            assessTranscriptQuality,
             parseApprovalTokenFromText,
             executeExecApprovalAction,
             noteInboundChatEvent,
@@ -3549,6 +3550,22 @@
             assertRegression(calls[0].params && calls[0].params.model === "next-model",
                 "config submit path should preserve model value through coercion pipeline");
             summary.push("config submit path smoke");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            assertRegression(controller.assessTranscriptQuality("写一首诗用它来描述春天的色彩").accepted === true,
+                "speech transcript quality should accept clean CJK utterance");
+            const repeatedQuality = controller.assessTranscriptQuality(
+                "写一首诗用它来描述描述描述描述描述春天的色素色素色素色素色素色素色素色素色素色素色素色素色素色素色素色素色素彩");
+            assertRegression(repeatedQuality.accepted === false &&
+                repeatedQuality.reason === "repetitive phrase transcript pattern detected",
+                "speech transcript quality should reject repeated CJK phrase transcript");
+            summary.push("speech transcript CJK repeat quality gate");
         }
 
         {

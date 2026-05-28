@@ -654,6 +654,8 @@ submission.
 
 ### Phase 7: Add regression coverage
 
+Status: implemented.
+
 Target files:
 
 - `tests/SpeechRecognitionRealtimeStreamingTests.cpp`
@@ -673,10 +675,34 @@ Plan:
 4. If a stable PCM fixture is available, add a replay baseline test for the full
    Sherpa path.
 
+Implementation notes:
+
+- `SherpaStep8BaselineToolTests.cpp` now expands the repeat classifier coverage
+  with fixtures for:
+  - clean `写一首诗用它来描述春天的色彩`,
+  - repeated `描述描述描述描述描述`,
+  - the reported `色彩色彩色彩色彩色彩` failure with token n-gram `1251 768`,
+  - repeated `色素` output.
+- `web/chat/chat-controller.js` now exposes `assessTranscriptQuality` through the
+  in-file regression harness and adds checks that:
+  - accept `写一首诗用它来描述春天的色彩`,
+  - reject the repeated CJK phrase transcript with reason
+    `repetitive phrase transcript pattern detected`.
+- Existing realtime Sherpa streaming tests remain in
+  `SpeechRecognitionRealtimeStreamingTests.cpp`; no stable PCM replay fixture was
+  available in the workspace, so full-path audio replay was not added in this
+  phase.
+- Runtime token n-gram guard behavior is covered indirectly by persisted baseline
+  diagnostics and frontend/baseline regression gates; direct anonymous-namespace
+  helper testing was not added to avoid adding test-only production exports.
+
 Exit gate:
 
 - Tests fail on the current repeated-word behavior and pass after runtime and
   containment fixes.
+
+Result: implemented for baseline-tool and frontend containment regression gates;
+full Sherpa PCM replay remains future work pending a stable audio fixture.
 
 ## Validation plan
 
