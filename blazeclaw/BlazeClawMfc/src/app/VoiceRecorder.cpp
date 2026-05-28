@@ -667,8 +667,9 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
     }
 
     const uint64_t sequenceStart = m_audioRingBuffer->GetOldestAvailableSequence();
-    const uint64_t sequenceEnd = m_audioRingBuffer->GetLatestSequence();
-    if (sequenceEnd <= sequenceStart) {
+    const uint64_t latestSequence = m_audioRingBuffer->GetLatestSequence();
+    const bool liveRecording = m_state == VoiceRecorderState::Recording;
+    if (!liveRecording && latestSequence <= sequenceStart) {
         return std::nullopt;
     }
 
@@ -684,9 +685,11 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
     artifact.bitsPerSample = m_config.nBitsPerSample;
     artifact.frameSamples = static_cast<std::uint32_t>(m_config.nSamplesPerSec / 100);
     artifact.sequenceStart = sequenceStart;
-    artifact.sequenceEnd = sequenceEnd;
+    artifact.sequenceEnd = liveRecording ? 0ULL : latestSequence;
 
-    const uint64_t availableSamples = sequenceEnd - sequenceStart;
+    const uint64_t availableSamples = latestSequence > sequenceStart
+        ? latestSequence - sequenceStart
+        : 0ULL;
     const uint64_t durationMsRaw =
         (availableSamples * 1000ULL) / static_cast<uint64_t>(m_config.nSamplesPerSec);
     artifact.durationMs = static_cast<std::uint32_t>((std::min)(

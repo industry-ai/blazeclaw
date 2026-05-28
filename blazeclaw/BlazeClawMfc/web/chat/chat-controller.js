@@ -2175,9 +2175,10 @@
             const requestOverride = typeof sendOptions.requestOverride === "function"
                 ? sendOptions.requestOverride
                 : null;
+            const requestedRunId = String(sendOptions.runId || "").trim();
             const transcriptRequest = {
                 sessionId: state.sessionKey,
-                runId: nextId(),
+                runId: requestedRunId || nextId(),
                 prompt: prompt || String(state.inputEl && state.inputEl.value || "").trim(),
             };
             const transcriptionTimeoutMs = Number.isFinite(Number(sendOptions.timeoutMs)) && Number(sendOptions.timeoutMs) > 0
@@ -2193,16 +2194,18 @@
                 transcriptRequest.audioArtifact = audioArtifact;
             }
 
-            applySpeechLifecycleUpdate({
-                stage: "queued",
-                sessionId: transcriptRequest.sessionId,
-                runId: transcriptRequest.runId,
-                audioPath,
-                text: "",
-                errorCode: "",
-                errorMessage: "",
-                errorClass: "status",
-            });
+            if (!livePreviewOnly) {
+                applySpeechLifecycleUpdate({
+                    stage: "queued",
+                    sessionId: transcriptRequest.sessionId,
+                    runId: transcriptRequest.runId,
+                    audioPath,
+                    text: "",
+                    errorCode: "",
+                    errorMessage: "",
+                    errorClass: "status",
+                });
+            }
             updateComposerState();
 
             let transcriptionTimeoutId = null;
@@ -2225,9 +2228,17 @@
                     : {};
                 const normalizedSpeechSessionState = normalizeSpeechSessionPayload(payload);
                 const previousStage = String(previousSpeechSessionState.stage || "").trim();
+                const livePreviewStillActive =
+                    previousStage === "recording" ||
+                    previousStage === "start_stream" ||
+                    previousStage === "streaming" ||
+                    previousStage === "queued";
+                if (livePreviewOnly && !livePreviewStillActive) {
+                    return;
+                }
                 const keepLiveStreamingState =
                     livePreviewOnly === true &&
-                    (previousStage === "recording" || previousStage === "streaming") &&
+                    livePreviewStillActive &&
                     normalizedSpeechSessionState.stage === "completed" &&
                     !normalizedSpeechSessionState.segmentText &&
                     !normalizedSpeechSessionState.text &&
@@ -2256,6 +2267,10 @@
                 if (transcriptText) {
                     const quality = assessTranscriptQuality(transcriptText);
                     if (!quality.accepted) {
+                        if (livePreviewOnly) {
+                            updateComposerState();
+                            return;
+                        }
                         state.speechSessionState = {
                             ...state.speechSessionState,
                             stage: "failed",

@@ -2549,21 +2549,27 @@
         let recordingBusy = false;
         let liveSpeechPollTimer = null;
         let liveSpeechPollBusy = false;
+        let liveSpeechPollGeneration = 0;
+        const liveSpeechPollIntervalMs = 1200;
+        const liveSpeechPollTimeoutMs = 8000;
         const stopLiveSpeechPoll = () => {
+            liveSpeechPollGeneration += 1;
             if (liveSpeechPollTimer !== null) {
                 window.clearInterval(liveSpeechPollTimer);
                 liveSpeechPollTimer = null;
             }
             liveSpeechPollBusy = false;
         };
-        const startLiveSpeechPoll = (audioPath, audioArtifact, prompt) => {
+        const startLiveSpeechPoll = (audioPath, audioArtifact, prompt, previewRunId) => {
             stopLiveSpeechPoll();
-            if (!audioPath) {
+            if (!audioPath && !audioArtifact) {
                 return;
             }
 
+            const pollGeneration = liveSpeechPollGeneration;
+            const stablePreviewRunId = String(previewRunId || `speech-preview-${Date.now()}`).trim();
             const pollOnce = async () => {
-                if (liveSpeechPollBusy) {
+                if (pollGeneration !== liveSpeechPollGeneration || liveSpeechPollBusy) {
                     return;
                 }
                 const speechSnapshot = state.speechSessionState && typeof state.speechSessionState === "object"
@@ -2581,9 +2587,13 @@
                         audioPath,
                         audioArtifact,
                         prompt,
-                        timeoutMs: 8000,
+                        runId: stablePreviewRunId,
+                        timeoutMs: liveSpeechPollTimeoutMs,
                         livePreviewOnly: true,
                     });
+                    if (pollGeneration !== liveSpeechPollGeneration) {
+                        return;
+                    }
                     if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                         state.speechSessionState = controller.getSpeechSessionStateSnapshot();
                         updateComposerState();
@@ -2591,11 +2601,13 @@
                 } catch (_error) {
                     // Keep polling; final error will be surfaced on explicit stop transcribe.
                 } finally {
-                    liveSpeechPollBusy = false;
+                    if (pollGeneration === liveSpeechPollGeneration) {
+                        liveSpeechPollBusy = false;
+                    }
                 }
             };
 
-            liveSpeechPollTimer = window.setInterval(pollOnce, 1200);
+            liveSpeechPollTimer = window.setInterval(pollOnce, liveSpeechPollIntervalMs);
             void pollOnce();
         };
         state.speechTranscribeBtn.addEventListener("click", async () => {
@@ -2624,11 +2636,12 @@
                     const startAudioArtifact = startPayload.audioArtifact && typeof startPayload.audioArtifact === "object"
                         ? startPayload.audioArtifact
                         : null;
+                    const previewRunId = `speech-preview-${Date.now()}`;
                     if (typeof controller.applySpeechLifecycleUpdate === "function") {
                         controller.applySpeechLifecycleUpdate({
                             stage: "recording",
                             sessionId: state.sessionKey,
-                            runId: "",
+                            runId: previewRunId,
                             audioPath: startAudioPath,
                             audioArtifact: startAudioArtifact,
                             text: "",
@@ -2638,7 +2651,7 @@
                         });
                     }
                     const prompt = String(state.inputEl.value || "").trim();
-                    startLiveSpeechPoll(startAudioPath, startAudioArtifact, prompt);
+                    startLiveSpeechPoll(startAudioPath, startAudioArtifact, prompt, previewRunId);
                     updateComposerState();
                     return;
                 }

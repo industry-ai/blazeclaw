@@ -2126,28 +2126,56 @@ namespace blazeclaw::core::speechrecognition {
 		auto effectiveStreamingInput = request.streamingInput;
 		if (isSherpaStreamingModel && !effectiveStreamingInput.has_value()) {
 			constexpr const char* kDefaultVoiceStreamId = "voice_recorder";
+			const bool hasPcmStreamArtifact =
+				request.audioArtifact.has_value() &&
+				request.audioArtifact->handoffMode == SpeechAudioHandoffMode::PcmStream &&
+				!request.audioArtifact->streamId.empty();
+			const std::string streamId = hasPcmStreamArtifact
+				? request.audioArtifact->streamId
+				: std::string(kDefaultVoiceStreamId);
 			const auto oldestSequence =
-				GetStreamingAudioOldestSequence(kDefaultVoiceStreamId);
+				GetStreamingAudioOldestSequence(streamId);
 			const auto latestSequence =
-				GetStreamingAudioLatestSequence(kDefaultVoiceStreamId);
-			if (oldestSequence.has_value() &&
-				latestSequence.has_value() &&
-				*latestSequence > *oldestSequence) {
-				SpeechStreamingInputContract inferredStreamingInput;
-				inferredStreamingInput.source.streamId = kDefaultVoiceStreamId;
-				inferredStreamingInput.source.sessionId = request.sessionId;
-				inferredStreamingInput.source.sampleRate =
-					m_snapshot.sampleRate > 0 ? m_snapshot.sampleRate : 16000;
-				inferredStreamingInput.source.sequenceStart = *oldestSequence;
-				inferredStreamingInput.source.sequenceEnd = *latestSequence;
-				inferredStreamingInput.cursor.startSequence = *oldestSequence;
-				inferredStreamingInput.cursor.nextSequence = *oldestSequence;
-				inferredStreamingInput.chunkPolicy.chunkMs = 20;
-				inferredStreamingInput.chunkPolicy.overlapMs = 0;
-				inferredStreamingInput.chunkPolicy.lookbackMs = 0;
-				inferredStreamingInput.chunkPolicy.maxSpinCount = 64;
-				effectiveStreamingInput = std::move(inferredStreamingInput);
-				result.sessionState.streamingInput = effectiveStreamingInput;
+				GetStreamingAudioLatestSequence(streamId);
+			if (oldestSequence.has_value() && latestSequence.has_value()) {
+				const bool liveOpenEndedArtifact =
+					hasPcmStreamArtifact && request.audioArtifact->sequenceEnd == 0;
+				const bool hasReadableSamples = *latestSequence > *oldestSequence;
+				if (liveOpenEndedArtifact || hasReadableSamples) {
+					SpeechStreamingInputContract inferredStreamingInput;
+					inferredStreamingInput.source.streamId = streamId;
+					inferredStreamingInput.source.sessionId = request.sessionId;
+					inferredStreamingInput.source.sampleRate =
+						hasPcmStreamArtifact && request.audioArtifact->sampleRate > 0
+						? request.audioArtifact->sampleRate
+						: (m_snapshot.sampleRate > 0 ? m_snapshot.sampleRate : 16000);
+					inferredStreamingInput.source.channels =
+						hasPcmStreamArtifact && request.audioArtifact->channels > 0
+						? request.audioArtifact->channels
+						: 1;
+					inferredStreamingInput.source.bitsPerSample =
+						hasPcmStreamArtifact && request.audioArtifact->bitsPerSample > 0
+						? request.audioArtifact->bitsPerSample
+						: 16;
+					const std::uint64_t requestedStart = hasPcmStreamArtifact
+						? request.audioArtifact->sequenceStart
+						: *oldestSequence;
+					const std::uint64_t sequenceStart = (std::max)(requestedStart, *oldestSequence);
+					inferredStreamingInput.source.sequenceStart = sequenceStart;
+					inferredStreamingInput.source.sequenceEnd = liveOpenEndedArtifact
+						? 0ULL
+						: (hasPcmStreamArtifact && request.audioArtifact->sequenceEnd > 0
+							? (std::min)(request.audioArtifact->sequenceEnd, *latestSequence)
+							: *latestSequence);
+					inferredStreamingInput.cursor.startSequence = sequenceStart;
+					inferredStreamingInput.cursor.nextSequence = sequenceStart;
+					inferredStreamingInput.chunkPolicy.chunkMs = 20;
+					inferredStreamingInput.chunkPolicy.overlapMs = 0;
+					inferredStreamingInput.chunkPolicy.lookbackMs = 0;
+					inferredStreamingInput.chunkPolicy.maxSpinCount = 64;
+					effectiveStreamingInput = std::move(inferredStreamingInput);
+					result.sessionState.streamingInput = effectiveStreamingInput;
+				}
 			}
 		}
 		const bool hasStreamingInput = effectiveStreamingInput.has_value();

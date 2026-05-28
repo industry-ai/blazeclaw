@@ -1224,9 +1224,11 @@ namespace blazeclaw::gateway {
 			artifact->path = audioPath;
 		}
 
+		const bool hasFiniteSequenceRange = artifact->sequenceEnd > artifact->sequenceStart;
+		const bool hasOpenEndedLiveRange = artifact->sequenceEnd == 0;
 		if (artifact->handoffMode != blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream ||
 			artifact->streamId.empty() ||
-			artifact->sequenceEnd <= artifact->sequenceStart) {
+			(!hasFiniteSequenceRange && !hasOpenEndedLiveRange)) {
 			return std::nullopt;
 		}
 

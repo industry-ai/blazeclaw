@@ -75,6 +75,11 @@ Acceptance criteria result:
 - completed: primary button path, native host output path, recording start/stop path, and `speech.transcribe` invocation path are documented
 
 ### Step 2: Refine the live preview polling loop while recording
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP2_LIVE_PREVIEW_POLLING.md`
+
 Refine the existing lightweight live preview loop after recording starts.
 
 Current starting point from Step 1:
@@ -82,6 +87,15 @@ Current starting point from Step 1:
 - the existing loop calls `controller.transcribeSpeech(...)` with `livePreviewOnly: true`.
 - the existing loop uses `liveSpeechPollBusy` to suppress overlapping preview calls.
 - the existing interval is 1200 ms and should be tuned only after correctness is confirmed.
+
+Implemented refinements:
+- `startLiveSpeechPoll(...)` now starts when either `audioPath` or the live `audioArtifact` is available, so preview can run before the final WAV path is available.
+- each recording session gets a stable `speech-preview-<timestamp>` preview run id that is reused by all preview ticks.
+- `controller.transcribeSpeech(...)` now accepts an optional `runId` for preview requests instead of always generating a new run id.
+- `liveSpeechPollGeneration` invalidates late preview responses after stop/failure-like transitions.
+- `livePreviewOnly` calls no longer emit a local queued update that clears interim transcript text before every poll.
+- stale live preview responses are ignored after the speech state leaves active preview stages.
+- low-quality interim preview text is ignored instead of failing the whole speech session; final transcription keeps the quality gate.
 
 Recommended refinement approach:
 - In WebView, keep the timer active while `speechSessionState.stage === "recording"` or `speechSessionState.stage === "streaming"`.
@@ -99,11 +113,17 @@ Native MFC alternative:
 - Post interim updates back to the UI thread.
 
 Acceptance criteria:
-- Interim recognition requests occur while recording is active.
-- Requests stop immediately when recording stops, fails, or the view is destroyed.
-- The UI thread is never blocked by preview inference.
+- completed: interim recognition requests occur while recording is active through the existing WebView preview loop.
+- completed: preview requests can run from the live artifact even before a final WAV path exists.
+- completed: requests stop before final stop transcription and stale preview results are suppressed by generation checks.
+- completed: preview inference remains asynchronous through the `CBlazeClawMFCView` speech RPC worker path and does not block the UI thread.
 
 ### Step 3: Ensure live preview requests use the ring-buffer PCM stream
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP3_RING_PCM_STREAM.md`
+
 Ensure preview requests do not wait for the final WAV file.
 
 Files to review/update:
@@ -120,10 +140,17 @@ Implementation notes:
 - For live preview, keep `sequenceEnd` open-ended or use the latest available sequence according to the existing streaming contract.
 - Resolve native recording artifacts through `GatewayHost::ResolveNativeRecordingArtifact(...)` when possible.
 
+Implemented behavior:
+- `CVoiceRecorder::BuildStreamingAudioArtifact()` now returns an open-ended live `PcmStream` artifact while recording by setting `sequenceEnd` to `0`.
+- the live artifact is available immediately after recording starts, even before a final WAV path or captured sample range is available.
+- stopped/final artifacts continue to use a finite `sequenceEnd`, preserving final transcription behavior.
+- `GatewayHost::ResolveNativeRecordingArtifact(...)` now accepts both finite PCM ranges and open-ended live PCM ranges.
+- `SpeechRecognitionRuntime::Transcribe(...)` now infers Sherpa `SpeechStreamingInputContract` from the provided PCM artifact, including `streamId`, sample rate, channels, bit depth, and open-ended `sequenceEnd`.
+
 Acceptance criteria:
-- Live preview requests read from the ring buffer, not from an incomplete WAV file.
-- Preview works before the user clicks stop.
-- WAV-file fallback remains available for final transcription.
+- completed: live preview requests can read from the ring-buffer PCM stream artifact rather than an incomplete WAV file.
+- completed: preview can start before the user clicks stop because the recording start path can return an open-ended artifact.
+- completed: WAV-file fallback and final finite-range transcription remain available after stop.
 
 ### Step 4: Emit interim segments from the coordinator
 Update `SpeechTranscriptionCoordinator::Execute(...)` so streaming requests with a non-empty non-final segment update the tracked execution state and emit callbacks.
