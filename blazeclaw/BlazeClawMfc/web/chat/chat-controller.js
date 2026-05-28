@@ -2052,9 +2052,21 @@
             if (!resolvedSegmentText && normalized.stage === "segment_finalized") {
                 resolvedSegmentText = normalized.text;
             }
+            if (!resolvedSegmentText &&
+                (normalized.stage === "queued" ||
+                    normalized.stage === "stopped" ||
+                    normalized.stage === "transcribing" ||
+                    normalized.stage === "failed")) {
+                resolvedSegmentText = String(previous.segmentText || "");
+            }
 
             let resolvedText = normalized.text;
-            if (!resolvedText && normalized.stage === "streaming") {
+            if (!resolvedText &&
+                (normalized.stage === "streaming" ||
+                    normalized.stage === "queued" ||
+                    normalized.stage === "stopped" ||
+                    normalized.stage === "transcribing" ||
+                    normalized.stage === "failed")) {
                 resolvedText = String(previous.text || "");
             }
 
@@ -2215,6 +2227,53 @@
             }
 
             return { accepted: true, reason: "", cleanedText: cleaned };
+        }
+
+        function clearSpeechPreviewAfterDelay(expectedRunId, delayMs) {
+            const timeoutMs = Number.isFinite(Number(delayMs)) && Number(delayMs) >= 0
+                ? Number(delayMs)
+                : 2500;
+            window.setTimeout(() => {
+                const current = state.speechSessionState && typeof state.speechSessionState === "object"
+                    ? state.speechSessionState
+                    : null;
+                if (!current) {
+                    return;
+                }
+
+                const currentRunId = String(current.runId || "").trim();
+                if (expectedRunId && currentRunId && currentRunId !== expectedRunId) {
+                    return;
+                }
+
+                const stage = String(current.stage || "").trim();
+                if (stage !== "completed" && stage !== "segment_finalized") {
+                    return;
+                }
+
+                state.speechSessionState = {
+                    stage: "idle",
+                    text: "",
+                    segmentText: "",
+                    segmentFinal: true,
+                    segmentSequence: 0,
+                    runId: "",
+                    sessionId: state.sessionKey,
+                    audioPath: "",
+                    audioArtifact: null,
+                    language: "",
+                    latencyMs: 0,
+                    cancelled: false,
+                    errorCode: "",
+                    errorMessage: "",
+                    errorClass: "status",
+                    retryable: false,
+                    retryStrategy: "immediate",
+                    retryGuidance: "",
+                    updatedAtMs: Date.now(),
+                };
+                updateComposerState();
+            }, timeoutMs);
         }
 
         async function transcribeSpeech(options) {
@@ -2403,6 +2462,31 @@
                                 },
                         },
                     });
+                    const finalRunId = String(
+                        payload.executionRunId ||
+                        payload.runId ||
+                        payload.speechSession && payload.speechSession.runId ||
+                        transcriptRequest.runId ||
+                        "").trim();
+                    applySpeechLifecycleUpdate({
+                        stage: "completed",
+                        sessionId: transcriptRequest.sessionId,
+                        runId: finalRunId,
+                        audioPath: String(payload.audioPath || payload.speechSession && payload.speechSession.audioPath || audioPath || "").trim(),
+                        audioArtifact: payload.audioArtifact && typeof payload.audioArtifact === "object"
+                            ? payload.audioArtifact
+                            : payload.speechSession && payload.speechSession.audioArtifact && typeof payload.speechSession.audioArtifact === "object"
+                                ? payload.speechSession.audioArtifact
+                                : audioArtifact,
+                        text: cleanedTranscriptText,
+                        language: String(payload.language || payload.speechSession && payload.speechSession.language || "").trim(),
+                        latencyMs: Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : Number(payload.speechSession && payload.speechSession.latencyMs || 0),
+                        errorCode: "",
+                        errorMessage: "",
+                        errorClass: "status",
+                    });
+                    clearSpeechPreviewAfterDelay(finalRunId, 2500);
+                    updateComposerState();
                     return;
                 }
 

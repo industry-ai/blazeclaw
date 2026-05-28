@@ -317,6 +317,11 @@ Acceptance criteria:
 - completed: stop/final transcription cancels or ignores outstanding preview results through generation invalidation, in-flight run clearing, and active-stage stale response checks.
 
 ### Step 9: Finalize cleanly on stop
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP9_CLEAN_STOP_FINALIZATION.md`
+
 When the user stops recording:
 - Stop the preview loop.
 - Keep the last interim text visible as `Finalizing...`.
@@ -324,10 +329,18 @@ When the user stops recording:
 - Replace interim text with the accepted final transcript.
 - Clear preview state after successful chat send or after a short terminal-state delay.
 
+Implemented behavior:
+- stop handling still invalidates the preview loop before requesting the final recording artifact.
+- the last interim transcript is carried into the `stopped` lifecycle update so the preview remains visible as `Finalizing...`.
+- `applySpeechLifecycleUpdate(...)` preserves previous interim text during `queued`, `stopped`, `transcribing`, and `failed` status transitions when no newer text is available.
+- the non-preview final transcription path remains the only path that calls `sendPayload(...)` for voice text.
+- final transcript quality checks still block rejected final text before chat send, with no interim fallback send.
+- after successful final send, the preview is marked `completed` with the accepted transcript, then cleared after a short run-id-guarded delay.
+
 Acceptance criteria:
-- The final transcript is authoritative.
-- Interim-only text is not sent if final transcription fails quality checks.
-- The UI does not regress to blank while final transcription is running.
+- completed: the final transcript is authoritative because only the final non-preview transcription path sends voice text.
+- completed: interim-only text is not sent if final transcription fails quality checks.
+- completed: the UI does not regress to blank while final transcription is running because finalizing states preserve the last interim text.
 
 ### Step 10: Add diagnostics and tests
 Add focused coverage for live updates.

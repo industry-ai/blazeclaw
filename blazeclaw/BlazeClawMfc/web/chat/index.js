@@ -2744,6 +2744,9 @@
                 const audioArtifact = payload.audioArtifact && typeof payload.audioArtifact === "object"
                     ? payload.audioArtifact
                     : null;
+                const finalizingText = String(
+                    speechSessionState && (speechSessionState.segmentText || speechSessionState.text) ||
+                    "").trim();
 
                 if (typeof controller.applySpeechLifecycleUpdate === "function") {
                     controller.applySpeechLifecycleUpdate({
@@ -2751,7 +2754,7 @@
                         sessionId: state.sessionKey,
                         audioPath,
                         audioArtifact,
-                        text: "",
+                        text: finalizingText,
                         errorCode: "",
                         errorMessage: "",
                         errorClass: "status",
