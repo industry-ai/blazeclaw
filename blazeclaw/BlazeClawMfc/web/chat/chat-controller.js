@@ -2044,6 +2044,52 @@
                 return { accepted: false, reason: "empty transcript", cleanedText: "" };
             }
 
+            const isCjkCharacter = function (ch) {
+                return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(ch);
+            };
+
+            const findRepeatedCjkPhrase = function (compactText) {
+                const chars = Array.from(String(compactText || ""));
+                if (chars.length < 4) {
+                    return null;
+                }
+
+                let best = null;
+                for (let unitLength = 2; unitLength <= 6; unitLength += 1) {
+                    if (chars.length < unitLength * 2) {
+                        continue;
+                    }
+                    for (let start = 0; start + unitLength * 2 <= chars.length; start += 1) {
+                        const unitChars = chars.slice(start, start + unitLength);
+                        if (!unitChars.every(isCjkCharacter)) {
+                            continue;
+                        }
+                        const unit = unitChars.join("");
+                        let repeatCount = 1;
+                        let cursor = start + unitLength;
+                        while (cursor + unitLength <= chars.length &&
+                            chars.slice(cursor, cursor + unitLength).join("") === unit) {
+                            repeatCount += 1;
+                            cursor += unitLength;
+                        }
+                        const coverage = (repeatCount * unitLength) / chars.length;
+                        const degenerate =
+                            (unitLength === 2 && repeatCount >= 5) ||
+                            (unitLength >= 3 && unitLength <= 6 && repeatCount >= 4) ||
+                            (repeatCount >= 3 && coverage >= 0.35);
+                        if (!degenerate) {
+                            continue;
+                        }
+                        if (!best ||
+                            repeatCount > best.repeatCount ||
+                            (repeatCount === best.repeatCount && coverage > best.coverage)) {
+                            best = { unit, unitLength, repeatCount, coverage };
+                        }
+                    }
+                }
+                return best;
+            };
+
             let longestRun = 1;
             let currentRun = 1;
             for (let i = 1; i < value.length; i += 1) {
@@ -2067,6 +2113,10 @@
             const compactUniqueChars = new Set(compact).size;
             const punctuationCount = (compact.match(/[.,!?，。！？；;:、]/g) || []).length;
             const cjkCount = (cleaned.match(/[\u4e00-\u9fff]/g) || []).length;
+            const repeatedCjkPhrase = findRepeatedCjkPhrase(compact);
+            if (repeatedCjkPhrase) {
+                return { accepted: false, reason: "repetitive phrase transcript pattern detected", cleanedText: cleaned };
+            }
             const shortCjkUtterance = cjkCount > 0 && compact.length <= 12 && compactUniqueChars >= 3;
             if (shortCjkUtterance) {
                 return { accepted: true, reason: "", cleanedText: cleaned };

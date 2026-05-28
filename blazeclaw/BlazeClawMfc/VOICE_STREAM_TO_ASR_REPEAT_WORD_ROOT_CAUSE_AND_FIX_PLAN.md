@@ -607,6 +607,8 @@ diagnostics available for baseline comparison.
 
 ### Phase 6: Strengthen frontend containment for repeated CJK phrases
 
+Status: implemented.
+
 Target file:
 
 - `web/chat/chat-controller.js`
@@ -625,10 +627,30 @@ Plan:
    `repetitive phrase transcript pattern detected`.
 5. Keep this as containment only; do not silently rewrite the transcript for chat.
 
+Implementation notes:
+
+- `assessTranscriptQuality(...)` now scans the sanitized compact transcript for
+  repeated CJK phrase units before the short-CJK acceptance path.
+- The frontend detector is structural and generic:
+  - unit length 2-6 CJK characters,
+  - 2-character unit repeated 5 or more times,
+  - 3-6 character unit repeated 4 or more times,
+  - or 3 or more repeats with at least 0.35 repeated-unit coverage.
+- When the detector fires, the existing speech rejection flow sets
+  `errorCode="transcript_rejected"`, shows `speech transcript blocked: repetitive
+  phrase transcript pattern detected`, clears transcript text, and returns before
+  `sendPayload(...)` can call `chat.send`.
+- The frontend does not rewrite or collapse repeated text; it only blocks the
+  visibly degenerate transcript as containment if runtime guards regress.
+
 Exit gate:
 
 - If Sherpa decoding regresses again, the repeated transcript is blocked before
   `chat.send`.
+
+Result: implemented. Repeated CJK phrase transcripts such as repeated `色彩` or
+other repeated 2-6 CJK units are blocked by the WebView quality gate before chat
+submission.
 
 ### Phase 7: Add regression coverage
 

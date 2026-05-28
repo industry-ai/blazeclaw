@@ -529,6 +529,11 @@ Implementation notes:
   `rnntAdaptiveFrameStopCount` and `rnntLastFrameStopReason` so future baselines
   can distinguish max-symbol stops, n-gram-repeat stops, immediate-token-repeat
   stops, and weak-margin adaptive stops.
+- Follow-up frontend containment: `web/chat/chat-controller.js` now rejects
+  sanitized transcripts containing repeated 2-6 character CJK phrase units before
+  `chat.send`. The WebView keeps this as a containment layer only: it emits
+  `transcript_rejected` with reason `repetitive phrase transcript pattern
+  detected` and does not rewrite repeated text.
 
 After non-blank output is restored and reference comparison is acceptable:
 
