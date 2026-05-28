@@ -2623,6 +2623,16 @@
         let liveSpeechPollInFlightRunId = "";
         const liveSpeechPollIntervalMs = 1200;
         const liveSpeechPollTimeoutMs = 8000;
+        const emitSpeechPreviewDiagnostic = (counterName, details) => {
+            if (typeof controller.getOperatorDiagnosticsSnapshot === "function" &&
+                window.console &&
+                typeof window.console.debug === "function") {
+                window.console.debug("[speech-preview-diagnostic]", {
+                    counter: String(counterName || ""),
+                    details: details && typeof details === "object" ? details : {},
+                });
+            }
+        };
         const stopLiveSpeechPoll = () => {
             liveSpeechPollGeneration += 1;
             if (liveSpeechPollTimer !== null) {
@@ -2641,7 +2651,19 @@
             const pollGeneration = liveSpeechPollGeneration;
             const stablePreviewRunId = String(previewRunId || `speech-preview-${Date.now()}`).trim();
             const pollOnce = async () => {
-                if (pollGeneration !== liveSpeechPollGeneration || liveSpeechPollBusy) {
+                if (pollGeneration !== liveSpeechPollGeneration) {
+                    emitSpeechPreviewDiagnostic("speech.preview.skip_stale_generation", {
+                        runId: stablePreviewRunId,
+                        generation: pollGeneration,
+                        currentGeneration: liveSpeechPollGeneration,
+                    });
+                    return;
+                }
+                if (liveSpeechPollBusy) {
+                    emitSpeechPreviewDiagnostic("speech.preview.skip_busy", {
+                        runId: liveSpeechPollInFlightRunId || stablePreviewRunId,
+                        generation: pollGeneration,
+                    });
                     return;
                 }
                 const speechSnapshot = state.speechSessionState && typeof state.speechSessionState === "object"
@@ -2649,12 +2671,24 @@
                     : null;
                 const stage = String(speechSnapshot && speechSnapshot.stage || "").trim();
                 if (stage !== "recording" && stage !== "streaming") {
+                    emitSpeechPreviewDiagnostic("speech.preview.stop_inactive_stage", {
+                        runId: stablePreviewRunId,
+                        generation: pollGeneration,
+                        stage,
+                    });
                     stopLiveSpeechPoll();
                     return;
                 }
 
                 liveSpeechPollBusy = true;
                 liveSpeechPollInFlightRunId = stablePreviewRunId;
+                emitSpeechPreviewDiagnostic("speech.preview.request_start", {
+                    runId: stablePreviewRunId,
+                    generation: pollGeneration,
+                    stage,
+                    hasAudioArtifact: Boolean(audioArtifact),
+                    hasAudioPath: Boolean(audioPath),
+                });
                 try {
                     await controller.transcribeSpeech({
                         audioPath,
@@ -2665,13 +2699,30 @@
                         livePreviewOnly: true,
                     });
                     if (pollGeneration !== liveSpeechPollGeneration) {
+                        emitSpeechPreviewDiagnostic("speech.preview.response_stale_generation", {
+                            runId: stablePreviewRunId,
+                            generation: pollGeneration,
+                            currentGeneration: liveSpeechPollGeneration,
+                        });
                         return;
                     }
                     if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                         state.speechSessionState = controller.getSpeechSessionStateSnapshot();
+                        const updatedSequence = Number(state.speechSessionState.segmentSequence || 0);
+                        emitSpeechPreviewDiagnostic("speech.preview.request_end", {
+                            runId: stablePreviewRunId,
+                            generation: pollGeneration,
+                            stage: String(state.speechSessionState.stage || ""),
+                            segmentSequence: updatedSequence,
+                            hasText: Boolean(state.speechSessionState.segmentText || state.speechSessionState.text),
+                        });
                         updateComposerState();
                     }
                 } catch (_error) {
+                    emitSpeechPreviewDiagnostic("speech.preview.request_error", {
+                        runId: stablePreviewRunId,
+                        generation: pollGeneration,
+                    });
                     // Keep polling; final error will be surfaced on explicit stop transcribe.
                 } finally {
                     if (pollGeneration === liveSpeechPollGeneration) {

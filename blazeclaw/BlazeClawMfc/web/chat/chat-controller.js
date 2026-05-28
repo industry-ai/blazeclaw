@@ -2485,6 +2485,15 @@
                         errorMessage: "",
                         errorClass: "status",
                     });
+                    emitOperatorDiagnostic("speech.final.replacement", {
+                        runId: finalRunId,
+                        sessionId: transcriptRequest.sessionId,
+                        stage: "completed",
+                        hasText: true,
+                        transcriptLength: cleanedTranscriptText.length,
+                    }, {
+                        minIntervalMs: 0,
+                    });
                     clearSpeechPreviewAfterDelay(finalRunId, 2500);
                     updateComposerState();
                     return;
@@ -4197,6 +4206,124 @@
                 "setPolledEventsHandler should forward polled chat events to registered callback");
             controller.clearRunState();
             summary.push("watchdog poll event forwarding");
+        }
+
+        {
+            const state = createRegressionState();
+            const messageRows = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-1",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-1",
+                segment: {
+                    text: "interim hello",
+                    final: false,
+                    sequence: 2,
+                },
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-old",
+                segment: {
+                    text: "stale text",
+                    final: false,
+                    sequence: 1,
+                },
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.segmentText === "interim hello" && snapshot.segmentSequence === 2,
+                "speech lifecycle should keep newer interim segment when stale preview update arrives");
+            assertRegression(messageRows.length === 0,
+                "speech lifecycle interim updates should not append chat messages");
+            summary.push("speech lifecycle stale interim guard");
+        }
+
+        {
+            const state = createRegressionState();
+            const messageRows = [];
+            const sendCalls = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-2",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-2",
+                segment: {
+                    text: "interim should not send",
+                    final: false,
+                    sequence: 3,
+                },
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-final-regression-2",
+                text: "",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "final.wav",
+                runId: "speech-final-regression-2",
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: params.runId,
+                                audioPath: "final.wav",
+                                text: "final accepted transcript",
+                                speechSession: {
+                                    stage: "completed",
+                                    sessionId: "main",
+                                    runId: params.runId,
+                                    audioPath: "final.wav",
+                                    text: "final accepted transcript",
+                                },
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "chat-run-final-speech" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            assertRegression(sendCalls.length === 1 && sendCalls[0].message === "final accepted transcript",
+                "speech finalization should send only authoritative final transcript");
+            assertRegression(sendCalls[0].message !== "interim should not send",
+                "speech finalization should not send interim-only transcript text");
+            assertRegression(Number(state.operatorDiagnosticsCounters["speech.final.replacement"] || 0) >= 1,
+                "speech final replacement should increment operator diagnostic counter");
+            assertRegression(messageRows.every((row) => row.text.indexOf("interim should not send") < 0),
+                "speech finalization should not append interim transcript to message list");
+            summary.push("speech final transcript authority");
         }
 
         return {

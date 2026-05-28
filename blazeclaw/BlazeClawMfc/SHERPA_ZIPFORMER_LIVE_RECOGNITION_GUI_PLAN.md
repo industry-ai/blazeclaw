@@ -343,7 +343,19 @@ Acceptance criteria:
 - completed: the UI does not regress to blank while final transcription is running because finalizing states preserve the last interim text.
 
 ### Step 10: Add diagnostics and tests
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP10_DIAGNOSTICS_AND_TESTS.md`
+
 Add focused coverage for live updates.
+
+Implemented behavior:
+- `web/chat/index.js` now emits metadata-only preview diagnostics for request start/end, skipped busy ticks, stale generations, inactive-stage stops, and preview errors.
+- preview diagnostics include run id, generation, stage, segment sequence, audio path/artifact presence, and text presence without logging transcript content.
+- `web/chat/chat-controller.js` now emits `speech.final.replacement` operator diagnostics after successful authoritative final transcript replacement.
+- `window.BlazeClawChatController.runRegressionChecks()` now covers interim lifecycle updates without chat append, stale preview suppression, final-only speech send, and final replacement diagnostics.
+- existing `tests/SpeechRecognitionRealtimeStreamingTests.cpp` coverage was reviewed for Sherpa streaming segment, sequence catch-up, and cancellation behavior.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -360,6 +372,12 @@ Existing relevant tests to extend or mirror:
 Diagnostics:
 - Add trace logs for preview request start/end, skipped ticks, segment sequence, and final replacement.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
+
+Acceptance criteria:
+- completed: WebView controller applies `speech.lifecycle` interim payloads without sending chat messages in regression coverage.
+- completed: preview stale/duplicate behavior is covered by run/sequence-based regression checks.
+- completed: stop/finalization sends only authoritative final text in regression coverage.
+- completed: diagnostics cover preview request start/end/skips/stale/error and final replacement without logging transcript content.
 
 ## Rollout Strategy
 
