@@ -132,6 +132,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::uint64_t rnntRepeatedTokenCount = 0;
 			std::uint64_t rnntMultiSymbolFrameCount = 0;
 			std::uint64_t rnntMaxSymbolsPerFrame = 0;
+			std::uint64_t rnntAdaptiveFrameStopCount = 0;
+			std::string rnntLastFrameStopReason;
 			std::uint64_t repeatedTokenNgramLength = 0;
 			std::uint64_t repeatedTokenNgramCount = 0;
 			std::string repeatedTokenNgramUnit;

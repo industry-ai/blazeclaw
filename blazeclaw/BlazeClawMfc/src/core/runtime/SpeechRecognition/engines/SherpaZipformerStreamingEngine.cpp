@@ -41,11 +41,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
 		constexpr std::size_t kSherpaFinalPartialMinRealFrames = 16;
-		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
+		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 4;
 		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
 		constexpr std::size_t kSherpaRepeatGuardMinNgramLength = 2;
 		constexpr std::size_t kSherpaRepeatGuardMaxNgramLength = 8;
 		constexpr std::size_t kSherpaRepeatGuardMinRepeatCount = 3;
+		constexpr float kSherpaAdaptiveFrameStopMinLogitMargin = 0.75f;
 
 		enum class SherpaFbankSampleScalingMode {
 			KaldiInt16,
@@ -1768,6 +1769,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"rnntRepeatedTokenCount\": " << streamState.rnntRepeatedTokenCount << ",\n";
 		stream << "  \"rnntMultiSymbolFrameCount\": " << streamState.rnntMultiSymbolFrameCount << ",\n";
 		stream << "  \"rnntMaxSymbolsPerFrame\": " << kSherpaMaxSymbolsPerFrame << ",\n";
+		stream << "  \"rnntAdaptiveFrameStopCount\": " << streamState.rnntAdaptiveFrameStopCount << ",\n";
+		stream << "  \"rnntLastFrameStopReason\": \"" << EscapeJsonString(streamState.rnntLastFrameStopReason) << "\",\n";
 		stream << "  \"repeatedTokenNgramLength\": " << streamState.repeatedTokenNgramLength << ",\n";
 		stream << "  \"repeatedTokenNgramCount\": " << streamState.repeatedTokenNgramCount << ",\n";
 		stream << "  \"repeatedTokenNgramUnit\": \"" << EscapeJsonString(streamState.repeatedTokenNgramUnit) << "\",\n";
@@ -3165,6 +3168,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 									streamState.emittedTokenIds.size() - 1,
 									1);
 								streamState.repeatGuardAction = "immediate_token_suppressed";
+				streamState.rnntLastFrameStopReason = "immediate_token_repeat";
 											advanceFrame = true;
 											continue;
 										}
@@ -3180,6 +3184,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 										static_cast<std::uint64_t>(candidateRepeat.repeatedUnitCount);
 									streamState.repeatedTokenNgramUnit = candidateRepeat.repeatedUnit;
 									streamState.repeatGuardAction = "ngram_suppressed";
+									streamState.rnntLastFrameStopReason = "ngram_repeat";
 									advanceFrame = true;
 									continue;
 								}
@@ -3210,7 +3215,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 														streamState.decoderContext.end() - static_cast<std::ptrdiff_t>(contextSize));
 												}
 
-												if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
+										const float bestTokenMargin =
+											streamState.lastSecondBestTokenId >= 0
+											? streamState.lastBestTokenScore - streamState.lastSecondBestTokenScore
+											: kSherpaAdaptiveFrameStopMinLogitMargin;
+										if (symbolsThisFrame > 0 && bestTokenMargin < kSherpaAdaptiveFrameStopMinLogitMargin) {
+											++streamState.rnntAdaptiveFrameStopCount;
+											streamState.rnntLastFrameStopReason = "weak_margin_after_symbol";
+											advanceFrame = true;
+										}
+										else if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
+											streamState.rnntLastFrameStopReason = "max_tokens_per_utterance";
 													advanceFrame = true;
 												}
 												else {
@@ -3448,6 +3463,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaRnntRepeatedTokenCount = streamState.rnntRepeatedTokenCount,
 			.sherpaRnntMultiSymbolFrameCount = streamState.rnntMultiSymbolFrameCount,
 			.sherpaRnntMaxSymbolsPerFrame = kSherpaMaxSymbolsPerFrame,
+			.sherpaRnntAdaptiveFrameStopCount = streamState.rnntAdaptiveFrameStopCount,
+			.sherpaRnntLastFrameStopReason = streamState.rnntLastFrameStopReason,
 			.sherpaRepeatedTokenNgramLength = streamState.repeatedTokenNgramLength,
 			.sherpaRepeatedTokenNgramCount = streamState.repeatedTokenNgramCount,
 			.sherpaRepeatedTokenNgramUnit = streamState.repeatedTokenNgramUnit,

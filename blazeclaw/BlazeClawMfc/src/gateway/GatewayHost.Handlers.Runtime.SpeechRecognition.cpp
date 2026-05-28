@@ -822,6 +822,8 @@ namespace blazeclaw::gateway {
 							{ "sherpaRnntRepeatedTokenCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRnntRepeatedTokenCount : 0ULL) },
 							{ "sherpaRnntMultiSymbolFrameCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRnntMultiSymbolFrameCount : 0ULL) },
 							{ "sherpaRnntMaxSymbolsPerFrame", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRnntMaxSymbolsPerFrame : 0ULL) },
+							{ "sherpaRnntAdaptiveFrameStopCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRnntAdaptiveFrameStopCount : 0ULL) },
+							{ "sherpaRnntLastFrameStopReason", JsonString(debugInfo.has_value() ? debugInfo->sherpaRnntLastFrameStopReason : std::string()) },
 							{ "sherpaRepeatedTokenNgramLength", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRepeatedTokenNgramLength : 0ULL) },
 							{ "sherpaRepeatedTokenNgramCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRepeatedTokenNgramCount : 0ULL) },
 							{ "sherpaRepeatedTokenNgramUnit", JsonString(debugInfo.has_value() ? debugInfo->sherpaRepeatedTokenNgramUnit : std::string()) },

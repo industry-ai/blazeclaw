@@ -522,6 +522,13 @@ Implementation notes:
   `decodedRepeatFinalRejected=true`, uses final outcome
   `decoded_repeat_rejected`, and does not publish the repeated text as final
   transcript text or as a final valid segment.
+- Follow-up per-frame emission containment: `kSherpaMaxSymbolsPerFrame` is now 4
+  instead of 8, and the RNN-T loop advances the current encoder frame after an
+  emitted symbol when the best-vs-second-best joiner logit margin falls below
+  0.75. Baseline JSON and gateway debug snapshots now expose
+  `rnntAdaptiveFrameStopCount` and `rnntLastFrameStopReason` so future baselines
+  can distinguish max-symbol stops, n-gram-repeat stops, immediate-token-repeat
+  stops, and weak-margin adaptive stops.
 
 After non-blank output is restored and reference comparison is acceptable:
 

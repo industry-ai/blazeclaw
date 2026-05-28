@@ -550,6 +550,8 @@ valid final segment.
 
 ### Phase 5: Review RNN-T per-frame emission limits
 
+Status: implemented.
+
 Target file:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.cpp`
@@ -570,10 +572,38 @@ Plan:
    - stop when a repeated n-gram candidate appears,
    - preserve normal multi-symbol frames when confidence remains stable.
 
+Implementation notes:
+
+- The hard RNN-T per-frame cap is now reduced from 8 to 4 symbols per encoder
+  frame. This preserves normal multi-symbol frames while reducing the amount of
+  repeated content a local greedy-loop failure can emit before the frame advances.
+- The RNN-T loop now records `rnntLastFrameStopReason` for containment decisions:
+  - `immediate_token_repeat`,
+  - `ngram_repeat`,
+  - `weak_margin_after_symbol`,
+  - `max_tokens_per_utterance`,
+  - `max_symbols_per_frame`.
+- The existing Phase 3 n-gram guard already stops a repeated n-gram candidate by
+  advancing the current frame before the candidate enters emitted-token or
+  decoder-context state.
+- A new adaptive per-frame stop advances the frame when at least one symbol has
+  already been emitted from the current encoder frame and the best-vs-second-best
+  joiner logit margin is below `0.75`.
+- The adaptive stop is conservative: it does not block the first non-blank symbol
+  from a frame, and it only prevents continuing to emit more symbols from the same
+  frame when confidence has become weak.
+- `rnntAdaptiveFrameStopCount` and `rnntLastFrameStopReason` are persisted in
+  Sherpa baseline JSON, exposed in `SpeechRecognitionDebugInfo`, and surfaced via
+  `gateway.speech.debug.snapshot`.
+
 Exit gate:
 
 - Normal recognition quality is preserved while runaway per-frame repeated output
   is stopped.
+
+Result: implemented. Runaway per-frame emission is constrained by a lower hard
+cap, repeated n-gram frame advancement, and a weak-margin adaptive stop, with
+diagnostics available for baseline comparison.
 
 ### Phase 6: Strengthen frontend containment for repeated CJK phrases
 
