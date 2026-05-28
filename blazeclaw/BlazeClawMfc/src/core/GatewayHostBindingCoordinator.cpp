@@ -294,6 +294,15 @@ namespace blazeclaw::core {
 			};
 
 			manager.m_gatewayHost.NotifySpeechExecutionUpdate(state);
+			const std::string segmentJson = state.segment.has_value()
+				? std::string("{\"text\":") +
+					blazeclaw::gateway::JsonString(state.segment->text) +
+					",\"final\":" +
+					(state.segment->final ? "true" : "false") +
+					",\"sequence\":" +
+					std::to_string(static_cast<std::uint64_t>(state.segment->sequence)) +
+					"}"
+				: std::string("null");
 			blazeclaw::gateway::EmitTelemetryEvent(
 				"gateway.speech.execution.update",
 				std::string("{\"runId\":") +
@@ -302,10 +311,14 @@ namespace blazeclaw::core {
 				blazeclaw::gateway::JsonString(state.sessionId) +
 				",\"stage\":" +
 				blazeclaw::gateway::JsonString(stageToString(state.stage)) +
+				",\"text\":" +
+				blazeclaw::gateway::JsonString(state.transcriptText) +
 				",\"cancelRequested\":" +
 				(state.cancelRequested ? "true" : "false") +
 				",\"hasSegment\":" +
 				(state.segment.has_value() ? "true" : "false") +
+				",\"segment\":" +
+				segmentJson +
 				",\"streamingInput\":" +
 				(state.streamingInput.has_value() ? "true" : "false") +
 				"}");

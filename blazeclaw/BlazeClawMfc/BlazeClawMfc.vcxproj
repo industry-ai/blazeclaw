@@ -593,6 +593,7 @@
     <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP2_LIVE_PREVIEW_POLLING.md" />
     <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP3_RING_PCM_STREAM.md" />
     <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP4_COORDINATOR_INTERIM_SEGMENTS.md" />
+    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP5_GATEWAY_SEGMENT_PAYLOADS.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
     <None Include="tools\.tmp_sherpa_no_output_baseline.json" />

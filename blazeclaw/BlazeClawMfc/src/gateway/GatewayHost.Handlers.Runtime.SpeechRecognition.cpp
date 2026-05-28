@@ -44,6 +44,18 @@ namespace blazeclaw::gateway {
 					}
 				};
 
+					auto buildSegmentJson = [](const std::optional<blazeclaw::core::speechrecognition::SpeechTranscriptSegment>& segment) {
+						if (!segment.has_value()) {
+							return std::string("null");
+						}
+
+						return JsonObject({
+							{ "text", JsonString(segment->text) },
+							{ "final", JsonBool(segment->final) },
+							{ "sequence", JsonNumber(static_cast<std::uint64_t>(segment->sequence)) },
+						});
+					};
+
 			auto buildAudioArtifactJson =
 				[&audioHandoffModeToString](
 					const blazeclaw::core::speechrecognition::SpeechAudioArtifact& artifact) {
@@ -524,6 +536,18 @@ namespace blazeclaw::gateway {
 						}
 					};
 
+					auto buildSegmentJson = [](const std::optional<blazeclaw::core::speechrecognition::SpeechTranscriptSegment>& segment) {
+						if (!segment.has_value()) {
+							return std::string("null");
+						}
+
+						return JsonObject({
+							{ "text", JsonString(segment->text) },
+							{ "final", JsonBool(segment->final) },
+							{ "sequence", JsonNumber(static_cast<std::uint64_t>(segment->sequence)) },
+						});
+					};
+
 					const RequestParamsView params(request.paramsJson);
 					const std::string audioPath = params.GetString("audioPath");
 					const std::string language = params.GetString("language");
@@ -563,6 +587,7 @@ namespace blazeclaw::gateway {
 						const auto& busyState = existingExecution.found
 							? existingExecution.executionState
 							: accepted.executionState;
+						const std::string busySegmentJson = buildSegmentJson(busyState.segment);
 						return protocol::OkResponse(
 							request,
 							JsonObject({
@@ -572,6 +597,9 @@ namespace blazeclaw::gateway {
 								{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
 								{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
 								{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
+								{ "stage", JsonString(executionStageToString(busyState.stage)) },
+								{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
+								{ "segment", busySegmentJson },
 								{ "speechSession", JsonObject({
 									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
 									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
@@ -581,6 +609,7 @@ namespace blazeclaw::gateway {
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
 									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
 									{ "cancelled", JsonBool(busyState.cancelRequested) },
+									{ "segment", busySegmentJson },
 								}) },
 								{ "executionState", JsonObject({
 									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
@@ -591,6 +620,7 @@ namespace blazeclaw::gateway {
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
 									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
 									{ "cancelRequested", JsonBool(busyState.cancelRequested) },
+									{ "segment", busySegmentJson },
 								}) },
 								{ "errorCode", JsonString(accepted.errorCode) },
 								{ "errorMessage", JsonString(accepted.errorMessage) },
@@ -678,6 +708,15 @@ namespace blazeclaw::gateway {
 					const std::uint32_t effectiveSegmentSequence = hasNativeSegment
 						? transcribe.sessionState.segment->sequence
 						: 1U;
+					const std::optional<blazeclaw::core::speechrecognition::SpeechTranscriptSegment> effectiveSegment = hasSegment
+						? std::optional<blazeclaw::core::speechrecognition::SpeechTranscriptSegment>(
+							blazeclaw::core::speechrecognition::SpeechTranscriptSegment{
+								.text = effectiveSegmentText,
+								.final = effectiveSegmentFinal,
+								.sequence = effectiveSegmentSequence,
+							})
+						: std::nullopt;
+					const std::string segmentJson = buildSegmentJson(effectiveSegment);
 					const std::string audioArtifactJson =
 						transcribe.sessionState.audioArtifact.has_value()
 						? buildAudioArtifactJson(*transcribe.sessionState.audioArtifact)
@@ -889,10 +928,12 @@ namespace blazeclaw::gateway {
 							{ "runId", JsonString(effectiveRunId) },
 							{ "sessionId", JsonString(effectiveSessionId) },
 							{ "stage", JsonString(normalizedStage) },
+							{ "text", JsonString(normalizedText) },
 							{ "ok", JsonBool(transcribe.ok) },
 							{ "cancelled", JsonBool(transcribe.cancelled) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "hasSegment", JsonBool(hasSegment) },
+							{ "segment", segmentJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorClass", JsonString(errorClass) },
 						}));
@@ -904,6 +945,7 @@ namespace blazeclaw::gateway {
 								{ "runId", JsonString(effectiveRunId) },
 								{ "sessionId", JsonString(effectiveSessionId) },
 								{ "stage", JsonString(normalizedStage) },
+								{ "text", JsonString(effectiveSegmentText) },
 								{ "final", JsonBool(effectiveSegmentFinal) },
 								{ "sequence", JsonNumber(static_cast<std::uint64_t>(effectiveSegmentSequence)) },
 							}));
@@ -914,8 +956,7 @@ namespace blazeclaw::gateway {
 					const std::string forwardedPayload = "{}";
 
 					const std::string speechSessionJson =
-						hasSegment
-						? JsonObject({
+						JsonObject({
 							{ "sessionId", JsonString(transcribe.sessionState.sessionId) },
 							{ "runId", JsonString(transcribe.sessionState.runId) },
 							{ "stage", JsonString(normalizedStage) },
@@ -925,22 +966,7 @@ namespace blazeclaw::gateway {
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
 							{ "audioArtifact", audioArtifactJson },
-							{ "segment", JsonObject({
-								{ "text", JsonString(effectiveSegmentText) },
-								{ "final", JsonBool(effectiveSegmentFinal) },
-								{ "sequence", JsonNumber(static_cast<std::uint64_t>(effectiveSegmentSequence)) },
-							}) },
-						})
-						: JsonObject({
-							{ "sessionId", JsonString(transcribe.sessionState.sessionId) },
-							{ "runId", JsonString(transcribe.sessionState.runId) },
-							{ "stage", JsonString(normalizedStage) },
-							{ "audioPath", JsonString(transcribe.sessionState.audioPath) },
-							{ "text", JsonString(normalizedText) },
-							{ "language", JsonString(normalizedLanguage) },
-							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
-							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
-							{ "audioArtifact", audioArtifactJson },
+							{ "segment", segmentJson },
 						});
 
 					return protocol::OkResponse(
@@ -953,7 +979,10 @@ namespace blazeclaw::gateway {
 							{ "sessionId", JsonString(sessionId) },
 							{ "runId", JsonString(runId) },
 							{ "executionRunId", JsonString(effectiveRunId) },
+							{ "stage", JsonString(normalizedStage) },
+							{ "audioPath", JsonString(transcribe.sessionState.audioPath) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(transcribe.latencyMs)) },
+							{ "segment", segmentJson },
 							{ "speechSession", speechSessionJson },
 							{ "executionState", JsonObject({
 								{ "sessionId", JsonString(effectiveSessionId) },
@@ -965,6 +994,7 @@ namespace blazeclaw::gateway {
 								{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 								{ "cancelRequested", JsonBool(false) },
 								{ "audioArtifact", audioArtifactJson },
+									{ "segment", segmentJson },
 							}) },
 							{ "transcriptInjection", JsonObject({
 								{ "source", JsonString("voice") },

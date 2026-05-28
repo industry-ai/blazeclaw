@@ -185,6 +185,11 @@ Acceptance criteria:
 - completed: duplicate suppression is left to downstream gateway/UI logic so no valid interim callback opportunity is lost.
 
 ### Step 5: Include segment data in gateway lifecycle payloads
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP5_GATEWAY_SEGMENT_PAYLOADS.md`
+
 Ensure lifecycle and response JSON include segment data for interim updates.
 
 Files to review/update:
@@ -211,9 +216,11 @@ Payload shape should include:
 ```
 
 Acceptance criteria:
-- `speech.lifecycle` events carry interim segment text.
-- `speech.transcribe` preview responses carry the same normalized segment data.
-- Final responses remain backward compatible with existing chat send behavior.
+- completed: `speech.lifecycle` events emitted from `CBlazeClawMFCView` can carry interim segment text through normalized `speechSession.segment` data.
+- completed: `speech.transcribe` preview responses carry normalized segment data at top level, under `speechSession`, and under `executionState`.
+- completed: busy/in-flight speech responses preserve segment data when available.
+- completed: gateway lifecycle, segment, and coordinator execution-update telemetry include segment text and metadata.
+- completed: final responses remain backward compatible with existing `speechSession`, `speechArtifact`, `transcriptInjection`, and chat send behavior.
 
 ### Step 6: Render live recognition in the WebView GUI
 Update the WebView chat UI to show interim transcript text clearly while recording.
