@@ -683,10 +683,22 @@ Step 10 diagnostic retirement gate:
 - Load-time binding/cache-map TRACE output remains available because it is
   bounded by model metadata and is useful for future contract regressions.
 - Step 10 tests verify the retained debug fields and the verbose trace gate.
-- Post-Step 10 regression handling now initializes dynamic encoder cache inputs
-  before ONNX execution and fails early with a bounded contract error if encoder
-  input assembly is incomplete, avoiding runtime `Missing Input` errors such as
-  `cached_conv2_4`.
+- Post-Step 10 regression handling now resolves unresolved initial dynamic
+  encoder cache axes to a valid batch-size dimension while still passing
+  explicit tensors before ONNX execution. It fails early with a bounded contract
+  error if encoder input assembly is incomplete, avoiding runtime `Missing
+  Input` errors such as `cached_conv2_4` while preserving the encoder MatMul
+  broadcast contract.
+- Final drain handling now skips tiny fixed-chunk tails that would be mostly
+  zero padding and records real/padded feature-frame counts in baseline JSON,
+  preserving diagnostics for blank-only regressions without re-enabling verbose
+  frame traces.
+- The default Sherpa fbank input convention is now normalized floating-point
+  waveform samples. Set `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING=kaldi_int16` only
+  when intentionally comparing against the previous `sample * 32768` path.
+- RNN-T greedy search now treats an immediate repeated token as a frame-boundary
+  signal: it increments `rnntRepeatedTokenCount`, advances to the next encoder
+  frame, and does not append the duplicate to emitted tokens or decoder context.
 
 ## Recommended implementation order
 

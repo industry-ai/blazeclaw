@@ -469,11 +469,24 @@ Implementation notes:
   model metadata rather than per-frame runtime volume.
 - Step 10 coverage verifies the retained bounded Sherpa debug fields and the
   verbose trace gate.
-- Follow-up runtime regression fix: initial dynamic encoder cache inputs are now
-  materialized as valid zero-initialized tensors before ONNX execution, and an
-  encoder input completeness guard stops before `Run(...)` if cache assembly is
-  incomplete. This prevents ONNX `Missing Input` failures for required cache
-  tensors such as `cached_conv2_4`.
+- Follow-up runtime regression fix: initial dynamic encoder cache inputs now
+  resolve unresolved model axes to a valid batch-size dimension and pass
+  explicit ONNX tensors for every required state input. An encoder input
+  completeness guard stops before `Run(...)` if cache assembly is incomplete,
+  preventing ONNX `Missing Input` failures for required cache tensors such as
+  `cached_conv2_4` while preserving the model's MatMul broadcast contract.
+- Follow-up blank-only runtime guard: finite final `pcm_stream` drains no longer
+  run a fixed-size encoder chunk for tiny final feature tails padded mostly with
+  zeros. Baseline JSON now also records real and padded feature-frame counts so
+  final-tail padding regressions remain visible without verbose traces.
+- Follow-up fbank parity change: this Sherpa model now defaults to normalized
+  floating-point waveform samples for `knf::OnlineFbank` instead of `sample *
+  32768`. The previous Kaldi-int16 scaling remains available through
+  `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING=kaldi_int16` for comparison.
+- Follow-up RNN-T repeat fix: immediate repeated token IDs from the same greedy
+  decode path now terminate the current encoder-frame inner loop without being
+  emitted or fed back into decoder context. `rnntRepeatedTokenCount` still tracks
+  the suppressed repetitions for diagnostics.
 
 After non-blank output is restored and reference comparison is acceptable:
 

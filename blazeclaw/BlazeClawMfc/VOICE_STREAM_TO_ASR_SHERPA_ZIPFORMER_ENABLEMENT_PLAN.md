@@ -262,10 +262,22 @@ Latest runtime telemetry root cause:
 	through debug snapshots, baseline JSON, final outcome classification, cache
 	binding/update counts, contract failure counts, and top-level model-contract
 	shape summaries.
-28. A post-Step 10 runtime regression fix initializes dynamic encoder cache
-	inputs before ONNX execution and adds an encoder-input completeness guard.
-	Required cache tensors such as `cached_conv2_4` now get valid zero-filled
-	initial inputs instead of surfacing as ONNX Runtime `Missing Input` failures.
+28. A post-Step 10 runtime regression fix resolves unresolved initial dynamic
+	encoder cache axes to a valid batch-size dimension while still passing
+	explicit tensors before ONNX execution and adding an encoder-input
+	completeness guard. Required cache tensors such as `cached_conv2_4` no longer
+	surface as ONNX Runtime `Missing Input` failures, and the encoder MatMul
+	broadcast contract remains intact.
+29. A blank-only follow-up guard prevents finite final drains from running tiny
+	fixed-size feature tails padded mostly with zeros. Baseline diagnostics now
+	include real and padded feature-frame counts to keep this contract visible.
+30. The Sherpa fbank input convention now defaults to normalized floating-point
+	waveform samples for this model. The previous `sample * 32768` path remains
+	available through `BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING=kaldi_int16` for
+	controlled comparisons.
+31. RNN-T greedy search now suppresses immediate repeated token IDs by treating
+	them as a frame-boundary signal. The duplicate is counted in
+	`rnntRepeatedTokenCount` but is not emitted or fed back into decoder context.
 
 ## FunASR references to follow
 

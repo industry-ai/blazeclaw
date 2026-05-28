@@ -20,6 +20,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
+		constexpr std::size_t kSherpaFinalPartialMinRealFrames = 16;
 		constexpr std::size_t kSherpaMaxSymbolsPerFrame = 8;
 		constexpr std::size_t kSherpaMaxTokensPerUtterance = 512;
 
@@ -29,8 +30,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		};
 
 		struct SherpaFbankSampleScalingPolicy {
-			SherpaFbankSampleScalingMode mode = SherpaFbankSampleScalingMode::KaldiInt16;
-			std::string diagnosticName = "reference_kaldi_int16";
+			SherpaFbankSampleScalingMode mode = SherpaFbankSampleScalingMode::NormalizedFloat;
+			std::string diagnosticName = "reference_normalized_float";
 		};
 
 		bool IsFiniteSample(float value) {
@@ -102,13 +103,23 @@ namespace blazeclaw::core::speechrecognition::engines {
 				};
 			}
 
+			if (configuredValue == "kaldi" ||
+				configuredValue == "kaldi_int16" ||
+				configuredValue == "int16" ||
+				configuredValue == "scaled") {
+				return SherpaFbankSampleScalingPolicy{
+					.mode = SherpaFbankSampleScalingMode::KaldiInt16,
+					.diagnosticName = "kaldi_int16",
+				};
+			}
+
 			return SherpaFbankSampleScalingPolicy{
-				.mode = SherpaFbankSampleScalingMode::KaldiInt16,
+				.mode = SherpaFbankSampleScalingMode::NormalizedFloat,
 				.diagnosticName = configuredValue.empty() ||
 					configuredValue == "reference" ||
 					configuredValue == "default"
-					? "reference_kaldi_int16"
-					: "kaldi_int16",
+					? "reference_normalized_float"
+					: "normalized_float",
 			};
 		}
 
@@ -491,9 +502,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 						dim = 1;
 					}
 				}
-				return ComputeStaticElementCount(shape) > 0
-					? std::optional{ shape }
-					: std::nullopt;
+				return shape;
 			}
 
 			return std::nullopt;
@@ -1467,6 +1476,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"hasSegment\": " << (hasSegment ? "true" : "false") << ",\n";
 		stream << "  \"fallbackUsed\": " << (fallbackUsed ? "true" : "false") << ",\n";
 		stream << "  \"fbankFrameCount\": " << streamState.encoderFrameCount << ",\n";
+		stream << "  \"featureRealFrameCount\": " << streamState.contractFeatureRealFrameCount << ",\n";
+		stream << "  \"featurePaddedFrameCount\": " << streamState.contractFeaturePaddedFrameCount << ",\n";
 		stream << "  \"encoderFrameCount\": " << streamState.encoderFrameCount << ",\n";
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
 		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
@@ -2060,7 +2071,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 					const bool hasFullFixedChunk = hasFixedEncoderChunk && featureFrames >= fixedEncoderChunkFrames;
 					const bool hasEnoughDynamicFrames = !hasFixedEncoderChunk &&
 						(featureFrames >= kMinSherpaFeatureFrames || forceFlushFeatures);
-					const bool hasFinalPartialChunk = forceFlushFeatures && featureFrames > 0;
+					const bool hasFinalPartialChunk = forceFlushFeatures &&
+						featureFrames >= (std::min)(
+							hasFixedEncoderChunk ? fixedEncoderChunkFrames : kMinSherpaFeatureFrames,
+							kSherpaFinalPartialMinRealFrames);
 					const bool shouldRunEncoder = hasFixedEncoderChunk
 						? (hasFullFixedChunk || hasFinalPartialChunk)
 						: hasEnoughDynamicFrames;
@@ -2205,7 +2219,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 								}
 								shape = *resolvedShape;
 								const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(shape));
-								if (expectedElements == 0) {
+								if (expectedElements == 0 && cache.size() > 0) {
 									++streamState.encoderStateCacheContractFailureCount;
 									streamState.contractStateCacheLastError = FormatStateCacheContractError(
 										"initialize",
@@ -2223,10 +2237,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 								cacheShape = shape;
 								encoderInt64Buffers.push_back(cache);
 								auto& stateRef = encoderInt64Buffers.back();
+								if (stateRef.empty()) {
+									stateRef.push_back(0);
+								}
 								encoderInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
 									memoryInfo,
 									stateRef.data(),
-									stateRef.size(),
+									expectedElements,
 									shape.data(),
 									shape.size()));
 							}
@@ -2254,7 +2271,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 								}
 								shape = *resolvedShape;
 								const auto expectedElements = static_cast<std::size_t>(ComputeResolvedElementCount(shape));
-								if (expectedElements == 0) {
+								if (expectedElements == 0 && cache.size() > 0) {
 									++streamState.encoderStateCacheContractFailureCount;
 									streamState.contractStateCacheLastError = FormatStateCacheContractError(
 										"initialize",
@@ -2272,10 +2289,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 								cacheShape = shape;
 								encoderFloatBuffers.push_back(cache);
 								auto& stateRef = encoderFloatBuffers.back();
+								if (stateRef.empty()) {
+									stateRef.push_back(0.0f);
+								}
 								encoderInputs.push_back(Ort::Value::CreateTensor<float>(
 									memoryInfo,
 									stateRef.data(),
-									stateRef.size(),
+									expectedElements,
 									shape.data(),
 									shape.size()));
 							}
@@ -2829,9 +2849,11 @@ namespace blazeclaw::core::speechrecognition::engines {
 													continue;
 												}
 
-												if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
-													++streamState.rnntRepeatedTokenCount;
-												}
+										if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
+											++streamState.rnntRepeatedTokenCount;
+											advanceFrame = true;
+											continue;
+										}
 												streamState.emittedTokenIds.push_back(tokenId);
 										streamState.baselineTokenIds.push_back(tokenId);
 												++streamState.decodedTokenCount;
