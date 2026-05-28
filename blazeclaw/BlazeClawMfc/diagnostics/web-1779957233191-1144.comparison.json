@@ -1,0 +1,88 @@
+{
+  "status": "reference_missing",
+  "blazeclaw": {
+    "decoded_text": "请讲一个笑话",
+    "expected_text": "请讲一个笑话",
+    "sample_rate": 16000,
+    "chunk_samples": 160,
+    "fbank_frames": 64,
+    "encoder_frames": 64,
+    "joiner_calls": 70,
+    "blank_tokens": 62,
+    "decoded_token_count": 6,
+    "token_ids": [
+      "601",
+      "637",
+      "547",
+      "548",
+      "638",
+      "572"
+    ],
+    "token_pieces": [
+      "请",
+      "讲",
+      "一",
+      "个",
+      "笑",
+      "话"
+    ],
+    "sequence_start": 0,
+    "sequence_end": 51169,
+    "cursor_next": 51169,
+    "final_remaining_samples": 0,
+    "final_flush": true,
+    "final_outcome": "final_transcript",
+    "final_drain_complete": true,
+    "latency_ms": null,
+    "loop_count": 321,
+    "max_loop_count": 322,
+    "has_segment": true,
+    "fallback_used": false,
+    "rnnt_repeated_token_count": 2,
+    "rnnt_max_symbols_hit_count": 0,
+    "rnnt_multi_symbol_frame_count": 0
+  },
+  "repeatClassification": {
+    "status": "ok",
+    "degenerate": false,
+    "tokenNgram": {
+      "detected": false,
+      "ngramLength": 3,
+      "repeatCount": 1,
+      "unit": [
+        "601",
+        "637",
+        "547"
+      ],
+      "startIndex": 0,
+      "coverage": 0.5,
+      "degenerate": false
+    },
+    "decodedText": {
+      "textLength": 6,
+      "compactLength": 6,
+      "longestRepeatedChar": "请",
+      "longestRepeatedCharRun": 1,
+      "repeatedCjkPhrase": {
+        "detected": false,
+        "unit": "请讲一",
+        "unitLength": 3,
+        "repeatCount": 1,
+        "startIndex": 0,
+        "coverage": 0.5
+      },
+      "degenerate": false
+    },
+    "rnntCounters": {
+      "repeatedTokenCount": 2,
+      "maxSymbolsHitCount": 0,
+      "multiSymbolFrameCount": 0
+    }
+  },
+  "gateway": {
+    "has_segment": null,
+    "fallback_used": false,
+    "user_visible_transcript": ""
+  },
+  "message": "No reference JSON was supplied; BlazeClaw baseline metrics were extracted only."
+}

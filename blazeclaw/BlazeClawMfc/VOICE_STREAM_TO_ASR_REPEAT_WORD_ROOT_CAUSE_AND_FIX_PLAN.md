@@ -194,6 +194,12 @@ appears to be the same class of failure at a larger granularity: repeated decode
 phrases such as `描述` and `色素` can be formed by more than one token or across
 more than one encoder frame, so the existing one-token guard is not sufficient.
 
+The latest Phase 1 baseline run narrows this further: the current longer
+utterance produced `写一首是用他来描述春天的色彩色彩色彩色彩色彩`, and the
+classifier identified a repeated two-token unit `1251 768` decoded as `色彩`
+with count 5 and coverage 0.455. This confirms the immediate same-token guard is
+working, but an alternating/multi-token RNN-T loop still escapes it.
+
 The likely contributing causes are:
 
 1. **RNN-T inner-loop over-emission per encoder frame.**
@@ -262,6 +268,42 @@ Implementation notes:
 - `SherpaStep8BaselineToolTests.cpp` now covers both a clean CJK baseline and a
   repeated CJK phrase baseline through the `--require-no-repeat` gate.
 
+Latest captured baseline result:
+
+- Historical control baseline:
+  - file: `bin/Debug/BlazeClawRecordings/web-1779957233191-1144.sherpa-baseline.json`
+  - expected text: `请讲一个笑话`
+  - decoded text: `请讲一个笑话`
+  - token count: 6
+  - fbank frames: 64
+  - final flush: `true`
+  - final outcome: `final_transcript`
+  - repeat classification: `ok`
+- Current longer utterance baseline:
+  - file: `bin/Debug/BlazeClawRecordings/web-1779957261620-9748.sherpa-baseline.json`
+  - expected text: `写一首诗用它来描述春天的色彩`
+  - decoded text: `写一首是用他来描述春天的色彩色彩色彩色彩色彩`
+  - token count: 22
+  - fbank frames: 128
+  - final flush: `true`
+  - final outcome: `final_transcript`
+  - repeat classification: `degenerate_repeat_detected`
+  - token repeat: length 2, count 5, unit `['1251', '768']`
+  - decoded CJK repeat: unit `色彩`, count 5, coverage 0.455
+
+Interpretation:
+
+- The historical control proves the previous immediate-token repeat fix still
+  works for `请讲一个笑话`.
+- The longer utterance proves this is no longer a no-output or transport issue:
+  the Sherpa path emits a native final transcript, but the final transcript is
+  quality-degenerate.
+- The repeated unit is now measured precisely: the failing run repeats token
+  n-gram `1251 768`, decoded as `色彩`, five times.
+- The next implementation phase should focus on suppressing repeated token
+  n-grams before they are appended to `emittedTokenIds` or fed back into
+  `decoderContext`.
+
 Usage:
 
 1. Start BlazeClaw with the active Sherpa config in `BlazeClawMfc/blazeclaw.conf`.
@@ -319,6 +361,10 @@ Exit gate:
   text, or final text normalization.
 - `--require-no-repeat` passes for the corrected historical control and fails for
   a baseline containing repeated CJK phrase output like the reported transcript.
+
+Result: satisfied by the captured baselines above. Phase 1 confirms the current
+failure signature is a repeated two-token Sherpa RNN-T loop (`1251 768`) decoded
+as repeated `色彩`, not a Qwen fallback, no-output regression, or UI append bug.
 
 ### Phase 2: Add runtime repeated-unit diagnostics
 

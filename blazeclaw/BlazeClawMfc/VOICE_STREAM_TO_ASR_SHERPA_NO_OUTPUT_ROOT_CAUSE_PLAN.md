@@ -493,6 +493,15 @@ Implementation notes:
   token n-grams, repeated CJK phrase units, and long CJK character runs. This
   supports comparing the corrected `请讲一个笑话` control utterance with longer
   utterances that may still expose phrase-level RNN-T repetition.
+- Latest repeat-baseline result: the corrected `请讲一个笑话` control baseline
+  passes `--require-no-repeat` with decoded text `请讲一个笑话`, 6 tokens, 64
+  fbank frames, final flush true, and final outcome `final_transcript`. The
+  longer utterance baseline fails `--require-no-repeat` with decoded text
+  `写一首是用他来描述春天的色彩色彩色彩色彩色彩`; the classifier reports token
+  n-gram `['1251', '768']` repeated 5 times and decoded CJK unit `色彩` repeated
+  5 times with coverage 0.455. This confirms the remaining failure is a
+  phrase-level Sherpa RNN-T repetition issue after non-blank output has been
+  restored.
 
 After non-blank output is restored and reference comparison is acceptable:
 

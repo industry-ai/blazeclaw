@@ -1,0 +1,118 @@
+{
+  "status": "repeat_failed",
+  "blazeclaw": {
+    "decoded_text": "写一首是用他来描述春天的色彩色彩色彩色彩色彩",
+    "expected_text": "写一首诗用它来描述春天的色彩",
+    "sample_rate": 16000,
+    "chunk_samples": 160,
+    "fbank_frames": 128,
+    "encoder_frames": 128,
+    "joiner_calls": 149,
+    "blank_tokens": 123,
+    "decoded_token_count": 22,
+    "token_ids": [
+      "911",
+      "547",
+      "574",
+      "500",
+      "843",
+      "734",
+      "787",
+      "2448",
+      "2536",
+      "1196",
+      "607",
+      "519",
+      "1251",
+      "768",
+      "1251",
+      "768",
+      "1251",
+      "768",
+      "1251",
+      "768",
+      "1251",
+      "768"
+    ],
+    "token_pieces": [
+      "写",
+      "一",
+      "首",
+      "是",
+      "用",
+      "他",
+      "来",
+      "描",
+      "述",
+      "春",
+      "天",
+      "的",
+      "色",
+      "彩",
+      "色",
+      "彩",
+      "色",
+      "彩",
+      "色",
+      "彩",
+      "色",
+      "彩"
+    ],
+    "sequence_start": 0,
+    "sequence_end": 97889,
+    "cursor_next": 97889,
+    "final_remaining_samples": 0,
+    "final_flush": true,
+    "final_outcome": "final_transcript",
+    "final_drain_complete": true,
+    "latency_ms": null,
+    "loop_count": 613,
+    "max_loop_count": 614,
+    "has_segment": true,
+    "fallback_used": false,
+    "rnnt_repeated_token_count": 4,
+    "rnnt_max_symbols_hit_count": 1,
+    "rnnt_multi_symbol_frame_count": 1
+  },
+  "repeatClassification": {
+    "status": "degenerate_repeat_detected",
+    "degenerate": true,
+    "tokenNgram": {
+      "detected": true,
+      "ngramLength": 2,
+      "repeatCount": 5,
+      "unit": [
+        "1251",
+        "768"
+      ],
+      "startIndex": 12,
+      "coverage": 0.45454545454545453,
+      "degenerate": true
+    },
+    "decodedText": {
+      "textLength": 22,
+      "compactLength": 22,
+      "longestRepeatedChar": "写",
+      "longestRepeatedCharRun": 1,
+      "repeatedCjkPhrase": {
+        "detected": true,
+        "unit": "色彩",
+        "unitLength": 2,
+        "repeatCount": 5,
+        "startIndex": 12,
+        "coverage": 0.45454545454545453
+      },
+      "degenerate": true
+    },
+    "rnntCounters": {
+      "repeatedTokenCount": 4,
+      "maxSymbolsHitCount": 1,
+      "multiSymbolFrameCount": 1
+    }
+  },
+  "gateway": {
+    "has_segment": null,
+    "fallback_used": false,
+    "user_visible_transcript": ""
+  }
+}
