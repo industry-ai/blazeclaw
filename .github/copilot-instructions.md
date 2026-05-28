@@ -12,6 +12,7 @@
 
 ### Speech Recognition
 - For BlazeClaw speech recognition work, treat `BlazeClawMfc/blazeclaw.conf` as the current used config file; the active STT path is Sherpa Zipformer (`speech.storageRoot=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en`), while Qwen3 ASR is obsolete unless explicitly reselected.
+- For BlazeClaw Sherpa speech recognition GUI work, use CBlazeClawMFCView as the speech-recognition result/output surface; CChatView may be a recorder provider but should not be treated as the GUI output owner.
 
 ### UI & UX
 - Target WebView-first UI flows: BlazeClaw currently uses a WebView at BlazeClawMfc/web/chat/index.html via the CBlazeClawMFCView bridge; design parity and UI plans assuming WebView-first implementation.

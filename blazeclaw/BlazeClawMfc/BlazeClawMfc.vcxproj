@@ -588,6 +588,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\docs\readme.md" />
+    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_PLAN.md" />
+    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP1_ENTRY_POINTS.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
     <None Include="tools\.tmp_sherpa_no_output_baseline.json" />
