@@ -74,6 +74,20 @@ namespace blazeclaw::core::speechrecognition::engines {
 			return value;
 		}
 
+		bool ReadEnvironmentFlag(const char* name) {
+			const auto value = ToLowerAscii(ReadEnvironmentString(name));
+			return value == "1" ||
+				value == "true" ||
+				value == "yes" ||
+				value == "on" ||
+				value == "verbose";
+		}
+
+		bool IsSherpaVerboseTraceEnabled() {
+			static const bool enabled = ReadEnvironmentFlag("BLAZECLAW_SHERPA_VERBOSE_TRACE");
+			return enabled;
+		}
+
 		SherpaFbankSampleScalingPolicy ResolveSherpaFbankSampleScalingPolicy() {
 			const auto configuredValue = ToLowerAscii(ReadEnvironmentString(
 				"BLAZECLAW_SHERPA_FBANK_SAMPLE_SCALING"));
@@ -1970,7 +1984,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			const float energy = ComputeFrameEnergy(chunk);
 			const bool frameSpeech = energy >= kSpeechEnergyThreshold;
-			if (streamState.chunkCount % 10 == 1) {
+			if (IsSherpaVerboseTraceEnabled() && streamState.chunkCount % 10 == 1) {
 				TRACE(L"[SherpaStreaming] chunkCount=%llu energy=%f frameSpeech=%d\n",
 					streamState.chunkCount, energy, frameSpeech);
 			}
@@ -1999,7 +2013,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 					newLogMel.end());
 				streamState.pendingFeatureFrameCount += newFeatureFrames;
 			}
-			if (streamState.chunkCount % 10 == 1) {
+			if (IsSherpaVerboseTraceEnabled() && streamState.chunkCount % 10 == 1) {
 				TRACE(L"[SherpaStreaming] onlineFbankNewFrames=%llu pendingFeatureFrames=%llu finalFlush=%d\n",
 					(unsigned long long)newFeatureFrames,
 					(unsigned long long)streamState.pendingFeatureFrameCount,
@@ -2729,7 +2743,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 													streamState.contractJoinerTopTokens = FormatTopTokens(
 														logits + logitsOffset,
 														vocabSize);
-													if (streamState.joinerCallCount <= 3 || streamState.joinerCallCount % 50 == 0) {
+													if (IsSherpaVerboseTraceEnabled() &&
+														(streamState.joinerCallCount <= 3 || streamState.joinerCallCount % 50 == 0)) {
 				TRACE(L"[SherpaContract] fbankScaling=%S featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
 					streamState.contractFbankSampleScalingMode.c_str(),
 															streamState.contractFeatureInputShape.c_str(),
@@ -2770,7 +2785,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 														streamState.lastSecondBestTokenScore = *candidate;
 													}
 												}
-												if (tokenId != m_blankId) {
+														if (IsSherpaVerboseTraceEnabled() && tokenId != m_blankId) {
 													TRACE(L"[SherpaStreaming] emitted tokenId=%lld value=%f blankId=%lld\n",
 														(long long)tokenId, *bestIt, (long long)m_blankId);
 												}

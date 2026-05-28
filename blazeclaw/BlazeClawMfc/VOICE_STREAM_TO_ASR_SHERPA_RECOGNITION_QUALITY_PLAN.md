@@ -671,6 +671,19 @@ Step 9 reference comparison gate:
 - Step 9 tests cover both matched reference output and measurable differences in
   decoded text, token IDs/pieces, timing, and drain state.
 
+Step 10 diagnostic retirement gate:
+
+- High-volume Sherpa runtime TRACE output is now opt-in through
+  `BLAZECLAW_SHERPA_VERBOSE_TRACE=1`.
+- Gated traces include periodic chunk-energy logs, online fbank pending-frame
+  logs, sampled joiner top-token contract dumps, and per-emitted-token lines.
+- Retained always-on bounded diagnostics include `gateway.speech.debug.snapshot`,
+  baseline JSON, final outcome classification, cache binding/update counts,
+  contract failure counts, and feature/encoder/decoder/joiner shape summaries.
+- Load-time binding/cache-map TRACE output remains available because it is
+  bounded by model metadata and is useful for future contract regressions.
+- Step 10 tests verify the retained debug fields and the verbose trace gate.
+
 ## Recommended implementation order
 
 1. Build the reproducible baseline first.

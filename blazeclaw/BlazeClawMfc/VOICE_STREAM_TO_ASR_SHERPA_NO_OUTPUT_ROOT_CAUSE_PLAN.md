@@ -454,6 +454,22 @@ a no-output regression.
 
 ### Step 10: Retire only noisy diagnostics
 
+Status: implemented.
+
+Implementation notes:
+
+- High-volume runtime TRACE output for chunk energy, online fbank frame polling,
+  sampled per-joiner contract top-token dumps, and per-emitted-token messages is
+  now opt-in via `BLAZECLAW_SHERPA_VERBOSE_TRACE=1`.
+- Structured diagnostics remain enabled: `gateway.speech.debug.snapshot`,
+  baseline JSON, final outcome classification, cache binding/update counts,
+  contract failure counts, and top-level feature/encoder/decoder/joiner contract
+  shapes are retained.
+- Load-time binding/cache-map TRACE output is retained because it is bounded by
+  model metadata rather than per-frame runtime volume.
+- Step 10 coverage verifies the retained bounded Sherpa debug fields and the
+  verbose trace gate.
+
 After non-blank output is restored and reference comparison is acceptable:
 
 1. keep minimal failure telemetry for future regressions,
@@ -461,7 +477,8 @@ After non-blank output is restored and reference comparison is acceptable:
 3. keep final outcome classification,
 4. keep cache binding counts and top-level model-contract diagnostics.
 
-Exit gate: the runtime remains diagnosable without flooding debug output.
+Exit gate: the runtime remains diagnosable without flooding debug output; verbose
+per-frame/token traces require `BLAZECLAW_SHERPA_VERBOSE_TRACE`.
 
 ## Validation checklist
 

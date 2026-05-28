@@ -126,3 +126,33 @@ TEST_CASE(
 	REQUIRE(gatewayHost.find("SetSpeechStopCallback") != std::string::npos);
 	REQUIRE(gatewayHost.find("SetSpeechStatusCallback") != std::string::npos);
 }
+
+TEST_CASE(
+	"Sherpa Step 10 diagnostics retain bounded contracts and gate verbose traces",
+	"[speech][sherpa][step10]")
+{
+	const auto speechHandlerPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.SpeechRecognition.cpp";
+	const auto sherpaEnginePath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"runtime" /
+		"SpeechRecognition" /
+		"engines" /
+		"SherpaZipformerStreamingEngine.cpp";
+
+	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
+	const std::string sherpaEngine = ReadTextFile(ResolveProjectPath(sherpaEnginePath));
+
+	REQUIRE(speechHandler.find("gateway.speech.debug.snapshot") != std::string::npos);
+	REQUIRE(speechHandler.find("sherpaFinalOutcome") != std::string::npos);
+	REQUIRE(speechHandler.find("sherpaEncoderStateCacheBindingCount") != std::string::npos);
+	REQUIRE(speechHandler.find("sherpaDecoderJoinerContractFailureCount") != std::string::npos);
+	REQUIRE(speechHandler.find("sherpaContractJoinerOutputShape") != std::string::npos);
+
+	REQUIRE(sherpaEngine.find("BLAZECLAW_SHERPA_VERBOSE_TRACE") != std::string::npos);
+	REQUIRE(sherpaEngine.find("IsSherpaVerboseTraceEnabled() && streamState.chunkCount") != std::string::npos);
+	REQUIRE(sherpaEngine.find("IsSherpaVerboseTraceEnabled() && tokenId != m_blankId") != std::string::npos);
+}

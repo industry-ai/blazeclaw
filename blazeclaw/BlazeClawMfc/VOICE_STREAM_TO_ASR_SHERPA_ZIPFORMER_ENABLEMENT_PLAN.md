@@ -255,6 +255,13 @@ Latest runtime telemetry root cause:
 	common Sherpa/FunASR field names for sequence/cursor drain state, final flush,
 	final outcome, latency, and loop counts. Tests cover both matched reference
 	fixtures and measurable quality/lifecycle deltas.
+27. Step 10 of the no-output root-cause plan is now implemented: high-volume
+	runtime TRACE output for chunk energy, online fbank frame polling, sampled
+	joiner top-token dumps, and emitted-token lines is gated behind
+	`BLAZECLAW_SHERPA_VERBOSE_TRACE=1`. Bounded diagnostics remain always available
+	through debug snapshots, baseline JSON, final outcome classification, cache
+	binding/update counts, contract failure counts, and top-level model-contract
+	shape summaries.
 
 ## FunASR references to follow
 
