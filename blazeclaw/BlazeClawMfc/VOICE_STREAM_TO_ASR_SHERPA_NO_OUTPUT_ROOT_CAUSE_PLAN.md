@@ -502,6 +502,12 @@ Implementation notes:
   5 times with coverage 0.455. This confirms the remaining failure is a
   phrase-level Sherpa RNN-T repetition issue after non-blank output has been
   restored.
+- Follow-up runtime repeat diagnostics: the Sherpa streaming engine now records
+  repeated token n-gram length/count/unit and repeated decoded CJK
+  unit/length/count/coverage in `StreamState`, `SpeechRecognitionDebugInfo`,
+  `gateway.speech.debug.snapshot`, and persisted Sherpa baseline JSON. The
+  current guard action is `diagnostic_only`, so this follow-up improves root-cause
+  visibility without changing transcript publication behavior.
 
 After non-blank output is restored and reference comparison is acceptable:
 

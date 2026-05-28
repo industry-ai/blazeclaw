@@ -32,6 +32,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::size_t longestRepeatedCharRun = 0;
 		};
 
+		struct TokenRepeatClassification {
+			std::size_t repeatedUnitLength = 0;
+			std::size_t repeatedUnitCount = 0;
+			std::string repeatedUnit;
+		};
+
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
 		constexpr std::size_t kSherpaFinalPartialMinRealFrames = 16;
@@ -125,6 +131,68 @@ namespace blazeclaw::core::speechrecognition::engines {
 				unit += symbols[start + offset].text;
 			}
 			return unit;
+		}
+
+		std::string JoinTokenNgramUnit(
+			const std::vector<std::int64_t>& tokenIds,
+			std::size_t start,
+			std::size_t length) {
+			std::ostringstream stream;
+			for (std::size_t offset = 0; offset < length && start + offset < tokenIds.size(); ++offset) {
+				if (offset > 0) {
+					stream << ' ';
+				}
+				stream << tokenIds[start + offset];
+			}
+			return stream.str();
+		}
+
+		bool SameTokenNgram(
+			const std::vector<std::int64_t>& tokenIds,
+			std::size_t left,
+			std::size_t right,
+			std::size_t length) {
+			if (left + length > tokenIds.size() || right + length > tokenIds.size()) {
+				return false;
+			}
+			for (std::size_t offset = 0; offset < length; ++offset) {
+				if (tokenIds[left + offset] != tokenIds[right + offset]) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		TokenRepeatClassification ClassifyTrailingTokenRepeats(
+			const std::vector<std::int64_t>& tokenIds,
+			std::size_t minUnitLength,
+			std::size_t maxUnitLength) {
+			TokenRepeatClassification result;
+			if (tokenIds.empty()) {
+				return result;
+			}
+
+			const std::size_t boundedMaxUnitLength = (std::min)(maxUnitLength, tokenIds.size() / 2);
+			for (std::size_t unitLength = minUnitLength; unitLength <= boundedMaxUnitLength; ++unitLength) {
+				std::size_t repeatCount = 1;
+				std::size_t unitStart = tokenIds.size() - unitLength;
+				while (unitStart >= unitLength &&
+					SameTokenNgram(tokenIds, unitStart - unitLength, unitStart, unitLength)) {
+					++repeatCount;
+					unitStart -= unitLength;
+				}
+				if (repeatCount > result.repeatedUnitCount ||
+					(repeatCount == result.repeatedUnitCount && unitLength > result.repeatedUnitLength)) {
+					result.repeatedUnitLength = unitLength;
+					result.repeatedUnitCount = repeatCount;
+					result.repeatedUnit = JoinTokenNgramUnit(tokenIds, tokenIds.size() - unitLength, unitLength);
+				}
+			}
+
+			if (result.repeatedUnitCount < 2) {
+				result = TokenRepeatClassification{};
+			}
+			return result;
 		}
 
 		DecodedRepeatClassification ClassifyDecodedRepeats(const std::string& decodedText) {
@@ -1654,6 +1722,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"rnntRepeatedTokenCount\": " << streamState.rnntRepeatedTokenCount << ",\n";
 		stream << "  \"rnntMultiSymbolFrameCount\": " << streamState.rnntMultiSymbolFrameCount << ",\n";
 		stream << "  \"rnntMaxSymbolsPerFrame\": " << kSherpaMaxSymbolsPerFrame << ",\n";
+		stream << "  \"repeatedTokenNgramLength\": " << streamState.repeatedTokenNgramLength << ",\n";
+		stream << "  \"repeatedTokenNgramCount\": " << streamState.repeatedTokenNgramCount << ",\n";
+		stream << "  \"repeatedTokenNgramUnit\": \"" << EscapeJsonString(streamState.repeatedTokenNgramUnit) << "\",\n";
+		stream << "  \"repeatedDecodedUnit\": \"" << EscapeJsonString(streamState.repeatedDecodedUnit) << "\",\n";
+		stream << "  \"repeatedDecodedUnitLength\": " << streamState.repeatedDecodedUnitLength << ",\n";
+		stream << "  \"repeatedDecodedUnitCount\": " << streamState.repeatedDecodedUnitCount << ",\n";
+		{
+			std::ostringstream runtimeRepeatCoverageStream;
+			runtimeRepeatCoverageStream << std::fixed << std::setprecision(6)
+				<< streamState.repeatedDecodedUnitCoverage;
+			stream << "  \"repeatedDecodedUnitCoverage\": " << runtimeRepeatCoverageStream.str() << ",\n";
+		}
+		stream << "  \"repeatGuardAction\": \"" << EscapeJsonString(streamState.repeatGuardAction) << "\",\n";
 		stream << "  \"decodedRepeatDegenerate\": " << (repeatClassification.degenerate ? "true" : "false") << ",\n";
 		stream << "  \"decodedRepeatUnit\": \"" << EscapeJsonString(repeatClassification.repeatedUnit) << "\",\n";
 		stream << "  \"decodedRepeatUnitLength\": " << static_cast<std::uint64_t>(repeatClassification.repeatedUnitLength) << ",\n";
@@ -3033,8 +3114,22 @@ namespace blazeclaw::core::speechrecognition::engines {
 											advanceFrame = true;
 											continue;
 										}
-												streamState.emittedTokenIds.push_back(tokenId);
-										streamState.baselineTokenIds.push_back(tokenId);
+										streamState.emittedTokenIds.push_back(tokenId);
+								streamState.baselineTokenIds.push_back(tokenId);
+								{
+									const auto tokenRepeat = ClassifyTrailingTokenRepeats(
+										streamState.emittedTokenIds,
+										2,
+										8);
+									if (tokenRepeat.repeatedUnitCount > 0) {
+										streamState.repeatedTokenNgramLength =
+											static_cast<std::uint64_t>(tokenRepeat.repeatedUnitLength);
+										streamState.repeatedTokenNgramCount =
+											static_cast<std::uint64_t>(tokenRepeat.repeatedUnitCount);
+										streamState.repeatedTokenNgramUnit = tokenRepeat.repeatedUnit;
+										streamState.repeatGuardAction = "diagnostic_only";
+									}
+								}
 												++streamState.decodedTokenCount;
 												++symbolsThisFrame;
 												streamState.decoderContext.push_back(tokenId);
@@ -3081,6 +3176,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 					break;
 				}
 				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
+				{
+					const auto decodedRepeat = ClassifyDecodedRepeats(streamState.partialText);
+					if (decodedRepeat.repeatedUnitCount > 0) {
+						streamState.repeatedDecodedUnit = decodedRepeat.repeatedUnit;
+						streamState.repeatedDecodedUnitLength =
+							static_cast<std::uint64_t>(decodedRepeat.repeatedUnitLength);
+						streamState.repeatedDecodedUnitCount =
+							static_cast<std::uint64_t>(decodedRepeat.repeatedUnitCount);
+						streamState.repeatedDecodedUnitCoverage = decodedRepeat.repeatedUnitCoverage;
+						streamState.repeatGuardAction = "diagnostic_only";
+					}
+				}
 				result.text = streamState.partialText;
 
 				if (consumedFeatureFrames > 0 &&
@@ -3266,6 +3373,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaRnntRepeatedTokenCount = streamState.rnntRepeatedTokenCount,
 			.sherpaRnntMultiSymbolFrameCount = streamState.rnntMultiSymbolFrameCount,
 			.sherpaRnntMaxSymbolsPerFrame = kSherpaMaxSymbolsPerFrame,
+			.sherpaRepeatedTokenNgramLength = streamState.repeatedTokenNgramLength,
+			.sherpaRepeatedTokenNgramCount = streamState.repeatedTokenNgramCount,
+			.sherpaRepeatedTokenNgramUnit = streamState.repeatedTokenNgramUnit,
+			.sherpaRepeatedDecodedUnit = streamState.repeatedDecodedUnit,
+			.sherpaRepeatedDecodedUnitLength = streamState.repeatedDecodedUnitLength,
+			.sherpaRepeatedDecodedUnitCount = streamState.repeatedDecodedUnitCount,
+			.sherpaRepeatedDecodedUnitCoverage = streamState.repeatedDecodedUnitCoverage,
+			.sherpaRepeatGuardAction = streamState.repeatGuardAction,
 			.sherpaBpeModelPresent = m_artifacts.bpeModelPresent,
 			.sherpaBpeVocabPresent = m_artifacts.bpeVocabPresent,
 			.sherpaDecodedText = baselineDecodedText,

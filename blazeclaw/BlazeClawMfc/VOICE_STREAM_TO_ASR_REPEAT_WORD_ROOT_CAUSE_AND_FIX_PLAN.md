@@ -368,6 +368,8 @@ as repeated `色彩`, not a Qwen fallback, no-output regression, or UI append bu
 
 ### Phase 2: Add runtime repeated-unit diagnostics
 
+Status: implemented.
+
 Target files:
 
 - `src/core/runtime/SpeechRecognition/engines/SherpaZipformerStreamingEngine.h`
@@ -380,20 +382,55 @@ Plan:
 1. Extend `StreamState` / debug info with repeated-unit diagnostics:
    - repeated token n-gram length,
    - repeated token n-gram count,
+   - repeated token n-gram unit,
    - repeated decoded UTF-8 unit,
+   - repeated decoded unit length,
    - repeated decoded unit count,
+   - repeated decoded unit coverage,
    - repeat guard action.
 2. Analyze repetition after every accepted non-blank token by checking recent
    token history for repeated n-grams of length 2-8.
-3. Decode only the recent window for UTF-8 phrase-repeat diagnostics to avoid
-   high per-frame overhead.
+3. Reuse the decoded partial transcript for UTF-8/CJK phrase-repeat diagnostics
+   after each inference pass, avoiding an extra full-token decode inside the
+   inner RNN-T loop.
 4. Include these fields in `gateway.speech.debug.snapshot` and persisted baseline
    JSON.
+
+Implementation notes:
+
+- `StreamState` now tracks:
+  - `repeatedTokenNgramLength`,
+  - `repeatedTokenNgramCount`,
+  - `repeatedTokenNgramUnit`,
+  - `repeatedDecodedUnit`,
+  - `repeatedDecodedUnitLength`,
+  - `repeatedDecodedUnitCount`,
+  - `repeatedDecodedUnitCoverage`,
+  - `repeatGuardAction`.
+- `SpeechRecognitionDebugInfo` exposes the same fields with `sherpa...` names.
+- After each accepted non-blank token, the runtime checks the recent emitted-token
+  tail for repeated n-grams of length 2-8 and records the strongest trailing
+  repeat found.
+- After each partial transcript decode, the runtime records decoded CJK repeated
+  unit diagnostics using the existing decoded-repeat classifier.
+- `repeatGuardAction` is currently `diagnostic_only`; Phase 2 does not suppress,
+  rewrite, or hold transcript output.
+- Persisted Sherpa baseline JSON and `gateway.speech.debug.snapshot` now include
+  these diagnostics so a failing run can identify both the repeated token unit and
+  the repeated decoded unit. Gateway telemetry exposes decoded repeat coverage as
+  `sherpaRepeatedDecodedUnitCoveragePermille` because the existing gateway JSON
+  number helper is integer-only; persisted baseline JSON keeps the decimal
+  `repeatedDecodedUnitCoverage` field.
 
 Exit gate:
 
 - A failing run reports exactly which repeated token/decoded unit caused the
   transcript to degenerate.
+
+Result: implemented. A repeat run should now surface the escaped pattern through
+runtime telemetry and baseline JSON, for example token n-gram `1251 768` and
+decoded unit `色彩`, while leaving the transcript acceptance behavior unchanged
+until Phase 3 and Phase 4 add guards.
 
 ### Phase 3: Generalize the historical RNN-T repeat guard to n-grams
 
