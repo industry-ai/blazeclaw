@@ -17,6 +17,20 @@
 namespace blazeclaw::core::speechrecognition::engines {
 
 	namespace {
+		struct Utf8Symbol {
+			std::uint32_t codePoint = 0;
+			std::string text;
+		};
+
+		struct DecodedRepeatClassification {
+			bool degenerate = false;
+			std::string repeatedUnit;
+			std::size_t repeatedUnitLength = 0;
+			std::size_t repeatedUnitCount = 0;
+			double repeatedUnitCoverage = 0.0;
+			std::string longestRepeatedChar;
+			std::size_t longestRepeatedCharRun = 0;
+		};
 
 		constexpr float kSpeechEnergyThreshold = 0.0001f;
 		constexpr std::size_t kMinSherpaFeatureFrames = 16;
@@ -36,6 +50,155 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		bool IsFiniteSample(float value) {
 			return std::isfinite(value) != 0;
+		}
+
+		bool IsCjkCodePoint(std::uint32_t value) {
+			return (value >= 0x3400U && value <= 0x4DBFU) ||
+				(value >= 0x4E00U && value <= 0x9FFFU) ||
+				(value >= 0xF900U && value <= 0xFAFFU) ||
+				(value >= 0x20000U && value <= 0x2A6DFU) ||
+				(value >= 0x2A700U && value <= 0x2B73FU) ||
+				(value >= 0x2B740U && value <= 0x2B81FU) ||
+				(value >= 0x2B820U && value <= 0x2CEAFU);
+		}
+
+		std::vector<Utf8Symbol> DecodeUtf8Symbols(const std::string& value) {
+			std::vector<Utf8Symbol> symbols;
+			for (std::size_t index = 0; index < value.size();) {
+				const auto lead = static_cast<unsigned char>(value[index]);
+				std::size_t width = 1;
+				std::uint32_t codePoint = lead;
+				if ((lead & 0x80U) == 0U) {
+					width = 1;
+					codePoint = lead;
+				}
+				else if ((lead & 0xE0U) == 0xC0U && index + 1 < value.size()) {
+					width = 2;
+					codePoint = ((lead & 0x1FU) << 6) |
+						(static_cast<unsigned char>(value[index + 1]) & 0x3FU);
+				}
+				else if ((lead & 0xF0U) == 0xE0U && index + 2 < value.size()) {
+					width = 3;
+					codePoint = ((lead & 0x0FU) << 12) |
+						((static_cast<unsigned char>(value[index + 1]) & 0x3FU) << 6) |
+						(static_cast<unsigned char>(value[index + 2]) & 0x3FU);
+				}
+				else if ((lead & 0xF8U) == 0xF0U && index + 3 < value.size()) {
+					width = 4;
+					codePoint = ((lead & 0x07U) << 18) |
+						((static_cast<unsigned char>(value[index + 1]) & 0x3FU) << 12) |
+						((static_cast<unsigned char>(value[index + 2]) & 0x3FU) << 6) |
+						(static_cast<unsigned char>(value[index + 3]) & 0x3FU);
+				}
+
+				symbols.push_back(Utf8Symbol{
+					.codePoint = codePoint,
+					.text = value.substr(index, width),
+				});
+				index += width;
+			}
+			return symbols;
+		}
+
+		bool SameUtf8Unit(
+			const std::vector<Utf8Symbol>& symbols,
+			std::size_t left,
+			std::size_t right,
+			std::size_t length) {
+			if (left + length > symbols.size() || right + length > symbols.size()) {
+				return false;
+			}
+			for (std::size_t offset = 0; offset < length; ++offset) {
+				if (symbols[left + offset].text != symbols[right + offset].text) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		std::string JoinUtf8Unit(
+			const std::vector<Utf8Symbol>& symbols,
+			std::size_t start,
+			std::size_t length) {
+			std::string unit;
+			for (std::size_t offset = 0; offset < length && start + offset < symbols.size(); ++offset) {
+				unit += symbols[start + offset].text;
+			}
+			return unit;
+		}
+
+		DecodedRepeatClassification ClassifyDecodedRepeats(const std::string& decodedText) {
+			DecodedRepeatClassification result;
+			std::vector<Utf8Symbol> symbols;
+			for (const auto& symbol : DecodeUtf8Symbols(decodedText)) {
+				if (!std::isspace(static_cast<unsigned char>(symbol.text.front()))) {
+					symbols.push_back(symbol);
+				}
+			}
+			if (symbols.empty()) {
+				return result;
+			}
+
+			std::size_t currentRun = 0;
+			std::string currentChar;
+			for (const auto& symbol : symbols) {
+				if (symbol.text == currentChar) {
+					++currentRun;
+				}
+				else {
+					currentChar = symbol.text;
+					currentRun = 1;
+				}
+				if (currentRun > result.longestRepeatedCharRun) {
+					result.longestRepeatedCharRun = currentRun;
+					result.longestRepeatedChar = symbol.text;
+				}
+			}
+
+			for (std::size_t unitLength = 2; unitLength <= 6; ++unitLength) {
+				if (symbols.size() < unitLength * 2) {
+					continue;
+				}
+				for (std::size_t start = 0; start + (unitLength * 2) <= symbols.size(); ++start) {
+					bool allCjk = true;
+					for (std::size_t offset = 0; offset < unitLength; ++offset) {
+						if (!IsCjkCodePoint(symbols[start + offset].codePoint)) {
+							allCjk = false;
+							break;
+						}
+					}
+					if (!allCjk) {
+						continue;
+					}
+
+					std::size_t repeatCount = 1;
+					std::size_t cursor = start + unitLength;
+					while (SameUtf8Unit(symbols, start, cursor, unitLength)) {
+						++repeatCount;
+						cursor += unitLength;
+					}
+					const double coverage = static_cast<double>(repeatCount * unitLength) /
+						static_cast<double>(symbols.size());
+					if (repeatCount > result.repeatedUnitCount ||
+						(repeatCount == result.repeatedUnitCount && coverage > result.repeatedUnitCoverage)) {
+						result.repeatedUnit = JoinUtf8Unit(symbols, start, unitLength);
+						result.repeatedUnitLength = unitLength;
+						result.repeatedUnitCount = repeatCount;
+						result.repeatedUnitCoverage = coverage;
+					}
+				}
+			}
+
+			const bool phraseDegenerate =
+				(result.repeatedUnitLength == 2 && result.repeatedUnitCount >= 5) ||
+				(result.repeatedUnitLength >= 3 && result.repeatedUnitLength <= 6 && result.repeatedUnitCount >= 4) ||
+				(result.repeatedUnitCount >= 3 && result.repeatedUnitCoverage >= 0.35);
+			const bool charDegenerate = result.longestRepeatedCharRun >= 4 &&
+				!result.longestRepeatedChar.empty() &&
+				!DecodeUtf8Symbols(result.longestRepeatedChar).empty() &&
+				IsCjkCodePoint(DecodeUtf8Symbols(result.longestRepeatedChar).front().codePoint);
+			result.degenerate = phraseDegenerate || charDegenerate;
+			return result;
 		}
 
 		std::string FormatShape(const std::vector<std::int64_t>& shape) {
@@ -1448,6 +1611,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		const std::string tokenIds = JoinTokenIds(streamState.baselineTokenIds);
 		const std::string tokenPieces = JoinTokenPieces(streamState.baselineTokenIds);
+		const auto repeatClassification = ClassifyDecodedRepeats(decodedText);
+		std::ostringstream repeatCoverageStream;
+		repeatCoverageStream << std::fixed << std::setprecision(6)
+			<< repeatClassification.repeatedUnitCoverage;
 		stream << "{\n";
 		stream << "  \"runId\": \"" << EscapeJsonString(request.runId) << "\",\n";
 		stream << "  \"sessionId\": \"" << EscapeJsonString(request.sessionId) << "\",\n";
@@ -1482,6 +1649,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 		stream << "  \"joinerCallCount\": " << streamState.joinerCallCount << ",\n";
 		stream << "  \"blankTokenCount\": " << streamState.blankTokenCount << ",\n";
 		stream << "  \"decodedTokenCount\": " << streamState.decodedTokenCount << ",\n";
+		stream << "  \"rnntInnerLoopCount\": " << streamState.rnntInnerLoopCount << ",\n";
+		stream << "  \"rnntMaxSymbolsHitCount\": " << streamState.rnntMaxSymbolsHitCount << ",\n";
+		stream << "  \"rnntRepeatedTokenCount\": " << streamState.rnntRepeatedTokenCount << ",\n";
+		stream << "  \"rnntMultiSymbolFrameCount\": " << streamState.rnntMultiSymbolFrameCount << ",\n";
+		stream << "  \"rnntMaxSymbolsPerFrame\": " << kSherpaMaxSymbolsPerFrame << ",\n";
+		stream << "  \"decodedRepeatDegenerate\": " << (repeatClassification.degenerate ? "true" : "false") << ",\n";
+		stream << "  \"decodedRepeatUnit\": \"" << EscapeJsonString(repeatClassification.repeatedUnit) << "\",\n";
+		stream << "  \"decodedRepeatUnitLength\": " << static_cast<std::uint64_t>(repeatClassification.repeatedUnitLength) << ",\n";
+		stream << "  \"decodedRepeatUnitCount\": " << static_cast<std::uint64_t>(repeatClassification.repeatedUnitCount) << ",\n";
+		stream << "  \"decodedRepeatUnitCoverage\": " << repeatCoverageStream.str() << ",\n";
+		stream << "  \"decodedLongestRepeatedChar\": \"" << EscapeJsonString(repeatClassification.longestRepeatedChar) << "\",\n";
+		stream << "  \"decodedLongestRepeatedCharRun\": " << static_cast<std::uint64_t>(repeatClassification.longestRepeatedCharRun) << ",\n";
 		stream << "  \"encoderStateCacheValidatedUpdateCount\": " << streamState.encoderStateCacheValidatedUpdateCount << ",\n";
 		stream << "  \"encoderStateCacheContractFailureCount\": " << streamState.encoderStateCacheContractFailureCount << ",\n";
 		stream << "  \"encoderStateCacheSummary\": \"" << EscapeJsonString(streamState.contractStateCacheSummary) << "\",\n";

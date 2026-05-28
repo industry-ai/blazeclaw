@@ -269,6 +269,60 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Sherpa repeat classifier accepts clean CJK baselines and rejects repeated phrase baselines",
+	"[speech][sherpa][repeat]")
+{
+	const auto tempRoot = CreateUniqueTempDirectory();
+	const auto cleanBaselinePath = tempRoot / "repeat-clean.sherpa-baseline.json";
+	const auto repeatedBaselinePath = tempRoot / "repeat-degenerate.sherpa-baseline.json";
+	const auto cleanOutputPath = tempRoot / "repeat-clean-comparison.json";
+
+	WriteTextFile(
+		cleanBaselinePath,
+		"{\n"
+		"  \"expectedText\": \"写一首诗用它来描述春天的色彩\",\n"
+		"  \"decodedText\": \"写一首诗用它来描述春天的色彩\",\n"
+		"  \"decodedTokenCount\": 14,\n"
+		"  \"tokenIds\": \"101 102 103 104 105 106 107 108 109 110 111 112 113 114\",\n"
+		"  \"rnntRepeatedTokenCount\": 0,\n"
+		"  \"rnntMaxSymbolsHitCount\": 0,\n"
+		"  \"rnntMultiSymbolFrameCount\": 2\n"
+		"}\n");
+
+	WriteTextFile(
+		repeatedBaselinePath,
+		"{\n"
+		"  \"expectedText\": \"写一首诗用它来描述春天的色彩\",\n"
+		"  \"decodedText\": \"写一首诗用它来描述描述描述描述描述春天的色素色素色素色素色素色素彩\",\n"
+		"  \"decodedTokenCount\": 28,\n"
+		"  \"tokenIds\": \"101 102 201 202 201 202 201 202 201 202 201 202\",\n"
+		"  \"rnntRepeatedTokenCount\": 0,\n"
+		"  \"rnntMaxSymbolsHitCount\": 3,\n"
+		"  \"rnntMultiSymbolFrameCount\": 8\n"
+		"}\n");
+
+	const auto scriptPath = ResolveProjectPath(
+		std::filesystem::path("BlazeClawMfc") / "tools" / "compare_sherpa_baseline.py");
+	REQUIRE(std::filesystem::exists(scriptPath));
+
+	const std::string cleanCommand =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(cleanBaselinePath) +
+		" --require-no-repeat" +
+		" --output " + QuotePath(cleanOutputPath);
+	REQUIRE(RunCommand(cleanCommand) == 0);
+	REQUIRE(std::filesystem::exists(cleanOutputPath));
+
+	const std::string repeatedCommand =
+		"python " + QuotePath(scriptPath) +
+		" --baseline " + QuotePath(repeatedBaselinePath) +
+		" --require-no-repeat";
+	REQUIRE(RunCommand(repeatedCommand) != 0);
+
+	std::filesystem::remove_all(tempRoot);
+}
+
+TEST_CASE(
 	"Sherpa Step 8 checker rejects all-blank no-output baselines",
 	"[speech][sherpa][step8]")
 {

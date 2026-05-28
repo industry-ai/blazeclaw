@@ -593,6 +593,7 @@
     <None Include="tools\.tmp_sherpa_no_output_baseline.json" />
     <None Include="tools\compare_sherpa_baseline.py" />
     <None Include="tools\freeze_sherpa_no_output_baseline.py" />
+    <None Include="VOICE_STREAM_TO_ASR_REPEAT_WORD_ROOT_CAUSE_AND_FIX_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_SHERPA_NO_OUTPUT_ROOT_CAUSE_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_SHERPA_RECOGNITION_QUALITY_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_STEP11_ROOT_CAUSE_AND_FIX_PLAN.md" />

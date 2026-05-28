@@ -10,6 +10,9 @@
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands. Always validate with: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
 
+### Speech Recognition
+- For BlazeClaw speech recognition work, treat `BlazeClawMfc/blazeclaw.conf` as the current used config file; the active STT path is Sherpa Zipformer (`speech.storageRoot=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en`), while Qwen3 ASR is obsolete unless explicitly reselected.
+
 ### UI & UX
 - Target WebView-first UI flows: BlazeClaw currently uses a WebView at BlazeClawMfc/web/chat/index.html via the CBlazeClawMFCView bridge; design parity and UI plans assuming WebView-first implementation.
 - Treat CChatView as a potential future UI path; design parity plans to allow migration to CChatView later, but prioritize WebView parity and validation.

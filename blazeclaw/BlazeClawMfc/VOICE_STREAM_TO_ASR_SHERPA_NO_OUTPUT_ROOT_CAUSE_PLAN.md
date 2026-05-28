@@ -487,6 +487,12 @@ Implementation notes:
   decode path now terminate the current encoder-frame inner loop without being
   emitted or fed back into decoder context. `rnntRepeatedTokenCount` still tracks
   the suppressed repetitions for diagnostics.
+- Follow-up repeat-baseline classifier: Sherpa baseline JSON now persists RNN-T
+  repeat counters and decoded CJK repeat fields, and
+  `tools/compare_sherpa_baseline.py --require-no-repeat` classifies repeated
+  token n-grams, repeated CJK phrase units, and long CJK character runs. This
+  supports comparing the corrected `请讲一个笑话` control utterance with longer
+  utterances that may still expose phrase-level RNN-T repetition.
 
 After non-blank output is restored and reference comparison is acceptable:
 

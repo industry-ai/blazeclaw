@@ -35,6 +35,9 @@ BLAZECLAW_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "max_loop_count": ("maxLoopCount", "sherpaMaxLoopCount"),
     "has_segment": ("hasSegment", "hasSegmentEffective"),
     "fallback_used": ("fallbackUsed", "sherpaFallbackUsed"),
+    "rnnt_repeated_token_count": ("rnntRepeatedTokenCount", "sherpaRnntRepeatedTokenCount"),
+    "rnnt_max_symbols_hit_count": ("rnntMaxSymbolsHitCount", "sherpaRnntMaxSymbolsHitCount"),
+    "rnnt_multi_symbol_frame_count": ("rnntMultiSymbolFrameCount", "sherpaRnntMultiSymbolFrameCount"),
 }
 
 REFERENCE_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
@@ -301,18 +304,176 @@ def text_similarity(left: str | None, right: str | None) -> float | None:
     return difflib.SequenceMatcher(a=left, b=right).ratio()
 
 
+def is_cjk_char(value: str) -> bool:
+    return any(
+        start <= ord(value) <= end
+        for start, end in (
+            (0x3400, 0x4DBF),
+            (0x4E00, 0x9FFF),
+            (0xF900, 0xFAFF),
+            (0x20000, 0x2A6DF),
+            (0x2A700, 0x2B73F),
+            (0x2B740, 0x2B81F),
+            (0x2B820, 0x2CEAF),
+        )
+    )
+
+
+def classify_repeated_token_ngrams(tokens: list[str]) -> dict[str, Any]:
+    best: dict[str, Any] = {
+        "detected": False,
+        "ngramLength": 0,
+        "repeatCount": 0,
+        "unit": [],
+        "startIndex": None,
+        "coverage": 0.0,
+    }
+    if len(tokens) < 2:
+        return best
+
+    max_ngram = min(8, len(tokens) // 2)
+    for ngram_length in range(1, max_ngram + 1):
+        for start in range(0, len(tokens) - (ngram_length * 2) + 1):
+            unit = tokens[start:start + ngram_length]
+            if not unit:
+                continue
+            repeat_count = 1
+            cursor = start + ngram_length
+            while cursor + ngram_length <= len(tokens) and tokens[cursor:cursor + ngram_length] == unit:
+                repeat_count += 1
+                cursor += ngram_length
+            coverage = (repeat_count * ngram_length) / len(tokens)
+            best_coverage = float(best.get("coverage") or 0.0)
+            if repeat_count > int(best.get("repeatCount") or 0) or (
+                repeat_count == int(best.get("repeatCount") or 0) and coverage > best_coverage
+            ):
+                best = {
+                    "detected": repeat_count >= 2,
+                    "ngramLength": ngram_length,
+                    "repeatCount": repeat_count,
+                    "unit": unit,
+                    "startIndex": start,
+                    "coverage": coverage,
+                }
+    best["degenerate"] = (
+        best["detected"]
+        and int(best["repeatCount"]) >= 3
+        and int(best["ngramLength"]) <= 8
+    )
+    return best
+
+
+def classify_repeated_text_units(text: str | None) -> dict[str, Any]:
+    value = "" if text is None else str(text)
+    compact = "".join(ch for ch in value if not ch.isspace())
+    longest_char_run = 0
+    longest_char = ""
+    current_char = ""
+    current_count = 0
+    for ch in compact:
+        if ch == current_char:
+            current_count += 1
+        else:
+            current_char = ch
+            current_count = 1
+        if current_count > longest_char_run:
+            longest_char_run = current_count
+            longest_char = ch
+
+    best_phrase: dict[str, Any] = {
+        "detected": False,
+        "unit": "",
+        "unitLength": 0,
+        "repeatCount": 0,
+        "startIndex": None,
+        "coverage": 0.0,
+    }
+    for unit_length in range(2, 7):
+        if len(compact) < unit_length * 2:
+            continue
+        for start in range(0, len(compact) - (unit_length * 2) + 1):
+            unit = compact[start:start + unit_length]
+            if not unit or not all(is_cjk_char(ch) for ch in unit):
+                continue
+            repeat_count = 1
+            cursor = start + unit_length
+            while cursor + unit_length <= len(compact) and compact[cursor:cursor + unit_length] == unit:
+                repeat_count += 1
+                cursor += unit_length
+            coverage = (repeat_count * unit_length) / len(compact) if compact else 0.0
+            best_coverage = float(best_phrase.get("coverage") or 0.0)
+            if repeat_count > int(best_phrase.get("repeatCount") or 0) or (
+                repeat_count == int(best_phrase.get("repeatCount") or 0) and coverage > best_coverage
+            ):
+                best_phrase = {
+                    "detected": repeat_count >= 2,
+                    "unit": unit,
+                    "unitLength": unit_length,
+                    "repeatCount": repeat_count,
+                    "startIndex": start,
+                    "coverage": coverage,
+                }
+
+    phrase_repeat_count = int(best_phrase.get("repeatCount") or 0)
+    phrase_unit_length = int(best_phrase.get("unitLength") or 0)
+    phrase_coverage = float(best_phrase.get("coverage") or 0.0)
+    phrase_degenerate = (
+        (phrase_unit_length == 2 and phrase_repeat_count >= 5)
+        or (3 <= phrase_unit_length <= 6 and phrase_repeat_count >= 4)
+        or (phrase_repeat_count >= 3 and phrase_coverage >= 0.35)
+    )
+    char_degenerate = longest_char_run >= 4 and bool(longest_char) and is_cjk_char(longest_char)
+    return {
+        "textLength": len(value),
+        "compactLength": len(compact),
+        "longestRepeatedChar": longest_char,
+        "longestRepeatedCharRun": longest_char_run,
+        "repeatedCjkPhrase": best_phrase,
+        "degenerate": bool(phrase_degenerate or char_degenerate),
+    }
+
+
+def classify_repeat_patterns(metrics: dict[str, Any]) -> dict[str, Any]:
+    token_classification = classify_repeated_token_ngrams(metrics.get("token_ids") or [])
+    text_classification = classify_repeated_text_units(metrics.get("decoded_text"))
+    rnnt_repeated = as_int(metrics.get("rnnt_repeated_token_count")) or 0
+    rnnt_max_symbols = as_int(metrics.get("rnnt_max_symbols_hit_count")) or 0
+    rnnt_multi_symbol = as_int(metrics.get("rnnt_multi_symbol_frame_count")) or 0
+    degenerate = bool(
+        token_classification.get("degenerate")
+        or text_classification.get("degenerate")
+    )
+    return {
+        "status": "degenerate_repeat_detected" if degenerate else "ok",
+        "degenerate": degenerate,
+        "tokenNgram": token_classification,
+        "decodedText": text_classification,
+        "rnntCounters": {
+            "repeatedTokenCount": rnnt_repeated,
+            "maxSymbolsHitCount": rnnt_max_symbols,
+            "multiSymbolFrameCount": rnnt_multi_symbol,
+        },
+    }
+
+
 def compare_metrics(
     blazeclaw: dict[str, Any],
     reference: dict[str, Any] | None,
     gateway: dict[str, Any] | None = None,
     require_step8_pass: bool = False,
+    require_no_repeat: bool = False,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "reference_missing" if reference is None else "compared",
         "blazeclaw": blazeclaw,
     }
+    repeat_classification = classify_repeat_patterns(blazeclaw)
+    result["repeatClassification"] = repeat_classification
     if gateway:
         result["gateway"] = gateway
+    if require_no_repeat and repeat_classification.get("degenerate"):
+        result["status"] = "repeat_failed"
+        return result
     if require_step8_pass:
         step8 = evaluate_step8_regression(blazeclaw, gateway)
         result["step8"] = step8
@@ -442,6 +603,28 @@ def print_summary(comparison: dict[str, Any]) -> None:
                 state = "pass" if check.get("pass") else "fail"
                 print(f"step8 {check.get('name')}: {state}")
 
+    repeat_classification = comparison.get("repeatClassification")
+    if isinstance(repeat_classification, dict):
+        print(f"repeat classification: {repeat_classification.get('status')}")
+        token_ngram = repeat_classification.get("tokenNgram")
+        if isinstance(token_ngram, dict) and token_ngram.get("detected"):
+            print(
+                "token repeat: "
+                f"len={token_ngram.get('ngramLength')} "
+                f"count={token_ngram.get('repeatCount')} "
+                f"unit={token_ngram.get('unit')}"
+            )
+        decoded_text = repeat_classification.get("decodedText")
+        if isinstance(decoded_text, dict):
+            phrase = decoded_text.get("repeatedCjkPhrase")
+            if isinstance(phrase, dict) and phrase.get("detected"):
+                print(
+                    "decoded CJK repeat: "
+                    f"unit={phrase.get('unit')} "
+                    f"count={phrase.get('repeatCount')} "
+                    f"coverage={float(phrase.get('coverage') or 0.0):.3f}"
+                )
+
     reference = comparison.get("reference")
     if reference:
         print(f"reference decoded text: {reference.get('decoded_text') or ''}")
@@ -487,6 +670,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Fail unless the baseline and optional debug log satisfy Step 8 non-blank regression criteria.",
     )
+    parser.add_argument(
+        "--require-no-repeat",
+        action="store_true",
+        help="Fail if decoded text or token IDs contain a degenerate repeated CJK/token pattern.",
+    )
     return parser.parse_args(argv)
 
 
@@ -504,11 +692,14 @@ def main(argv: list[str]) -> int:
             reference_metrics,
             gateway_metrics,
             args.require_step8_pass,
+            args.require_no_repeat,
         )
         if args.output is not None:
             write_json(args.output, comparison)
         print_summary(comparison)
         if args.require_step8_pass and comparison.get("step8", {}).get("status") != "passed":
+            return 1
+        if args.require_no_repeat and comparison.get("repeatClassification", {}).get("degenerate"):
             return 1
         return 0
     except Exception as ex:
