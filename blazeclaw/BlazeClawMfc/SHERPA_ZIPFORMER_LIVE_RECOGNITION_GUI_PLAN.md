@@ -260,11 +260,24 @@ Acceptance criteria:
 - completed: final transcript can still be sent through the existing chat path because preview rendering is separate from composer injection and `messages`.
 
 ### Step 7: Render live recognition through CBlazeClawMFCView
+Status: completed
+
+Detailed findings and implementation notes:
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP7_NATIVE_VIEW_LIFECYCLE.md`
+
 Route native live recognition updates through `CBlazeClawMFCView`, which is the current output surface for speech recognition results.
 
 Files to review/update:
 - `src/app/BlazeClawMFCView.h`
 - `src/app/BlazeClawMFCView.cpp`
+
+Implemented behavior:
+- `CBlazeClawMFCView` now tracks the active live speech session key, run id, last segment text, and last segment sequence.
+- `EmitSpeechLifecycleEvent(...)` now routes payloads through `ShouldEmitSpeechLifecycleEvent(...)` before forwarding to `BridgeEventTopic::SpeechLifecycle`.
+- duplicate non-final `streaming` segment payloads for the same session/run/text/sequence are suppressed in the native view.
+- status, empty streaming, final, and terminal payloads remain emitted so the WebView can show `Listening...`, `Recognizing...`, `Finalizing...`, and final/error states.
+- terminal stages reset native coalescing state so the next recording starts cleanly.
+- asynchronous speech RPC results still post to `CBlazeClawMFCView::OnSpeechRpcCompleted(...)` before bridge emission, preserving the existing UI-thread/native view output path.
 
 Recommended native behavior:
 - Track the last live segment sequence/text in `CBlazeClawMFCView`.
@@ -274,9 +287,9 @@ Recommended native behavior:
 - Avoid appending one output item per partial update.
 
 Acceptance criteria:
-- Users see interim recognition from the current `CBlazeClawMFCView` speech output path while recording.
-- Interim updates are coalesced instead of appended repeatedly.
-- UI updates are posted to the MFC UI thread and ignored after the view is destroyed.
+- completed: users see interim recognition from the current `CBlazeClawMFCView` speech lifecycle bridge output path while recording.
+- completed: duplicate interim updates are coalesced instead of appended or forwarded repeatedly.
+- completed: speech RPC UI updates remain posted through the MFC view message path, with existing owned-payload cleanup for stale view posts.
 
 ### Step 8: Prevent overlapping preview inference from piling up
 Add concurrency protection for preview requests.

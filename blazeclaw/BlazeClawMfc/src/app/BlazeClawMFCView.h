@@ -91,6 +91,10 @@ protected:
 	UINT_PTR m_bridgeTimerId = 0;
 	std::string m_bridgeSessionId = "main";
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
+	std::string m_liveSpeechSessionKey;
+	std::string m_liveSpeechRunId;
+	std::string m_liveSpeechSegmentText;
+	std::uint64_t m_liveSpeechSegmentSequence = 0;
 	CEventTransport m_eventTransport;
 	CBridge m_bridge;
 
@@ -115,6 +119,8 @@ protected:
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
+	bool ShouldEmitSpeechLifecycleEvent(const std::string& payloadJson);
+	void ResetLiveSpeechPreviewState();
 	void EmitSpeechLifecycleEvent(const std::string& payloadJson);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
 	void ReportRunSkillPathsToToolOutput(const std::string& runId);

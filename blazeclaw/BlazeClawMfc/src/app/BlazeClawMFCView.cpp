@@ -2554,8 +2554,115 @@ void CBlazeClawMFCView::EmitSpeechLifecycleEvent(const std::string& payloadJson)
 	{
 		return;
 	}
+	if (!ShouldEmitSpeechLifecycleEvent(payloadJson))
+	{
+		return;
+	}
 
 	m_eventTransport.EmitTopic(BridgeEventTopic::SpeechLifecycle, payloadJson);
+}
+
+void CBlazeClawMFCView::ResetLiveSpeechPreviewState()
+{
+	m_liveSpeechSessionKey.clear();
+	m_liveSpeechRunId.clear();
+	m_liveSpeechSegmentText.clear();
+	m_liveSpeechSegmentSequence = 0;
+}
+
+bool CBlazeClawMFCView::ShouldEmitSpeechLifecycleEvent(const std::string& payloadJson)
+{
+	std::string stage;
+	if (!blazeclaw::gateway::json::FindStringField(payloadJson, "stage", stage))
+	{
+		return true;
+	}
+
+	std::string sessionId;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "sessionId", sessionId);
+	std::string runId;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "runId", runId);
+	const std::string sessionKey = sessionId.empty() ? m_bridgeSessionId : sessionId;
+
+	const bool startsSession =
+		stage == "recording" ||
+		stage == "queued" ||
+		stage == "start_stream" ||
+		stage == "transcribing";
+	if (startsSession)
+	{
+		const bool changedSession =
+			m_liveSpeechSessionKey != sessionKey ||
+			(!runId.empty() && m_liveSpeechRunId != runId);
+		if (changedSession)
+		{
+			ResetLiveSpeechPreviewState();
+		}
+		m_liveSpeechSessionKey = sessionKey;
+		if (!runId.empty())
+		{
+			m_liveSpeechRunId = runId;
+		}
+		return true;
+	}
+
+	if (stage != "streaming")
+	{
+		const bool terminalStage =
+			stage == "segment_finalized" ||
+			stage == "stopped" ||
+			stage == "completed" ||
+			stage == "failed" ||
+			stage == "cancelled";
+		if (terminalStage)
+		{
+			ResetLiveSpeechPreviewState();
+		}
+		return true;
+	}
+
+	std::string text;
+	std::uint64_t sequence = 0;
+	bool segmentFinal = false;
+	std::string segmentRaw;
+	if (blazeclaw::gateway::json::FindRawField(payloadJson, "segment", segmentRaw) &&
+		blazeclaw::gateway::json::IsJsonObjectShape(segmentRaw))
+	{
+		blazeclaw::gateway::json::FindStringField(segmentRaw, "text", text);
+		blazeclaw::gateway::json::FindUInt64Field(segmentRaw, "sequence", sequence);
+		blazeclaw::gateway::json::FindBoolField(segmentRaw, "final", segmentFinal);
+	}
+	if (text.empty())
+	{
+		blazeclaw::gateway::json::FindStringField(payloadJson, "text", text);
+	}
+	if (segmentFinal)
+	{
+		return true;
+	}
+	if (text.empty())
+	{
+		return true;
+	}
+
+	const bool duplicate =
+		m_liveSpeechSessionKey == sessionKey &&
+		(runId.empty() || m_liveSpeechRunId.empty() || m_liveSpeechRunId == runId) &&
+		m_liveSpeechSegmentText == text &&
+		(sequence == 0 || m_liveSpeechSegmentSequence == sequence);
+	if (duplicate)
+	{
+		return false;
+	}
+
+	m_liveSpeechSessionKey = sessionKey;
+	if (!runId.empty())
+	{
+		m_liveSpeechRunId = runId;
+	}
+	m_liveSpeechSegmentText = text;
+	m_liveSpeechSegmentSequence = sequence;
+	return true;
 }
 
 void CBlazeClawMFCView::EmitOpenClawChatEvents(
