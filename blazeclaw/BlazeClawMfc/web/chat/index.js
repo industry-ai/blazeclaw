@@ -162,9 +162,7 @@
         return normalizedStage === "recording" ||
             normalizedStage === "start_stream" ||
             normalizedStage === "streaming" ||
-            (normalizedStage === "queued" && previewRun) ||
-            (normalizedStage === "segment_finalized" && previewRun) ||
-            (normalizedStage === "completed" && previewRun);
+            (normalizedStage === "queued" && previewRun);
     }
 
     function renderSpeechLivePreview() {
@@ -2555,6 +2553,7 @@
                 speechStage === "recording" ||
                 speechStage === "start_stream" ||
                 speechStage === "streaming" ||
+                speechStage === "stopped" ||
                 speechStage === "transcribing";
             const recordingActive = isRecordingSpeechStage(speechStage, speechRunId);
             state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || (speechBusy && !recordingActive);
@@ -2566,6 +2565,8 @@
                 state.speechTranscribeBtn.textContent = "Recording... (click to stop)";
             } else if (speechStage === "queued") {
                 state.speechTranscribeBtn.textContent = "Queued...";
+            } else if (speechStage === "stopped") {
+                state.speechTranscribeBtn.textContent = "Finalizing...";
             } else if (speechStage === "transcribing") {
                 state.speechTranscribeBtn.textContent = "Transcribing...";
             } else if (speechStage === "failed" && String(speechSessionState && speechSessionState.errorCode || "").trim() === "transcript_rejected") {
@@ -2948,6 +2949,27 @@
 
                 stopLiveSpeechPoll();
 
+                const finalizingText = String(
+                    speechSessionState && (speechSessionState.segmentText || speechSessionState.text) ||
+                    "").trim();
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate({
+                        stage: "stopped",
+                        sessionId: state.sessionKey,
+                        runId: speechRunId,
+                        audioPath: String(speechSessionState && speechSessionState.audioPath || "").trim(),
+                        audioArtifact: speechSessionState && speechSessionState.audioArtifact &&
+                            typeof speechSessionState.audioArtifact === "object"
+                            ? speechSessionState.audioArtifact
+                            : null,
+                        text: finalizingText,
+                        errorCode: "",
+                        errorMessage: "",
+                        errorClass: "status",
+                    });
+                    updateComposerState();
+                }
+
                 const stopResponse = await controller.request("gateway.speech.stopRecording", {
                     sessionId: state.sessionKey,
                 });
@@ -2958,14 +2980,12 @@
                 const audioArtifact = payload.audioArtifact && typeof payload.audioArtifact === "object"
                     ? payload.audioArtifact
                     : null;
-                const finalizingText = String(
-                    speechSessionState && (speechSessionState.segmentText || speechSessionState.text) ||
-                    "").trim();
 
                 if (typeof controller.applySpeechLifecycleUpdate === "function") {
                     controller.applySpeechLifecycleUpdate({
                         stage: "stopped",
                         sessionId: state.sessionKey,
+                        runId: speechRunId,
                         audioPath,
                         audioArtifact,
                         text: finalizingText,

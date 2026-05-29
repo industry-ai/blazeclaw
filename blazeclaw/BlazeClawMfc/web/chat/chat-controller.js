@@ -2482,8 +2482,8 @@
                     payload.transcript ||
                     state.speechSessionState.segmentText ||
                     state.speechSessionState.text ||
-                    previousSpeechSessionState.segmentText ||
-                    previousSpeechSessionState.text ||
+                    (livePreviewOnly ? previousSpeechSessionState.segmentText : "") ||
+                    (livePreviewOnly ? previousSpeechSessionState.text : "") ||
                     "").trim();
                 if (transcriptText) {
                     const quality = assessTranscriptQuality(transcriptText);
@@ -2564,12 +2564,14 @@
                                 },
                         },
                     });
-                    const finalRunId = String(
+                    const responseRunId = String(
                         payload.executionRunId ||
                         payload.runId ||
                         payload.speechSession && payload.speechSession.runId ||
-                        transcriptRequest.runId ||
                         "").trim();
+                    const finalRunId = responseRunId && !isSpeechPreviewRunId(responseRunId)
+                        ? responseRunId
+                        : transcriptRequest.runId;
                     applySpeechLifecycleUpdate({
                         stage: "completed",
                         sessionId: transcriptRequest.sessionId,
@@ -4426,6 +4428,70 @@
             assertRegression(messageRows.every((row) => row.text.indexOf("interim should not send") < 0),
                 "speech finalization should not append interim transcript to message list");
             summary.push("speech final transcript authority");
+        }
+
+        {
+            const state = createRegressionState();
+            const sendCalls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-3",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-3",
+                text: "interim should not be reused",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-preview-regression-3",
+                text: "interim should not be reused",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "final.wav",
+                runId: "speech-final-regression-3",
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: "speech-preview-regression-3",
+                                audioPath: "final.wav",
+                                text: "authoritative final transcript",
+                                speechSession: {
+                                    stage: "completed",
+                                    sessionId: "main",
+                                    runId: "speech-preview-regression-3",
+                                    audioPath: "final.wav",
+                                    text: "authoritative final transcript",
+                                },
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "chat-run-final-speech-stale-preview" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(sendCalls.length === 1 && sendCalls[0].message === "authoritative final transcript",
+                "speech finalization should use authoritative text when response carries stale preview run id");
+            assertRegression(snapshot.runId === "speech-final-regression-3",
+                "speech finalization should replace stale preview run id with requested final run id");
+            summary.push("speech final stale preview run guard");
         }
 
         return {
