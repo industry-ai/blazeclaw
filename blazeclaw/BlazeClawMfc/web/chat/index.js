@@ -204,10 +204,10 @@
         let label = "Listening...";
         let modeClass = "listening";
         if (stage === "streaming" && text) {
-            label = "Recognizing...";
+            label = "Recognizing stream ...";
             modeClass = sessionState.segmentFinal ? "final" : "interim";
         } else if ((stage === "segment_finalized" || stage === "completed") && isSpeechPreviewRunId(sessionState.runId)) {
-            label = "Recognizing...";
+            label = "Recognizing segment ...";
             modeClass = "interim";
         } else if (stage === "queued" || stage === "stopped" || stage === "transcribing") {
             label = "Finalizing...";

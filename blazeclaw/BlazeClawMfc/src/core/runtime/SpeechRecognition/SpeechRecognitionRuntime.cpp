@@ -1812,9 +1812,16 @@ namespace blazeclaw::core::speechrecognition {
 			}
 
 			std::string sherpaLoadError;
+			engines::SherpaZipformerStreamingEngine::ExecutionProviderStatus sherpaProviderStatus;
 			if (!m_sessionState->sherpaStreamingEngine->Load(
 				rootPath,
 				layoutProbe,
+				engines::SherpaZipformerStreamingEngine::ExecutionProviderOptions{
+					.cudaEnabled = m_config.speechRecognition.cudaEnabled,
+					.threads = m_snapshot.threads,
+					.executionMode = m_snapshot.executionMode,
+				},
+				sherpaProviderStatus,
 				sherpaLoadError)) {
 				outResult.ok = false;
 				outResult.error = SpeechRecognitionError{
@@ -1836,6 +1843,21 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.decoderInitModelPath = ToNarrow(sherpaArtifacts.decoderPath.wstring());
 			m_snapshot.decoderStepModelPath = ToNarrow(sherpaArtifacts.joinerPath.wstring());
 			m_snapshot.tokenizerPath = ToNarrow(sherpaArtifacts.tokensPath.wstring());
+			m_snapshot.cudaExecutionProviderAvailable =
+				sherpaProviderStatus.cudaExecutionProviderAvailable;
+			m_snapshot.cudaExecutionProviderEnabled =
+				sherpaProviderStatus.cudaExecutionProviderEnabled;
+			m_snapshot.cudaExecutionProviderReason =
+				sherpaProviderStatus.cudaExecutionProviderReason;
+			m_snapshot.effectiveExecutionProvider =
+				sherpaProviderStatus.effectiveExecutionProvider;
+			TraceRuntime(
+				"runtime.execution_provider",
+				std::string(),
+				"provider=" + m_snapshot.effectiveExecutionProvider +
+				" cudaAvailable=" + (m_snapshot.cudaExecutionProviderAvailable ? std::string("true") : std::string("false")) +
+				" cudaEnabled=" + (m_snapshot.cudaExecutionProviderEnabled ? std::string("true") : std::string("false")) +
+				" reason=" + (m_snapshot.cudaExecutionProviderReason.empty() ? std::string("none") : m_snapshot.cudaExecutionProviderReason));
 			m_snapshot.ready = true;
 			m_snapshot.status = "ready";
 			m_snapshot.error = std::nullopt;

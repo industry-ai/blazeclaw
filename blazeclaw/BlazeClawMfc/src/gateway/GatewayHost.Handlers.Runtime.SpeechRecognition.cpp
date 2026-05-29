@@ -34,6 +34,7 @@ namespace blazeclaw::gateway {
 			};
 
 			const bool ringStreamingEnabled = isRingStreamingFeatureEnabled();
+			auto* const hostPtr = &host;
 
 			auto elapsedGatewayMs = [](const std::chrono::steady_clock::time_point& start) {
 				return static_cast<std::uint64_t>(
@@ -84,7 +85,7 @@ namespace blazeclaw::gateway {
 					};
 
 			auto buildAudioArtifactJson =
-				[&audioHandoffModeToString](
+				[audioHandoffModeToString](
 					const blazeclaw::core::speechrecognition::SpeechAudioArtifact& artifact) {
 					return JsonObject({
 						{ "handoffMode", JsonString(audioHandoffModeToString(artifact.handoffMode)) },
@@ -103,8 +104,8 @@ namespace blazeclaw::gateway {
 				};
 
 			auto buildSpeechRuntimeProviderJson =
-				[&host]() {
-					const auto status = host.GetSpeechRecognitionRuntimeStatus();
+				[hostPtr]() {
+					const auto status = hostPtr->GetSpeechRecognitionRuntimeStatus();
 					return JsonObject({
 						{ "provider", JsonString(status.provider) },
 						{ "effectiveExecutionProvider", JsonString(status.effectiveExecutionProvider) },
@@ -251,9 +252,9 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.capabilities.get",
-				[&host, &ringStreamingEnabled](const protocol::RequestFrame& request) {
-					const bool runtimeConnected = host.IsRunning();
-					const auto sttRuntimeStatus = host.GetSpeechRecognitionRuntimeStatus();
+				[hostPtr, ringStreamingEnabled](const protocol::RequestFrame& request) {
+					const bool runtimeConnected = hostPtr->IsRunning();
+					const auto sttRuntimeStatus = hostPtr->GetSpeechRecognitionRuntimeStatus();
 						const bool sherpaLayout = sttRuntimeStatus.modelLayout == "sherpa_zipformer_transducer";
 						const bool streamingConfigured = sttRuntimeStatus.streamingEnabled;
 						const bool streamingSupported = ringStreamingEnabled && streamingConfigured;
@@ -265,7 +266,7 @@ namespace blazeclaw::gateway {
 						sttRuntimeStatus.enabled &&
 						(sttRuntimeStatus.ready || sttRuntimeStatus.runtimeHotMode == "on_demand");
 					const bool incrementalSegmentSupported = true;
-					const auto ttsStatus = host.GetSpeechStatus();
+					const auto ttsStatus = hostPtr->GetSpeechStatus();
 					const bool ttsSupported = ttsStatus.supported;
 					const bool ttsReady = ttsStatus.ready;
 
@@ -351,18 +352,18 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.startRecording",
-				[&host,
-					&buildAudioArtifactJson,
-					&buildSpeechRuntimeProviderJson,
-					&elapsedGatewayMs](const protocol::RequestFrame& request) {
+				[hostPtr,
+					buildAudioArtifactJson,
+					buildSpeechRuntimeProviderJson,
+					elapsedGatewayMs](const protocol::RequestFrame& request) {
 					const auto gatewayReceivedAt = std::chrono::steady_clock::now();
 					// Start native recording and return an object { ok: bool }
-					const auto result = host.StartNativeRecording();
+					const auto result = hostPtr->StartNativeRecording();
 					const auto nativeRecordingStartedOffsetMs = elapsedGatewayMs(gatewayReceivedAt);
 					if (!result.ok) {
 						return protocol::ErrorResponse(request, std::string("start_recording_failed"), result.errorMessage);
 					}
-					auto currentArtifact = host.ResolveNativeRecordingArtifact(std::string{});
+					auto currentArtifact = hostPtr->ResolveNativeRecordingArtifact(std::string{});
 					const auto nativeArtifactResolvedOffsetMs = elapsedGatewayMs(gatewayReceivedAt);
 					const std::string gatewayTimingJson = JsonObject({
 						{ "gatewayStartRecordingReceivedOffsetMs", JsonNumber(0ULL) },
@@ -386,9 +387,9 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.stopRecording",
-				[&host, &buildAudioArtifactJson, &buildSpeechRuntimeProviderJson](const protocol::RequestFrame& request) {
+				[hostPtr, buildAudioArtifactJson, buildSpeechRuntimeProviderJson](const protocol::RequestFrame& request) {
 					// Stop native recording and return audioPath
-					const auto result = host.StopNativeRecording();
+					const auto result = hostPtr->StopNativeRecording();
 					if (!result.ok) {
 						return protocol::ErrorResponse(request, std::string("stop_recording_failed"), result.errorMessage);
 					}
@@ -459,8 +460,8 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.status",
-				[&host](const protocol::RequestFrame& request) {
-					const auto status = host.GetSpeechStatus();
+				[hostPtr](const protocol::RequestFrame& request) {
+					const auto status = hostPtr->GetSpeechStatus();
 					EmitTelemetryEvent(
 						"gateway.speech.tts.status",
 						JsonObject({
@@ -493,7 +494,7 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.speak",
-				[&host, NormalizeMarkdownToPlainText](const protocol::RequestFrame& request) {
+				[hostPtr, NormalizeMarkdownToPlainText](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
 					const std::string textRaw = params.GetString("text");
 					const std::string normalizedText = NormalizeMarkdownToPlainText(textRaw);
@@ -510,7 +511,7 @@ namespace blazeclaw::gateway {
 					const std::string provider = params.GetString("provider");
 					const std::string model = params.GetString("model");
 
-					const auto result = host.SpeakSpeech(
+					const auto result = hostPtr->SpeakSpeech(
 						GatewayHost::SpeechSpeakRequest{
 							.runId = runId,
 							.sessionId = sessionId,
@@ -558,13 +559,13 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.stop",
-				[&host](const protocol::RequestFrame& request) {
+				[hostPtr](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
 					const std::string runId = params.GetString("runId");
 					const std::string sessionId = params.GetString("sessionId");
 					const std::string utteranceId = params.GetString("utteranceId");
 
-					const auto result = host.StopSpeech(
+					const auto result = hostPtr->StopSpeech(
 						GatewayHost::SpeechStopRequest{
 							.runId = runId,
 							.sessionId = sessionId,
@@ -597,13 +598,12 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.transcribe",
-				[&host,
-					&tryParseAudioArtifact,
-					&buildAudioArtifactJson,
-					&buildSpeechRuntimeProviderJson,
-					&buildFirstTokenTimingJson,
-					&elapsedGatewayMs,
-					&ringStreamingEnabled](const protocol::RequestFrame& request) {
+				[hostPtr,
+					tryParseAudioArtifact,
+					buildAudioArtifactJson,
+					buildSpeechRuntimeProviderJson,
+					buildFirstTokenTimingJson,
+					elapsedGatewayMs](const protocol::RequestFrame& request) {
 				const auto gatewayTranscribeReceivedAt = std::chrono::steady_clock::now();
 				auto executionStageToString =
 					[](blazeclaw::core::speechrecognition::SpeechExecutionStage stage) {
@@ -660,7 +660,7 @@ namespace blazeclaw::gateway {
 						const bool isPcmStream =
 							audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream;
 						if (isPcmStream) {
-							auto refreshedArtifact = host.ResolveNativeRecordingArtifact(audioPath);
+							auto refreshedArtifact = hostPtr->ResolveNativeRecordingArtifact(audioPath);
 							if (refreshedArtifact.has_value() &&
 								refreshedArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream &&
 								!refreshedArtifact->streamId.empty()) {
@@ -669,10 +669,10 @@ namespace blazeclaw::gateway {
 						}
 					}
 					else {
-						audioArtifact = host.ResolveNativeRecordingArtifact(audioPath);
+						audioArtifact = hostPtr->ResolveNativeRecordingArtifact(audioPath);
 					}
 
-					const auto accepted = host.AcceptSpeechTranscription(
+					const auto accepted = hostPtr->AcceptSpeechTranscription(
 						GatewayHost::SpeechExecutionRequest{
 							.runId = runId,
 							.sessionId = sessionId,
@@ -684,7 +684,7 @@ namespace blazeclaw::gateway {
 						});
 					if (!accepted.accepted) {
 						const auto existingExecution =
-							host.GetSpeechExecutionStatus(accepted.executionState.runId);
+							hostPtr->GetSpeechExecutionStatus(accepted.executionState.runId);
 						const auto& busyState = existingExecution.found
 							? existingExecution.executionState
 							: accepted.executionState;
@@ -737,7 +737,7 @@ namespace blazeclaw::gateway {
 							}));
 					}
 
-					auto transcribe = host.TranscribeSpeech(
+					auto transcribe = hostPtr->TranscribeSpeech(
 						GatewayHost::SpeechTranscribeRequest{
 							.runId = accepted.executionState.runId,
 							.sessionId = sessionId,
@@ -763,7 +763,7 @@ namespace blazeclaw::gateway {
 								{ "to", JsonString("wav_file") },
 							}));
 
-						transcribe = host.TranscribeSpeech(
+						transcribe = hostPtr->TranscribeSpeech(
 							GatewayHost::SpeechTranscribeRequest{
 								.runId = accepted.executionState.runId,
 								.sessionId = sessionId,

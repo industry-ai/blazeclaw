@@ -360,6 +360,7 @@ namespace {
 
 		std::set<std::wstring> moduleRoots;
 		std::set<std::wstring> versionFamilies;
+		std::set<std::wstring> versionMajors;
 		for (const auto& module : trackedModules) {
 			const std::filesystem::path modulePath = module.second;
 			const std::filesystem::path rootPath = modulePath.parent_path().lexically_normal();
@@ -370,6 +371,10 @@ namespace {
 			const std::wstring versionFamily = DetectVersionFamilyTag(module.first);
 			if (!versionFamily.empty()) {
 				versionFamilies.insert(versionFamily);
+				const std::size_t separator = versionFamily.find(L':');
+				if (separator != std::wstring::npos && separator + 1 < versionFamily.size()) {
+					versionMajors.insert(versionFamily.substr(separator + 1));
+				}
 			}
 		}
 
@@ -384,24 +389,25 @@ namespace {
 		}
 
 		const bool mixedRoots = moduleRoots.size() > 1;
-		const bool mixedVersions = versionFamilies.size() > 1;
+		const bool mixedVersions = versionMajors.size() > 1;
 		const wchar_t* alignmentStatus = (mixedRoots || mixedVersions)
 			? L"mixed"
 			: L"aligned";
 		CString alignmentLine;
 		alignmentLine.Format(
-			L"[Speech] startup.runtime.cuda.alignment - status=%s moduleCount=%llu rootCount=%llu versionFamilyCount=%llu",
+			L"[Speech] startup.runtime.cuda.alignment - status=%s moduleCount=%llu rootCount=%llu versionMajorCount=%llu",
 			alignmentStatus,
 			static_cast<unsigned long long>(trackedModules.size()),
 			static_cast<unsigned long long>(moduleRoots.size()),
-			static_cast<unsigned long long>(versionFamilies.size()));
+			static_cast<unsigned long long>(versionMajors.size()));
 		AppendMainFrameStatusLine(alignmentLine);
 
 		CString alignmentDetailsLine;
 		alignmentDetailsLine.Format(
-			L"[Speech] startup.runtime.cuda.alignment.details - roots=%s versionFamilies=%s",
+			L"[Speech] startup.runtime.cuda.alignment.details - roots=%s versionFamilies=%s versionMajors=%s",
 			JoinValues(moduleRoots).c_str(),
-			JoinValues(versionFamilies).c_str());
+			JoinValues(versionFamilies).c_str(),
+			JoinValues(versionMajors).c_str());
 		AppendMainFrameStatusLine(alignmentDetailsLine);
 
 		if (mixedRoots || mixedVersions) {

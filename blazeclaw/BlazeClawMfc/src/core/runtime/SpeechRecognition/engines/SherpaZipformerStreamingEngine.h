@@ -80,6 +80,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool bpeVocabPresent = false;
 		};
 
+		struct ExecutionProviderOptions {
+			bool cudaEnabled = false;
+			std::uint32_t threads = 0;
+			std::string executionMode = "sequential";
+		};
+
+		struct ExecutionProviderStatus {
+			bool cudaExecutionProviderAvailable = false;
+			bool cudaExecutionProviderEnabled = false;
+			std::string cudaExecutionProviderReason;
+			std::string effectiveExecutionProvider = "cpu";
+		};
+
 		struct StreamState {
 			std::chrono::steady_clock::time_point firstTokenTraceStart{};
 			std::uint64_t firstTokenFirstAudioReadableOffsetMs = 0;
@@ -164,6 +177,12 @@ namespace blazeclaw::core::speechrecognition::engines {
 		bool Load(
 			const std::filesystem::path& rootPath,
 			const SpeechModelLayoutProbeResult& layout,
+			std::string& outError);
+		bool Load(
+			const std::filesystem::path& rootPath,
+			const SpeechModelLayoutProbeResult& layout,
+			const ExecutionProviderOptions& providerOptions,
+			ExecutionProviderStatus& providerStatus,
 			std::string& outError);
 
 		[[nodiscard]] bool IsLoaded() const;

@@ -54,6 +54,79 @@ namespace blazeclaw::core::speechrecognition::engines {
 			NormalizedFloat,
 		};
 
+#if BLAZECLAW_HAS_ONNXRUNTIME
+		void ConfigureSessionOptions(
+			Ort::SessionOptions& sessionOptions,
+			const SherpaZipformerStreamingEngine::ExecutionProviderOptions& providerOptions) {
+			sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+			const bool useParallelMode = providerOptions.executionMode == "parallel";
+			sessionOptions.SetExecutionMode(
+				useParallelMode
+				? ExecutionMode::ORT_PARALLEL
+				: ExecutionMode::ORT_SEQUENTIAL);
+
+			if (providerOptions.threads > 0) {
+				sessionOptions.SetIntraOpNumThreads(static_cast<int>(providerOptions.threads));
+				sessionOptions.SetInterOpNumThreads(static_cast<int>(providerOptions.threads));
+			}
+		}
+
+		bool TryAppendCudaExecutionProvider(
+			Ort::SessionOptions& sessionOptions,
+			bool& outApiAvailable,
+			std::string& outReason) {
+			outApiAvailable = false;
+			outReason.clear();
+
+			using AppendCudaFn = OrtStatus * (ORT_API_CALL*)(
+				OrtSessionOptions*,
+				int);
+
+			HMODULE onnxRuntimeModule = ::GetModuleHandleW(L"onnxruntime.dll");
+			if (onnxRuntimeModule == nullptr) {
+				outReason = "onnxruntime.dll not loaded";
+				return false;
+			}
+
+			const auto appendCuda = reinterpret_cast<AppendCudaFn>(
+				::GetProcAddress(
+					onnxRuntimeModule,
+					"OrtSessionOptionsAppendExecutionProvider_CUDA"));
+			if (appendCuda == nullptr) {
+				outReason = "CUDA execution provider API unavailable";
+				return false;
+			}
+
+			outApiAvailable = true;
+			OrtStatus* status = appendCuda(
+				sessionOptions,
+				0);
+			if (status != nullptr) {
+				const OrtApi& api = Ort::GetApi();
+				const char* message = api.GetErrorMessage(status);
+				outReason = message == nullptr
+					? "CUDA provider append failed"
+					: message;
+				api.ReleaseStatus(status);
+				return false;
+			}
+
+			return true;
+		}
+
+		std::string ResolveCudaFallbackReason(
+			const std::string& reason,
+			bool cudaApiAvailable) {
+			if (!reason.empty()) {
+				return reason;
+			}
+
+			return cudaApiAvailable
+				? std::string("cuda_execution_provider_not_enabled_without_reported_error")
+				: std::string("cuda_execution_provider_unavailable_without_reported_error");
+		}
+#endif
+
 		struct SherpaFbankSampleScalingPolicy {
 			SherpaFbankSampleScalingMode mode = SherpaFbankSampleScalingMode::NormalizedFloat;
 			std::string diagnosticName = "reference_normalized_float";
@@ -1279,6 +1352,22 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const std::filesystem::path& rootPath,
 		const SpeechModelLayoutProbeResult& layout,
 		std::string& outError) {
+		ExecutionProviderStatus providerStatus;
+		return Load(
+			rootPath,
+			layout,
+			ExecutionProviderOptions{},
+			providerStatus,
+			outError);
+	}
+
+	bool SherpaZipformerStreamingEngine::Load(
+		const std::filesystem::path& rootPath,
+		const SpeechModelLayoutProbeResult& layout,
+		const ExecutionProviderOptions& providerOptions,
+		ExecutionProviderStatus& providerStatus,
+		std::string& outError) {
+		providerStatus = ExecutionProviderStatus{};
 		outError.clear();
 		m_loaded = false;
 		m_artifacts = {};
@@ -1374,20 +1463,75 @@ namespace blazeclaw::core::speechrecognition::engines {
 		try {
 			m_env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "blazeclaw-sherpa-streaming");
 			m_options = std::make_unique<Ort::SessionOptions>();
-			m_options->SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+			ConfigureSessionOptions(*m_options, providerOptions);
 
-			m_encoderSession = std::make_unique<Ort::Session>(
-				*m_env,
-				m_artifacts.encoderPath.c_str(),
-				*m_options);
-			m_decoderSession = std::make_unique<Ort::Session>(
-				*m_env,
-				m_artifacts.decoderPath.c_str(),
-				*m_options);
-			m_joinerSession = std::make_unique<Ort::Session>(
-				*m_env,
-				m_artifacts.joinerPath.c_str(),
-				*m_options);
+			bool usingCuda = false;
+			bool cudaApiAvailable = false;
+			std::string cudaFallbackReason;
+			if (!providerOptions.cudaEnabled) {
+				providerStatus.cudaExecutionProviderAvailable = false;
+				providerStatus.cudaExecutionProviderEnabled = false;
+				providerStatus.cudaExecutionProviderReason = "disabled_by_config";
+				providerStatus.effectiveExecutionProvider = "cpu";
+			}
+			else if (TryAppendCudaExecutionProvider(
+				*m_options,
+				cudaApiAvailable,
+				cudaFallbackReason)) {
+				usingCuda = true;
+				providerStatus.cudaExecutionProviderAvailable = true;
+				providerStatus.cudaExecutionProviderEnabled = true;
+				providerStatus.cudaExecutionProviderReason = "active";
+				providerStatus.effectiveExecutionProvider = "cuda";
+			}
+			else {
+				providerStatus.cudaExecutionProviderAvailable = cudaApiAvailable;
+				providerStatus.cudaExecutionProviderEnabled = false;
+				providerStatus.cudaExecutionProviderReason = ResolveCudaFallbackReason(
+					cudaFallbackReason,
+					cudaApiAvailable);
+				providerStatus.effectiveExecutionProvider = "cpu";
+			}
+
+			try {
+				m_encoderSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.encoderPath.c_str(),
+					*m_options);
+				m_decoderSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.decoderPath.c_str(),
+					*m_options);
+				m_joinerSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.joinerPath.c_str(),
+					*m_options);
+			}
+			catch (const std::exception& ex) {
+				if (!usingCuda) {
+					throw;
+				}
+
+				providerStatus.cudaExecutionProviderEnabled = false;
+				providerStatus.cudaExecutionProviderReason =
+					"cuda_session_init_failed: " + std::string(ex.what());
+				providerStatus.effectiveExecutionProvider = "cpu";
+
+				m_options = std::make_unique<Ort::SessionOptions>();
+				ConfigureSessionOptions(*m_options, providerOptions);
+				m_encoderSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.encoderPath.c_str(),
+					*m_options);
+				m_decoderSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.decoderPath.c_str(),
+					*m_options);
+				m_joinerSession = std::make_unique<Ort::Session>(
+					*m_env,
+					m_artifacts.joinerPath.c_str(),
+					*m_options);
+			}
 
 			m_encoderInputBindings = BuildTensorBindings(
 				*m_encoderSession,
