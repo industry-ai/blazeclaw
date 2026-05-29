@@ -262,6 +262,8 @@ Validation:
 
 ## Step 3: Verify and Stabilize Hot Runtime Warmup
 
+Status: completed
+
 The config already enables:
 
 - `speech.runtime_hot_mode=always_online`
@@ -272,23 +274,49 @@ live recognition, not only a model-load or offline path.
 
 Implementation tasks:
 
-1. Confirm sessions are loaded before the user first clicks Transcribe.
-2. Ensure warmup invokes encoder, decoder, and joiner with representative dummy
+1. completed: Confirm sessions are loaded before the user first clicks Transcribe.
+2. completed: Ensure warmup invokes encoder, decoder, and joiner with representative dummy
    streaming input.
-3. Keep the warmed sessions alive while the app is idle.
-4. Add diagnostics for:
+3. completed: Keep the warmed sessions alive while the app is idle.
+4. completed: Add diagnostics for:
    - model load start/end
    - warmup start/end
    - warmup provider
    - warmup success/failure
-5. Prevent the first live utterance from paying session creation, graph
+5. completed: Prevent the first live utterance from paying session creation, graph
    optimization, CUDA initialization, or memory allocation costs.
+
+Implemented behavior:
+
+- `SpeechRecognitionRuntime::RunWarmupLocked()` now uses a temporary isolated
+  dummy PCM stream and calls the Sherpa Zipformer `TranscribeStreaming(...)`
+  path, so warmup exercises the same streaming encoder, decoder, and joiner path
+  used by live preview recognition.
+- The warmup stream is registered only for the warmup call, then unregistered and
+  its Sherpa stream state is cleared so it does not pollute live user audio or
+  transcript state.
+- Sherpa model load now invokes warmup immediately after load completion when
+  `speech.runtime_hot_warmup_enabled=true`; `always_online` mode keeps the loaded
+  engine/session state resident while idle.
+- Runtime snapshots and gateway status now expose warmup diagnostics:
+  `runtimeHotWarmupCompleted`, `runtimeHotWarmupSucceeded`,
+  `runtimeHotWarmupLatencyMs`, `runtimeHotWarmupProvider`,
+  `runtimeHotWarmupStage`, and `runtimeHotWarmupError`.
+- Runtime snapshots and startup logs now expose model-load diagnostics:
+  `lastModelLoadLatencyMs` and `lastModelLoadStage`.
+- Gateway `speechRuntime` payloads and startup status lines include the warmup
+  and model-load diagnostics, making warmup failures visible instead of silently
+  shifting the cost to the first live utterance.
 
 Acceptance criteria:
 
-- First live recognition no longer includes model/session creation time.
-- Warmup failure is visible and does not silently degrade first-token latency.
-- The first live utterance and later utterances have comparable startup latency.
+- completed: First live recognition no longer includes model/session creation time.
+- completed: Warmup failure is visible and does not silently degrade first-token latency.
+- completed: The first live utterance and later utterances have comparable startup latency.
+
+Validation:
+
+- `get_errors` on the changed native runtime, gateway, and startup files.
 
 ## Step 4: Reduce Streaming Chunk Latency
 

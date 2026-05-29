@@ -561,6 +561,26 @@ namespace {
 			static_cast<unsigned long long>(runtime.transcribeRequestsCompleted));
 		AppendMainFrameStatusLine(runtimeLine);
 
+		CString runtimeLoadLine;
+		runtimeLoadLine.Format(
+			L"[Speech] startup.runtime.load - stage=%s latencyMs=%u",
+			ToWide(runtime.lastModelLoadStage).c_str(),
+			runtime.lastModelLoadLatencyMs);
+		AppendMainFrameStatusLine(runtimeLoadLine);
+
+		CString runtimeWarmupLine;
+		runtimeWarmupLine.Format(
+			L"[Speech] startup.runtime.warmup - enabled=%s completed=%s succeeded=%s runs=%u provider=%s stage=%s latencyMs=%u error=%s",
+			runtime.runtimeHotWarmupEnabled ? L"true" : L"false",
+			runtime.runtimeHotWarmupCompleted ? L"true" : L"false",
+			runtime.runtimeHotWarmupSucceeded ? L"true" : L"false",
+			runtime.runtimeHotWarmupRuns,
+			ToWide(runtime.runtimeHotWarmupProvider).c_str(),
+			ToWide(runtime.runtimeHotWarmupStage).c_str(),
+			runtime.runtimeHotWarmupLatencyMs,
+			ToWide(runtime.runtimeHotWarmupError).c_str());
+		AppendMainFrameStatusLine(runtimeWarmupLine);
+
 		const std::wstring cudaReason = runtime.cudaExecutionProviderReason.empty()
 			? std::wstring(L"none")
 			: ToWide(runtime.cudaExecutionProviderReason);

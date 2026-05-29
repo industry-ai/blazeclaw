@@ -361,6 +361,11 @@ Implemented behavior:
 - `window.BlazeClawChatController.runRegressionChecks()` now covers interim lifecycle updates without chat append, stale preview suppression, final-only speech send, and final replacement diagnostics.
 - existing `tests/SpeechRecognitionRealtimeStreamingTests.cpp` coverage was reviewed for Sherpa streaming segment, sequence catch-up, and cancellation behavior.
 - live speech gateway payloads now carry `speechRuntime` provider diagnostics through `gateway.speech.startRecording`, `gateway.speech.stopRecording`, `speech.transcribe`, nested speech session payloads, and speech lifecycle telemetry so WebView and logs can identify CPU vs CUDA use for each live session.
+- live speech gateway payloads and startup status logs now also carry Sherpa hot
+  warmup and model-load diagnostics, including warmup completion/success,
+  provider, stage, latency, error, and model-load stage/latency. Warmup uses an
+  isolated dummy PCM stream through the same Sherpa streaming engine path as live
+  preview recognition.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -380,6 +385,9 @@ Diagnostics:
 - Include first-token timing diagnostics with live speech lifecycle payloads and
   WebView preview diagnostics through the `firstTokenTiming` object and the
   correlated `speech-preview-*` run id.
+- Include hot runtime warmup diagnostics in `speechRuntime` payloads so live
+  preview traces can distinguish first-token latency from model load, session
+  creation, graph optimization, CUDA initialization, and dummy streaming warmup.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -390,6 +398,8 @@ Acceptance criteria:
 - completed: diagnostics expose the actual speech runtime provider and CUDA fallback reason in WebView status/preview diagnostics and native gateway speech payloads.
 - completed: diagnostics expose first-token latency checkpoints across native
   Sherpa streaming, gateway payload emission, and WebView first-render events.
+- completed: diagnostics expose hot runtime warmup completion/success/failure
+  and model-load stage/latency in startup logs and gateway speech payloads.
 
 ## Rollout Strategy
 

@@ -1090,6 +1090,31 @@ namespace blazeclaw::core::speechrecognition {
 				candidates.front().lexically_normal();
 		}
 
+		std::uint64_t ElapsedMsSince(
+			const std::chrono::steady_clock::time_point& start) {
+			if (start == std::chrono::steady_clock::time_point{}) {
+				return 0;
+			}
+
+			const auto now = std::chrono::steady_clock::now();
+			if (now <= start) {
+				return 0;
+			}
+
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					now - start)
+					.count());
+		}
+
+		std::uint32_t ElapsedMsSinceClamped(
+			const std::chrono::steady_clock::time_point& start) {
+			const auto elapsed = ElapsedMsSince(start);
+			return static_cast<std::uint32_t>((std::min)(
+				elapsed,
+				static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)())));
+		}
+
 		std::uint32_t ReadLe32(const std::uint8_t* ptr) {
 			return static_cast<std::uint32_t>(ptr[0]) |
 				(static_cast<std::uint32_t>(ptr[1]) << 8) |
@@ -1498,6 +1523,14 @@ namespace blazeclaw::core::speechrecognition {
 		m_config.speechRecognition.runtimeHotWarmupRuns;
 		m_snapshot.runtimeHotIdleTimeoutMs =
 			m_config.speechRecognition.runtimeHotIdleTimeoutMs;
+		m_snapshot.runtimeHotWarmupCompleted = false;
+		m_snapshot.runtimeHotWarmupSucceeded = false;
+		m_snapshot.runtimeHotWarmupLatencyMs = 0;
+		m_snapshot.runtimeHotWarmupProvider.clear();
+		m_snapshot.runtimeHotWarmupStage = "not_started";
+		m_snapshot.runtimeHotWarmupError.clear();
+		m_snapshot.lastModelLoadLatencyMs = 0;
+		m_snapshot.lastModelLoadStage = "not_started";
 		SetLifecycleStateLocked("cold");
 	}
 
@@ -1566,8 +1599,107 @@ namespace blazeclaw::core::speechrecognition {
 			return;
 		}
 
+		const auto warmupStartedAt = std::chrono::steady_clock::now();
+		m_snapshot.runtimeHotWarmupCompleted = false;
+		m_snapshot.runtimeHotWarmupSucceeded = false;
+		m_snapshot.runtimeHotWarmupLatencyMs = 0;
+		m_snapshot.runtimeHotWarmupProvider = m_snapshot.effectiveExecutionProvider;
+		m_snapshot.runtimeHotWarmupStage = "starting";
+		m_snapshot.runtimeHotWarmupError.clear();
 		try {
 			for (std::uint32_t run = 0; run < m_snapshot.runtimeHotWarmupRuns; ++run) {
+				m_snapshot.runtimeHotWarmupStage = "run_" + std::to_string(run + 1);
+				if (m_snapshot.modelLayout == "sherpa_zipformer_transducer") {
+					if (!m_sessionState->sherpaStreamingEngine ||
+						!m_sessionState->sherpaStreamingEngine->IsLoaded()) {
+						throw std::runtime_error("sherpa streaming engine is unavailable for warmup");
+					}
+
+					const std::string warmupStreamId =
+						"sherpa_zipformer_warmup_" + std::to_string(run + 1);
+					const std::uint32_t sampleRate =
+						m_snapshot.sampleRate > 0 ? m_snapshot.sampleRate : 16000U;
+					const std::uint64_t sampleCount =
+						static_cast<std::uint64_t>(sampleRate);
+					std::vector<float> warmupSamples(static_cast<std::size_t>(sampleCount), 0.0f);
+					for (std::size_t i = 0; i < warmupSamples.size(); ++i) {
+						const double phase =
+							(2.0 * 3.14159265358979323846 * 440.0 * static_cast<double>(i)) /
+							static_cast<double>(sampleRate);
+						warmupSamples[i] = static_cast<float>(0.01 * std::sin(phase));
+					}
+
+					RegisterStreamingAudioSource(
+						warmupStreamId,
+						StreamingAudioSourceReader{
+							.readBySequence = [warmupSamples](
+								std::uint64_t startSequence,
+								std::size_t requestedSampleCount,
+								std::vector<float>& outSamples) {
+								if (startSequence >= warmupSamples.size()) {
+									return false;
+								}
+
+								const std::size_t available = warmupSamples.size() -
+									static_cast<std::size_t>(startSequence);
+								const std::size_t copyCount = (std::min)(available, requestedSampleCount);
+								outSamples.assign(
+									warmupSamples.begin() + static_cast<std::ptrdiff_t>(startSequence),
+									warmupSamples.begin() + static_cast<std::ptrdiff_t>(startSequence + copyCount));
+								return !outSamples.empty();
+							},
+							.latestSequence = [sampleCount]() { return sampleCount; },
+							.oldestSequence = []() { return 0ULL; },
+						});
+
+					try {
+						SpeechTranscribeRequest warmupRequest;
+						warmupRequest.runId = "speech-warmup-" + std::to_string(run + 1);
+						warmupRequest.sessionId = "speech-warmup";
+						warmupRequest.language = "und";
+						warmupRequest.audioArtifact = SpeechAudioArtifact{
+							.handoffMode = SpeechAudioHandoffMode::PcmStream,
+							.streamId = warmupStreamId,
+							.sampleRate = sampleRate,
+							.channels = 1,
+							.bitsPerSample = 16,
+							.frameSamples = static_cast<std::uint32_t>(sampleCount),
+							.sequenceStart = 0,
+							.sequenceEnd = sampleCount,
+							.durationMs = 1000,
+						};
+						SpeechStreamingInputContract warmupInput;
+						warmupInput.source.streamId = warmupStreamId;
+						warmupInput.source.sessionId = warmupRequest.sessionId;
+						warmupInput.source.sampleRate = sampleRate;
+						warmupInput.source.channels = 1;
+						warmupInput.source.bitsPerSample = 16;
+						warmupInput.source.sequenceStart = 0;
+						warmupInput.source.sequenceEnd = sampleCount;
+						warmupInput.cursor.startSequence = 0;
+						warmupInput.cursor.nextSequence = 0;
+						warmupInput.chunkPolicy.chunkMs = 320;
+						warmupInput.chunkPolicy.maxSpinCount = 16;
+						warmupRequest.streamingInput = warmupInput;
+
+						const auto warmupResult =
+							m_sessionState->sherpaStreamingEngine->TranscribeStreaming(
+								warmupRequest,
+								[](const std::string&) { return false; });
+						if (!warmupResult.ok) {
+							throw std::runtime_error(
+								warmupResult.error.has_value()
+								? warmupResult.error->message
+								: std::string("sherpa streaming warmup failed"));
+						}
+					}
+					catch (...) {
+						UnregisterStreamingAudioSource(warmupStreamId);
+						throw;
+					}
+					UnregisterStreamingAudioSource(warmupStreamId);
+					continue;
+				}
 #if BLAZECLAW_HAS_ONNXRUNTIME
 				if (m_sessionState->encoder) {
 					(void)m_sessionState->encoder->GetInputCount();
@@ -1578,18 +1710,30 @@ namespace blazeclaw::core::speechrecognition {
 #endif
 			}
 			m_runtimeWarmupCompleted = true;
+			m_snapshot.runtimeHotWarmupCompleted = true;
+			m_snapshot.runtimeHotWarmupSucceeded = true;
+			m_snapshot.runtimeHotWarmupLatencyMs = ElapsedMsSinceClamped(warmupStartedAt);
+			m_snapshot.runtimeHotWarmupStage = "completed";
 			TouchRuntimeActivityLocked();
 			TraceRuntime(
 				"runtime.hot.warmup.completed",
 				std::string(),
-				"runs=" + std::to_string(m_snapshot.runtimeHotWarmupRuns));
+				"runs=" + std::to_string(m_snapshot.runtimeHotWarmupRuns) +
+				" provider=" + m_snapshot.runtimeHotWarmupProvider +
+				" latencyMs=" + std::to_string(m_snapshot.runtimeHotWarmupLatencyMs));
 		}
 		catch (const std::exception& ex) {
 			m_snapshot.status = "warmup_failed";
+			m_snapshot.runtimeHotWarmupCompleted = true;
+			m_snapshot.runtimeHotWarmupSucceeded = false;
+			m_snapshot.runtimeHotWarmupLatencyMs = ElapsedMsSinceClamped(warmupStartedAt);
+			m_snapshot.runtimeHotWarmupError = ex.what();
 			TraceRuntime(
 				"runtime.hot.warmup.failed",
 				std::string(),
-				"message=" + std::string(ex.what()));
+				"provider=" + m_snapshot.runtimeHotWarmupProvider +
+				" latencyMs=" + std::to_string(m_snapshot.runtimeHotWarmupLatencyMs) +
+				" message=" + std::string(ex.what()));
 		}
 	}
 
@@ -1651,6 +1795,8 @@ namespace blazeclaw::core::speechrecognition {
 			" missing=" + JoinValues(layoutProbe.missingArtifacts));
 
 		if (layoutProbe.kind == SpeechModelLayoutKind::SherpaZipformerTransducer) {
+			const auto modelLoadStartedAt = std::chrono::steady_clock::now();
+			m_snapshot.lastModelLoadStage = "sherpa_streaming_load_start";
 			TraceRuntime(
 				"runtime.model.layout.route",
 				std::string(),
@@ -1689,9 +1835,12 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.ready = true;
 			m_snapshot.status = "ready";
 			m_snapshot.error = std::nullopt;
+			m_snapshot.lastModelLoadLatencyMs = ElapsedMsSinceClamped(modelLoadStartedAt);
+			m_snapshot.lastModelLoadStage = "sherpa_streaming_load_completed";
 			SetLifecycleStateLocked("hot");
 			TouchRuntimeActivityLocked();
 			m_sessionState->initialized = true;
+			RunWarmupLocked();
 			return true;
 		}
 
@@ -1813,6 +1962,8 @@ namespace blazeclaw::core::speechrecognition {
 		}
 
 		SetLifecycleStateLocked("loading");
+		const auto modelLoadStartedAt = std::chrono::steady_clock::now();
+		m_snapshot.lastModelLoadStage = "onnx_session_load_start";
 
 		try {
 			m_sessionState->env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "blazeclaw-speech");
@@ -2087,6 +2238,8 @@ namespace blazeclaw::core::speechrecognition {
 			m_snapshot.ready = true;
 			m_snapshot.status = "ready";
 			m_snapshot.error = std::nullopt;
+			m_snapshot.lastModelLoadLatencyMs = ElapsedMsSinceClamped(modelLoadStartedAt);
+			m_snapshot.lastModelLoadStage = "onnx_session_load_completed";
 			SetLifecycleStateLocked("hot");
 			TouchRuntimeActivityLocked();
 			RunWarmupLocked();

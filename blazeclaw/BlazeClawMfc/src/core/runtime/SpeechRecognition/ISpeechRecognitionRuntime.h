@@ -21,6 +21,14 @@ namespace blazeclaw::core::speechrecognition {
 		bool runtimeHotWarmupEnabled = false;
 		std::uint32_t runtimeHotWarmupRuns = 0;
 		std::uint32_t runtimeHotIdleTimeoutMs = 0;
+		bool runtimeHotWarmupCompleted = false;
+		bool runtimeHotWarmupSucceeded = false;
+		std::uint32_t runtimeHotWarmupLatencyMs = 0;
+		std::string runtimeHotWarmupProvider;
+		std::string runtimeHotWarmupStage;
+		std::string runtimeHotWarmupError;
+		std::uint32_t lastModelLoadLatencyMs = 0;
+		std::string lastModelLoadStage;
 		bool hotwordsEnabled = false;
 		std::uint32_t hotwordsCount = 0;
 		std::uint32_t hotwordsMaxCount = 0;

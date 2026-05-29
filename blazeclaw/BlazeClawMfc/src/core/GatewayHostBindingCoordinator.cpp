@@ -449,6 +449,14 @@ namespace blazeclaw::core {
 			status.runtimeHotWarmupEnabled = snapshot.runtimeHotWarmupEnabled;
 			status.runtimeHotWarmupRuns = snapshot.runtimeHotWarmupRuns;
 			status.runtimeHotIdleTimeoutMs = snapshot.runtimeHotIdleTimeoutMs;
+			status.runtimeHotWarmupCompleted = snapshot.runtimeHotWarmupCompleted;
+			status.runtimeHotWarmupSucceeded = snapshot.runtimeHotWarmupSucceeded;
+			status.runtimeHotWarmupLatencyMs = snapshot.runtimeHotWarmupLatencyMs;
+			status.runtimeHotWarmupProvider = snapshot.runtimeHotWarmupProvider;
+			status.runtimeHotWarmupStage = snapshot.runtimeHotWarmupStage;
+			status.runtimeHotWarmupError = snapshot.runtimeHotWarmupError;
+			status.lastModelLoadLatencyMs = snapshot.lastModelLoadLatencyMs;
+			status.lastModelLoadStage = snapshot.lastModelLoadStage;
 			status.hotwordsEnabled = snapshot.hotwordsEnabled;
 			status.hotwordsCount = snapshot.hotwordsCount;
 			status.hotwordsMaxCount = snapshot.hotwordsMaxCount;

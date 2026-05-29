@@ -119,6 +119,21 @@ namespace blazeclaw::gateway {
 						{ "streamingLookbackMs", JsonNumber(static_cast<std::uint64_t>(status.streamingLookbackMs)) },
 						{ "threads", JsonNumber(static_cast<std::uint64_t>(status.threads)) },
 						{ "executionMode", JsonString(status.executionMode) },
+						{ "runtimeHot", JsonObject({
+							{ "mode", JsonString(status.runtimeHotMode) },
+							{ "lifecycleState", JsonString(status.runtimeHotLifecycleState) },
+							{ "warmupEnabled", JsonBool(status.runtimeHotWarmupEnabled) },
+							{ "warmupRuns", JsonNumber(static_cast<std::uint64_t>(status.runtimeHotWarmupRuns)) },
+							{ "warmupCompleted", JsonBool(status.runtimeHotWarmupCompleted) },
+							{ "warmupSucceeded", JsonBool(status.runtimeHotWarmupSucceeded) },
+							{ "warmupLatencyMs", JsonNumber(static_cast<std::uint64_t>(status.runtimeHotWarmupLatencyMs)) },
+							{ "warmupProvider", JsonString(status.runtimeHotWarmupProvider) },
+							{ "warmupStage", JsonString(status.runtimeHotWarmupStage) },
+							{ "warmupError", JsonString(status.runtimeHotWarmupError) },
+							{ "idleTimeoutMs", JsonNumber(static_cast<std::uint64_t>(status.runtimeHotIdleTimeoutMs)) },
+							{ "lastModelLoadLatencyMs", JsonNumber(static_cast<std::uint64_t>(status.lastModelLoadLatencyMs)) },
+							{ "lastModelLoadStage", JsonString(status.lastModelLoadStage) },
+						}) },
 					});
 				};
 
@@ -282,7 +297,15 @@ namespace blazeclaw::gateway {
 								{ "lifecycleState", JsonString(sttRuntimeStatus.runtimeHotLifecycleState) },
 								{ "warmupEnabled", JsonBool(sttRuntimeStatus.runtimeHotWarmupEnabled) },
 								{ "warmupRuns", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotWarmupRuns)) },
+								{ "warmupCompleted", JsonBool(sttRuntimeStatus.runtimeHotWarmupCompleted) },
+								{ "warmupSucceeded", JsonBool(sttRuntimeStatus.runtimeHotWarmupSucceeded) },
+								{ "warmupLatencyMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotWarmupLatencyMs)) },
+								{ "warmupProvider", JsonString(sttRuntimeStatus.runtimeHotWarmupProvider) },
+								{ "warmupStage", JsonString(sttRuntimeStatus.runtimeHotWarmupStage) },
+								{ "warmupError", JsonString(sttRuntimeStatus.runtimeHotWarmupError) },
 								{ "idleTimeoutMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.runtimeHotIdleTimeoutMs)) },
+								{ "lastModelLoadLatencyMs", JsonNumber(static_cast<std::uint64_t>(sttRuntimeStatus.lastModelLoadLatencyMs)) },
+								{ "lastModelLoadStage", JsonString(sttRuntimeStatus.lastModelLoadStage) },
 							}) },
 							{ "hotwords", JsonObject({
 								{ "enabled", JsonBool(sttRuntimeStatus.hotwordsEnabled) },
