@@ -378,6 +378,11 @@ Implemented behavior:
   a 50 ms busy retry instead of the previous fixed 1200 ms interval. The
   scheduler avoids overlapping preview requests while preserving stale-generation
   and inactive-stage guards.
+- CUDA-vs-CPU live-preview benchmark summaries are now supported by
+  `tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1`, which converts
+  captured startup and WebView speech diagnostic logs into JSON and Markdown
+  reports for provider, CUDA readiness, model-load, warmup, first-token,
+  click-to-render, and steady-state partial interval comparison.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -411,6 +416,10 @@ Diagnostics:
 - Include WebView poll cadence diagnostics through `speech.preview.poll_config`,
   request `intervalMs`, and busy `retryMs` so render delay can be correlated with
   native first-partial timing.
+- Summarize CPU/CUDA benchmark captures with
+  `tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1`; pass
+  `-RequireCudaActive` for CUDA runs so mixed or inactive CUDA runtime stacks are
+  flagged before the results are used for provider policy decisions.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -430,6 +439,8 @@ Acceptance criteria:
   button.
 - completed: live preview polling uses a 150 ms low-latency fallback scheduler
   with stale-session protection and no overlapping preview requests.
+- completed: CPU/CUDA live-preview benchmark summaries can be generated from
+  captured diagnostics without assuming that CUDA is faster or active.
 
 ## Rollout Strategy
 

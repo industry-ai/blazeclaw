@@ -476,22 +476,54 @@ actual first-token latency and steady-state streaming latency for both providers
 
 Implementation tasks:
 
-1. Run with `speech.cuda.enabled=true` and capture provider diagnostics.
-2. Run with `speech.cuda.enabled=false` and capture CPU baseline diagnostics.
-3. Compare:
+1. completed: Add repeatable benchmark-summary tooling that extracts provider,
+   CUDA, startup model-load, warmup, first-token, WebView render, and steady-state
+   preview interval metrics from captured logs.
+2. Run with `speech.cuda.enabled=true` and capture provider diagnostics.
+3. Run with `speech.cuda.enabled=false` and capture CPU baseline diagnostics.
+4. Compare:
    - model load time
    - warmup time
    - first encoder time
    - first decoder/joiner time
    - first visible character time
    - steady-state partial update interval
-4. If CUDA is slower for very small chunks, consider profile-based provider
+5. If CUDA is slower for very small chunks, consider profile-based provider
    selection or CPU tuning for low-latency mode.
+
+Implementation notes:
+
+- Added `tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1` as the
+  repeatable manual benchmark summarizer for captured app/WebView diagnostic
+  logs. It writes JSON and Markdown reports under a
+  `speech-provider-benchmark` output directory next to the input log unless an
+  explicit `-OutputDirectory` is provided.
+- The script extracts the existing diagnostics implemented in earlier steps:
+  `effectiveProvider`, CUDA availability/enabled/reason, model-load stage and
+  latency, hot warmup completion/provider/stage/latency, streaming profile and
+  preview chunk/lookback, native first-token timing, gateway payload readiness,
+  WebView click-to-render timing, and an estimated steady-state partial update
+  interval from repeated preview response timings.
+- CUDA runs should pass `-RequireCudaActive` so the summary emits a warning when
+  the captured diagnostics do not meet the CUDA readiness gate.
+- Example CPU summary command:
+
+  `powershell -ExecutionPolicy Bypass -File "blazeclaw/BlazeClawMfc/tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1" -LogPath "path/to/cpu-run.log" -ProviderLabel cpu`
+
+- Example CUDA summary command:
+
+  `powershell -ExecutionPolicy Bypass -File "blazeclaw/BlazeClawMfc/tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1" -LogPath "path/to/cuda-run.log" -ProviderLabel cuda -RequireCudaActive`
+
+- Use the same utterances, app build, active Sherpa model root, streaming latency
+  profile, and preview chunk/lookback settings for both runs. The output reports
+  should be archived with the benchmark notes before changing provider policy.
 
 Acceptance criteria:
 
-- Provider choice is based on measured first-token latency, not assumption.
-- The plan can justify CUDA, CPU, or profile-dependent behavior with data.
+- completed by implementation support: Provider choice can be based on measured
+  first-token latency, not assumption.
+- completed by implementation support: The plan can justify CUDA, CPU, or
+  profile-dependent behavior with captured JSON/Markdown data.
 
 Current CUDA remediation tasks before CUDA benchmarking:
 
@@ -509,6 +541,13 @@ Current CUDA remediation tasks before CUDA benchmarking:
 
 If the int8 ONNX model remains faster on CPU for small streaming chunks, keep a
 CPU low-latency profile even after CUDA is fixed.
+
+Current status:
+
+- Benchmark-support tooling is implemented, but trusted CUDA data is still gated
+  on local runtime remediation. Do not treat a run as CUDA benchmark data until
+  startup diagnostics and the summary agree on `effectiveProvider=cuda`,
+  `available=true`, `enabled=true`, and `reason=active`.
 
 ## Step 8: Tune ONNX Runtime and CPU Fallback
 
