@@ -2665,7 +2665,8 @@
         let liveSpeechPollGeneration = 0;
         let liveSpeechPollInFlightRunId = "";
         let speechFirstTokenTrace = null;
-        const liveSpeechPollIntervalMs = 1200;
+        const liveSpeechPollIntervalMs = 150;
+        const liveSpeechPollBusyRetryMs = 50;
         const liveSpeechPollTimeoutMs = 8000;
         const nowPerfMs = () => {
             if (window.performance && typeof window.performance.now === "function") {
@@ -2728,7 +2729,29 @@
 
             const pollGeneration = liveSpeechPollGeneration;
             const stablePreviewRunId = String(previewRunId || `speech-preview-${Date.now()}`).trim();
+            emitSpeechPreviewDiagnostic("speech.preview.poll_config", {
+                runId: stablePreviewRunId,
+                generation: pollGeneration,
+                intervalMs: liveSpeechPollIntervalMs,
+                busyRetryMs: liveSpeechPollBusyRetryMs,
+                timeoutMs: liveSpeechPollTimeoutMs,
+                mode: "recursive_timeout",
+                hasAudioArtifact: Boolean(audioArtifact),
+                hasAudioPath: Boolean(audioPath),
+            });
+            const scheduleNextPoll = (delayMs) => {
+                if (pollGeneration !== liveSpeechPollGeneration) {
+                    return;
+                }
+
+                const safeDelayMs = Math.max(0, Number(delayMs) || 0);
+                liveSpeechPollTimer = window.setTimeout(pollOnce, safeDelayMs);
+            };
             const pollOnce = async () => {
+                if (liveSpeechPollTimer !== null) {
+                    window.clearTimeout(liveSpeechPollTimer);
+                    liveSpeechPollTimer = null;
+                }
                 if (pollGeneration !== liveSpeechPollGeneration) {
                     emitSpeechPreviewDiagnostic("speech.preview.skip_stale_generation", {
                         runId: stablePreviewRunId,
@@ -2741,7 +2764,9 @@
                     emitSpeechPreviewDiagnostic("speech.preview.skip_busy", {
                         runId: liveSpeechPollInFlightRunId || stablePreviewRunId,
                         generation: pollGeneration,
+                        retryMs: liveSpeechPollBusyRetryMs,
                     });
+                    scheduleNextPoll(liveSpeechPollBusyRetryMs);
                     return;
                 }
                 const speechSnapshot = state.speechSessionState && typeof state.speechSessionState === "object"
@@ -2766,6 +2791,7 @@
                     runId: stablePreviewRunId,
                     generation: pollGeneration,
                     stage,
+                        intervalMs: liveSpeechPollIntervalMs,
                     hasAudioArtifact: Boolean(audioArtifact),
                     hasAudioPath: Boolean(audioPath),
                     clickToPreviewRequestMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
@@ -2802,6 +2828,7 @@
                             stage: String(state.speechSessionState.stage || ""),
                             segmentSequence: updatedSequence,
                             hasText: Boolean(state.speechSessionState.segmentText || state.speechSessionState.text),
+                            intervalMs: liveSpeechPollIntervalMs,
                             previewRequestToResponseMs: Math.max(0, previewResponseAtMs - previewRequestAtMs),
                             clickToPreviewResponseMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
                                 ? Math.max(0, previewResponseAtMs - speechFirstTokenTrace.clickAtMs)
@@ -2826,13 +2853,13 @@
                     if (pollGeneration === liveSpeechPollGeneration) {
                         liveSpeechPollBusy = false;
                         liveSpeechPollInFlightRunId = "";
+                        scheduleNextPoll(liveSpeechPollIntervalMs);
                     } else if (liveSpeechPollInFlightRunId === stablePreviewRunId) {
                         liveSpeechPollInFlightRunId = "";
                     }
                 }
             };
 
-            liveSpeechPollTimer = window.setInterval(pollOnce, liveSpeechPollIntervalMs);
             void pollOnce();
         };
         state.speechTranscribeBtn.addEventListener("click", async () => {

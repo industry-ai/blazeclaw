@@ -374,6 +374,10 @@ Implemented behavior:
   lifecycle stage after the coordinator emits them, and WebView normalization
   treats `speech-preview-*` streaming updates as interim so partial text can be
   shown while the Transcribe button remains in the active recording state.
+- WebView live-preview polling now uses a 150 ms recursive timeout fallback with
+  a 50 ms busy retry instead of the previous fixed 1200 ms interval. The
+  scheduler avoids overlapping preview requests while preserving stale-generation
+  and inactive-stage guards.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -382,6 +386,8 @@ Recommended tests:
 - Coordinator keeps non-final preview segment updates in `Streaming` instead of
   sending a terminal completed update.
 - Preview loop suppresses overlapping requests.
+- Preview loop runs with the bounded low-latency recursive scheduler and keeps
+  stale generation protection.
 - Stop path ignores stale preview responses and sends only final text.
 
 Existing relevant tests to extend or mirror:
@@ -402,6 +408,9 @@ Diagnostics:
   `streamingLatencyProfile`, `streamingPreviewChunkMs`, and
   `streamingPreviewLookbackMs`, alongside existing chunk/lookback, provider,
   thread, and execution-mode fields.
+- Include WebView poll cadence diagnostics through `speech.preview.poll_config`,
+  request `intervalMs`, and busy `retryMs` so render delay can be correlated with
+  native first-partial timing.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -419,6 +428,8 @@ Acceptance criteria:
 - completed: non-final partial preview text is propagated as active streaming
   state so the WebView can render interim text without resetting the recording
   button.
+- completed: live preview polling uses a 150 ms low-latency fallback scheduler
+  with stale-session protection and no overlapping preview requests.
 
 ## Rollout Strategy
 

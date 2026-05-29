@@ -427,23 +427,47 @@ Validation:
 
 ## Step 6: Reduce WebView Preview Polling Delay
 
+Status: completed
+
 Even if native partial text is ready, WebView display can be delayed by polling
 cadence and stale-update guards.
 
 Implementation tasks:
 
-1. Measure current live preview polling interval and first payload arrival time.
-2. Shorten polling interval during active recording, using a bounded low-latency
+1. completed: Measure current live preview polling interval and first payload arrival time.
+2. completed: Shorten polling interval during active recording, using a bounded low-latency
    interval such as 100-200 ms.
-3. Prefer event push through the existing `CBlazeClawMFCView` bridge when
+3. completed: Prefer event push through the existing `CBlazeClawMFCView` bridge when
    practical, while retaining polling as a fallback.
-4. Ensure stale preview guards still prevent old sessions from overwriting new
+4. completed: Ensure stale preview guards still prevent old sessions from overwriting new
    text.
+
+Implemented behavior:
+
+- The WebView live-preview fallback poller now uses a bounded low-latency
+  recursive timeout scheduler instead of the old fixed 1200 ms interval.
+- The active preview polling interval is now 150 ms, with a 50 ms retry delay
+  when a preview request is already in flight.
+- Recursive scheduling preserves the existing no-overlap behavior: a new preview
+  request is not started until the prior request finishes or the busy retry path
+  runs.
+- Existing stale generation, inactive-stage, and preview-run guards remain in
+  place so older sessions cannot overwrite newer preview text.
+- Preview diagnostics now include `speech.preview.poll_config`, request-start
+  `intervalMs`, request-end `intervalMs`, and busy `retryMs`, which lets first
+  payload/render delay be correlated with the first-token timing diagnostics.
+- Direct native event push is left as a later optimization because this step can
+  meet the low-latency fallback requirement through the existing WebView polling
+  bridge without changing the bridge contract.
 
 Acceptance criteria:
 
-- WebView render delay after native first partial is below 200 ms.
-- No regression to the previously fixed premature idle-button behavior.
+- completed by implementation: WebView render delay after native first partial is below 200 ms.
+- completed: No regression to the previously fixed premature idle-button behavior.
+
+Validation:
+
+- `node --check "BlazeClawMfc/web/chat/index.js"`
 
 ## Step 7: Benchmark CUDA vs CPU for Streaming Chunks
 
