@@ -52,6 +52,7 @@ namespace blazeclaw::core::speechrecognition {
 		void MaybeUnloadForIdleLocked();
 		void UnloadSessionLocked(const char* reason);
 		void RunWarmupLocked();
+		void ApplyCudaDllLoadingLocked();
 
 		void ResetSnapshotLocked();
 

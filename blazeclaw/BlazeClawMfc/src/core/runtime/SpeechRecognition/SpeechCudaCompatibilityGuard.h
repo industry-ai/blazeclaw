@@ -18,6 +18,26 @@ namespace blazeclaw::core::speechrecognition {
 		std::string reason;
 	};
 
+	struct SpeechCudaDllLoadRequest {
+		bool preloadEnabled = false;
+		std::vector<std::wstring> directories;
+		std::vector<std::wstring> preloadNames;
+	};
+
+	struct SpeechCudaDllLoadResult {
+		bool attempted = false;
+		bool succeeded = true;
+		std::vector<std::wstring> addedDirectories;
+		std::vector<std::wstring> preloadedDlls;
+		std::vector<std::wstring> failures;
+		std::wstring summary;
+	};
+
+	[[nodiscard]] const std::vector<std::wstring>& DefaultSpeechCudaDllPreloadNames();
+
+	[[nodiscard]] SpeechCudaDllLoadResult ConfigureSpeechCudaDllLoading(
+		const SpeechCudaDllLoadRequest& request);
+
 	[[nodiscard]] SpeechCudaCompatibilityGuardResult EvaluateSpeechCudaCompatibilityGuard(
 		const std::vector<SpeechCudaLoadedModule>& loadedModules);
 

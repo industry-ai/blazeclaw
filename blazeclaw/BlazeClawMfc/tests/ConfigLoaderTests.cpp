@@ -73,6 +73,37 @@ TEST_CASE("ConfigLoader parses and normalizes speech hotwords policy", "[config]
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader parses speech CUDA DLL loading settings", "[config][speech][cuda]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_speech_cuda_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "speech-cuda.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.cuda.dll_preload_enabled=true\n";
+		out << L"speech.cuda.dll_directories=D:\\nVidia\\bin;D:\\nVidia\\cudnn9.20\\bin\\12.9\\x64\n";
+		out << L"speech.cuda.dll_preload_names=cublas64_12.dll,cublasLt64_12.dll,cudnn64_9.dll\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.speechRecognition.cudaDllPreloadEnabled);
+	REQUIRE(config.speechRecognition.cudaDllDirectories.size() == 2);
+	REQUIRE(config.speechRecognition.cudaDllDirectories[0] == L"D:\\nVidia\\bin");
+	REQUIRE(config.speechRecognition.cudaDllDirectories[1] == L"D:\\nVidia\\cudnn9.20\\bin\\12.9\\x64");
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames.size() == 3);
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames[0] == L"cublas64_12.dll");
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames[1] == L"cublasLt64_12.dll");
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames[2] == L"cudnn64_9.dll");
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader normalizes and validates skills entry config keys", "[config][skills][entries][normalize]") {
 	blazeclaw::config::ConfigLoader loader;
 

@@ -1423,6 +1423,9 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.cudaExecutionProviderAvailable = false;
 		m_snapshot.cudaExecutionProviderEnabled = false;
 		m_snapshot.cudaExecutionProviderReason.clear();
+		m_snapshot.cudaDllLoadAttempted = false;
+		m_snapshot.cudaDllLoadSucceeded = true;
+		m_snapshot.cudaDllLoadSummary.clear();
 		m_snapshot.effectiveExecutionProvider = "cpu";
 		m_snapshot.verboseMetrics = m_config.speechRecognition.verboseMetrics;
 		m_snapshot.hotwordsEnabled = m_config.speechRecognition.hotwordsEnabled;
@@ -1438,7 +1441,27 @@ namespace blazeclaw::core::speechrecognition {
 		m_snapshot.lastPromptBuildStatus = "not_built";
 		m_snapshot.lastPromptBuildError.clear();
 		ApplyRuntimeHotPolicyToSnapshotLocked();
+		ApplyCudaDllLoadingLocked();
 		m_snapshot.status = "configured";
+	}
+
+	void SpeechRecognitionRuntime::ApplyCudaDllLoadingLocked() {
+		SpeechCudaDllLoadRequest request;
+		request.preloadEnabled = m_config.speechRecognition.cudaDllPreloadEnabled;
+		request.directories = m_config.speechRecognition.cudaDllDirectories;
+		request.preloadNames = m_config.speechRecognition.cudaDllPreloadNames;
+
+		const auto result = ConfigureSpeechCudaDllLoading(request);
+		m_snapshot.cudaDllLoadAttempted = result.attempted;
+		m_snapshot.cudaDllLoadSucceeded = result.succeeded;
+		m_snapshot.cudaDllLoadSummary = ToNarrow(result.summary);
+
+		if (result.attempted) {
+			TRACE(
+				L"[Speech][CUDA] dll_load attempted=1 succeeded=%d summary=%s\n",
+				result.succeeded ? 1 : 0,
+				result.summary.c_str());
+		}
 	}
 
 	void SpeechRecognitionRuntime::ApplyRuntimeHotPolicyToSnapshotLocked() {

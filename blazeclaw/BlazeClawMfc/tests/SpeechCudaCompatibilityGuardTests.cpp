@@ -82,6 +82,41 @@ TEST_CASE("Speech CUDA compatibility guard reports incompatible loaded major", "
 	REQUIRE(result.reason.find("cublas major=13 expected=12") != std::string::npos);
 }
 
+TEST_CASE("Speech CUDA DLL loading reports configured directory and missing preload", "[speech][cuda][dll-load]")
+{
+	using namespace blazeclaw::core::speechrecognition;
+
+	const auto root = CreateUniqueTempDirectory(L"dll-load");
+	const auto result = ConfigureSpeechCudaDllLoading(SpeechCudaDllLoadRequest{
+		.preloadEnabled = true,
+		.directories = { root.wstring() },
+		.preloadNames = { L"definitely-missing-cuda-test.dll" },
+	});
+
+	REQUIRE(result.attempted);
+	REQUIRE_FALSE(result.succeeded);
+	REQUIRE(result.addedDirectories.size() == 1);
+	REQUIRE(result.preloadedDlls.empty());
+	REQUIRE(result.failures.size() == 1);
+	REQUIRE(result.failures[0].find(L"preload DLL not found") != std::wstring::npos);
+	REQUIRE(result.summary.find(L"directories=1") != std::wstring::npos);
+	REQUIRE(result.summary.find(L"preloaded=0") != std::wstring::npos);
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Speech CUDA DLL loading exposes default CUDA 12 preload list", "[speech][cuda][dll-load]")
+{
+	using namespace blazeclaw::core::speechrecognition;
+
+	const auto& names = DefaultSpeechCudaDllPreloadNames();
+
+	REQUIRE_FALSE(names.empty());
+	REQUIRE(std::find(names.begin(), names.end(), L"cublas64_12.dll") != names.end());
+	REQUIRE(std::find(names.begin(), names.end(), L"cublasLt64_12.dll") != names.end());
+	REQUIRE(std::find(names.begin(), names.end(), L"cudnn64_9.dll") != names.end());
+}
+
 TEST_CASE("Sherpa CUDA provider selection honors latched compatibility guard", "[speech][cuda][sherpa]")
 {
 	using namespace blazeclaw::core::speechrecognition;

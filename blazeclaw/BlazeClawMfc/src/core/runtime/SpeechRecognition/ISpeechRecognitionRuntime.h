@@ -49,6 +49,9 @@ namespace blazeclaw::core::speechrecognition {
 		bool cudaExecutionProviderAvailable = false;
 		bool cudaExecutionProviderEnabled = false;
 		std::string cudaExecutionProviderReason;
+		bool cudaDllLoadAttempted = false;
+		bool cudaDllLoadSucceeded = true;
+		std::string cudaDllLoadSummary;
 		std::string effectiveExecutionProvider;
 		std::uint64_t modelLoadAttempts = 0;
 		std::uint64_t modelLoadFailures = 0;

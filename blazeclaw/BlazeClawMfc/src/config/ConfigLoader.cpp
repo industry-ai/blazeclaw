@@ -1130,6 +1130,25 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.cuda.dll_preload_enabled=", 0) == 0) {
+				outConfig.speechRecognition.cudaDllPreloadEnabled = ParseBool(
+					trimmedLine.substr(32),
+					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.cuda.dll_directories=", 0) == 0) {
+				outConfig.speechRecognition.cudaDllDirectories = SplitCsvValues(
+					trimmedLine.substr(28));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.cuda.dll_preload_names=", 0) == 0) {
+				outConfig.speechRecognition.cudaDllPreloadNames = SplitCsvValues(
+					trimmedLine.substr(30));
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.rolloutStage=", 0) == 0) {
 				outConfig.speechRecognition.rolloutStage = Trim(trimmedLine.substr(20));
 				continue;

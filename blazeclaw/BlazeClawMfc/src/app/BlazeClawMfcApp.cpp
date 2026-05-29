@@ -602,6 +602,14 @@ namespace {
 			runtime.cudaExecutionProviderEnabled ? L"true" : L"false",
 			cudaReason.c_str());
 		AppendMainFrameStatusLine(cudaLine);
+		if (runtime.cudaDllLoadAttempted) {
+			CString cudaDllLoadLine;
+			cudaDllLoadLine.Format(
+				L"[Speech] startup.runtime.cuda.dll_load - attempted=true succeeded=%s summary=%s",
+				runtime.cudaDllLoadSucceeded ? L"true" : L"false",
+				ToWide(runtime.cudaDllLoadSummary).c_str());
+			AppendMainFrameStatusLine(cudaDllLoadLine);
+		}
 		AppendMainFrameStatusLine(
 			L"[Speech] startup.runtime.cuda.policy - cublasMajor=12 cublasLtMajor=12 cufftMajor=12 cudnnMajor=9 guard=enabled latchOnGuardFailure=true");
 		AppendSpeechCudaModuleInventoryStatus();

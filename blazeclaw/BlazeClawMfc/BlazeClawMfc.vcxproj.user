@@ -4,4 +4,9 @@
     <ShowAllFiles>false</ShowAllFiles>
     <RESOURCE_FILE>src\app\BlazeClawMFC.rc</RESOURCE_FILE>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LocalDebuggerEnvironment>PATH=D:\nVidia\bin;D:\nVidia\cudnn9.20\bin\12.9\x64;$(PATH)
+$(LocalDebuggerEnvironment)</LocalDebuggerEnvironment>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
 </Project>

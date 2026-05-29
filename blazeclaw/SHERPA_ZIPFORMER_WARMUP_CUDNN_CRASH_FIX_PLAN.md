@@ -202,6 +202,10 @@ Status: implemented in the BlazeClaw speech runtime and wired into the app/test 
 - CUDA session creation exceptions still fall back to CPU session creation.
 - Sherpa provider decisions and pre-encoder-run diagnostics now trace the effective provider, CUDA reason, tensor counts, feature shape, element count, and state-cache summary.
 - Added `SpeechCudaCompatibilityGuardTests.cpp` for guard formatting and Sherpa latch/provider-status behavior.
+- Added `speech.cuda.dll_preload_enabled`, `speech.cuda.dll_directories`, and
+  `speech.cuda.dll_preload_names` so BlazeClaw can explicitly register and
+  preload speech CUDA/cuDNN DLLs from configured directories before Sherpa/ONNX
+  Runtime CUDA initialization.
 
 ## Immediate Workarounds Until the Fix Lands
 

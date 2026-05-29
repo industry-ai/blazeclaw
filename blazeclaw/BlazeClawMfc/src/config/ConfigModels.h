@@ -485,6 +485,9 @@ namespace blazeclaw::config {
 	struct SpeechRecognitionConfig {
 		bool enabled = false;
 		bool cudaEnabled = true;
+		bool cudaDllPreloadEnabled = false;
+		std::vector<std::wstring> cudaDllDirectories;
+		std::vector<std::wstring> cudaDllPreloadNames;
 		std::wstring provider = L"onnx";
 		std::wstring rolloutStage = L"dev";
 		std::wstring storageRoot =
