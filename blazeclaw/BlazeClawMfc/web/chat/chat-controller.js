@@ -785,12 +785,14 @@
                 segmentSequence = Number(segment.sequence);
             }
 
-            const stageImpliesSegmentFinal =
+            const runId = String(speechSession.runId || source.runId || "").trim();
+            const previewRunActive = runId.startsWith("speech-preview-") && stage === "streaming";
+            const stageImpliesSegmentFinal = !previewRunActive && (
                 stage === "segment_finalized" ||
                 stage === "stopped" ||
                 stage === "completed" ||
                 stage === "failed" ||
-                stage === "cancelled";
+                stage === "cancelled");
 
             const segmentFinal = segment
                 ? Boolean(segment.final)
@@ -802,7 +804,7 @@
                 segmentText,
                 segmentFinal,
                 segmentSequence,
-                runId: String(speechSession.runId || source.runId || "").trim(),
+                runId,
                 sessionId: String(speechSession.sessionId || source.sessionId || "").trim(),
                 audioPath: String(speechSession.audioPath || source.audioPath || "").trim(),
                 audioArtifact: speechSession.audioArtifact && typeof speechSession.audioArtifact === "object"

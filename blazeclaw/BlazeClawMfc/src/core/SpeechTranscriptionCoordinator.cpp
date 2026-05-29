@@ -69,6 +69,19 @@ namespace blazeclaw::core {
 			}
 		}
 
+		SpeechExecutionStage ResolveCompletedExecutionStage(
+			const bool isStreamingRequest,
+			const speechrecognition::SpeechTranscribeResult& result) {
+			if (isStreamingRequest &&
+				result.ok &&
+				result.sessionState.segment.has_value() &&
+				!result.sessionState.segment->final) {
+				return SpeechExecutionStage::Streaming;
+			}
+
+			return ToExecutionStage(result.sessionState.stage);
+		}
+
 		SpeechRecognitionError BuildBusySessionError(const std::string& sessionId) {
 			SpeechRecognitionError error;
 			error.code = SpeechRecognitionErrorCode::RuntimeUnavailable;
@@ -292,7 +305,7 @@ namespace blazeclaw::core {
 
 		ExecutionState completedState = BuildState(
 			accepted.executionState,
-			ToExecutionStage(result.sessionState.stage),
+			ResolveCompletedExecutionStage(isStreamingRequest, result),
 			&result);
 		ExecutionUpdateCallback completedCallback;
 		{

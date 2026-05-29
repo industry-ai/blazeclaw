@@ -370,11 +370,17 @@ Implemented behavior:
   chunk policy only for `livePreviewOnly=true` requests. The first CPU tuning
   trial uses a 500 ms preview chunk with 320 ms lookback while final
   transcription keeps the broader 1500 ms chunk and 320 ms overlap policy.
+- non-final Sherpa preview segments now remain in the native `streaming`
+  lifecycle stage after the coordinator emits them, and WebView normalization
+  treats `speech-preview-*` streaming updates as interim so partial text can be
+  shown while the Transcribe button remains in the active recording state.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
 - Coordinator emits `SegmentFinalized` for final streaming segment.
 - WebView controller applies `speech.lifecycle` interim payload without sending chat.
+- Coordinator keeps non-final preview segment updates in `Streaming` instead of
+  sending a terminal completed update.
 - Preview loop suppresses overlapping requests.
 - Stop path ignores stale preview responses and sends only final text.
 
@@ -410,6 +416,9 @@ Acceptance criteria:
   and model-load stage/latency in startup logs and gateway speech payloads.
 - completed: live preview chunk tuning is visible in startup logs and gateway
   speech payloads without changing the final transcription chunk/overlap policy.
+- completed: non-final partial preview text is propagated as active streaming
+  state so the WebView can render interim text without resetting the recording
+  button.
 
 ## Rollout Strategy
 

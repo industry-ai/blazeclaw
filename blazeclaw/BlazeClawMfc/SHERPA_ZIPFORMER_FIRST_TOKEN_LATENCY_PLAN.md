@@ -386,25 +386,44 @@ Validation:
 
 ## Step 5: Emit Partial Text as Soon as It Exists
 
+Status: completed
+
 Confirm that native code emits interim recognition text immediately when the
 streaming engine has non-empty partial output. Avoid waiting for segment
 finalization, endpoint detection, or stop recording before the first preview.
 
 Implementation tasks:
 
-1. Audit the Sherpa streaming result path for any gating on final segment state.
-2. Emit first non-empty partial text immediately through the coordinator.
-3. Keep preview lifecycle state as active recording while the microphone remains
+1. completed: Audit the Sherpa streaming result path for any gating on final segment state.
+2. completed: Emit first non-empty partial text immediately through the coordinator.
+3. completed: Keep preview lifecycle state as active recording while the microphone remains
    active.
-4. Preserve the existing fix that prevents preview terminal updates from
+4. completed: Preserve the existing fix that prevents preview terminal updates from
    resetting the Transcribe button too early.
+
+Implemented behavior:
+
+- Sherpa streaming already creates a non-final `SpeechTranscriptSegment` as soon
+  as `partialText` is non-empty, before endpoint detection or final stream drain.
+- `SpeechTranscriptionCoordinator` now keeps successful streaming results with a
+  non-final segment in `SpeechExecutionStage::Streaming` instead of emitting a
+  follow-up completed execution update that can look terminal to downstream UI.
+- WebView speech-session normalization now treats `speech-preview-*` streaming
+  updates as interim, so displayed preview text does not imply finalization.
+- Existing preview button logic remains intact: `recording`, `start_stream`, and
+  `streaming` states keep the Transcribe button as
+  `Recording... (click to stop)`.
 
 Acceptance criteria:
 
-- First partial text appears while recording is still active.
-- The Transcribe button remains `Recording... (click to stop)` while preview
+- completed: First partial text appears while recording is still active.
+- completed: The Transcribe button remains `Recording... (click to stop)` while preview
   text is shown.
-- Final text can still replace or refine interim text after stop/finalization.
+- completed: Final text can still replace or refine interim text after stop/finalization.
+
+Validation:
+
+- `get_errors` on the changed coordinator and WebView controller files.
 
 ## Step 6: Reduce WebView Preview Polling Delay
 
