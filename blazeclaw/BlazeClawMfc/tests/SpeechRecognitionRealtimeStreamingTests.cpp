@@ -10,6 +10,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <memory>
 
 namespace {
 
@@ -171,6 +173,99 @@ TEST_CASE("Sherpa streaming engine emits finalized segment for speech energy", "
 		REQUIRE_FALSE(result.sessionState.segment->text.empty());
 	}
 	REQUIRE(result.sessionState.latencyMs > 0);
+
+	UnregisterStreamingAudioSource(streamId);
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Sherpa streaming engine final stream resets live preview state", "[speech][streaming][realtime]")
+{
+	using namespace blazeclaw::core::speechrecognition;
+
+	const auto root = CreateUniqueTempDirectory(L"final-reset");
+	const auto layout = BuildSherpaLayout(root);
+	engines::SherpaZipformerStreamingEngine engine;
+	std::string loadError;
+	if (!engine.Load(root, layout, loadError)) {
+		SUCCEED("Sherpa runtime load unavailable in test env: " + loadError);
+		std::filesystem::remove_all(root);
+		return;
+	}
+
+	const std::string streamId = "phase7-stream-final-reset";
+	const std::uint64_t oldestSequence = 100;
+	const std::uint64_t latestSequence = 900;
+	const std::vector<float> samples(
+		static_cast<std::size_t>(latestSequence - oldestSequence),
+		0.2f);
+	const auto minReadStart = std::make_shared<std::uint64_t>(
+		(std::numeric_limits<std::uint64_t>::max)());
+	RegisterStreamingAudioSource(
+		streamId,
+		StreamingAudioSourceReader{
+			.readBySequence = [oldestSequence, latestSequence, samples, minReadStart](
+				std::uint64_t startSequence,
+				std::size_t sampleCount,
+				std::vector<float>& outSamples) {
+				*minReadStart = (std::min)(*minReadStart, startSequence);
+				if (startSequence < oldestSequence ||
+					startSequence + sampleCount > latestSequence) {
+					return false;
+				}
+
+				const std::size_t start = static_cast<std::size_t>(startSequence - oldestSequence);
+				if (start + sampleCount > samples.size()) {
+					return false;
+				}
+
+				outSamples.assign(samples.begin() + start, samples.begin() + start + sampleCount);
+				return true;
+			},
+			.latestSequence = [latestSequence]() { return latestSequence; },
+			.oldestSequence = [oldestSequence]() { return oldestSequence; },
+		});
+
+	SpeechAudioArtifact artifact;
+	artifact.handoffMode = SpeechAudioHandoffMode::PcmStream;
+	artifact.streamId = streamId;
+	artifact.sampleRate = 16000;
+	artifact.channels = 1;
+	artifact.bitsPerSample = 16;
+	artifact.sequenceStart = oldestSequence;
+	artifact.sequenceEnd = 0;
+
+	SpeechTranscribeRequest liveRequest;
+	liveRequest.runId = "run-phase7-final-reset-live";
+	liveRequest.sessionId = "session-phase7-final-reset";
+	liveRequest.audioArtifact = artifact;
+	liveRequest.streamingInput = SpeechStreamingInputContract{};
+	liveRequest.streamingInput->source.streamId = streamId;
+	liveRequest.streamingInput->source.sampleRate = 16000;
+	liveRequest.streamingInput->source.sequenceStart = oldestSequence;
+	liveRequest.streamingInput->source.sequenceEnd = 0;
+	liveRequest.streamingInput->cursor.nextSequence = oldestSequence;
+	liveRequest.streamingInput->chunkPolicy.chunkMs = 20;
+	liveRequest.language = "zh";
+
+	const auto liveResult = engine.TranscribeStreaming(
+		liveRequest,
+		[](const std::string&) { return false; });
+	REQUIRE(liveResult.ok);
+
+	*minReadStart = (std::numeric_limits<std::uint64_t>::max)();
+	artifact.sequenceEnd = latestSequence;
+	SpeechTranscribeRequest finalRequest = liveRequest;
+	finalRequest.runId = "run-phase7-final-reset-final";
+	finalRequest.audioArtifact = artifact;
+	finalRequest.streamingInput->source.sequenceEnd = latestSequence;
+	finalRequest.streamingInput->cursor.nextSequence = oldestSequence;
+
+	const auto finalResult = engine.TranscribeStreaming(
+		finalRequest,
+		[](const std::string&) { return false; });
+
+	REQUIRE(finalResult.ok);
+	REQUIRE(*minReadStart == oldestSequence);
 
 	UnregisterStreamingAudioSource(streamId);
 	std::filesystem::remove_all(root);

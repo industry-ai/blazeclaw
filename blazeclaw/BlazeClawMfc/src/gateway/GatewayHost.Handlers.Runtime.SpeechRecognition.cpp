@@ -14,6 +14,25 @@ namespace blazeclaw::gateway {
 	namespace handlers::runtime {
 
 		void SpeechRecognitionHandlers::RegisterAll(GatewayHost& host) {
+			auto isEnvironmentFlagEnabled = [](const char* name, bool defaultValue) {
+				char* raw = nullptr;
+				size_t size = 0;
+				const int readStatus = _dupenv_s(&raw, &size, name);
+				if (readStatus != 0 || raw == nullptr) {
+					return defaultValue;
+				}
+
+				std::string value(raw);
+				free(raw);
+				for (char& ch : value) {
+					if (ch >= 'A' && ch <= 'Z') {
+						ch = static_cast<char>(ch - 'A' + 'a');
+					}
+				}
+
+				return !(value == "0" || value == "false" || value == "off");
+			};
+
 			auto isRingStreamingFeatureEnabled = []() {
 				char* raw = nullptr;
 				size_t size = 0;
@@ -34,6 +53,9 @@ namespace blazeclaw::gateway {
 			};
 
 			const bool ringStreamingEnabled = isRingStreamingFeatureEnabled();
+			const bool speechLivePreviewEnabled = isEnvironmentFlagEnabled(
+				"BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED",
+				true);
 			auto* const hostPtr = &host;
 
 			auto elapsedGatewayMs = [](const std::chrono::steady_clock::time_point& start) {
@@ -252,12 +274,13 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.capabilities.get",
-				[hostPtr, ringStreamingEnabled](const protocol::RequestFrame& request) {
+				[hostPtr, ringStreamingEnabled, speechLivePreviewEnabled](const protocol::RequestFrame& request) {
 					const bool runtimeConnected = hostPtr->IsRunning();
 					const auto sttRuntimeStatus = hostPtr->GetSpeechRecognitionRuntimeStatus();
 						const bool sherpaLayout = sttRuntimeStatus.modelLayout == "sherpa_zipformer_transducer";
 						const bool streamingConfigured = sttRuntimeStatus.streamingEnabled;
 						const bool streamingSupported = ringStreamingEnabled && streamingConfigured;
+						const bool streamingPreviewEnabled = streamingSupported && speechLivePreviewEnabled;
 						const std::string audioHandoffMode = sherpaLayout
 							? std::string("pcm_stream")
 							: std::string("dual");
@@ -265,7 +288,7 @@ namespace blazeclaw::gateway {
 					const bool sttReady = runtimeConnected &&
 						sttRuntimeStatus.enabled &&
 						(sttRuntimeStatus.ready || sttRuntimeStatus.runtimeHotMode == "on_demand");
-					const bool incrementalSegmentSupported = true;
+					const bool incrementalSegmentSupported = streamingPreviewEnabled;
 					const auto ttsStatus = hostPtr->GetSpeechStatus();
 					const bool ttsSupported = ttsStatus.supported;
 					const bool ttsReady = ttsStatus.ready;
@@ -285,6 +308,7 @@ namespace blazeclaw::gateway {
 								{ "audioMimeType", JsonString("audio/wav") },
 								{ "audioContainer", JsonString("wav") },
 								{ "streamingSupported", JsonBool(streamingSupported) },
+								{ "streamingPreviewEnabled", JsonBool(streamingPreviewEnabled) },
 								{ "streamingMode", JsonString("artifact_metadata") },
 								{ "ringStreamingEnabled", JsonBool(ringStreamingEnabled) },
 								{ "streamingConfigured", JsonBool(streamingConfigured) },

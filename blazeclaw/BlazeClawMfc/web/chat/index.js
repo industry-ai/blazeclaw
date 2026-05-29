@@ -90,6 +90,9 @@
             } else {
                 parts.push("final-only");
             }
+            if (capability.streamingPreviewEnabled === false) {
+                parts.push("preview=off");
+            }
             parts.push(capability.ttsSupported ? "tts available" : "tts off");
             const capabilityEffectiveProvider = String(capability.effectiveExecutionProvider || "").trim();
             if (capabilityEffectiveProvider) {
@@ -2723,6 +2726,16 @@
         };
         const startLiveSpeechPoll = (audioPath, audioArtifact, prompt, previewRunId) => {
             stopLiveSpeechPoll();
+            const speechCapabilities = state.speechCapabilities && typeof state.speechCapabilities === "object"
+                ? state.speechCapabilities
+                : null;
+            if (speechCapabilities && speechCapabilities.streamingPreviewEnabled === false) {
+                emitSpeechPreviewDiagnostic("speech.preview.disabled", {
+                    runId: String(previewRunId || ""),
+                    reason: "capability_toggle",
+                });
+                return;
+            }
             if (!audioPath && !audioArtifact) {
                 return;
             }

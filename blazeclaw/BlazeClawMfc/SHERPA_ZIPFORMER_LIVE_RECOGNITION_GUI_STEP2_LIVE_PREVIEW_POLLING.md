@@ -21,6 +21,16 @@ The loop still uses:
 - `stopLiveSpeechPoll()` to stop preview polling before final stop transcription.
 - `liveSpeechPollBusy` to prevent overlapping preview requests.
 
+Step 1 of `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_BAD_RESULT_FIX_PLAN.md` added
+an A/B bypass switch for this loop:
+
+- set `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` to keep final
+  record-then-transcribe behavior while disabling interim preview polling.
+- the native `speech.capabilities.get` response reports this as
+  `stt.streamingPreviewEnabled=false`.
+- `startLiveSpeechPoll(...)` exits before scheduling preview requests when that
+  capability is false.
+
 ### Artifact-only preview support
 `startLiveSpeechPoll(...)` now allows polling when either `audioPath` or `audioArtifact` is present.
 
@@ -83,10 +93,12 @@ Reason:
 - only the final accepted transcript should decide whether to send or block chat input.
 
 ## Current Polling Parameters
-- interval: `1200` ms
+- interval: `150` ms
 - per-preview timeout: `8000` ms
 
-The interval was intentionally left unchanged for Step 2. Later performance tuning can adjust it after coordinator/gateway correctness is complete.
+The interval is active only when `streamingPreviewEnabled` is true. Later
+performance tuning can adjust it after coordinator/gateway correctness is
+complete.
 
 ## Acceptance Criteria Results
 - Interim recognition requests occur while recording is active through the existing WebView preview loop.

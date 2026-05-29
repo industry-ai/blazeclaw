@@ -2161,6 +2161,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 		{
 			std::lock_guard<std::mutex> lock(m_streamMutex);
 			auto& cachedState = m_streamStateByStreamId[streamingInput.source.streamId];
+			if (isFinalStreamRequest && streamingInput.source.sequenceEnd > 0) {
+				cachedState = StreamState{};
+			}
 			if (cachedState.decoderContext.empty()) {
 				cachedState.decoderContext.assign(
 					(std::max)(std::size_t{ 1 },

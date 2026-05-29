@@ -89,6 +89,9 @@ Current starting point from Step 1:
 - the existing interval is 1200 ms and should be tuned only after correctness is confirmed.
 
 Implemented refinements:
+- `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` now provides a one-switch A/B
+  bypass for the WebView live preview polling loop while preserving final
+  stop-recording transcription.
 - `startLiveSpeechPoll(...)` now starts when either `audioPath` or the live `audioArtifact` is available, so preview can run before the final WAV path is available.
 - each recording session gets a stable `speech-preview-<timestamp>` preview run id that is reused by all preview ticks.
 - `controller.transcribeSpeech(...)` now accepts an optional `runId` for preview requests instead of always generating a new run id.
