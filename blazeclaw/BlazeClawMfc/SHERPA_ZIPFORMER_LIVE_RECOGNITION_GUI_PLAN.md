@@ -366,6 +366,10 @@ Implemented behavior:
   provider, stage, latency, error, and model-load stage/latency. Warmup uses an
   isolated dummy PCM stream through the same Sherpa streaming engine path as live
   preview recognition.
+- live preview PCM stream contracts now use configurable low-latency preview
+  chunk policy only for `livePreviewOnly=true` requests. The first CPU tuning
+  trial uses a 500 ms preview chunk with 320 ms lookback while final
+  transcription keeps the broader 1500 ms chunk and 320 ms overlap policy.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -388,6 +392,10 @@ Diagnostics:
 - Include hot runtime warmup diagnostics in `speechRuntime` payloads so live
   preview traces can distinguish first-token latency from model load, session
   creation, graph optimization, CUDA initialization, and dummy streaming warmup.
+- Include streaming latency profile diagnostics in `speechRuntime` payloads:
+  `streamingLatencyProfile`, `streamingPreviewChunkMs`, and
+  `streamingPreviewLookbackMs`, alongside existing chunk/lookback, provider,
+  thread, and execution-mode fields.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -400,6 +408,8 @@ Acceptance criteria:
   Sherpa streaming, gateway payload emission, and WebView first-render events.
 - completed: diagnostics expose hot runtime warmup completion/success/failure
   and model-load stage/latency in startup logs and gateway speech payloads.
+- completed: live preview chunk tuning is visible in startup logs and gateway
+  speech payloads without changing the final transcription chunk/overlap policy.
 
 ## Rollout Strategy
 

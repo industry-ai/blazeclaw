@@ -69,7 +69,10 @@ namespace blazeclaw::core {
 		std::optional<speechrecognition::SpeechStreamingInputContract>
 		BuildStreamingInputContractFromArtifact(
 			const std::optional<speechrecognition::SpeechAudioArtifact>& audioArtifact,
-			const std::string& sessionId) {
+			const std::string& sessionId,
+			const bool livePreviewOnly,
+			const std::uint32_t previewChunkMs,
+			const std::uint32_t previewLookbackMs) {
 			if (!audioArtifact.has_value() ||
 				audioArtifact->handoffMode != speechrecognition::SpeechAudioHandoffMode::PcmStream) {
 				return std::nullopt;
@@ -87,7 +90,10 @@ namespace blazeclaw::core {
 			contract.cursor.startSequence = audioArtifact->sequenceStart;
 			contract.cursor.nextSequence = audioArtifact->sequenceStart;
 
-			if (audioArtifact->sampleRate > 0 && audioArtifact->frameSamples > 0) {
+			if (livePreviewOnly && previewChunkMs > 0) {
+				contract.chunkPolicy.chunkMs = previewChunkMs;
+			}
+			else if (audioArtifact->sampleRate > 0 && audioArtifact->frameSamples > 0) {
 				const std::uint64_t chunkMs =
 					(static_cast<std::uint64_t>(audioArtifact->frameSamples) * 1000ULL) /
 					static_cast<std::uint64_t>(audioArtifact->sampleRate);
@@ -95,8 +101,12 @@ namespace blazeclaw::core {
 					std::uint64_t{ 1 },
 					chunkMs));
 			}
-			contract.chunkPolicy.overlapMs = 0;
-			contract.chunkPolicy.lookbackMs = 0;
+			const std::uint32_t safePreviewLookbackMs =
+				contract.chunkPolicy.chunkMs > 0
+				? (std::min)(previewLookbackMs, contract.chunkPolicy.chunkMs - 1)
+				: 0u;
+			contract.chunkPolicy.overlapMs = livePreviewOnly ? safePreviewLookbackMs : 0;
+			contract.chunkPolicy.lookbackMs = livePreviewOnly ? safePreviewLookbackMs : 0;
 			contract.chunkPolicy.maxSpinCount = 64;
 
 			return contract;
@@ -328,7 +338,10 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::GatewayHost::SpeechExecutionRequest& request) {
 			const auto streamingInput = BuildStreamingInputContractFromArtifact(
 				request.audioArtifact,
-				request.sessionId);
+				request.sessionId,
+				request.livePreviewOnly,
+				manager.m_activeConfig.speechRecognition.streamingPreviewChunkMs,
+				manager.m_activeConfig.speechRecognition.streamingPreviewLookbackMs);
 				const auto accepted = manager.m_speechTranscriptionCoordinator.Accept(
 					speechrecognition::SpeechExecutionRequest{
 						.runId = request.runId,
@@ -372,7 +385,10 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::GatewayHost::SpeechTranscribeRequest& request) {
 			const auto streamingInput = BuildStreamingInputContractFromArtifact(
 				request.audioArtifact,
-				request.sessionId);
+				request.sessionId,
+				request.livePreviewOnly,
+				manager.m_activeConfig.speechRecognition.streamingPreviewChunkMs,
+				manager.m_activeConfig.speechRecognition.streamingPreviewLookbackMs);
 				const auto result = manager.m_speechTranscriptionCoordinator.Execute(
 					manager.m_speechRecognitionRuntime,
 					speechrecognition::SpeechExecutionRequest{
@@ -467,6 +483,9 @@ namespace blazeclaw::core {
 			status.streamingEnabled = snapshot.streamingEnabled;
 			status.streamingChunkMs = snapshot.streamingChunkMs;
 			status.streamingLookbackMs = snapshot.streamingLookbackMs;
+			status.streamingLatencyProfile = snapshot.streamingLatencyProfile;
+			status.streamingPreviewChunkMs = snapshot.streamingPreviewChunkMs;
+			status.streamingPreviewLookbackMs = snapshot.streamingPreviewLookbackMs;
 			status.threads = snapshot.threads;
 			status.executionMode = snapshot.executionMode;
 			status.cudaExecutionProviderAvailable = snapshot.cudaExecutionProviderAvailable;

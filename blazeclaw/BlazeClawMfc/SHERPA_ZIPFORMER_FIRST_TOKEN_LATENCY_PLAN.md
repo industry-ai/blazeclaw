@@ -320,40 +320,69 @@ Validation:
 
 ## Step 4: Reduce Streaming Chunk Latency
 
+Status: completed
+
 The active config uses `speech.streaming.chunk_ms=1500`, which is too large for
 fast first-character feedback. Reduce the time before the first streaming decode
 attempt while preserving recognition quality.
 
 Implementation tasks:
 
-1. Add configurable low-latency profiles, for example:
+1. completed: Add configurable low-latency profiles, for example:
    - `balanced`: 640 ms chunk, 320 ms lookback
    - `low_latency`: 320 ms chunk, 160-320 ms lookback
    - `aggressive`: 160-240 ms chunk, 160 ms lookback
-2. Start with a safe default such as 320 ms or 500 ms for live preview.
-3. Ensure chunking changes apply only to streaming preview and do not regress
+2. completed: Start with a safe default such as 320 ms or 500 ms for live preview.
+3. completed: Ensure chunking changes apply only to streaming preview and do not regress
    final utterance quality.
-4. Benchmark Chinese and English utterances separately.
-5. Keep final recognition allowed to use enough context for quality if needed.
+4. pending runtime benchmark: Benchmark Chinese and English utterances separately.
+5. completed: Keep final recognition allowed to use enough context for quality if needed.
+
+Implemented behavior:
+
+- Added `speech.streaming.latency_profile` with `balanced`, `low_latency`, and
+  `aggressive` profile names.
+- Added explicit live-preview overrides:
+  - `speech.streaming.preview_chunk_ms`
+  - `speech.streaming.preview_lookback_ms`
+- The active config now starts the first CPU tuning trial with
+  `speech.streaming.chunk_ms=500`, `speech.streaming.preview_chunk_ms=500`, and
+  `speech.streaming.preview_lookback_ms=320`.
+- Final utterance quality remains protected because `speech.chunk_ms=1500` and
+  `speech.overlap_ms=320` are no longer overwritten by streaming chunk parsing or
+  normalization.
+- `livePreviewOnly=true` requests now apply the configured preview chunk/lookback
+  policy when building the PCM stream contract. Non-preview/final requests keep
+  the previous artifact-derived chunk policy with zero overlap/lookback.
+- Runtime, gateway, and startup diagnostics now expose
+  `streamingLatencyProfile`, `streamingPreviewChunkMs`, and
+  `streamingPreviewLookbackMs` alongside the existing streaming chunk/lookback,
+  provider, thread, and execution-mode fields.
 
 Acceptance criteria:
 
-- First decode attempt begins well before the old 1500 ms boundary.
-- First visible character latency improves without severe partial-result noise.
-- Final recognition output remains stable for short Chinese utterances such as
+- completed: First decode attempt begins well before the old 1500 ms boundary.
+- pending runtime benchmark: First visible character latency improves without severe partial-result noise.
+- pending runtime benchmark: Final recognition output remains stable for short Chinese utterances such as
   `讲一个笑话`.
 
 Debug-log-specific starting point:
 
-- Current baseline: `chunkMs=1500`, `overlapMs=320`, `threads=4`,
+- completed baseline: `chunkMs=1500`, `overlapMs=320`, `threads=4`,
   `mode=sequential`, `effectiveProvider=cpu`.
-- First CPU tuning trial should lower only the streaming chunk first, keeping
+- completed: First CPU tuning trial lowers only the streaming/live-preview chunk first, keeping
   other settings unchanged so the latency delta is attributable.
-- Recommended first trial: `speech.streaming.chunk_ms=500` with existing
-  `speech.streaming.lookback_ms=320`.
+- completed first trial: `speech.streaming.chunk_ms=500`,
+  `speech.streaming.preview_chunk_ms=500`, and
+  `speech.streaming.preview_lookback_ms=320` with existing final
+  `speech.chunk_ms=1500` and `speech.overlap_ms=320`.
 - Recommended second trial: `speech.streaming.chunk_ms=320` with existing
-  `speech.streaming.lookback_ms=320`.
+	`speech.streaming.preview_lookback_ms=320`.
 - Only after chunk tuning should thread and execution-mode tuning be compared.
+
+Validation:
+
+- `get_errors` on changed config, runtime, gateway, and startup files.
 
 ## Step 5: Emit Partial Text as Soon as It Exists
 

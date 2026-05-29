@@ -525,7 +525,7 @@ namespace {
 		const auto runtime = services.SpeechRecognition();
 		CString configLine;
 		configLine.Format(
-			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s modelVariant=%s language=%s allowedLanguages=%s enforceAllowedLanguages=%s sampleRate=%u chunkMs=%u overlapMs=%u threads=%u mode=%s",
+			L"[Speech] startup.config - enabled=%s cudaEnabled=%s provider=%s stage=%s storageRoot=%s model=%s modelVariant=%s language=%s allowedLanguages=%s enforceAllowedLanguages=%s sampleRate=%u chunkMs=%u overlapMs=%u streamingChunkMs=%u streamingLookbackMs=%u streamingLatencyProfile=%s streamingPreviewChunkMs=%u streamingPreviewLookbackMs=%u threads=%u mode=%s",
 			config.speechRecognition.enabled ? L"true" : L"false",
 			config.speechRecognition.cudaEnabled ? L"true" : L"false",
 			config.speechRecognition.provider.c_str(),
@@ -539,6 +539,11 @@ namespace {
 			config.speechRecognition.sampleRate,
 			config.speechRecognition.chunkMs,
 			config.speechRecognition.overlapMs,
+			config.speechRecognition.streamingChunkMs,
+			config.speechRecognition.streamingLookbackMs,
+			config.speechRecognition.streamingLatencyProfile.c_str(),
+			config.speechRecognition.streamingPreviewChunkMs,
+			config.speechRecognition.streamingPreviewLookbackMs,
 			config.speechRecognition.threads,
 			config.speechRecognition.executionMode.c_str());
 		AppendMainFrameStatusLine(configLine);

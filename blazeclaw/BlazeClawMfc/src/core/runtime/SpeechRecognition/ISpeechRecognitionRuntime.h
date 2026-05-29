@@ -41,6 +41,9 @@ namespace blazeclaw::core::speechrecognition {
 		bool streamingEnabled = false;
 		std::uint32_t streamingChunkMs = 0;
 		std::uint32_t streamingLookbackMs = 0;
+		std::string streamingLatencyProfile;
+		std::uint32_t streamingPreviewChunkMs = 0;
+		std::uint32_t streamingPreviewLookbackMs = 0;
 		std::uint32_t threads = 0;
 		std::string executionMode;
 		bool cudaExecutionProviderAvailable = false;

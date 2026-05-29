@@ -69,6 +69,32 @@ namespace blazeclaw::config {
 			return trimmed;
 		}
 
+		std::wstring NormalizeSpeechStreamingLatencyProfile(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"balanced" ||
+				normalized == L"low_latency" ||
+				normalized == L"low-latency" ||
+				normalized == L"aggressive") {
+				return normalized == L"low-latency" ? L"low_latency" : normalized;
+			}
+
+			return L"balanced";
+		}
+
+		std::pair<std::uint32_t, std::uint32_t> ResolveSpeechStreamingPreviewProfile(
+			const std::wstring& profile) {
+			const std::wstring normalized = NormalizeSpeechStreamingLatencyProfile(profile);
+			if (normalized == L"aggressive") {
+				return { 240u, 160u };
+			}
+
+			if (normalized == L"low_latency") {
+				return { 320u, 320u };
+			}
+
+			return { 640u, 320u };
+		}
+
 		std::vector<std::wstring> ParseSpeechHotwordsValue(const std::wstring& raw) {
 			const std::wstring trimmed = Trim(raw);
 			if (trimmed.empty()) {
@@ -1224,7 +1250,6 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(25), value) && value > 0) {
 					outConfig.speechRecognition.streamingChunkMs = value;
-					outConfig.speechRecognition.chunkMs = value;
 				}
 				continue;
 			}
@@ -1233,7 +1258,28 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(28), value)) {
 					outConfig.speechRecognition.streamingLookbackMs = value;
-					outConfig.speechRecognition.overlapMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.streaming.latency_profile=", 0) == 0) {
+				outConfig.speechRecognition.streamingLatencyProfile =
+					NormalizeSpeechStreamingLatencyProfile(trimmedLine.substr(33));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.streaming.preview_chunk_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(34), value) && value > 0) {
+					outConfig.speechRecognition.streamingPreviewChunkMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.streaming.preview_lookback_ms=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(37), value)) {
+					outConfig.speechRecognition.streamingPreviewLookbackMs = value;
 				}
 				continue;
 			}
@@ -1242,7 +1288,6 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(16), value) && value > 0) {
 					outConfig.speechRecognition.chunkMs = value;
-					outConfig.speechRecognition.streamingChunkMs = value;
 				}
 				continue;
 			}
@@ -1251,7 +1296,6 @@ namespace blazeclaw::config {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(18), value)) {
 					outConfig.speechRecognition.overlapMs = value;
-					outConfig.speechRecognition.streamingLookbackMs = value;
 				}
 				continue;
 			}
@@ -2018,17 +2062,45 @@ namespace blazeclaw::config {
 				outConfig.speechRecognition.allowedLanguages.begin(),
 				outConfig.speechRecognition.allowedLanguages.end()),
 			outConfig.speechRecognition.allowedLanguages.end());
-		const auto normalizedChunk = std::clamp<std::uint32_t>(
+		const auto normalizedStreamingChunk = std::clamp<std::uint32_t>(
 			outConfig.speechRecognition.streamingChunkMs,
+			160u,
+			1500u);
+		outConfig.speechRecognition.streamingChunkMs = normalizedStreamingChunk;
+		const auto normalizedStreamingLookback = (std::min)(
+			outConfig.speechRecognition.streamingLookbackMs,
+			normalizedStreamingChunk > 0 ? normalizedStreamingChunk - 1 : 0u);
+		outConfig.speechRecognition.streamingLookbackMs = normalizedStreamingLookback;
+		outConfig.speechRecognition.chunkMs = std::clamp<std::uint32_t>(
+			outConfig.speechRecognition.chunkMs,
 			320u,
 			1500u);
-		outConfig.speechRecognition.streamingChunkMs = normalizedChunk;
-		outConfig.speechRecognition.chunkMs = normalizedChunk;
-		const auto normalizedLookback = (std::min)(
-			outConfig.speechRecognition.streamingLookbackMs,
-			normalizedChunk > 0 ? normalizedChunk - 1 : 0u);
-		outConfig.speechRecognition.streamingLookbackMs = normalizedLookback;
-		outConfig.speechRecognition.overlapMs = normalizedLookback;
+		outConfig.speechRecognition.overlapMs = (std::min)(
+			outConfig.speechRecognition.overlapMs,
+			outConfig.speechRecognition.chunkMs > 0
+			? outConfig.speechRecognition.chunkMs - 1
+			: 0u);
+		outConfig.speechRecognition.streamingLatencyProfile =
+			NormalizeSpeechStreamingLatencyProfile(
+				outConfig.speechRecognition.streamingLatencyProfile);
+		const auto [profileChunkMs, profileLookbackMs] =
+			ResolveSpeechStreamingPreviewProfile(
+				outConfig.speechRecognition.streamingLatencyProfile);
+		if (outConfig.speechRecognition.streamingPreviewChunkMs == 0) {
+			outConfig.speechRecognition.streamingPreviewChunkMs = profileChunkMs;
+		}
+		if (outConfig.speechRecognition.streamingPreviewLookbackMs == 0) {
+			outConfig.speechRecognition.streamingPreviewLookbackMs = profileLookbackMs;
+		}
+		outConfig.speechRecognition.streamingPreviewChunkMs = std::clamp<std::uint32_t>(
+			outConfig.speechRecognition.streamingPreviewChunkMs,
+			160u,
+			1500u);
+		outConfig.speechRecognition.streamingPreviewLookbackMs = (std::min)(
+			outConfig.speechRecognition.streamingPreviewLookbackMs,
+			outConfig.speechRecognition.streamingPreviewChunkMs > 0
+			? outConfig.speechRecognition.streamingPreviewChunkMs - 1
+			: 0u);
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
 		if (outConfig.localModel.provider == L"llama.cpp") {

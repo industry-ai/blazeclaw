@@ -117,6 +117,9 @@ namespace blazeclaw::gateway {
 						{ "modelVariant", JsonString(status.modelVariant) },
 						{ "streamingChunkMs", JsonNumber(static_cast<std::uint64_t>(status.streamingChunkMs)) },
 						{ "streamingLookbackMs", JsonNumber(static_cast<std::uint64_t>(status.streamingLookbackMs)) },
+						{ "streamingLatencyProfile", JsonString(status.streamingLatencyProfile) },
+						{ "streamingPreviewChunkMs", JsonNumber(static_cast<std::uint64_t>(status.streamingPreviewChunkMs)) },
+						{ "streamingPreviewLookbackMs", JsonNumber(static_cast<std::uint64_t>(status.streamingPreviewLookbackMs)) },
 						{ "threads", JsonNumber(static_cast<std::uint64_t>(status.threads)) },
 						{ "executionMode", JsonString(status.executionMode) },
 						{ "runtimeHot", JsonObject({
@@ -650,6 +653,7 @@ namespace blazeclaw::gateway {
 					const std::string prompt = params.GetString("prompt");
 					const std::string sessionId = params.GetString("sessionId");
 					const std::string runId = params.GetString("runId");
+					const bool livePreviewOnly = params.GetBool("livePreviewOnly").value_or(false);
 					auto audioArtifact =
 						tryParseAudioArtifact(params.GetObject("audioArtifact"));
 					if (audioArtifact.has_value()) {
@@ -676,6 +680,7 @@ namespace blazeclaw::gateway {
 							.audioArtifact = audioArtifact,
 							.language = language,
 							.prompt = prompt,
+							.livePreviewOnly = livePreviewOnly,
 						});
 					if (!accepted.accepted) {
 						const auto existingExecution =
@@ -740,6 +745,7 @@ namespace blazeclaw::gateway {
 							.audioArtifact = audioArtifact,
 							.language = language,
 							.prompt = prompt,
+							.livePreviewOnly = livePreviewOnly,
 						});
 
 					if (!transcribe.ok &&
@@ -765,6 +771,7 @@ namespace blazeclaw::gateway {
 								.audioArtifact = std::nullopt,
 								.language = language,
 								.prompt = prompt,
+								.livePreviewOnly = livePreviewOnly,
 							});
 					}
 

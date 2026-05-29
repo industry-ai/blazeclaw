@@ -509,6 +509,9 @@ namespace blazeclaw::config {
 		bool streamingEnabled = true;
 		std::uint32_t streamingChunkMs = 1000;
 		std::uint32_t streamingLookbackMs = 320;
+		std::wstring streamingLatencyProfile = L"balanced";
+		std::uint32_t streamingPreviewChunkMs = 640;
+		std::uint32_t streamingPreviewLookbackMs = 320;
 		std::uint32_t chunkMs = 1000;
 		std::uint32_t overlapMs = 320;
 		std::uint32_t threads = 4;

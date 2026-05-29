@@ -342,6 +342,9 @@ namespace blazeclaw::gateway {
 			bool streamingEnabled = false;
 			std::uint32_t streamingChunkMs = 0;
 			std::uint32_t streamingLookbackMs = 0;
+			std::string streamingLatencyProfile;
+			std::uint32_t streamingPreviewChunkMs = 0;
+			std::uint32_t streamingPreviewLookbackMs = 0;
 			std::uint32_t threads = 0;
 			std::string executionMode;
 			bool cudaExecutionProviderAvailable = false;
@@ -395,6 +398,7 @@ namespace blazeclaw::gateway {
 			std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> audioArtifact;
 			std::string language;
 			std::string prompt;
+			bool livePreviewOnly = false;
 		};
 
 		struct SpeechExecutionAccepted {
@@ -418,6 +422,7 @@ namespace blazeclaw::gateway {
 			std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> audioArtifact;
 			std::string language;
 			std::string prompt;
+			bool livePreviewOnly = false;
 		};
 
 		struct SpeechTranscribeResult {
