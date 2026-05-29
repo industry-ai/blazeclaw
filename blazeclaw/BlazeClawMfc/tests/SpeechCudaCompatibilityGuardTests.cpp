@@ -82,6 +82,44 @@ TEST_CASE("Speech CUDA compatibility guard reports incompatible loaded major", "
 	REQUIRE(result.reason.find("cublas major=13 expected=12") != std::string::npos);
 }
 
+TEST_CASE("Speech CUDA compatibility guard allows expected major with mixed loaded majors", "[speech][cuda][guard]")
+{
+	using namespace blazeclaw::core::speechrecognition;
+
+	const auto result = EvaluateSpeechCudaCompatibilityGuard({
+		SpeechCudaLoadedModule{
+			.label = "cublas",
+			.major = 12,
+			.expectedMajor = 12,
+		},
+		SpeechCudaLoadedModule{
+			.label = "cublas",
+			.major = 13,
+			.expectedMajor = 12,
+		},
+		SpeechCudaLoadedModule{
+			.label = "cublasLt",
+			.major = 12,
+			.expectedMajor = 12,
+		},
+		SpeechCudaLoadedModule{
+			.label = "cublasLt",
+			.major = 13,
+			.expectedMajor = 12,
+		},
+		SpeechCudaLoadedModule{
+			.label = "cudnn",
+			.major = 9,
+			.expectedMajor = 9,
+		},
+	});
+
+	REQUIRE(result.compatible);
+	REQUIRE(result.observed.size() == 5);
+	REQUIRE(result.violations.empty());
+	REQUIRE(result.reason.empty());
+}
+
 TEST_CASE("Speech CUDA DLL loading reports configured directory and missing preload", "[speech][cuda][dll-load]")
 {
 	using namespace blazeclaw::core::speechrecognition;
@@ -99,6 +137,28 @@ TEST_CASE("Speech CUDA DLL loading reports configured directory and missing prel
 	REQUIRE(result.preloadedDlls.empty());
 	REQUIRE(result.failures.size() == 1);
 	REQUIRE(result.failures[0].find(L"preload DLL not found") != std::wstring::npos);
+	REQUIRE(result.summary.find(L"directories=1") != std::wstring::npos);
+	REQUIRE(result.summary.find(L"preloaded=0") != std::wstring::npos);
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Speech CUDA DLL loading treats missing default preload names as diagnostic", "[speech][cuda][dll-load]")
+{
+	using namespace blazeclaw::core::speechrecognition;
+
+	const auto root = CreateUniqueTempDirectory(L"dll-load-defaults");
+	const auto result = ConfigureSpeechCudaDllLoading(SpeechCudaDllLoadRequest{
+		.preloadEnabled = true,
+		.directories = { root.wstring() },
+	});
+
+	REQUIRE(result.attempted);
+	REQUIRE(result.succeeded);
+	REQUIRE(result.addedDirectories.size() == 1);
+	REQUIRE(result.preloadedDlls.empty());
+	REQUIRE_FALSE(result.failures.empty());
+	REQUIRE(result.failures[0].find(L"default preload DLL not found") != std::wstring::npos);
 	REQUIRE(result.summary.find(L"directories=1") != std::wstring::npos);
 	REQUIRE(result.summary.find(L"preloaded=0") != std::wstring::npos);
 

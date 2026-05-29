@@ -4,6 +4,7 @@
 #include <array>
 #include <cwctype>
 #include <filesystem>
+#include <map>
 #include <sstream>
 
 namespace blazeclaw::core::speechrecognition {
@@ -162,10 +163,6 @@ namespace blazeclaw::core::speechrecognition {
 			return result;
 		}
 
-		::SetDefaultDllDirectories(
-			LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
-			LOAD_LIBRARY_SEARCH_USER_DIRS);
-
 		for (const auto& directory : directories) {
 			if (!std::filesystem::is_directory(directory)) {
 				result.succeeded = false;
@@ -184,6 +181,7 @@ namespace blazeclaw::core::speechrecognition {
 		}
 
 		if (request.preloadEnabled) {
+			const bool usingDefaultPreloadNames = request.preloadNames.empty();
 			const auto& names = request.preloadNames.empty()
 				? DefaultPreloadNames()
 				: request.preloadNames;
@@ -216,8 +214,13 @@ namespace blazeclaw::core::speechrecognition {
 				}
 
 				if (!found) {
-					result.succeeded = false;
-					result.failures.push_back(L"preload DLL not found: " + name);
+					if (!usingDefaultPreloadNames) {
+						result.succeeded = false;
+					}
+					result.failures.push_back(
+						usingDefaultPreloadNames
+						? L"default preload DLL not found in configured directories: " + name
+						: L"preload DLL not found: " + name);
 				}
 			}
 		}
@@ -239,10 +242,24 @@ namespace blazeclaw::core::speechrecognition {
 	SpeechCudaCompatibilityGuardResult EvaluateSpeechCudaCompatibilityGuard(
 		const std::vector<SpeechCudaLoadedModule>& loadedModules) {
 		SpeechCudaCompatibilityGuardResult result;
+		std::map<std::string, bool> expectedMajorObservedByLabel;
 		for (const auto& module : loadedModules) {
 			result.observed.push_back(
 				module.label + "=" + std::to_string(module.major));
-			if (module.major != module.expectedMajor) {
+			if (module.major == module.expectedMajor) {
+				expectedMajorObservedByLabel[module.label] = true;
+			}
+			else if (expectedMajorObservedByLabel.find(module.label) ==
+				expectedMajorObservedByLabel.end()) {
+				expectedMajorObservedByLabel[module.label] = false;
+			}
+		}
+
+		for (const auto& module : loadedModules) {
+			const auto expectedObserved = expectedMajorObservedByLabel.find(module.label);
+			if (module.major != module.expectedMajor &&
+				(expectedObserved == expectedMajorObservedByLabel.end() ||
+					expectedObserved->second == false)) {
 				result.violations.push_back(
 					module.label +
 					" major=" + std::to_string(module.major) +
