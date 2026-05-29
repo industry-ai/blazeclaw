@@ -75,6 +75,26 @@ namespace blazeclaw::gateway {
 					});
 				};
 
+			auto buildSpeechRuntimeProviderJson =
+				[&host]() {
+					const auto status = host.GetSpeechRecognitionRuntimeStatus();
+					return JsonObject({
+						{ "provider", JsonString(status.provider) },
+						{ "effectiveExecutionProvider", JsonString(status.effectiveExecutionProvider) },
+						{ "cudaExecutionProviderAvailable", JsonBool(status.cudaExecutionProviderAvailable) },
+						{ "cudaExecutionProviderEnabled", JsonBool(status.cudaExecutionProviderEnabled) },
+						{ "cudaExecutionProviderReason", JsonString(status.cudaExecutionProviderReason.empty()
+							? std::string("none")
+							: status.cudaExecutionProviderReason) },
+						{ "modelLayout", JsonString(status.modelLayout) },
+						{ "modelVariant", JsonString(status.modelVariant) },
+						{ "streamingChunkMs", JsonNumber(static_cast<std::uint64_t>(status.streamingChunkMs)) },
+						{ "streamingLookbackMs", JsonNumber(static_cast<std::uint64_t>(status.streamingLookbackMs)) },
+						{ "threads", JsonNumber(static_cast<std::uint64_t>(status.threads)) },
+						{ "executionMode", JsonString(status.executionMode) },
+					});
+				};
+
 			auto tryParseAudioArtifact =
 				[](const std::optional<std::string>& artifactJson)
 				-> std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact> {
@@ -278,7 +298,7 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.startRecording",
-				[&host, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
+				[&host, &buildAudioArtifactJson, &buildSpeechRuntimeProviderJson](const protocol::RequestFrame& request) {
 					// Start native recording and return an object { ok: bool }
 					const auto result = host.StartNativeRecording();
 					if (!result.ok) {
@@ -289,14 +309,18 @@ namespace blazeclaw::gateway {
 						? JsonObject({
 							{ "ok", JsonBool(true) },
 							{ "audioArtifact", buildAudioArtifactJson(*currentArtifact) },
+							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
 						})
-						: JsonObject({ { "ok", JsonBool(true) } });
+						: JsonObject({
+							{ "ok", JsonBool(true) },
+							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
+						});
 					return protocol::OkResponse(request, payload);
 				});
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.stopRecording",
-				[&host, &buildAudioArtifactJson](const protocol::RequestFrame& request) {
+				[&host, &buildAudioArtifactJson, &buildSpeechRuntimeProviderJson](const protocol::RequestFrame& request) {
 					// Stop native recording and return audioPath
 					const auto result = host.StopNativeRecording();
 					if (!result.ok) {
@@ -307,10 +331,12 @@ namespace blazeclaw::gateway {
 							{ "ok", JsonBool(true) },
 							{ "audioPath", JsonString(result.audioPath) },
 							{ "audioArtifact", buildAudioArtifactJson(*result.audioArtifact) },
+							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
 						})
 						: JsonObject({
 							{ "ok", JsonBool(true) },
 							{ "audioPath", JsonString(result.audioPath) },
+							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
 						});
 					return protocol::OkResponse(request, payload);
 				});
@@ -505,7 +531,11 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.transcribe",
-				[&host, &tryParseAudioArtifact, &buildAudioArtifactJson, &ringStreamingEnabled](const protocol::RequestFrame& request) {
+				[&host,
+					&tryParseAudioArtifact,
+					&buildAudioArtifactJson,
+					&buildSpeechRuntimeProviderJson,
+					&ringStreamingEnabled](const protocol::RequestFrame& request) {
 				auto executionStageToString =
 					[](blazeclaw::core::speechrecognition::SpeechExecutionStage stage) {
 						switch (stage) {
@@ -744,6 +774,7 @@ namespace blazeclaw::gateway {
 					const bool requestArtifactPresent = audioArtifact.has_value();
 					const bool runtimeArtifactPresent = transcribe.sessionState.audioArtifact.has_value();
 					const bool runtimeStreamingInputPresent = transcribe.sessionState.streamingInput.has_value();
+					const std::string speechRuntimeProviderJson = buildSpeechRuntimeProviderJson();
 
 					const std::string requestArtifactMode = requestArtifactPresent
 						? (audioArtifact->handoffMode == blazeclaw::core::speechrecognition::SpeechAudioHandoffMode::PcmStream
@@ -896,6 +927,7 @@ namespace blazeclaw::gateway {
 							{ "sherpaBaselineTokenIds", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenIds : std::string()) },
 							{ "sherpaBaselineTokenPieces", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenPieces : std::string()) },
 							{ "sherpaBaselineDiagnosticPath", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineDiagnosticPath : std::string()) },
+							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorMessage", JsonString(transcribe.errorMessage) },
 						}));
@@ -934,6 +966,7 @@ namespace blazeclaw::gateway {
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "hasSegment", JsonBool(hasSegment) },
 							{ "segment", segmentJson },
+							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorClass", JsonString(errorClass) },
 						}));
@@ -967,6 +1000,7 @@ namespace blazeclaw::gateway {
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
 							{ "audioArtifact", audioArtifactJson },
 							{ "segment", segmentJson },
+							{ "speechRuntime", speechRuntimeProviderJson },
 						});
 
 					return protocol::OkResponse(
@@ -983,6 +1017,7 @@ namespace blazeclaw::gateway {
 							{ "audioPath", JsonString(transcribe.sessionState.audioPath) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(transcribe.latencyMs)) },
 							{ "segment", segmentJson },
+							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "speechSession", speechSessionJson },
 							{ "executionState", JsonObject({
 								{ "sessionId", JsonString(effectiveSessionId) },
@@ -994,7 +1029,8 @@ namespace blazeclaw::gateway {
 								{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 								{ "cancelRequested", JsonBool(false) },
 								{ "audioArtifact", audioArtifactJson },
-									{ "segment", segmentJson },
+								{ "segment", segmentJson },
+								{ "speechRuntime", speechRuntimeProviderJson },
 							}) },
 							{ "transcriptInjection", JsonObject({
 								{ "source", JsonString("voice") },
@@ -1018,6 +1054,7 @@ namespace blazeclaw::gateway {
 								{ "stage", JsonString(normalizedStage) },
 								{ "hasSegment", JsonBool(hasSegment) },
 								{ "audioArtifact", audioArtifactJson },
+								{ "speechRuntime", speechRuntimeProviderJson },
 							}) },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorMessage", JsonString(transcribe.errorMessage) },

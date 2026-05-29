@@ -334,6 +334,11 @@ namespace blazeclaw::gateway {
 			bool streamingEnabled = false;
 			std::uint32_t streamingChunkMs = 0;
 			std::uint32_t streamingLookbackMs = 0;
+			std::uint32_t threads = 0;
+			std::string executionMode;
+			bool cudaExecutionProviderAvailable = false;
+			bool cudaExecutionProviderEnabled = false;
+			std::string cudaExecutionProviderReason;
 			std::string effectiveExecutionProvider;
 		};
 

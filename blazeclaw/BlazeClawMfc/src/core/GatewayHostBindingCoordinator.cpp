@@ -459,6 +459,11 @@ namespace blazeclaw::core {
 			status.streamingEnabled = snapshot.streamingEnabled;
 			status.streamingChunkMs = snapshot.streamingChunkMs;
 			status.streamingLookbackMs = snapshot.streamingLookbackMs;
+			status.threads = snapshot.threads;
+			status.executionMode = snapshot.executionMode;
+			status.cudaExecutionProviderAvailable = snapshot.cudaExecutionProviderAvailable;
+			status.cudaExecutionProviderEnabled = snapshot.cudaExecutionProviderEnabled;
+			status.cudaExecutionProviderReason = snapshot.cudaExecutionProviderReason;
 			status.effectiveExecutionProvider = snapshot.effectiveExecutionProvider;
 			return status;
 			});

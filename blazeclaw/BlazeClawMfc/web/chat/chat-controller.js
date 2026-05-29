@@ -739,6 +739,11 @@
                 streamingLookbackMs: Number.isFinite(Number(stt.streamingLookbackMs))
                     ? Number(stt.streamingLookbackMs)
                     : 0,
+                provider: String(stt.provider || "").trim(),
+                effectiveExecutionProvider: String(stt.effectiveExecutionProvider || "").trim(),
+                cudaExecutionProviderAvailable: Boolean(stt.cudaExecutionProviderAvailable),
+                cudaExecutionProviderEnabled: Boolean(stt.cudaExecutionProviderEnabled),
+                cudaExecutionProviderReason: String(stt.cudaExecutionProviderReason || "").trim(),
                 transcriptSupportsSegments: Boolean(transcript.supportsSegments),
                 transcriptSupportsInterim: Boolean(transcript.supportsInterim),
                 transcriptSupportsFinal: transcript.supportsFinal !== false,
@@ -757,6 +762,11 @@
             const speechSession = source.speechSession && typeof source.speechSession === "object"
                 ? source.speechSession
                 : source;
+            const speechRuntime = speechSession.speechRuntime && typeof speechSession.speechRuntime === "object"
+                ? speechSession.speechRuntime
+                : source.speechRuntime && typeof source.speechRuntime === "object"
+                    ? source.speechRuntime
+                    : null;
             const segment = speechSession.segment && typeof speechSession.segment === "object"
                 ? speechSession.segment
                 : null;
@@ -806,6 +816,12 @@
                 retryable: Boolean(source.retry && source.retry.retryable),
                 retryStrategy: String(source.retry && source.retry.strategy || "immediate").trim() || "immediate",
                 retryGuidance: String(source.retry && source.retry.guidance || "").trim(),
+                speechRuntime: speechRuntime ? { ...speechRuntime } : null,
+                provider: String(speechRuntime && speechRuntime.provider || "").trim(),
+                effectiveExecutionProvider: String(speechRuntime && speechRuntime.effectiveExecutionProvider || "").trim(),
+                cudaExecutionProviderAvailable: Boolean(speechRuntime && speechRuntime.cudaExecutionProviderAvailable),
+                cudaExecutionProviderEnabled: Boolean(speechRuntime && speechRuntime.cudaExecutionProviderEnabled),
+                cudaExecutionProviderReason: String(speechRuntime && speechRuntime.cudaExecutionProviderReason || "").trim(),
                 updatedAtMs: Date.now(),
             };
         }
@@ -1018,6 +1034,11 @@
                 modelNativeVad: false,
                 streamingChunkMs: 0,
                 streamingLookbackMs: 0,
+                    provider: "",
+                    effectiveExecutionProvider: "",
+                    cudaExecutionProviderAvailable: false,
+                    cudaExecutionProviderEnabled: false,
+                    cudaExecutionProviderReason: "",
                     transcriptSupportsSegments: false,
                     transcriptSupportsInterim: false,
                     transcriptSupportsFinal: true,
@@ -1049,6 +1070,11 @@
                     modelNativeVad: false,
                     streamingChunkMs: 0,
                     streamingLookbackMs: 0,
+                    provider: "",
+                    effectiveExecutionProvider: "",
+                    cudaExecutionProviderAvailable: false,
+                    cudaExecutionProviderEnabled: false,
+                    cudaExecutionProviderReason: "",
                     transcriptSupportsSegments: false,
                     transcriptSupportsInterim: false,
                     transcriptSupportsFinal: true,
@@ -1081,6 +1107,12 @@
                     retryable: false,
                     retryStrategy: "immediate",
                     retryGuidance: "",
+                    speechRuntime: null,
+                    provider: "",
+                    effectiveExecutionProvider: "",
+                    cudaExecutionProviderAvailable: false,
+                    cudaExecutionProviderEnabled: false,
+                    cudaExecutionProviderReason: "",
                     updatedAtMs: 0,
                 };
         }

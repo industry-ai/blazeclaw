@@ -203,6 +203,18 @@ namespace blazeclaw::core::speechrecognition {
 
 			return true;
 		}
+
+		std::string ResolveCudaFallbackReason(
+			const std::string& reason,
+			bool cudaApiAvailable) {
+			if (!reason.empty()) {
+				return reason;
+			}
+
+			return cudaApiAvailable
+				? std::string("cuda_execution_provider_not_enabled_without_reported_error")
+				: std::string("cuda_execution_provider_unavailable_without_reported_error");
+		}
 #endif
 
 		constexpr std::uint32_t kDefaultSampleRate = 16000;
@@ -1857,7 +1869,9 @@ namespace blazeclaw::core::speechrecognition {
 			else {
 				m_snapshot.cudaExecutionProviderAvailable = cudaApiAvailable;
 				m_snapshot.cudaExecutionProviderEnabled = false;
-				m_snapshot.cudaExecutionProviderReason = cudaFallbackReason;
+				m_snapshot.cudaExecutionProviderReason = ResolveCudaFallbackReason(
+					cudaFallbackReason,
+					cudaApiAvailable);
 				m_snapshot.effectiveExecutionProvider = "cpu";
 			}
 			TraceRuntime(

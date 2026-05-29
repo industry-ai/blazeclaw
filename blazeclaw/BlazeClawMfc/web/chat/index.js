@@ -91,6 +91,19 @@
                 parts.push("final-only");
             }
             parts.push(capability.ttsSupported ? "tts available" : "tts off");
+            const capabilityEffectiveProvider = String(capability.effectiveExecutionProvider || "").trim();
+            if (capabilityEffectiveProvider) {
+                parts.push(`provider=${capabilityEffectiveProvider}`);
+            }
+            const capabilityCudaReason = String(capability.cudaExecutionProviderReason || "").trim();
+            if (capabilityEffectiveProvider === "cuda") {
+                parts.push("cuda=active");
+            } else if (capabilityCudaReason && capabilityCudaReason !== "none") {
+                parts.push(`cuda=${capabilityCudaReason}`);
+            } else if (capability.cudaExecutionProviderAvailable === false &&
+                capability.cudaExecutionProviderEnabled === false) {
+                parts.push("cuda=unavailable");
+            }
         }
 
         if (capability.error) {
@@ -122,6 +135,14 @@
             }
             if (sessionState.errorCode) {
                 parts.push(`err=${String(sessionState.errorCode)}`);
+            }
+            const sessionEffectiveProvider = String(sessionState.effectiveExecutionProvider || "").trim();
+            if (sessionEffectiveProvider && sessionEffectiveProvider !== String(capability && capability.effectiveExecutionProvider || "").trim()) {
+                parts.push(`sessionProvider=${sessionEffectiveProvider}`);
+            }
+            const sessionCudaReason = String(sessionState.cudaExecutionProviderReason || "").trim();
+            if (sessionCudaReason && sessionCudaReason !== "none") {
+                parts.push(`sessionCuda=${sessionCudaReason}`);
             }
         }
 
@@ -2738,6 +2759,10 @@
                             stage: String(state.speechSessionState.stage || ""),
                             segmentSequence: updatedSequence,
                             hasText: Boolean(state.speechSessionState.segmentText || state.speechSessionState.text),
+                            effectiveExecutionProvider: String(state.speechSessionState.effectiveExecutionProvider || ""),
+                            cudaExecutionProviderAvailable: Boolean(state.speechSessionState.cudaExecutionProviderAvailable),
+                            cudaExecutionProviderEnabled: Boolean(state.speechSessionState.cudaExecutionProviderEnabled),
+                            cudaExecutionProviderReason: String(state.speechSessionState.cudaExecutionProviderReason || ""),
                         });
                         updateComposerState();
                     }
