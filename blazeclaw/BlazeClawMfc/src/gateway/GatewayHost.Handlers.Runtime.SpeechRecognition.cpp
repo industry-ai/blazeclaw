@@ -7,6 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <chrono>
+
 namespace blazeclaw::gateway {
 
 	namespace handlers::runtime {
@@ -33,6 +35,13 @@ namespace blazeclaw::gateway {
 
 			const bool ringStreamingEnabled = isRingStreamingFeatureEnabled();
 
+			auto elapsedGatewayMs = [](const std::chrono::steady_clock::time_point& start) {
+				return static_cast<std::uint64_t>(
+					std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - start)
+						.count());
+			};
+
 			auto audioHandoffModeToString =
 				[](blazeclaw::core::speechrecognition::SpeechAudioHandoffMode mode) {
 					switch (mode) {
@@ -42,6 +51,24 @@ namespace blazeclaw::gateway {
 					default:
 						return std::string("wav_file");
 					}
+				};
+
+			auto buildFirstTokenTimingJson =
+				[](const std::optional<blazeclaw::core::speechrecognition::SpeechRecognitionDebugInfo>& debugInfo) {
+					const auto empty = blazeclaw::core::speechrecognition::SpeechRecognitionDebugInfo{};
+					const auto& timing = debugInfo.has_value() ? *debugInfo : empty;
+					return JsonObject({
+						{ "requestAcceptedOffsetMs", JsonNumber(timing.firstTokenRequestAcceptedOffsetMs) },
+						{ "streamingInputReadyOffsetMs", JsonNumber(timing.firstTokenStreamingInputReadyOffsetMs) },
+						{ "firstAudioReadableOffsetMs", JsonNumber(timing.firstTokenFirstAudioReadableOffsetMs) },
+						{ "firstAudioAcceptedOffsetMs", JsonNumber(timing.firstTokenFirstAudioAcceptedOffsetMs) },
+						{ "encoderStartOffsetMs", JsonNumber(timing.firstTokenEncoderStartOffsetMs) },
+						{ "encoderEndOffsetMs", JsonNumber(timing.firstTokenEncoderEndOffsetMs) },
+						{ "decoderStartOffsetMs", JsonNumber(timing.firstTokenDecoderStartOffsetMs) },
+						{ "joinerStartOffsetMs", JsonNumber(timing.firstTokenJoinerStartOffsetMs) },
+						{ "partialTextOffsetMs", JsonNumber(timing.firstTokenPartialTextOffsetMs) },
+						{ "nativePayloadReadyOffsetMs", JsonNumber(timing.firstTokenNativePayloadReadyOffsetMs) },
+					});
 				};
 
 					auto buildSegmentJson = [](const std::optional<blazeclaw::core::speechrecognition::SpeechTranscriptSegment>& segment) {
@@ -298,22 +325,35 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"gateway.speech.startRecording",
-				[&host, &buildAudioArtifactJson, &buildSpeechRuntimeProviderJson](const protocol::RequestFrame& request) {
+				[&host,
+					&buildAudioArtifactJson,
+					&buildSpeechRuntimeProviderJson,
+					&elapsedGatewayMs](const protocol::RequestFrame& request) {
+					const auto gatewayReceivedAt = std::chrono::steady_clock::now();
 					// Start native recording and return an object { ok: bool }
 					const auto result = host.StartNativeRecording();
+					const auto nativeRecordingStartedOffsetMs = elapsedGatewayMs(gatewayReceivedAt);
 					if (!result.ok) {
 						return protocol::ErrorResponse(request, std::string("start_recording_failed"), result.errorMessage);
 					}
 					auto currentArtifact = host.ResolveNativeRecordingArtifact(std::string{});
+					const auto nativeArtifactResolvedOffsetMs = elapsedGatewayMs(gatewayReceivedAt);
+					const std::string gatewayTimingJson = JsonObject({
+						{ "gatewayStartRecordingReceivedOffsetMs", JsonNumber(0ULL) },
+						{ "nativeRecordingStartedOffsetMs", JsonNumber(nativeRecordingStartedOffsetMs) },
+						{ "nativeArtifactResolvedOffsetMs", JsonNumber(nativeArtifactResolvedOffsetMs) },
+					});
 					const std::string payload = currentArtifact.has_value()
 						? JsonObject({
 							{ "ok", JsonBool(true) },
 							{ "audioArtifact", buildAudioArtifactJson(*currentArtifact) },
 							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
+							{ "firstTokenTiming", gatewayTimingJson },
 						})
 						: JsonObject({
 							{ "ok", JsonBool(true) },
 							{ "speechRuntime", buildSpeechRuntimeProviderJson() },
+							{ "firstTokenTiming", gatewayTimingJson },
 						});
 					return protocol::OkResponse(request, payload);
 				});
@@ -535,7 +575,10 @@ namespace blazeclaw::gateway {
 					&tryParseAudioArtifact,
 					&buildAudioArtifactJson,
 					&buildSpeechRuntimeProviderJson,
+					&buildFirstTokenTimingJson,
+					&elapsedGatewayMs,
 					&ringStreamingEnabled](const protocol::RequestFrame& request) {
+				const auto gatewayTranscribeReceivedAt = std::chrono::steady_clock::now();
 				auto executionStageToString =
 					[](blazeclaw::core::speechrecognition::SpeechExecutionStage stage) {
 						switch (stage) {
@@ -814,6 +857,9 @@ namespace blazeclaw::gateway {
 					const std::uint64_t normalizedTextLength = static_cast<std::uint64_t>(normalizedText.size());
 					const std::uint64_t segmentTextLength = static_cast<std::uint64_t>(effectiveSegmentText.size());
 					const auto& debugInfo = transcribe.sessionState.debugInfo;
+					const std::string firstTokenTimingJson = buildFirstTokenTimingJson(debugInfo);
+					const std::uint64_t gatewayNativePayloadReadyOffsetMs = elapsedGatewayMs(
+						gatewayTranscribeReceivedAt);
 
 					EmitTelemetryEvent(
 						"gateway.speech.debug.snapshot",
@@ -927,6 +973,8 @@ namespace blazeclaw::gateway {
 							{ "sherpaBaselineTokenIds", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenIds : std::string()) },
 							{ "sherpaBaselineTokenPieces", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenPieces : std::string()) },
 							{ "sherpaBaselineDiagnosticPath", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineDiagnosticPath : std::string()) },
+								{ "firstTokenTiming", firstTokenTimingJson },
+								{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorMessage", JsonString(transcribe.errorMessage) },
@@ -966,6 +1014,8 @@ namespace blazeclaw::gateway {
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(normalizedLatency)) },
 							{ "hasSegment", JsonBool(hasSegment) },
 							{ "segment", segmentJson },
+								{ "firstTokenTiming", firstTokenTimingJson },
+								{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorClass", JsonString(errorClass) },
@@ -1000,6 +1050,7 @@ namespace blazeclaw::gateway {
 							{ "cancelled", JsonBool(transcribe.sessionState.cancelled) },
 							{ "audioArtifact", audioArtifactJson },
 							{ "segment", segmentJson },
+								{ "firstTokenTiming", firstTokenTimingJson },
 							{ "speechRuntime", speechRuntimeProviderJson },
 						});
 
@@ -1017,6 +1068,8 @@ namespace blazeclaw::gateway {
 							{ "audioPath", JsonString(transcribe.sessionState.audioPath) },
 							{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(transcribe.latencyMs)) },
 							{ "segment", segmentJson },
+							{ "firstTokenTiming", firstTokenTimingJson },
+							{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "speechSession", speechSessionJson },
 							{ "executionState", JsonObject({
@@ -1030,6 +1083,7 @@ namespace blazeclaw::gateway {
 								{ "cancelRequested", JsonBool(false) },
 								{ "audioArtifact", audioArtifactJson },
 								{ "segment", segmentJson },
+								{ "firstTokenTiming", firstTokenTimingJson },
 								{ "speechRuntime", speechRuntimeProviderJson },
 							}) },
 							{ "transcriptInjection", JsonObject({
@@ -1054,6 +1108,7 @@ namespace blazeclaw::gateway {
 								{ "stage", JsonString(normalizedStage) },
 								{ "hasSegment", JsonBool(hasSegment) },
 								{ "audioArtifact", audioArtifactJson },
+								{ "firstTokenTiming", firstTokenTimingJson },
 								{ "speechRuntime", speechRuntimeProviderJson },
 							}) },
 							{ "errorCode", JsonString(transcribe.errorCode) },

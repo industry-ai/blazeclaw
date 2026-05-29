@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <chrono>
 #include <numeric>
 #include <sstream>
 #include <iomanip>
@@ -365,6 +366,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 		bool IsSherpaVerboseTraceEnabled() {
 			static const bool enabled = ReadEnvironmentFlag("BLAZECLAW_SHERPA_VERBOSE_TRACE");
 			return enabled;
+		}
+
+		std::uint64_t ElapsedMsSince(
+			const std::chrono::steady_clock::time_point& start) {
+			if (start == std::chrono::steady_clock::time_point{}) {
+				return 0;
+			}
+
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - start)
+					.count());
 		}
 
 		SherpaFbankSampleScalingPolicy ResolveSherpaFbankSampleScalingPolicy() {
@@ -1981,6 +1994,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 			cachedState.contractStateCacheSummary = encoderStateCacheSummary;
 			cachedState.contractDecoderJoinerSummary = decoderJoinerContractSummary;
+			if (cachedState.firstTokenTraceStart == std::chrono::steady_clock::time_point{}) {
+				cachedState.firstTokenTraceStart = std::chrono::steady_clock::now();
+			}
 			streamState = cachedState;
 		}
 
@@ -2300,6 +2316,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 			if (nextSequence >= readableEnd) {
 				break;
 			}
+			if (streamState.firstTokenFirstAudioReadableOffsetMs == 0) {
+				streamState.firstTokenFirstAudioReadableOffsetMs = ElapsedMsSince(
+					streamState.firstTokenTraceStart);
+			}
 
 			const std::size_t requestSamples = static_cast<std::size_t>((std::min)(
 				static_cast<std::uint64_t>(chunkSamples),
@@ -2314,6 +2334,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 				requestSamples,
 				chunk)) {
 				break;
+			}
+			if (streamState.firstTokenFirstAudioAcceptedOffsetMs == 0) {
+				streamState.firstTokenFirstAudioAcceptedOffsetMs = ElapsedMsSince(
+					streamState.firstTokenTraceStart);
 			}
 
 			++streamState.chunkCount;
@@ -2667,6 +2691,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 						encoderOutputNames.push_back(outputName.c_str());
 					}
 
+					if (streamState.firstTokenEncoderStartOffsetMs == 0) {
+						streamState.firstTokenEncoderStartOffsetMs = ElapsedMsSince(
+							streamState.firstTokenTraceStart);
+					}
 					auto encoderOutputs = m_encoderSession->Run(
 						Ort::RunOptions{ nullptr },
 						encoderInputNames.data(),
@@ -2674,6 +2702,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 						encoderInputs.size(),
 						encoderOutputNames.data(),
 						encoderOutputNames.size());
+					if (streamState.firstTokenEncoderEndOffsetMs == 0) {
+						streamState.firstTokenEncoderEndOffsetMs = ElapsedMsSince(
+							streamState.firstTokenTraceStart);
+					}
 
 					if (!encoderOutputs.empty()) {
 						std::optional<std::size_t> encoderOutputFrameLimit;
@@ -2853,6 +2885,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 									if (encoderFrames > 0 && encoderDim > 0) {
 										streamState.encoderFrameCount += static_cast<std::uint64_t>(encoderFrames);
 										std::vector<float> decoderVector;
+										if (streamState.firstTokenDecoderStartOffsetMs == 0) {
+											streamState.firstTokenDecoderStartOffsetMs = ElapsedMsSince(
+												streamState.firstTokenTraceStart);
+										}
 										if (updateDecoderFromContext(decoderVector)) {
 											for (std::size_t frameIdx = 0; frameIdx < encoderFrames; ++frameIdx) {
 												if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
@@ -3003,6 +3039,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 													joinerOutputNames.push_back(outputName.c_str());
 												}
 
+											if (streamState.firstTokenJoinerStartOffsetMs == 0) {
+												streamState.firstTokenJoinerStartOffsetMs = ElapsedMsSince(
+													streamState.firstTokenTraceStart);
+											}
 											++streamState.joinerCallCount;
 											auto joinerOutputs = m_joinerSession->Run(
 													Ort::RunOptions{ nullptr },
@@ -3260,7 +3300,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 				if (inferenceFailed) {
 					break;
 				}
-				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
+					const bool hadPartialText = !streamState.partialText.empty();
+					streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
+					if (!hadPartialText &&
+						!streamState.partialText.empty() &&
+						streamState.firstTokenPartialTextOffsetMs == 0) {
+						streamState.firstTokenPartialTextOffsetMs = ElapsedMsSince(
+							streamState.firstTokenTraceStart);
+					}
 				{
 					const auto decodedRepeat = ClassifyDecodedRepeats(streamState.partialText);
 					ApplyDecodedRepeatDiagnostics(streamState, decodedRepeat, "diagnostic_only");
@@ -3410,6 +3457,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 			result.sessionState.streamingInput->source.sequenceEnd = streamingInput.source.sequenceEnd;
 		}
 		result.sessionState.debugInfo = SpeechRecognitionDebugInfo{
+			.firstTokenFirstAudioReadableOffsetMs = streamState.firstTokenFirstAudioReadableOffsetMs,
+			.firstTokenFirstAudioAcceptedOffsetMs = streamState.firstTokenFirstAudioAcceptedOffsetMs,
+			.firstTokenEncoderStartOffsetMs = streamState.firstTokenEncoderStartOffsetMs,
+			.firstTokenEncoderEndOffsetMs = streamState.firstTokenEncoderEndOffsetMs,
+			.firstTokenDecoderStartOffsetMs = streamState.firstTokenDecoderStartOffsetMs,
+			.firstTokenJoinerStartOffsetMs = streamState.firstTokenJoinerStartOffsetMs,
+			.firstTokenPartialTextOffsetMs = streamState.firstTokenPartialTextOffsetMs,
 			.sherpaChunkCount = streamState.chunkCount,
 			.sherpaDecodedTokenCount = streamState.decodedTokenCount,
 			.sherpaEmittedTokenCount = static_cast<std::uint64_t>(streamState.baselineTokenIds.size()),

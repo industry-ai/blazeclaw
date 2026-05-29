@@ -108,6 +108,16 @@ namespace blazeclaw::core::speechrecognition {
 	};
 
 	struct SpeechRecognitionDebugInfo {
+		std::uint64_t firstTokenRequestAcceptedOffsetMs = 0;
+		std::uint64_t firstTokenStreamingInputReadyOffsetMs = 0;
+		std::uint64_t firstTokenFirstAudioReadableOffsetMs = 0;
+		std::uint64_t firstTokenFirstAudioAcceptedOffsetMs = 0;
+		std::uint64_t firstTokenEncoderStartOffsetMs = 0;
+		std::uint64_t firstTokenEncoderEndOffsetMs = 0;
+		std::uint64_t firstTokenDecoderStartOffsetMs = 0;
+		std::uint64_t firstTokenJoinerStartOffsetMs = 0;
+		std::uint64_t firstTokenPartialTextOffsetMs = 0;
+		std::uint64_t firstTokenNativePayloadReadyOffsetMs = 0;
 		std::uint64_t sherpaChunkCount = 0;
 		std::uint64_t sherpaDecodedTokenCount = 0;
 		std::uint64_t sherpaEmittedTokenCount = 0;

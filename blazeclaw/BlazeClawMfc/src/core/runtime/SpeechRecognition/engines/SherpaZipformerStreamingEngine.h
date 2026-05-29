@@ -81,6 +81,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 		};
 
 		struct StreamState {
+			std::chrono::steady_clock::time_point firstTokenTraceStart{};
+			std::uint64_t firstTokenFirstAudioReadableOffsetMs = 0;
+			std::uint64_t firstTokenFirstAudioAcceptedOffsetMs = 0;
+			std::uint64_t firstTokenEncoderStartOffsetMs = 0;
+			std::uint64_t firstTokenEncoderEndOffsetMs = 0;
+			std::uint64_t firstTokenDecoderStartOffsetMs = 0;
+			std::uint64_t firstTokenJoinerStartOffsetMs = 0;
+			std::uint64_t firstTokenPartialTextOffsetMs = 0;
 			std::uint64_t nextSequence = 0;
 			std::uint32_t segmentSequence = 0;
 			std::vector<std::int64_t> decoderContext;

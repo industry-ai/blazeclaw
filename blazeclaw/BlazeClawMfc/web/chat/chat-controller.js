@@ -767,6 +767,11 @@
                 : source.speechRuntime && typeof source.speechRuntime === "object"
                     ? source.speechRuntime
                     : null;
+            const firstTokenTiming = speechSession.firstTokenTiming && typeof speechSession.firstTokenTiming === "object"
+                ? speechSession.firstTokenTiming
+                : source.firstTokenTiming && typeof source.firstTokenTiming === "object"
+                    ? source.firstTokenTiming
+                    : null;
             const segment = speechSession.segment && typeof speechSession.segment === "object"
                 ? speechSession.segment
                 : null;
@@ -822,6 +827,10 @@
                 cudaExecutionProviderAvailable: Boolean(speechRuntime && speechRuntime.cudaExecutionProviderAvailable),
                 cudaExecutionProviderEnabled: Boolean(speechRuntime && speechRuntime.cudaExecutionProviderEnabled),
                 cudaExecutionProviderReason: String(speechRuntime && speechRuntime.cudaExecutionProviderReason || "").trim(),
+                firstTokenTiming: firstTokenTiming ? { ...firstTokenTiming } : null,
+                gatewayNativePayloadReadyOffsetMs: Number.isFinite(Number(source.gatewayNativePayloadReadyOffsetMs))
+                    ? Number(source.gatewayNativePayloadReadyOffsetMs)
+                    : 0,
                 updatedAtMs: Date.now(),
             };
         }
@@ -1113,6 +1122,8 @@
                     cudaExecutionProviderAvailable: false,
                     cudaExecutionProviderEnabled: false,
                     cudaExecutionProviderReason: "",
+                    firstTokenTiming: null,
+                    gatewayNativePayloadReadyOffsetMs: 0,
                     updatedAtMs: 0,
                 };
         }

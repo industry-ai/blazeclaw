@@ -353,6 +353,10 @@ Add focused coverage for live updates.
 Implemented behavior:
 - `web/chat/index.js` now emits metadata-only preview diagnostics for request start/end, skipped busy ticks, stale generations, inactive-stage stops, and preview errors.
 - preview diagnostics include run id, generation, stage, segment sequence, audio path/artifact presence, text presence, effective speech execution provider, CUDA availability/enabled flags, and CUDA fallback reason without logging transcript content.
+- preview diagnostics now also include first-token timing checkpoints for click,
+  start-recording response, preview request/response, native first readable and
+  accepted audio, encoder/decoder/joiner start, first partial text, native
+  payload readiness, gateway payload readiness, and first WebView render.
 - `web/chat/chat-controller.js` now emits `speech.final.replacement` operator diagnostics after successful authoritative final transcript replacement.
 - `window.BlazeClawChatController.runRegressionChecks()` now covers interim lifecycle updates without chat append, stale preview suppression, final-only speech send, and final replacement diagnostics.
 - existing `tests/SpeechRecognitionRealtimeStreamingTests.cpp` coverage was reviewed for Sherpa streaming segment, sequence catch-up, and cancellation behavior.
@@ -373,6 +377,9 @@ Existing relevant tests to extend or mirror:
 Diagnostics:
 - Add trace logs for preview request start/end, skipped ticks, segment sequence, and final replacement.
 - Include runtime provider diagnostics with live speech lifecycle payloads: `provider`, `effectiveExecutionProvider`, `cudaExecutionProviderAvailable`, `cudaExecutionProviderEnabled`, `cudaExecutionProviderReason`, chunk/lookback, threads, and execution mode.
+- Include first-token timing diagnostics with live speech lifecycle payloads and
+  WebView preview diagnostics through the `firstTokenTiming` object and the
+  correlated `speech-preview-*` run id.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -381,6 +388,8 @@ Acceptance criteria:
 - completed: stop/finalization sends only authoritative final text in regression coverage.
 - completed: diagnostics cover preview request start/end/skips/stale/error and final replacement without logging transcript content.
 - completed: diagnostics expose the actual speech runtime provider and CUDA fallback reason in WebView status/preview diagnostics and native gateway speech payloads.
+- completed: diagnostics expose first-token latency checkpoints across native
+  Sherpa streaming, gateway payload emission, and WebView first-render events.
 
 ## Rollout Strategy
 

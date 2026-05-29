@@ -2664,8 +2664,15 @@
         let liveSpeechPollBusy = false;
         let liveSpeechPollGeneration = 0;
         let liveSpeechPollInFlightRunId = "";
+        let speechFirstTokenTrace = null;
         const liveSpeechPollIntervalMs = 1200;
         const liveSpeechPollTimeoutMs = 8000;
+        const nowPerfMs = () => {
+            if (window.performance && typeof window.performance.now === "function") {
+                return window.performance.now();
+            }
+            return Date.now();
+        };
         const emitSpeechPreviewDiagnostic = (counterName, details) => {
             if (typeof controller.getOperatorDiagnosticsSnapshot === "function" &&
                 window.console &&
@@ -2684,6 +2691,34 @@
             }
             liveSpeechPollBusy = false;
             liveSpeechPollInFlightRunId = "";
+        };
+        const emitFirstTokenRenderDiagnostic = (runId, sessionState) => {
+            const text = String(sessionState && (sessionState.segmentText || sessionState.text) || "").trim();
+            if (!text || !speechFirstTokenTrace || speechFirstTokenTrace.firstRendered) {
+                return;
+            }
+
+            const activeRunId = String(runId || sessionState.runId || "").trim();
+            if (speechFirstTokenTrace.runId && activeRunId && speechFirstTokenTrace.runId !== activeRunId) {
+                return;
+            }
+
+            speechFirstTokenTrace.firstRendered = true;
+            speechFirstTokenTrace.firstRenderAtMs = nowPerfMs();
+            emitSpeechPreviewDiagnostic("speech.first_token.rendered", {
+                runId: activeRunId,
+                sessionId: String(sessionState.sessionId || ""),
+                clickToRenderMs: speechFirstTokenTrace.clickAtMs
+                    ? Math.max(0, speechFirstTokenTrace.firstRenderAtMs - speechFirstTokenTrace.clickAtMs)
+                    : 0,
+                previewResponseToRenderMs: speechFirstTokenTrace.previewResponseAtMs
+                    ? Math.max(0, speechFirstTokenTrace.firstRenderAtMs - speechFirstTokenTrace.previewResponseAtMs)
+                    : 0,
+                firstTokenTiming: sessionState.firstTokenTiming || null,
+                gatewayNativePayloadReadyOffsetMs: Number(sessionState.gatewayNativePayloadReadyOffsetMs || 0),
+                effectiveExecutionProvider: String(sessionState.effectiveExecutionProvider || ""),
+                cudaExecutionProviderReason: String(sessionState.cudaExecutionProviderReason || ""),
+            });
         };
         const startLiveSpeechPoll = (audioPath, audioArtifact, prompt, previewRunId) => {
             stopLiveSpeechPoll();
@@ -2726,12 +2761,16 @@
 
                 liveSpeechPollBusy = true;
                 liveSpeechPollInFlightRunId = stablePreviewRunId;
+                const previewRequestAtMs = nowPerfMs();
                 emitSpeechPreviewDiagnostic("speech.preview.request_start", {
                     runId: stablePreviewRunId,
                     generation: pollGeneration,
                     stage,
                     hasAudioArtifact: Boolean(audioArtifact),
                     hasAudioPath: Boolean(audioPath),
+                    clickToPreviewRequestMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
+                        ? Math.max(0, previewRequestAtMs - speechFirstTokenTrace.clickAtMs)
+                        : 0,
                 });
                 try {
                     await controller.transcribeSpeech({
@@ -2752,6 +2791,10 @@
                     }
                     if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                         state.speechSessionState = controller.getSpeechSessionStateSnapshot();
+                        const previewResponseAtMs = nowPerfMs();
+                        if (speechFirstTokenTrace && speechFirstTokenTrace.runId === stablePreviewRunId) {
+                            speechFirstTokenTrace.previewResponseAtMs = previewResponseAtMs;
+                        }
                         const updatedSequence = Number(state.speechSessionState.segmentSequence || 0);
                         emitSpeechPreviewDiagnostic("speech.preview.request_end", {
                             runId: stablePreviewRunId,
@@ -2759,12 +2802,19 @@
                             stage: String(state.speechSessionState.stage || ""),
                             segmentSequence: updatedSequence,
                             hasText: Boolean(state.speechSessionState.segmentText || state.speechSessionState.text),
+                            previewRequestToResponseMs: Math.max(0, previewResponseAtMs - previewRequestAtMs),
+                            clickToPreviewResponseMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
+                                ? Math.max(0, previewResponseAtMs - speechFirstTokenTrace.clickAtMs)
+                                : 0,
+                            firstTokenTiming: state.speechSessionState.firstTokenTiming || null,
+                            gatewayNativePayloadReadyOffsetMs: Number(state.speechSessionState.gatewayNativePayloadReadyOffsetMs || 0),
                             effectiveExecutionProvider: String(state.speechSessionState.effectiveExecutionProvider || ""),
                             cudaExecutionProviderAvailable: Boolean(state.speechSessionState.cudaExecutionProviderAvailable),
                             cudaExecutionProviderEnabled: Boolean(state.speechSessionState.cudaExecutionProviderEnabled),
                             cudaExecutionProviderReason: String(state.speechSessionState.cudaExecutionProviderReason || ""),
                         });
                         updateComposerState();
+                        emitFirstTokenRenderDiagnostic(stablePreviewRunId, state.speechSessionState);
                     }
                 } catch (_error) {
                     emitSpeechPreviewDiagnostic("speech.preview.request_error", {
@@ -2804,9 +2854,14 @@
             recordingBusy = true;
             try {
                 if (!recordingActive) {
+                    const clickAtMs = nowPerfMs();
+                    emitSpeechPreviewDiagnostic("speech.first_token.click", {
+                        sessionId: state.sessionKey,
+                    });
                     const startResponse = await controller.request("gateway.speech.startRecording", {
                         sessionId: state.sessionKey,
                     });
+                    const startResponseAtMs = nowPerfMs();
                     const startPayload = startResponse && typeof startResponse.payload === "object"
                         ? startResponse.payload
                         : {};
@@ -2815,6 +2870,21 @@
                         ? startPayload.audioArtifact
                         : null;
                     const previewRunId = `speech-preview-${Date.now()}`;
+                    speechFirstTokenTrace = {
+                        runId: previewRunId,
+                        sessionId: state.sessionKey,
+                        clickAtMs,
+                        startResponseAtMs,
+                        firstRendered: false,
+                    };
+                    emitSpeechPreviewDiagnostic("speech.first_token.start_recording_response", {
+                        runId: previewRunId,
+                        sessionId: state.sessionKey,
+                        clickToStartResponseMs: Math.max(0, startResponseAtMs - clickAtMs),
+                        firstTokenTiming: startPayload.firstTokenTiming || null,
+                        effectiveExecutionProvider: String(startPayload.speechRuntime && startPayload.speechRuntime.effectiveExecutionProvider || ""),
+                        cudaExecutionProviderReason: String(startPayload.speechRuntime && startPayload.speechRuntime.cudaExecutionProviderReason || ""),
+                    });
                     if (typeof controller.applySpeechLifecycleUpdate === "function") {
                         controller.applySpeechLifecycleUpdate({
                             stage: "recording",
@@ -2822,6 +2892,8 @@
                             runId: previewRunId,
                             audioPath: startAudioPath,
                             audioArtifact: startAudioArtifact,
+                            speechRuntime: startPayload.speechRuntime || null,
+                            firstTokenTiming: startPayload.firstTokenTiming || null,
                             text: "",
                             errorCode: "",
                             errorMessage: "",

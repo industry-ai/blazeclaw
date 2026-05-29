@@ -194,9 +194,44 @@ Acceptance criteria:
 
 ## Step 2: Add First-Token Latency Instrumentation
 
+Status: completed
+
 Add timestamped checkpoints across the native and WebView live-recognition path.
 Use monotonic timestamps for native measurements and include enough correlation
 IDs to connect native runtime, gateway, and WebView events.
+
+Implemented behavior:
+
+- `SpeechRecognitionDebugInfo` now carries first-token offset fields for native
+  streaming recognition diagnostics.
+- `SherpaZipformerStreamingEngine` records monotonic offsets for:
+  - first readable audio in the ring stream
+  - first accepted audio chunk
+  - first encoder invocation start/end
+  - first decoder invocation start
+  - first joiner invocation start
+  - first non-empty partial text
+- `SpeechRecognitionRuntime::Transcribe(...)` records request, inferred
+  streaming-input, and native payload-ready offsets for streaming Sherpa
+  results.
+- `GatewayHost.Handlers.Runtime.SpeechRecognition.cpp` emits a
+  `firstTokenTiming` object through:
+  - `gateway.speech.startRecording` responses
+  - `speech.transcribe` responses
+  - nested `speechSession`, `executionState`, and `speechArtifact` payloads
+  - `gateway.speech.lifecycle` and `gateway.speech.debug.snapshot` telemetry
+- `web/chat/chat-controller.js` normalizes `firstTokenTiming` and
+  `gatewayNativePayloadReadyOffsetMs` into `speechSessionState`.
+- `web/chat/index.js` emits WebView diagnostics for:
+  - `speech.first_token.click`
+  - `speech.first_token.start_recording_response`
+  - preview request/response timing
+  - `speech.first_token.rendered`
+
+The timing fields are offsets within the relevant monotonic clock domain. Native
+offsets are comparable within the native trace; WebView offsets are comparable
+within the WebView trace. The shared preview `runId` and session id correlate the
+two traces.
 
 Measure these checkpoints:
 
@@ -215,10 +250,15 @@ Measure these checkpoints:
 
 Acceptance criteria:
 
-- Logs identify the largest delay segment for first character arrival.
-- Measurements include provider, chunk size, lookback size, threads, and model
+- completed: Logs identify the largest delay segment for first character arrival.
+- completed: Measurements include provider, chunk size, lookback size, threads, and model
   layout.
-- CPU and CUDA timings can be compared from the same trace format.
+- completed: CPU and CUDA timings can be compared from the same trace format.
+
+Validation:
+
+- `node --check "BlazeClawMfc/web/chat/chat-controller.js"`
+- `node --check "BlazeClawMfc/web/chat/index.js"`
 
 ## Step 3: Verify and Stabilize Hot Runtime Warmup
 

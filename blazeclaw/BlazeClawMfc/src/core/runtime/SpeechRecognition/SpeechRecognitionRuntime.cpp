@@ -2129,6 +2129,12 @@ namespace blazeclaw::core::speechrecognition {
 		result.sessionState.stage = SpeechSessionStage::Transcribing;
 		result.sessionState.segment = std::nullopt;
 		const auto startedAt = std::chrono::steady_clock::now();
+		auto elapsedSinceStartMs = [&startedAt]() {
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - startedAt)
+					.count());
+		};
 		++m_snapshot.transcribeRequestsStarted;
 		TraceRuntime(
 			"transcribe.request.accepted",
@@ -2257,6 +2263,12 @@ namespace blazeclaw::core::speechrecognition {
 			auto streamingResult = m_sessionState->sherpaStreamingEngine->TranscribeStreaming(
 				streamingRequest,
 				cancelledChecker);
+			if (!streamingResult.sessionState.debugInfo.has_value()) {
+				streamingResult.sessionState.debugInfo = SpeechRecognitionDebugInfo{};
+			}
+			streamingResult.sessionState.debugInfo->firstTokenRequestAcceptedOffsetMs = 0;
+			streamingResult.sessionState.debugInfo->firstTokenStreamingInputReadyOffsetMs =
+				hasStreamingInput ? 0 : elapsedSinceStartMs();
 
 			streamingResult.sessionState.sessionId = request.sessionId;
 			streamingResult.sessionState.runId = request.runId;
@@ -2276,6 +2288,10 @@ namespace blazeclaw::core::speechrecognition {
 			}
 			if (streamingResult.sessionState.latencyMs == 0) {
 				streamingResult.sessionState.latencyMs = streamingResult.latencyMs;
+			}
+			if (streamingResult.sessionState.debugInfo.has_value()) {
+				streamingResult.sessionState.debugInfo->firstTokenNativePayloadReadyOffsetMs =
+					static_cast<std::uint64_t>(latencyMs);
 			}
 
 			if (streamingResult.ok) {
