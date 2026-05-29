@@ -164,6 +164,8 @@ This is lower priority than CUDA guard parity because the observed crash is nati
 
 ## Implementation Steps
 
+Status: implemented in the BlazeClaw speech runtime and wired into the app/test projects.
+
 1. Extract CUDA compatibility guard helpers into a shared speech runtime utility.
    - Candidate new files:
 	 - `BlazeClawMfc/src/core/runtime/SpeechRecognition/SpeechCudaCompatibilityGuard.h`
@@ -190,6 +192,16 @@ This is lower priority than CUDA guard parity because the observed crash is nati
    ```powershell
    msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
    ```
+
+## Implementation Notes
+
+- Added `SpeechCudaCompatibilityGuard.h/.cpp` as the shared CUDA/cuDNN major-version guard.
+- `SpeechRecognitionRuntime.cpp` now uses the shared guard and passes its process latch state into the Sherpa engine before `Load(...)`.
+- `SherpaZipformerStreamingEngine::ExecutionProviderOptions` and `ExecutionProviderStatus` now carry guard-latch state and reason strings.
+- Sherpa load now skips CUDA EP append when the guard is already latched or when an incompatible loaded CUDA/cuDNN major is detected.
+- CUDA session creation exceptions still fall back to CPU session creation.
+- Sherpa provider decisions and pre-encoder-run diagnostics now trace the effective provider, CUDA reason, tensor counts, feature shape, element count, and state-cache summary.
+- Added `SpeechCudaCompatibilityGuardTests.cpp` for guard formatting and Sherpa latch/provider-status behavior.
 
 ## Immediate Workarounds Until the Fix Lands
 

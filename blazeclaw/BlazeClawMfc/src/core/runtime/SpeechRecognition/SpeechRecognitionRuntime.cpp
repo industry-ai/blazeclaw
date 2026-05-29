@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SpeechRecognitionRuntime.h"
+#include "SpeechCudaCompatibilityGuard.h"
 #include "SpeechModelLayoutProbe.h"
 #include "StreamingAudioSourceRegistry.h"
 #include "engines/SherpaZipformerStreamingEngine.h"
@@ -65,84 +66,6 @@ namespace blazeclaw::core::speechrecognition {
 			}
 
 			return DecoderInputKind::UnknownFloat;
-		}
-
-		std::vector<int> DetectLoadedModuleMajors(
-			const std::wstring& modulePattern,
-			int minMajor,
-			int maxMajor) {
-			std::vector<int> majors;
-			for (int major = minMajor; major <= maxMajor; ++major) {
-				wchar_t moduleName[MAX_PATH]{};
-				swprintf_s(moduleName, modulePattern.c_str(), major);
-				if (::GetModuleHandleW(moduleName) != nullptr) {
-					majors.push_back(major);
-				}
-			}
-			return majors;
-		}
-
-		bool IsLoadedMajorCompatible(
-			const std::wstring& modulePattern,
-			const char* moduleLabel,
-			int expectedMajor,
-			std::vector<std::string>& violations,
-			std::vector<std::string>& observed) {
-			const auto loadedMajors = DetectLoadedModuleMajors(modulePattern, 0, 20);
-			for (const auto major : loadedMajors) {
-				observed.push_back(std::string(moduleLabel) + "=" + std::to_string(major));
-			}
-
-			for (const auto major : loadedMajors) {
-				if (major != expectedMajor) {
-					violations.push_back(
-						std::string(moduleLabel) +
-						" major=" + std::to_string(major) +
-						" expected=" + std::to_string(expectedMajor));
-				}
-			}
-
-			return violations.empty();
-		}
-
-		bool PassesSpeechCudaCompatibilityGuard(std::string& outReason) {
-			outReason.clear();
-			std::vector<std::string> violations;
-			std::vector<std::string> observed;
-
-			IsLoadedMajorCompatible(L"cublas64_%d.dll", "cublas", 12, violations, observed);
-			IsLoadedMajorCompatible(L"cublasLt64_%d.dll", "cublasLt", 12, violations, observed);
-			IsLoadedMajorCompatible(L"cufft64_%d.dll", "cufft", 12, violations, observed);
-			IsLoadedMajorCompatible(L"cudnn64_%d.dll", "cudnn", 9, violations, observed);
-			IsLoadedMajorCompatible(L"cudnn_graph64_%d.dll", "cudnn_graph", 9, violations, observed);
-			IsLoadedMajorCompatible(L"cudnn_engines_precompiled64_%d.dll", "cudnn_engines_precompiled", 9, violations, observed);
-			IsLoadedMajorCompatible(L"cudnn_engines_runtime_compiled64_%d.dll", "cudnn_engines_runtime_compiled", 9, violations, observed);
-
-			if (violations.empty()) {
-				return true;
-			}
-
-			std::ostringstream oss;
-			oss << "compatibility_guard_blocked";
-			if (!observed.empty()) {
-				oss << " observed=";
-				for (std::size_t i = 0; i < observed.size(); ++i) {
-					if (i > 0) {
-						oss << ",";
-					}
-					oss << observed[i];
-				}
-			}
-			oss << " violations=";
-			for (std::size_t i = 0; i < violations.size(); ++i) {
-				if (i > 0) {
-					oss << ";";
-				}
-				oss << violations[i];
-			}
-
-			outReason = oss.str();
-			return false;
 		}
 
 		void ConfigureDefaultSessionOptions(
@@ -1811,16 +1734,20 @@ namespace blazeclaw::core::speechrecognition {
 					std::make_unique<engines::SherpaZipformerStreamingEngine>();
 			}
 
+			engines::SherpaZipformerStreamingEngine::ExecutionProviderOptions sherpaProviderOptions{
+				.cudaEnabled = m_config.speechRecognition.cudaEnabled,
+				.threads = m_snapshot.threads,
+				.executionMode = m_snapshot.executionMode,
+				.cudaCompatibilityGuardLatched = m_cudaCompatibilityGuardLatched,
+				.cudaCompatibilityGuardLatchedReason = m_cudaCompatibilityGuardLatchedReason,
+			};
+
 			std::string sherpaLoadError;
 			engines::SherpaZipformerStreamingEngine::ExecutionProviderStatus sherpaProviderStatus;
 			if (!m_sessionState->sherpaStreamingEngine->Load(
 				rootPath,
 				layoutProbe,
-				engines::SherpaZipformerStreamingEngine::ExecutionProviderOptions{
-					.cudaEnabled = m_config.speechRecognition.cudaEnabled,
-					.threads = m_snapshot.threads,
-					.executionMode = m_snapshot.executionMode,
-				},
+				sherpaProviderOptions,
 				sherpaProviderStatus,
 				sherpaLoadError)) {
 				outResult.ok = false;
@@ -1851,6 +1778,13 @@ namespace blazeclaw::core::speechrecognition {
 				sherpaProviderStatus.cudaExecutionProviderReason;
 			m_snapshot.effectiveExecutionProvider =
 				sherpaProviderStatus.effectiveExecutionProvider;
+			if (sherpaProviderStatus.cudaCompatibilityGuardLatched) {
+				m_cudaCompatibilityGuardLatched = true;
+				m_cudaCompatibilityGuardLatchedReason =
+					sherpaProviderStatus.cudaCompatibilityGuardLatchedReason.empty()
+					? sherpaProviderStatus.cudaExecutionProviderReason
+					: sherpaProviderStatus.cudaCompatibilityGuardLatchedReason;
+			}
 			TraceRuntime(
 				"runtime.execution_provider",
 				std::string(),

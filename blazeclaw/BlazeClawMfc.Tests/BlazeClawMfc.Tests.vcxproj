@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ProjectConfiguration Include="Debug|x64">
@@ -93,6 +93,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTsAggregateParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionOfflineOptimizationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechCudaCompatibilityGuardTests.cpp" />
    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionModelLayoutDetectionTests.cpp" />
    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionRealtimeStreamingTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SherpaStep8BaselineToolTests.cpp" />
@@ -215,6 +216,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechModelLayoutProbe.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\SpeechCudaCompatibilityGuard.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\runtime\\SpeechRecognition\\engines\\SherpaZipformerStreamingEngine.cpp" />
     <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc">

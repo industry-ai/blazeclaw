@@ -161,6 +161,7 @@
     <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
     <ClInclude Include="src\core\runtime\pch.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
@@ -375,6 +376,7 @@
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
@@ -578,6 +580,7 @@
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
+    <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionRealtimeStreamingTests.cpp" />

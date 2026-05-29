@@ -84,6 +84,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool cudaEnabled = false;
 			std::uint32_t threads = 0;
 			std::string executionMode = "sequential";
+			bool cudaCompatibilityGuardLatched = false;
+			std::string cudaCompatibilityGuardLatchedReason;
 		};
 
 		struct ExecutionProviderStatus {
@@ -91,6 +93,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			bool cudaExecutionProviderEnabled = false;
 			std::string cudaExecutionProviderReason;
 			std::string effectiveExecutionProvider = "cpu";
+			bool cudaCompatibilityGuardLatched = false;
+			std::string cudaCompatibilityGuardLatchedReason;
 		};
 
 		struct StreamState {
@@ -239,6 +243,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		std::int64_t m_blankId = 0;
 		std::int64_t m_unkId = 2;
 		std::int64_t m_eosId = 1;
+		std::string m_effectiveExecutionProvider = "cpu";
+		std::string m_cudaExecutionProviderReason;
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
 		std::unique_ptr<Ort::Env> m_env;

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SherpaZipformerStreamingEngine.h"
 
+#include "../SpeechCudaCompatibilityGuard.h"
 #include "../StreamingAudioSourceRegistry.h"
 
 #include <kaldi-native-fbank/csrc/online-feature.h>
@@ -1375,6 +1376,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 		m_blankId = 0;
 		m_eosId = 1;
 		m_unkId = 2;
+	m_effectiveExecutionProvider = "cpu";
+	m_cudaExecutionProviderReason.clear();
 #if BLAZECLAW_HAS_ONNXRUNTIME
 		m_encoderInputBindings.clear();
 		m_encoderOutputBindings.clear();
@@ -1474,6 +1477,33 @@ namespace blazeclaw::core::speechrecognition::engines {
 				providerStatus.cudaExecutionProviderReason = "disabled_by_config";
 				providerStatus.effectiveExecutionProvider = "cpu";
 			}
+			else if (providerOptions.cudaCompatibilityGuardLatched) {
+				providerStatus.cudaExecutionProviderAvailable = false;
+				providerStatus.cudaExecutionProviderEnabled = false;
+				providerStatus.cudaExecutionProviderReason =
+					"compatibility_guard_latched_in_process: " +
+					(providerOptions.cudaCompatibilityGuardLatchedReason.empty()
+						? std::string("previous_guard_failure")
+						: providerOptions.cudaCompatibilityGuardLatchedReason);
+				providerStatus.effectiveExecutionProvider = "cpu";
+				providerStatus.cudaCompatibilityGuardLatched = true;
+				providerStatus.cudaCompatibilityGuardLatchedReason =
+					providerStatus.cudaExecutionProviderReason;
+				TRACE(
+					L"[SherpaStreaming][Provider] compatibility_guard.latch action=skip_cuda_ep_append reason=%S\n",
+					providerStatus.cudaExecutionProviderReason.c_str());
+			}
+			else if (!PassesSpeechCudaCompatibilityGuard(cudaFallbackReason)) {
+				providerStatus.cudaExecutionProviderAvailable = false;
+				providerStatus.cudaExecutionProviderEnabled = false;
+				providerStatus.cudaExecutionProviderReason = cudaFallbackReason;
+				providerStatus.effectiveExecutionProvider = "cpu";
+				providerStatus.cudaCompatibilityGuardLatched = true;
+				providerStatus.cudaCompatibilityGuardLatchedReason = cudaFallbackReason;
+				TRACE(
+					L"[SherpaStreaming][Provider] compatibility_guard.blocked action=force_cpu reason=%S\n",
+					providerStatus.cudaExecutionProviderReason.c_str());
+			}
 			else if (TryAppendCudaExecutionProvider(
 				*m_options,
 				cudaApiAvailable,
@@ -1492,6 +1522,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 					cudaApiAvailable);
 				providerStatus.effectiveExecutionProvider = "cpu";
 			}
+			m_effectiveExecutionProvider = providerStatus.effectiveExecutionProvider;
+			m_cudaExecutionProviderReason = providerStatus.cudaExecutionProviderReason;
+			TRACE(
+				L"[SherpaStreaming][Provider] selected provider=%S cudaAvailable=%d cudaEnabled=%d reason=%S guardLatched=%d\n",
+				m_effectiveExecutionProvider.c_str(),
+				providerStatus.cudaExecutionProviderAvailable ? 1 : 0,
+				providerStatus.cudaExecutionProviderEnabled ? 1 : 0,
+				m_cudaExecutionProviderReason.empty()
+				? "none"
+				: m_cudaExecutionProviderReason.c_str(),
+				providerStatus.cudaCompatibilityGuardLatched ? 1 : 0);
 
 			try {
 				m_encoderSession = std::make_unique<Ort::Session>(
@@ -2838,6 +2879,19 @@ namespace blazeclaw::core::speechrecognition::engines {
 					if (streamState.firstTokenEncoderStartOffsetMs == 0) {
 						streamState.firstTokenEncoderStartOffsetMs = ElapsedMsSince(
 							streamState.firstTokenTraceStart);
+					}
+					if (IsSherpaVerboseTraceEnabled()) {
+						TRACE(L"[SherpaStreaming][EncoderRun] provider=%S cudaReason=%S inputs=%llu outputs=%llu featureShape=%S featureElements=%llu stateCacheBindings=%llu stateSummary=%S\n",
+							m_effectiveExecutionProvider.c_str(),
+							m_cudaExecutionProviderReason.empty()
+							? "none"
+							: m_cudaExecutionProviderReason.c_str(),
+							static_cast<unsigned long long>(encoderInputs.size()),
+							static_cast<unsigned long long>(encoderOutputNames.size()),
+							streamState.contractFeatureInputShape.c_str(),
+							static_cast<unsigned long long>(featureElementCount),
+							static_cast<unsigned long long>(m_encoderStateCacheBindings.size()),
+							streamState.contractStateCacheSummary.c_str());
 					}
 					auto encoderOutputs = m_encoderSession->Run(
 						Ort::RunOptions{ nullptr },
