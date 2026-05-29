@@ -383,6 +383,12 @@ Implemented behavior:
   captured startup and WebView speech diagnostic logs into JSON and Markdown
   reports for provider, CUDA readiness, model-load, warmup, first-token,
   click-to-render, and steady-state partial interval comparison.
+- CPU fallback tuning is now supported by
+  `tools/speech/New-SherpaCpuFallbackTuningMatrix.ps1`, which generates trial
+  overlays for preview chunk size, preview lookback, `speech.threads`, and
+  `speech.execution_mode` while forcing CPU mode with `speech.cuda.enabled=false`.
+  The summary reports include thread count and execution mode so fallback tuning
+  decisions are tied to measured first-token and click-to-render latency.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -420,6 +426,11 @@ Diagnostics:
   `tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1`; pass
   `-RequireCudaActive` for CUDA runs so mixed or inactive CUDA runtime stacks are
   flagged before the results are used for provider policy decisions.
+- Generate CPU fallback tuning overlays with
+  `tools/speech/New-SherpaCpuFallbackTuningMatrix.ps1`, then summarize each
+  captured trial with `Invoke-SherpaProviderBenchmarkSummary.ps1` so the chosen
+  fallback profile records `speechThreads`, `speechExecutionMode`, preview chunk,
+  first partial, click-to-render, and steady-state interval metrics.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -441,6 +452,8 @@ Acceptance criteria:
   with stale-session protection and no overlapping preview requests.
 - completed: CPU/CUDA live-preview benchmark summaries can be generated from
   captured diagnostics without assuming that CUDA is faster or active.
+- completed: CPU fallback tuning has a repeatable trial matrix and summaries that
+  include thread count and execution mode for first-token latency comparison.
 
 ## Rollout Strategy
 

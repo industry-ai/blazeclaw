@@ -556,16 +556,62 @@ latency instead of throughput only.
 
 Implementation tasks:
 
-1. Benchmark `speech.threads` values such as 2, 4, 6, and 8.
-2. Compare `sequential` and `parallel` execution mode for first-token latency.
-3. Keep graph optimization enabled.
-4. Avoid settings that improve total throughput but worsen first-token latency.
-5. Record the best settings in config comments or docs.
+1. completed: Add repeatable CPU fallback tuning tooling for `speech.threads`
+   values such as 2, 4, 6, and 8.
+2. completed by tooling: Compare `sequential` and `parallel` execution mode for
+   first-token latency with generated trial overlays and captured logs.
+3. completed by workflow: Keep graph optimization enabled while changing only
+   CPU fallback tuning knobs.
+4. completed by workflow: Avoid settings that improve total throughput but
+   worsen first-token latency by ranking trials on first partial and
+   click-to-render timings.
+5. completed: Record the baseline and tuning workflow in config comments and
+   docs.
+
+Implementation notes:
+
+- Added `tools/speech/New-SherpaCpuFallbackTuningMatrix.ps1` to generate CPU
+  fallback trial overlays, a JSON matrix, a Markdown matrix, and a summary
+  command runner under `tools/speech/cpu-fallback-tuning` by default.
+- Generated overlays explicitly set `speech.cuda.enabled=false`, keep streaming
+  enabled, keep hot runtime warmup enabled, and vary only preview chunk size,
+  preview lookback, `speech.threads`, and `speech.execution_mode`.
+- The default matrix covers preview chunks `500` and `320`, lookback `320`,
+  thread counts `4`, `2`, `6`, and `8`, and both `sequential` and `parallel`
+  execution modes.
+- Extended `tools/speech/Invoke-SherpaProviderBenchmarkSummary.ps1` so CPU
+  tuning summaries include `speechThreads` and `speechExecutionMode` alongside
+  provider, CUDA reason, warmup, first-token, WebView render, and steady-state
+  partial interval fields.
+- Updated `BlazeClawMfc/blazeclaw.conf` with CPU fallback tuning comments and
+  commented baseline settings for `speech.threads=4` and
+  `speech.execution_mode=sequential`. These are comments only and do not change
+  current runtime behavior.
+
+Manual measurement workflow:
+
+1. Generate trial overlays:
+
+   `powershell -ExecutionPolicy Bypass -File "blazeclaw/BlazeClawMfc/tools/speech/New-SherpaCpuFallbackTuningMatrix.ps1"`
+
+2. For each trial, copy the overlay values into `BlazeClawMfc/blazeclaw.conf`,
+   relaunch the app, record the same short Chinese and English utterances, and
+   save startup/WebView speech diagnostics to the trial log path listed in the
+   matrix.
+3. Run the generated `Invoke-SherpaCpuFallbackTuningSummaries.ps1` after logs are
+   captured, or run `Invoke-SherpaProviderBenchmarkSummary.ps1` directly for an
+   individual trial.
+4. Select the CPU fallback profile by lowest first partial and click-to-render
+   timings first, then steady-state partial interval. Do not select `parallel`
+   or a higher thread count unless it improves first-token latency on the same
+   utterance set.
 
 Acceptance criteria:
 
-- CPU fallback has a known best low-latency configuration.
-- Logs make it clear when CPU tuning applies because CUDA is unavailable.
+- completed by implementation support: CPU fallback has a repeatable matrix for
+  identifying the best low-latency configuration on the target machine.
+- completed: Logs and summaries make it clear when CPU tuning applies because
+  CUDA is unavailable or explicitly disabled for the trial.
 
 Current baseline from debug log:
 
@@ -582,6 +628,13 @@ Initial CPU tuning matrix:
 4. Best chunk from trials 1-2 with `threads=6`.
 5. Best thread count with `mode=parallel`, only if sequential still misses the
    first-token target.
+
+Current status:
+
+- Step 8 tooling and documentation are implemented. The final best CPU fallback
+  profile remains hardware-dependent and should be filled in after captured
+  benchmark summaries identify the lowest first-token and click-to-render
+  latency on the local machine.
 
 ## Step 9: Add Regression Tests and Manual Validation Scripts
 

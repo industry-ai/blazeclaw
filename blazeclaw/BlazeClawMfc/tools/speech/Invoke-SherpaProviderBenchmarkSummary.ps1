@@ -45,6 +45,8 @@ function New-EmptyMetricSet {
 		warmupStage = ""
 		warmupLatencyMs = $null
 		streamingLatencyProfile = ""
+		speechThreads = $null
+		speechExecutionMode = ""
 		streamingPreviewChunkMs = $null
 		streamingPreviewLookbackMs = $null
 		firstEncoderStartOffsetMs = $null
@@ -121,6 +123,8 @@ foreach ($line in $lines) {
 	if ($text -match "startup\.runtime") {
 		$isRelevant = $true
 		Set-IfStringMatch $metrics "effectiveProvider" $text "effectiveProvider=([^\s]+)"
+		Set-IfNumberMatch $metrics "speechThreads" $text "threads=(\d+)"
+		Set-IfStringMatch $metrics "speechExecutionMode" $text "mode=([^\s]+)"
 		Set-IfStringMatch $metrics "modelLoadStage" $text "startup\.runtime\.load - stage=([^\s]+)"
 		Set-IfNumberMatch $metrics "modelLoadLatencyMs" $text "startup\.runtime\.load - .*latencyMs=(\d+)"
 		Set-IfStringMatch $metrics "warmupProvider" $text "startup\.runtime\.warmup - .*provider=([^\s]+)"
@@ -144,6 +148,8 @@ foreach ($line in $lines) {
 	if ($text -match "startup\.config") {
 		$isRelevant = $true
 		Set-IfStringMatch $metrics "streamingLatencyProfile" $text "streamingLatencyProfile=([^\s]+)"
+		Set-IfNumberMatch $metrics "speechThreads" $text "threads=(\d+)"
+		Set-IfStringMatch $metrics "speechExecutionMode" $text "mode=([^\s]+)"
 		Set-IfNumberMatch $metrics "streamingPreviewChunkMs" $text "streamingPreviewChunkMs=(\d+)"
 		Set-IfNumberMatch $metrics "streamingPreviewLookbackMs" $text "streamingPreviewLookbackMs=(\d+)"
 	}
@@ -151,6 +157,8 @@ foreach ($line in $lines) {
 	if ($text -match "speech-preview-diagnostic" -or $text -match "firstTokenTiming") {
 		$isRelevant = $true
 		Set-IfStringMatch $metrics "effectiveProvider" $text 'effectiveExecutionProvider[''" ]*[:=][''" ]*([A-Za-z0-9_\-]+)'
+		Set-IfNumberMatch $metrics "speechThreads" $text 'threads[''" ]*[:=]\s*(\d+)'
+		Set-IfStringMatch $metrics "speechExecutionMode" $text 'executionMode[''" ]*[:=][''" ]*([A-Za-z0-9_\-]+)'
 		Set-IfNumberMatch $metrics "firstEncoderStartOffsetMs" $text 'firstTokenEncoderStartOffsetMs[''" ]*[:=]\s*(\d+)'
 		Set-IfNumberMatch $metrics "firstEncoderEndOffsetMs" $text 'firstTokenEncoderEndOffsetMs[''" ]*[:=]\s*(\d+)'
 		Set-IfNumberMatch $metrics "firstDecoderStartOffsetMs" $text 'firstTokenDecoderStartOffsetMs[''" ]*[:=]\s*(\d+)'
@@ -211,6 +219,7 @@ $markdown = @(
 	"- Provider label: $($metrics.providerLabel)",
 	"- Effective provider: $($metrics.effectiveProvider)",
 	"- CUDA: available=$($metrics.cudaAvailable) enabled=$($metrics.cudaEnabled) reason=$($metrics.cudaReason)",
+	"- CPU tuning: threads=$($metrics.speechThreads) mode=$($metrics.speechExecutionMode)",
 	"- Model load: stage=$($metrics.modelLoadStage) latencyMs=$($metrics.modelLoadLatencyMs)",
 	"- Warmup: completed=$($metrics.warmupCompleted) succeeded=$($metrics.warmupSucceeded) provider=$($metrics.warmupProvider) stage=$($metrics.warmupStage) latencyMs=$($metrics.warmupLatencyMs)",
 	"- Streaming profile: $($metrics.streamingLatencyProfile) previewChunkMs=$($metrics.streamingPreviewChunkMs) previewLookbackMs=$($metrics.streamingPreviewLookbackMs)",
@@ -224,6 +233,7 @@ $markdown = @(
 	"## Interpretation checklist",
 	"",
 	"- Use CUDA data only when effectiveProvider=cuda, available=true, enabled=true, and reason=active.",
+	"- For CPU fallback tuning, require effectiveProvider=cpu and compare threads/mode/chunk settings by first-token latency.",
 	"- Compare CPU and CUDA using the same utterances, chunk profile, model path, and app build.",
 	"- Prefer the provider with lower click-to-render and first partial timing for the selected live-preview profile."
 )
