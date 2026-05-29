@@ -156,3 +156,76 @@ TEST_CASE(
 	REQUIRE(sherpaEngine.find("IsSherpaVerboseTraceEnabled() && streamState.chunkCount") != std::string::npos);
 	REQUIRE(sherpaEngine.find("IsSherpaVerboseTraceEnabled() && tokenId != m_blankId") != std::string::npos);
 }
+
+TEST_CASE(
+	"Sherpa first-token diagnostics expose provider and CUDA fallback contracts",
+	"[speech][sherpa][first-token][diagnostics]")
+{
+	const auto speechHandlerPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.SpeechRecognition.cpp";
+	const auto appPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"app" /
+		"BlazeClawMfcApp.cpp";
+
+	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
+	const std::string app = ReadTextFile(ResolveProjectPath(appPath));
+
+	REQUIRE(speechHandler.find("buildSpeechRuntimeProviderJson") != std::string::npos);
+	REQUIRE(speechHandler.find("effectiveExecutionProvider") != std::string::npos);
+	REQUIRE(speechHandler.find("cudaExecutionProviderAvailable") != std::string::npos);
+	REQUIRE(speechHandler.find("cudaExecutionProviderEnabled") != std::string::npos);
+	REQUIRE(speechHandler.find("cudaExecutionProviderReason") != std::string::npos);
+	REQUIRE(speechHandler.find("streamingLatencyProfile") != std::string::npos);
+	REQUIRE(speechHandler.find("streamingPreviewChunkMs") != std::string::npos);
+	REQUIRE(speechHandler.find("streamingPreviewLookbackMs") != std::string::npos);
+	REQUIRE(speechHandler.find("threads") != std::string::npos);
+	REQUIRE(speechHandler.find("executionMode") != std::string::npos);
+
+	REQUIRE(app.find("startup.runtime") != std::string::npos);
+	REQUIRE(app.find("startup.runtime.cuda") != std::string::npos);
+	REQUIRE(app.find("effectiveProvider=") != std::string::npos);
+	REQUIRE(app.find("available=") != std::string::npos);
+	REQUIRE(app.find("enabled=") != std::string::npos);
+	REQUIRE(app.find("reason=") != std::string::npos);
+}
+
+TEST_CASE(
+	"Sherpa first-token diagnostics retain native, gateway, and WebView timing fields",
+	"[speech][sherpa][first-token][timing]")
+{
+	const auto speechHandlerPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.SpeechRecognition.cpp";
+	const auto webIndexPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.js";
+	const auto webControllerPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+
+	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
+	const std::string webIndex = ReadTextFile(ResolveProjectPath(webIndexPath));
+	const std::string webController = ReadTextFile(ResolveProjectPath(webControllerPath));
+
+	REQUIRE(speechHandler.find("buildFirstTokenTimingJson") != std::string::npos);
+	REQUIRE(speechHandler.find("firstAudioAcceptedOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenEncoderStartOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenEncoderEndOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenDecoderStartOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenJoinerStartOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenPartialTextOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("firstTokenNativePayloadReadyOffsetMs") != std::string::npos);
+	REQUIRE(speechHandler.find("gatewayNativePayloadReadyOffsetMs") != std::string::npos);
+
+	REQUIRE(webController.find("firstTokenTiming") != std::string::npos);
+	REQUIRE(webIndex.find("emitFirstTokenRenderDiagnostic") != std::string::npos);
+	REQUIRE(webIndex.find("clickToRenderMs") != std::string::npos);
+	REQUIRE(webIndex.find("previewResponseToRenderMs") != std::string::npos);
+	REQUIRE(webIndex.find("speech-preview-diagnostic") != std::string::npos);
+}

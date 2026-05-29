@@ -389,6 +389,12 @@ Implemented behavior:
   `speech.execution_mode` while forcing CPU mode with `speech.cuda.enabled=false`.
   The summary reports include thread count and execution mode so fallback tuning
   decisions are tied to measured first-token and click-to-render latency.
+- Step 9 manual validation is now supported by
+  `tools/speech/New-SherpaFirstTokenValidationChecklist.ps1` and
+  `tools/speech/Test-SherpaFirstTokenBenchmarkSummary.ps1`, so CUDA active, CPU
+  fallback, cold first utterance, warm second utterance, Chinese short utterance,
+  and English short utterance runs can be checked against the same required
+  provider, warmup, first-token, and WebView timing fields.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -405,6 +411,7 @@ Existing relevant tests to extend or mirror:
 - `tests/SpeechRecognitionRealtimeStreamingTests.cpp`
 - `tests/VoiceRecorderRingArtifactIntegrationTests.cpp`
 - `tests/SherpaStep8BaselineToolTests.cpp`
+- `tests/GatewaySpeechPhase56ParityTests.cpp`
 
 Diagnostics:
 - Add trace logs for preview request start/end, skipped ticks, segment sequence, and final replacement.
@@ -431,6 +438,11 @@ Diagnostics:
   captured trial with `Invoke-SherpaProviderBenchmarkSummary.ps1` so the chosen
   fallback profile records `speechThreads`, `speechExecutionMode`, preview chunk,
   first partial, click-to-render, and steady-state interval metrics.
+- Generate Step 9 manual checklists with
+  `tools/speech/New-SherpaFirstTokenValidationChecklist.ps1` and validate
+  captured benchmark summaries with
+  `tools/speech/Test-SherpaFirstTokenBenchmarkSummary.ps1` before accepting a
+  first-token latency regression or improvement claim.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
@@ -454,6 +466,9 @@ Acceptance criteria:
   captured diagnostics without assuming that CUDA is faster or active.
 - completed: CPU fallback tuning has a repeatable trial matrix and summaries that
   include thread count and execution mode for first-token latency comparison.
+- completed: provider, CUDA fallback, startup, first-token, and WebView timing
+  diagnostic contracts are guarded by regression tests and manual validation
+  scripts.
 
 ## Rollout Strategy
 

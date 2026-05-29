@@ -642,24 +642,54 @@ Add repeatable validation for latency-sensitive behavior.
 
 Implementation tasks:
 
-1. Add or extend speech recognition tests to verify diagnostics include provider
-   and first-token timing fields.
-2. Add a manual validation checklist for:
+1. completed: Add or extend speech recognition tests to verify diagnostics
+   include provider and first-token timing fields.
+2. completed: Add a manual validation checklist for:
    - CUDA active
    - CPU fallback
    - first utterance after app startup
    - second utterance after warm runtime
    - Chinese short utterance: `讲一个笑话`
    - English short utterance
-3. Validate the solution with the required BlazeClaw build command:
+3. completed: Add a captured-summary validation script so benchmark JSON files
+   can be checked for required provider, CUDA, warmup, first-token, and WebView
+   timing fields.
+4. Validate the solution with the required BlazeClaw build command:
 
    `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
 
+Implementation notes:
+
+- Extended `tests/GatewaySpeechPhase56ParityTests.cpp` with Step 9 source
+  contract regression coverage for:
+  - provider diagnostics: `effectiveExecutionProvider`, CUDA availability,
+	CUDA enabled state, CUDA fallback reason, streaming latency profile,
+	preview chunk/lookback, thread count, and execution mode;
+  - startup diagnostics: `startup.runtime`, `startup.runtime.cuda`,
+	`effectiveProvider=`, `available=`, `enabled=`, and `reason=`;
+  - first-token timing fields: accepted audio, encoder, decoder, joiner, first
+	partial text, native payload readiness, and gateway payload readiness;
+  - WebView timing fields: normalized `firstTokenTiming`, first render
+	diagnostic emission, `clickToRenderMs`, and `previewResponseToRenderMs`.
+- Added `tools/speech/New-SherpaFirstTokenValidationChecklist.ps1` to generate a
+  Markdown checklist for the Step 9 manual scenarios. The generated checklist
+  includes per-scenario log paths and `Invoke-SherpaProviderBenchmarkSummary.ps1`
+  commands.
+- Added `tools/speech/Test-SherpaFirstTokenBenchmarkSummary.ps1` to validate
+  captured summary JSON files for required diagnostics. It can require CUDA
+  active, CPU fallback, first-token timing, and/or WebView timing depending on
+  the scenario.
+- Manual validation still requires real app runs and captured logs; the scripts
+  make the process repeatable and keep pass/fail checks tied to captured data.
+
 Acceptance criteria:
 
-- Build succeeds.
-- Diagnostics are present in startup and live-recognition paths.
-- First-token latency can be compared before and after each optimization.
+- completed: Build succeeds.
+- completed: Diagnostics are present in startup and live-recognition paths and
+  guarded by source-contract regression tests.
+- completed: First-token latency can be compared before and after each
+  optimization with generated checklists, benchmark summaries, and summary
+  validation checks.
 
 ## Proposed Success Targets
 
