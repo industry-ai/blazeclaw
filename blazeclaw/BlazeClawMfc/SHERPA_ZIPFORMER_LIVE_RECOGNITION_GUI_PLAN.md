@@ -135,6 +135,10 @@ Preview enablement:
   before calling final transcription. Any later `speech-preview-*` lifecycle
   event is ignored, so stale preview text cannot replace or send as final text
   after stop/final begins.
+- Final chat submission is now final-response-owned: only `payload.text` or
+  `payload.transcript` from the final speech response can be sent to chat.
+  Preview/session fallback text remains valid for live preview rendering, but
+  is not reused as the final user prompt.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the

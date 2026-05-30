@@ -80,6 +80,9 @@ Important evidence markers:
 - after `speech.final.request_start` or a `speech-final-*` lifecycle state,
   any later `speech-preview-*` lifecycle event must be ignored and must not
   replace the final visible text or chat-sent transcript.
+- the chat-sent transcript must come from final response text only. If the
+  final response has no transcript text, preserved preview text must not be
+  submitted as the user message.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.
@@ -121,6 +124,8 @@ Final visible transcript:
 Chat message sent: yes | no
 Late preview ignored reason:
 Late preview after final ignored: yes | no
+Final response text present: yes | no
+Preview text submitted when final text missing: yes | no
 Pass/fail:
 Notes:
 ```

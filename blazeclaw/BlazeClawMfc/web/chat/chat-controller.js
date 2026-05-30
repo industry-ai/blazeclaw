@@ -2613,14 +2613,36 @@
                         updatedAtMs: Date.now(),
                     }
                     : normalizedSpeechSessionState;
-                const transcriptText = String(
+                const finalPayloadText = String(
                     payload.text ||
                     payload.transcript ||
+                    "").trim();
+                const previewPayloadText = String(
+                    finalPayloadText ||
                     state.speechSessionState.segmentText ||
                     state.speechSessionState.text ||
-                    (livePreviewOnly ? previousSpeechSessionState.segmentText : "") ||
-                    (livePreviewOnly ? previousSpeechSessionState.text : "") ||
+                    previousSpeechSessionState.segmentText ||
+                    previousSpeechSessionState.text ||
                     "").trim();
+                const transcriptText = livePreviewOnly
+                    ? previewPayloadText
+                    : finalPayloadText;
+                if (!livePreviewOnly && !transcriptText) {
+                    emitSpeechRequestTrace("response_ignored", {
+                        requestType: "final",
+                        reason: "missing_final_transcript",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        responseStage: String(normalizedSpeechSessionState.stage || ""),
+                        responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                        preservedPreviewTextLength: String(
+                            previousSpeechSessionState.segmentText ||
+                            previousSpeechSessionState.text ||
+                            "").trim().length,
+                        audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
+                }
                 if (transcriptText) {
                     const quality = assessTranscriptQuality(transcriptText);
                     if (!quality.accepted) {
@@ -3756,7 +3778,7 @@
                 }),
             });
             const expired = await controller.executeExecApprovalAction("email-token-3", true, {
-                requestOverride: async (method) => {
+                requestOverride: async (method, params) => {
                     if (method === "gateway.email.backend.readiness") {
                         return {
                             payload: {
@@ -4683,6 +4705,54 @@
             assertRegression(snapshot.runId === "speech-final-regression-3",
                 "speech finalization should replace stale preview run id with requested final run id");
             summary.push("speech final stale preview run guard");
+        }
+
+        {
+            const state = createRegressionState();
+            const sendCalls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-3b",
+                text: "preview must not be submitted",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-final-regression-3b",
+                text: "preview must not be submitted",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "final.wav",
+                runId: "speech-final-regression-3b",
+                requestOverride: async (method) => {
+                    if (method === "speech.transcribe") {
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: "speech-final-regression-3b",
+                                audioPath: "final.wav",
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "chat-run-should-not-send" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            assertRegression(sendCalls.length === 0,
+                "speech finalization should not submit preserved preview text when final payload has no transcript");
+            summary.push("speech final missing transcript does not reuse preview text");
         }
 
         {

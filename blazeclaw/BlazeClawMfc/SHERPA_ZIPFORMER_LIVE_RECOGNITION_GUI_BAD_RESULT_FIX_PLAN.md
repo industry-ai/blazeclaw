@@ -599,6 +599,9 @@ Implementation details:
 - Added final-dispatch authority: when stop/final transcription begins, WebView
   state is owned by the `speech-final-*` run id, and later `speech-preview-*`
   lifecycle events are ignored instead of replacing the final visible/chat text.
+- Tightened final transcript submission: final `chat.send` now uses only text
+  returned by the final response (`payload.text` / `payload.transcript`).
+  Preserved preview/session text is no longer a fallback for final submission.
 
 Preview enablement:
 
@@ -650,6 +653,9 @@ Acceptance criteria:
 - ready to validate: logs may show late preview `transcribe.complete`, but any
   preview lifecycle after `speech.final.request_start` is ignored and cannot
   become the chat-sent transcript.
+- ready to validate: if a final response has no transcript text, WebView logs
+  `reason=missing_final_transcript` and does not send preserved preview text as
+  the user prompt.
 
 ### Step 10: Validate with build and focused tests
 
