@@ -599,22 +599,35 @@ Preview enablement:
 
 ### Step 9: Validate manually with controlled scenarios
 
-Status: pending
+Status: ready for manual execution
+
+Manual validation support is implemented in:
+
+- `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`
+
+Use that checklist to run the real microphone scenarios, capture the required
+diagnostics, and record the final pass/fail evidence. This step cannot be marked
+fully passed until the scenarios are run in the GUI with real audio input.
 
 Manual validation matrix:
 
 | Scenario | Expected result | Status |
 | --- | --- | --- |
-| Disable preview, speak `请讲一个笑话`, stop | Final text correct | pending |
-| Enable preview, speak `请讲一个笑话`, stop | Preview may be partial; final text correct | pending |
-| Enable preview, stop quickly | No stale preview overwrites final/empty state | pending |
-| Enable preview, speak English | Preview/final both remain sane | pending |
-| Enable preview, cancel recording | Preview is cleared/ignored; no chat send | pending |
+| Disable preview, speak `请讲一个笑话`, stop | Final text correct | checklist ready; not run |
+| Enable preview, speak `请讲一个笑话`, stop | Preview may be partial; final text correct | checklist ready; not run |
+| Enable preview, stop quickly | No stale preview overwrites final/empty state | checklist ready; not run |
+| Enable preview, speak English | Preview/final both remain sane | checklist ready; not run |
+| Enable preview, cancel recording | Preview is cleared/ignored; no chat send | checklist ready; not run |
 
 Acceptance criteria:
 
-- The bad `请听` final result is no longer reproducible for the reported phrase.
-- Final result quality matches the pre-live-recognition behavior.
+- ready to validate: the bad `请听` final result is no longer reproducible for
+  the reported phrase after a real preview-enabled GUI run.
+- ready to validate: final result quality matches the pre-live-recognition
+  preview-disabled behavior for the same speaker, microphone, phrase, and
+  environment.
+- ready to validate: final visible text is produced by a `speech-final-*` request
+  and late `speech-preview-*` updates are ignored after stop/final begins.
 
 ### Step 10: Validate with build and focused tests
 
@@ -646,13 +659,15 @@ Use this section while executing the plan.
 
 ### A/B preview bypass result
 
-- Status: ready for manual validation
+- Status: checklist ready; not run
 - Notes: Step 1 added `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` as the
-  one-switch bypass. To run the A/B test, uncomment
+  one-switch bypass. Step 9 manual execution should use
+  `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`.
+  For the disabled-preview A/B run, uncomment or add
   `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` in
-  `BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, record
-  `请讲一个笑话`, and verify the final stop transcription still runs without live
-  preview polling.
+  `BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, confirm WebView status shows
+  `preview=off`, record `请讲一个笑话`, and verify final stop transcription still
+  runs without live preview polling.
 
 ### WebView request identity trace
 
@@ -681,12 +696,18 @@ Use this section while executing the plan.
 
 ## Final Fix Summary
 
-Status: pending
+Status: implementation complete; manual Step 9 execution pending
 
-To be filled after implementation:
-
-- Root cause:
-- Files changed:
-- Tests added:
-- Manual validation result:
+- Root cause: preview and final speech orchestration could share or reuse GUI
+  state authority, allowing preview state/cursor/lifecycle evidence to obscure
+  whether final transcription used the finite final artifact.
+- Files changed: recorder final artifact range handling, Sherpa final decode
+  diagnostics, WebView request/bridge/coordinator diagnostics, WebView
+  final-authority guard, realtime streaming regression tests, and Step 9 manual
+  validation checklist.
+- Tests added: strengthened `tests/SpeechRecognitionRealtimeStreamingTests.cpp`
+  preview-plus-final regression and `web/chat/chat-controller.js` regression
+  checks for final transcript authority and late preview invalidation.
+- Manual validation result: pending real GUI runs using
+  `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`.
 - Build/test result:

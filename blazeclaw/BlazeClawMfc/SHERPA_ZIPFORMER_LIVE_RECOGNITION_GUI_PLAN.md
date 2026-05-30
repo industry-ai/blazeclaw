@@ -427,6 +427,11 @@ Implemented behavior:
   fallback, cold first utterance, warm second utterance, Chinese short utterance,
   and English short utterance runs can be checked against the same required
   provider, warmup, first-token, and WebView timing fields.
+- Bad-result Step 9 manual validation is now supported by
+  `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`.
+  It covers preview-disabled A/B behavior, preview-enabled Chinese final quality,
+  quick-stop stale preview suppression, English sanity validation, and
+  cancel/failure handling without sending preview-only chat messages.
 
 Recommended tests:
 - Coordinator emits `Streaming` callback for non-final streaming segment.
@@ -475,6 +480,11 @@ Diagnostics:
   captured benchmark summaries with
   `tools/speech/Test-SherpaFirstTokenBenchmarkSummary.ps1` before accepting a
   first-token latency regression or improvement claim.
+- Use
+  `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`
+  for the bad-result fix validation matrix. Capture preview/final run ids,
+  final artifact sequence range, Sherpa final drain status, final visible
+  transcript, chat-send state, and any late-preview ignored reason.
 - Avoid logging full transcript content unless existing diagnostics already allow it.
 
 Acceptance criteria:
