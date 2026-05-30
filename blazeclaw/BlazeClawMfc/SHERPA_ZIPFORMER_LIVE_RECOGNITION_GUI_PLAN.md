@@ -159,11 +159,13 @@ Implemented behavior:
 - `CVoiceRecorder` now emits `[VoiceRecorder][artifact.preview]` and `[VoiceRecorder][artifact.final]` diagnostics with stream id, sequence range, oldest/latest ring sequence, sample rate, channel count, duration, and start-before-oldest risk metadata.
 - `GatewayHost::ResolveNativeRecordingArtifact(...)` now accepts both finite PCM ranges and open-ended live PCM ranges.
 - `SpeechRecognitionRuntime::Transcribe(...)` now infers Sherpa `SpeechStreamingInputContract` from the provided PCM artifact, including `streamId`, sample rate, channels, bit depth, and open-ended `sequenceEnd`.
+- `SherpaZipformerStreamingEngine::TranscribeStreaming(...)` now emits `[SherpaStreaming][final.start]` and `[SherpaStreaming][final.summary]` diagnostics for finite final requests, including cached reset status, requested/effective start, oldest-sequence clamp status, final cursor, drain status, chunk/loop counts, decoded text, and final outcome.
 
 Acceptance criteria:
 - completed: live preview requests can read from the ring-buffer PCM stream artifact rather than an incomplete WAV file.
 - completed: preview can start before the user clicks stop because the recording start path can return an open-ended artifact.
 - completed: final stop artifacts preserve the recording start sequence and expose a finite PCM range for final transcription.
+- completed: Sherpa final decode diagnostics prove whether final transcription starts at the finite artifact range and drains to `sequenceEnd` independently of preview cursor state.
 - completed: WAV-file fallback and final finite-range transcription remain available after stop.
 
 ### Step 4: Emit interim segments from the coordinator

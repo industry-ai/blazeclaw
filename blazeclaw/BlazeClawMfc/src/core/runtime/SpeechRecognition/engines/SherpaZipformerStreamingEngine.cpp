@@ -2158,11 +2158,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 #endif
 
 		StreamState streamState;
+		bool finalCachedStateReset = false;
 		{
 			std::lock_guard<std::mutex> lock(m_streamMutex);
 			auto& cachedState = m_streamStateByStreamId[streamingInput.source.streamId];
 			if (isFinalStreamRequest && streamingInput.source.sequenceEnd > 0) {
 				cachedState = StreamState{};
+				finalCachedStateReset = true;
 			}
 			if (cachedState.decoderContext.empty()) {
 				cachedState.decoderContext.assign(
@@ -2189,14 +2191,36 @@ namespace blazeclaw::core::speechrecognition::engines {
 		}
 
 		std::uint64_t nextSequence = streamState.nextSequence;
+		const std::uint64_t requestedStartSequence = streamingInput.source.sequenceStart;
+		const std::uint64_t initialCursorNextSequence = nextSequence;
 
 		const auto oldestOpt =
 			GetStreamingAudioOldestSequence(streamingInput.source.streamId);
+		const std::uint64_t oldestAvailableSequence = oldestOpt.value_or(0ULL);
+		bool startClampedToOldest = false;
 		if (oldestOpt.has_value() && nextSequence < *oldestOpt) {
 			nextSequence = *oldestOpt;
+			startClampedToOldest = true;
 			streamState.pendingFeatureFrames.clear();
 			streamState.pendingFeatureFrameCount = 0;
 			streamState.onlineFbank.reset();
+		}
+		if (isFinalStreamRequest) {
+			TRACE(
+				"[SherpaStreaming][final.start] runId=%S streamId=%S final=%d cachedReset=%d requestedStart=%llu initialCursor=%llu oldestAvailable=%llu clamped=%d effectiveStart=%llu sequenceEnd=%llu artifactStart=%llu artifactEnd=%llu durationMs=%u\n",
+				request.runId.c_str(),
+				streamingInput.source.streamId.c_str(),
+				isFinalStreamRequest ? 1 : 0,
+				finalCachedStateReset ? 1 : 0,
+				static_cast<unsigned long long>(requestedStartSequence),
+				static_cast<unsigned long long>(initialCursorNextSequence),
+				static_cast<unsigned long long>(oldestAvailableSequence),
+				startClampedToOldest ? 1 : 0,
+				static_cast<unsigned long long>(nextSequence),
+				static_cast<unsigned long long>(streamingInput.source.sequenceEnd),
+				static_cast<unsigned long long>(request.audioArtifact.has_value() ? request.audioArtifact->sequenceStart : 0ULL),
+				static_cast<unsigned long long>(request.audioArtifact.has_value() ? request.audioArtifact->sequenceEnd : 0ULL),
+				request.audioArtifact.has_value() ? request.audioArtifact->durationMs : 0U);
 		}
 
 		constexpr std::size_t sherpaMelBinCount = 80;
@@ -3756,6 +3780,27 @@ namespace blazeclaw::core::speechrecognition::engines {
 				? baselineDiagnosticPath->string()
 				: std::string{},
 		};
+		if (isFinalStreamRequest) {
+			TRACE(
+				"[SherpaStreaming][final.summary] runId=%S streamId=%S final=%d cachedReset=%d requestedStart=%llu effectiveStart=%llu sequenceEnd=%llu finalCursor=%llu drained=%d remaining=%llu chunkCount=%llu loopCount=%llu decodedText=%S finalOutcome=%S diagnosticPath=%S\n",
+				request.runId.c_str(),
+				streamingInput.source.streamId.c_str(),
+				isFinalStreamRequest ? 1 : 0,
+				finalCachedStateReset ? 1 : 0,
+				static_cast<unsigned long long>(requestedStartSequence),
+				static_cast<unsigned long long>(startClampedToOldest ? oldestAvailableSequence : initialCursorNextSequence),
+				static_cast<unsigned long long>(streamingInput.source.sequenceEnd),
+				static_cast<unsigned long long>(nextSequence),
+				finalDrainComplete ? 1 : 0,
+				static_cast<unsigned long long>(finalRemainingSamples),
+				static_cast<unsigned long long>(streamState.chunkCount),
+				static_cast<unsigned long long>(loopGuard),
+				baselineDecodedText.c_str(),
+				finalOutcome.c_str(),
+				baselineDiagnosticPath.has_value()
+					? baselineDiagnosticPath->string().c_str()
+					: "");
+		}
 
 		streamState.nextSequence = nextSequence;
 		if (shouldTreatInputAsFinal) {

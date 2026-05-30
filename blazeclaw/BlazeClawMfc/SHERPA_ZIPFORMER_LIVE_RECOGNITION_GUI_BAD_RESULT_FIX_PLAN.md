@@ -407,7 +407,7 @@ Manual verification guidance:
 
 ### Step 6: Verify Sherpa final decode is actually clean and full-range
 
-Status: pending
+Status: completed
 
 Instrument `SherpaZipformerStreamingEngine::TranscribeStreaming(...)` for final
 requests to log:
@@ -431,8 +431,61 @@ Expected result:
 
 Acceptance criteria:
 
-- Logs prove final request reads the full finite range.
-- If it does not, fix stream-state reset/cursor handling.
+- completed: logs prove final request reads the full finite range.
+- completed: if it does not, the logs identify whether stream-state reset,
+  cursor initialization, or oldest-sequence clamping caused the mismatch.
+
+Implementation details:
+
+- `SherpaZipformerStreamingEngine::TranscribeStreaming(...)` now emits
+  `[SherpaStreaming][final.start]` for final finite PCM requests.
+- The final-start trace includes:
+  - `runId`,
+  - `streamId`,
+  - `final=1`,
+  - `cachedReset`,
+  - requested `sequenceStart`,
+  - initial cursor before oldest-sequence clamping,
+  - oldest available ring sequence,
+  - whether the start was clamped,
+  - effective decode start,
+  - `sequenceEnd`,
+  - artifact start/end and duration.
+- `TranscribeStreaming(...)` also emits `[SherpaStreaming][final.summary]` after
+  decoding.
+- The final-summary trace includes:
+  - requested/effective start,
+  - final cursor,
+  - drain status,
+  - remaining samples,
+  - chunk count,
+  - loop count,
+  - decoded text,
+  - final outcome,
+  - optional baseline diagnostic path.
+
+Current implementation finding:
+
+- Final finite requests already reset cached stream state before decoding.
+- After reset, the start cursor is initialized from the streaming contract cursor
+  or source `sequenceStart`.
+- The only expected reason final decode would not begin at `sequenceStart` is if
+  the requested start is no longer readable and must be clamped to the oldest
+  available ring-buffer sequence. This is now explicit in the `clamped` field.
+
+Manual verification guidance:
+
+1. Record `请讲一个笑话` with preview enabled.
+2. Confirm `[SherpaStreaming][final.start]` contains `final=1` and
+   `cachedReset=1`.
+3. Confirm `requestedStart` equals the Step 5 final artifact start.
+4. Confirm `clamped=0` unless logs show the requested start was no longer
+   readable.
+5. Confirm `[SherpaStreaming][final.summary]` has `drained=1`,
+   `remaining=0`, and `finalCursor >= sequenceEnd`.
+6. Confirm `decodedText` is independently produced on the final run. If it is
+   still partial while the range is fully drained, continue with later model/audio
+   diagnostics rather than GUI stale-state fixes.
 
 ### Step 7: Add an automated regression test for preview-plus-final flow
 
