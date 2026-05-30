@@ -139,6 +139,11 @@ Preview enablement:
   `payload.transcript` from the final speech response can be sent to chat.
   Preview/session fallback text remains valid for live preview rendering, but
   is not reused as the final user prompt.
+- Final-response ownership includes nested final fields
+  (`speechSession.text`, `speechSession.transcript`, and
+  `speechSession.segment.text`) when the response run is not preview-owned.
+  If no final-owned transcript is present, the UI enters a terminal
+  `missing_final_transcript` failed state so the Transcribe button can reset.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the

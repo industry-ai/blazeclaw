@@ -83,6 +83,12 @@ Important evidence markers:
 - the chat-sent transcript must come from final response text only. If the
   final response has no transcript text, preserved preview text must not be
   submitted as the user message.
+- final response text may come from top-level transcript fields or nested
+  final-owned `speechSession` / `segment` fields. Preview-owned response text
+  must still be rejected.
+- when no final-owned transcript is available, the UI must leave recording mode
+  and return the Transcribe button to retry/idle instead of keeping
+  `Recording... (click to stop)`.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.
@@ -126,6 +132,7 @@ Late preview ignored reason:
 Late preview after final ignored: yes | no
 Final response text present: yes | no
 Preview text submitted when final text missing: yes | no
+Button returned from recording mode after missing final text: yes | no
 Pass/fail:
 Notes:
 ```

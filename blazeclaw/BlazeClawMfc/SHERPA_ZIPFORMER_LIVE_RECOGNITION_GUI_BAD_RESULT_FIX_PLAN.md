@@ -602,6 +602,14 @@ Implementation details:
 - Tightened final transcript submission: final `chat.send` now uses only text
   returned by the final response (`payload.text` / `payload.transcript`).
   Preserved preview/session text is no longer a fallback for final submission.
+- Restored nested final transcript authority: final submission can also use
+  final-owned nested `speechSession.text`, `speechSession.transcript`, or
+  `speechSession.segment.text`, while preview-owned response text remains
+  rejected.
+- Added terminal reset for missing final text: if no final-owned transcript is
+  present, the speech state becomes `failed` with
+  `missing_final_transcript`, clears preview text, and allows the Transcribe
+  button to return to retry/idle.
 
 Preview enablement:
 
@@ -656,6 +664,9 @@ Acceptance criteria:
 - ready to validate: if a final response has no transcript text, WebView logs
   `reason=missing_final_transcript` and does not send preserved preview text as
   the user prompt.
+- ready to validate: missing final text does not leave the Transcribe button in
+  `Recording... (click to stop)` and does not repeatedly finalize the same
+  stale audio artifact on subsequent clicks.
 
 ### Step 10: Validate with build and focused tests
 

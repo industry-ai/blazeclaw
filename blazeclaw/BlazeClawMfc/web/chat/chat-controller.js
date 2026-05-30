@@ -881,6 +881,40 @@
             return String(runId || "").trim().startsWith("speech-final-");
         }
 
+        function extractFinalOwnedTranscriptText(payload, requestedRunId) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const requested = String(requestedRunId || "").trim();
+            const speechSession = source.speechSession && typeof source.speechSession === "object"
+                ? source.speechSession
+                : null;
+            const segment = speechSession && speechSession.segment && typeof speechSession.segment === "object"
+                ? speechSession.segment
+                : source.segment && typeof source.segment === "object"
+                    ? source.segment
+                    : null;
+
+            const ownerRunId = String(
+                source.executionRunId ||
+                source.runId ||
+                speechSession && speechSession.runId ||
+                "").trim();
+            const finalOwned = !isSpeechPreviewRunId(ownerRunId) ||
+                (requested && ownerRunId === requested);
+            if (!finalOwned) {
+                return "";
+            }
+
+            return String(
+                source.text ||
+                source.transcript ||
+                speechSession && speechSession.text ||
+                speechSession && speechSession.transcript ||
+                segment && segment.text ||
+                "").trim();
+        }
+
         function isActiveSpeechPreviewState(sessionState) {
             const source = sessionState && typeof sessionState === "object"
                 ? sessionState
@@ -2613,10 +2647,7 @@
                         updatedAtMs: Date.now(),
                     }
                     : normalizedSpeechSessionState;
-                const finalPayloadText = String(
-                    payload.text ||
-                    payload.transcript ||
-                    "").trim();
+                const finalPayloadText = extractFinalOwnedTranscriptText(payload, transcriptRequest.runId);
                 const previewPayloadText = String(
                     finalPayloadText ||
                     state.speechSessionState.segmentText ||
@@ -2641,6 +2672,18 @@
                             previousSpeechSessionState.text ||
                             "").trim().length,
                         audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
+                    applySpeechLifecycleUpdate({
+                        stage: "failed",
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        audioPath,
+                        audioArtifact,
+                        text: "",
+                        segmentText: "",
+                        errorCode: "missing_final_transcript",
+                        errorMessage: "speech final response did not contain transcript text",
+                        errorClass: "status",
                     });
                 }
                 if (transcriptText) {
@@ -4700,11 +4743,64 @@
             });
 
             const snapshot = controller.getSpeechSessionStateSnapshot();
-            assertRegression(sendCalls.length === 1 && sendCalls[0].message === "authoritative final transcript",
-                "speech finalization should use authoritative text when response carries stale preview run id");
-            assertRegression(snapshot.runId === "speech-final-regression-3",
-                "speech finalization should replace stale preview run id with requested final run id");
-            summary.push("speech final stale preview run guard");
+            assertRegression(sendCalls.length === 0,
+                "speech finalization should reject response text owned by stale preview run id");
+            assertRegression(snapshot.stage === "failed" && snapshot.errorCode === "missing_final_transcript",
+                "speech finalization should terminally fail when only preview-owned response text is available");
+            summary.push("speech final stale preview response guard");
+        }
+
+        {
+            const state = createRegressionState();
+            const sendCalls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-final-regression-3a",
+                text: "preview text should not win",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "final.wav",
+                runId: "speech-final-regression-3a",
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: params.runId,
+                                audioPath: "final.wav",
+                                speechSession: {
+                                    stage: "completed",
+                                    sessionId: "main",
+                                    runId: params.runId,
+                                    audioPath: "final.wav",
+                                    segment: {
+                                        text: "nested final transcript",
+                                        final: true,
+                                        sequence: 1,
+                                    },
+                                },
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "chat-run-nested-final-speech" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            assertRegression(sendCalls.length === 1 && sendCalls[0].message === "nested final transcript",
+                "speech finalization should accept nested final-owned segment text");
+            summary.push("speech final nested transcript authority");
         }
 
         {
@@ -4731,7 +4827,7 @@
             await controller.transcribeSpeech({
                 audioPath: "final.wav",
                 runId: "speech-final-regression-3b",
-                requestOverride: async (method) => {
+                requestOverride: async (method, params) => {
                     if (method === "speech.transcribe") {
                         return {
                             payload: {
@@ -4752,6 +4848,11 @@
 
             assertRegression(sendCalls.length === 0,
                 "speech finalization should not submit preserved preview text when final payload has no transcript");
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.stage === "failed" && snapshot.errorCode === "missing_final_transcript",
+                "speech finalization should leave terminal failed state when final payload has no transcript");
+            assertRegression(!snapshot.text && !snapshot.segmentText,
+                "speech finalization should clear preserved preview text when final payload has no transcript");
             summary.push("speech final missing transcript does not reuse preview text");
         }
 
