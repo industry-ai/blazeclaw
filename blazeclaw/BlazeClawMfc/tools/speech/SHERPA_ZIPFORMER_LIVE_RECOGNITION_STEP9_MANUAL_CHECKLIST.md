@@ -52,6 +52,9 @@ For each scenario, capture the following when present:
 - `speech.capabilities.get` payload, when available, with
   `streamingPreviewEnabled=false` and `livePreviewToggleEnabled=false` for the
   disabled-preview run
+- WebView `[speech-preview-diagnostic]` entry `speech.preview.disabled` with
+  `reason=capability_toggle` or `reason=capability_unloaded` if recording starts
+  before capabilities are loaded
 - `speech.bridge.order` / `[Speech][BridgeOrder]`
 - `SpeechTranscriptionCoordinator` `accept.*` and `execute.*` diagnostics
 - `[VoiceRecorder][artifact.preview]`
@@ -67,6 +70,9 @@ Important evidence markers:
   `speech-preview-*` run id.
 - disabled-preview runs must not emit `requestType=preview` or
   `livePreviewOnly=true` dispatches after recording starts.
+- preview polling is fail-closed: if capabilities are not loaded or do not
+  explicitly report `streamingPreviewEnabled=true`, preview must stay disabled
+  and final transcription must still run after stop.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.

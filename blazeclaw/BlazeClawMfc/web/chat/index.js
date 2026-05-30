@@ -187,7 +187,7 @@
         const capability = state.speechCapabilities && typeof state.speechCapabilities === "object"
             ? state.speechCapabilities
             : null;
-        const previewDisabled = capability && capability.streamingPreviewEnabled === false;
+        const previewDisabled = !capability || capability.streamingPreviewEnabled !== true;
         const liveStages = new Set(["recording", "start_stream", "streaming"]);
         const finalizingStages = new Set(["queued", "stopped", "transcribing"]);
         const finalStages = new Set(["segment_finalized", "completed"]);
@@ -2767,10 +2767,14 @@
             const speechCapabilities = state.speechCapabilities && typeof state.speechCapabilities === "object"
                 ? state.speechCapabilities
                 : null;
-            if (speechCapabilities && speechCapabilities.streamingPreviewEnabled === false) {
+            if (!speechCapabilities || speechCapabilities.streamingPreviewEnabled !== true) {
                 emitSpeechPreviewDiagnostic("speech.preview.disabled", {
                     runId: String(previewRunId || ""),
-                    reason: "capability_toggle",
+                    reason: speechCapabilities ? "capability_toggle" : "capability_unloaded",
+                    loaded: Boolean(speechCapabilities && speechCapabilities.loaded),
+                    streamingPreviewEnabled: Boolean(speechCapabilities && speechCapabilities.streamingPreviewEnabled),
+                    livePreviewToggleEnabled: Boolean(speechCapabilities && speechCapabilities.livePreviewToggleEnabled),
+                    livePreviewToggleSource: String(speechCapabilities && speechCapabilities.livePreviewToggleSource || ""),
                 });
                 return;
             }

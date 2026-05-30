@@ -123,6 +123,10 @@ Preview enablement:
   `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED` and exposes
   `livePreviewToggleEnabled` / `livePreviewToggleSource` so disabled-preview
   runs can be verified without relying only on UI text.
+- WebView preview polling is fail-closed: `startLiveSpeechPoll(...)` starts
+  preview only when capabilities explicitly report `streamingPreviewEnabled=true`.
+  Missing/unloaded capability state is treated as preview disabled so final-only
+  recording remains safe.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the

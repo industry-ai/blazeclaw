@@ -112,7 +112,8 @@ Implementation details:
 - `web/chat/chat-controller.js` preserves `streamingPreviewEnabled` in the
   speech capability snapshot.
 - `web/chat/index.js::startLiveSpeechPoll(...)` exits before starting preview
-  polling when `streamingPreviewEnabled === false`.
+	polling unless `streamingPreviewEnabled === true`; missing or unloaded
+  capabilities are treated as preview disabled.
 - Final stop-recording and final `speech.transcribe` are not gated by this
   switch.
 - `BlazeClawMfc/blazeclaw.conf` contains a commented A/B line:
@@ -678,8 +679,9 @@ Use this section while executing the plan.
 	`BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, confirm the WebView header
   speech status shows `preview=off`, confirm the live preview box shows
 	`Live preview disabled`, record `请讲一个笑话`, and verify the logs do not show
-  `requestType=preview` / `type=preview` dispatches while final stop
-  transcription still runs.
+	`requestType=preview` / `type=preview` dispatches. If recording starts before
+  capabilities load, WebView should emit `speech.preview.disabled` with
+  `reason=capability_unloaded`; final stop transcription must still run.
 
 ### WebView request identity trace
 
