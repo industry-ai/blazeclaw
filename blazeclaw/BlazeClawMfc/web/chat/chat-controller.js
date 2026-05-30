@@ -877,6 +877,10 @@
             return String(runId || "").trim().startsWith("speech-preview-");
         }
 
+        function isSpeechFinalRunId(runId) {
+            return String(runId || "").trim().startsWith("speech-final-");
+        }
+
         function isActiveSpeechPreviewState(sessionState) {
             const source = sessionState && typeof sessionState === "object"
                 ? sessionState
@@ -899,6 +903,14 @@
         function isPreviewUpdateBlockedByFinalAuthority(normalized, previous) {
             if (!isSpeechPreviewUpdate(normalized)) {
                 return false;
+            }
+
+            const current = previous && typeof previous === "object"
+                ? previous
+                : {};
+            if (isSpeechFinalRunId(current.finalRunId) ||
+                isSpeechFinalRunId(current.runId)) {
+                return true;
             }
 
             return !isActiveSpeechPreviewState(previous);
@@ -4712,6 +4724,37 @@
             assertRegression(Number(state.operatorDiagnosticsCounters["speech.request.lifecycle_ignored"] || 0) >= 1,
                 "speech final authority should emit ignored preview lifecycle diagnostic");
             summary.push("speech final lifecycle preview invalidation");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-final-regression-6",
+                finalRunId: "speech-final-regression-6",
+                text: "preview text before final",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-6",
+                text: "late preview after final dispatch",
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.runId === "speech-final-regression-6",
+                "speech final authority should keep final run id when late preview arrives after final dispatch");
+            assertRegression(snapshot.text === "preview text before final",
+                "speech final authority should reject late preview text after final dispatch");
+            assertRegression(Number(state.operatorDiagnosticsCounters["speech.request.lifecycle_ignored"] || 0) >= 1,
+                "speech final authority should trace ignored late preview after final dispatch");
+            summary.push("speech final dispatch blocks late preview lifecycle");
         }
 
         {

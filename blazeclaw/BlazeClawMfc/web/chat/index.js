@@ -3039,7 +3039,9 @@
                     controller.applySpeechLifecycleUpdate({
                         stage: "stopped",
                         sessionId: state.sessionKey,
-                        runId: speechRunId,
+                        runId: finalRunId,
+                        previousRunId: speechRunId,
+                        finalRunId,
                         audioPath,
                         audioArtifact,
                         text: finalizingText,

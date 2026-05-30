@@ -77,6 +77,9 @@ Important evidence markers:
   `speech-preview-*` run must not change the button back to `Transcribe`; the
   button should stay `Recording... (click to stop)` until the user explicitly
   stops recording.
+- after `speech.final.request_start` or a `speech-final-*` lifecycle state,
+  any later `speech-preview-*` lifecycle event must be ignored and must not
+  replace the final visible text or chat-sent transcript.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.
@@ -117,6 +120,7 @@ Sherpa final remaining:
 Final visible transcript:
 Chat message sent: yes | no
 Late preview ignored reason:
+Late preview after final ignored: yes | no
 Pass/fail:
 Notes:
 ```

@@ -596,6 +596,9 @@ Implementation details:
   lifecycle updates for `speech-preview-*` runs do not return the Transcribe
   button to idle. The button remains `Recording... (click to stop)` until the
   user explicitly stops recording.
+- Added final-dispatch authority: when stop/final transcription begins, WebView
+  state is owned by the `speech-final-*` run id, and later `speech-preview-*`
+  lifecycle events are ignored instead of replacing the final visible/chat text.
 
 Preview enablement:
 
@@ -644,6 +647,9 @@ Acceptance criteria:
   environment.
 - ready to validate: final visible text is produced by a `speech-final-*` request
   and late `speech-preview-*` updates are ignored after stop/final begins.
+- ready to validate: logs may show late preview `transcribe.complete`, but any
+  preview lifecycle after `speech.final.request_start` is ignored and cannot
+  become the chat-sent transcript.
 
 ### Step 10: Validate with build and focused tests
 

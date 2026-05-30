@@ -131,6 +131,10 @@ Preview enablement:
   make the UI leave recording mode: `speech-preview-*` `completed` or
   `segment_finalized` states keep the Transcribe button in
   `Recording... (click to stop)` until the user explicitly stops recording.
+- Final dispatch now establishes `speech-final-*` authority in WebView state
+  before calling final transcription. Any later `speech-preview-*` lifecycle
+  event is ignored, so stale preview text cannot replace or send as final text
+  after stop/final begins.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the
