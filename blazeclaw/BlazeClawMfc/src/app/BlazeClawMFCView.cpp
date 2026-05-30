@@ -95,6 +95,10 @@ namespace {
 	struct SpeechRpcCompletionPayload
 	{
 		std::string correlationId;
+		std::string sessionId;
+		std::string runId;
+		std::string requestType;
+		std::string requestTraceDetail;
 		blazeclaw::gateway::protocol::ResponseFrame response;
 	};
 
@@ -2554,12 +2558,77 @@ void CBlazeClawMFCView::EmitSpeechLifecycleEvent(const std::string& payloadJson)
 	{
 		return;
 	}
+
+	std::string stage;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "stage", stage);
+	std::string sessionId;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "sessionId", sessionId);
+	std::string runId;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "runId", runId);
+	std::string text;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "text", text);
+	std::uint64_t segmentSequence = 0;
+	bool segmentFinal = false;
+	std::string segmentRaw;
+	if (blazeclaw::gateway::json::FindRawField(payloadJson, "segment", segmentRaw) &&
+		blazeclaw::gateway::json::IsJsonObjectShape(segmentRaw))
+	{
+		blazeclaw::gateway::json::FindUInt64Field(
+			segmentRaw,
+			"sequence",
+			segmentSequence);
+		blazeclaw::gateway::json::FindBoolField(
+			segmentRaw,
+			"final",
+			segmentFinal);
+		if (text.empty())
+		{
+			blazeclaw::gateway::json::FindStringField(segmentRaw, "text", text);
+		}
+	}
+	const std::string lifecycleTraceDetail =
+		"stage=" + stage +
+		" sessionId=" + (sessionId.empty() ? m_bridgeSessionId : sessionId) +
+		" runId=" + runId +
+		" textLength=" + std::to_string(text.size()) +
+		" segmentSequence=" + std::to_string(segmentSequence) +
+		" segmentFinal=" + std::string(segmentFinal ? "true" : "false");
 	if (!ShouldEmitSpeechLifecycleEvent(payloadJson))
 	{
+		TraceSpeechBridgeOrder(
+			"lifecycle.suppressed",
+			lifecycleTraceDetail);
 		return;
 	}
 
+	TraceSpeechBridgeOrder(
+		"lifecycle.emit",
+		lifecycleTraceDetail);
+
 	m_eventTransport.EmitTopic(BridgeEventTopic::SpeechLifecycle, payloadJson);
+}
+
+void CBlazeClawMFCView::TraceSpeechBridgeOrder(
+	const char* phase,
+	const std::string& detail)
+{
+	const std::uint64_t sequence = ++m_speechBridgeOrderSequence;
+	std::string traceDetail =
+		"seq=" + std::to_string(sequence) +
+		" phase=" + std::string(phase != nullptr ? phase : "unknown");
+	if (!detail.empty())
+	{
+		traceDetail += " " + detail;
+	}
+
+	AppendChatProcedureStatusLine(
+		L"speech.bridge.order",
+		traceDetail);
+	ATLTRACE(
+		atlTraceGeneral,
+		0,
+		L"[Speech][BridgeOrder] %S\n",
+		traceDetail.c_str());
 }
 
 void CBlazeClawMFCView::ResetLiveSpeechPreviewState()
@@ -3018,6 +3087,12 @@ LRESULT CBlazeClawMFCView::OnSpeechRpcCompleted(
 	{
 		return 0;
 	}
+	TraceSpeechBridgeOrder(
+		"transcribe.complete",
+		"method=speech.transcribe ok=" +
+		std::string(payload->response.ok ? "true" : "false") +
+		" correlationId=" + payload->correlationId +
+		" " + payload->requestTraceDetail);
 
 	const std::string lifecyclePayloadJson =
 		BuildSpeechLifecyclePayloadFromTranscribeResponse(payload->response);
@@ -3896,6 +3971,10 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		}
 
 		bool streamingRequest = false;
+		std::string artifactHandoffMode;
+		std::string artifactStreamId;
+		std::uint64_t artifactSequenceStart = 0;
+		std::uint64_t artifactSequenceEnd = 0;
 		if (paramsJson.has_value())
 		{
 			std::string audioArtifactRaw;
@@ -3905,9 +3984,23 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				audioArtifactRaw) &&
 				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
 			{
-				std::string handoffMode;
-				blazeclaw::gateway::json::FindStringField(audioArtifactRaw, "handoffMode", handoffMode);
-				streamingRequest = (handoffMode == "pcm_stream");
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"handoffMode",
+					artifactHandoffMode);
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"streamId",
+					artifactStreamId);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceStart",
+					artifactSequenceStart);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceEnd",
+					artifactSequenceEnd);
+				streamingRequest = (artifactHandoffMode == "pcm_stream");
 			}
 		}
 
@@ -3916,6 +4009,34 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		{
 			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "audioPath", audioPath);
 		}
+
+		const bool previewRequest =
+			runId.rfind("speech-preview-", 0) == 0;
+		const bool finalRequest =
+			runId.rfind("speech-final-", 0) == 0;
+		const std::string requestType =
+			previewRequest ? "preview" : finalRequest ? "final" : "unknown";
+		const std::string speechRequestTraceDetail =
+			"type=" + requestType +
+			" sessionId=" + sessionId +
+			" runId=" + runId +
+			" streaming=" + std::string(streamingRequest ? "true" : "false") +
+			" handoffMode=" + artifactHandoffMode +
+			" streamId=" + artifactStreamId +
+			" sequenceStart=" + std::to_string(artifactSequenceStart) +
+			" sequenceEnd=" + std::to_string(artifactSequenceEnd) +
+			" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true");
+		AppendChatProcedureStatusLine(
+			L"speech.request.trace",
+			speechRequestTraceDetail);
+		ATLTRACE(
+			atlTraceGeneral,
+			0,
+			L"[Speech][RequestTrace] %S\n",
+			speechRequestTraceDetail.c_str());
+		TraceSpeechBridgeOrder(
+			"transcribe.dispatch",
+			"method=speech.transcribe " + speechRequestTraceDetail);
 
 		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
 			"queued",
@@ -3973,7 +4094,14 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		}
 
 		std::thread(
-			[hwnd, request, correlationId]()
+			[
+				hwnd,
+				request,
+				correlationId,
+				sessionId,
+				runId,
+				requestType,
+				speechRequestTraceDetail]()
 			{
 				auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 				blazeclaw::gateway::protocol::ResponseFrame response;
@@ -3999,6 +4127,10 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 				auto* payload = new SpeechRpcCompletionPayload{
 					.correlationId = correlationId,
+					.sessionId = sessionId,
+					.runId = runId,
+					.requestType = requestType,
+					.requestTraceDetail = speechRequestTraceDetail,
 					.response = std::move(response),
 				};
 				CMgrMessage::Instance().PostOwnedPayloadToHwnd(
@@ -4029,6 +4161,50 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			{
 				sessionId = m_bridgeSessionId;
 			}
+			std::string audioPath;
+			blazeclaw::gateway::json::FindStringField(
+				response.payloadJson.value(),
+				"audioPath",
+				audioPath);
+			std::string artifactTraceDetail;
+			std::string audioArtifactRaw;
+			if (blazeclaw::gateway::json::FindRawField(
+				response.payloadJson.value(),
+				"audioArtifact",
+				audioArtifactRaw) &&
+				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
+			{
+				std::string handoffMode;
+				std::string streamId;
+				std::uint64_t sequenceStart = 0;
+				std::uint64_t sequenceEnd = 0;
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"handoffMode",
+					handoffMode);
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"streamId",
+					streamId);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceStart",
+					sequenceStart);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceEnd",
+					sequenceEnd);
+				artifactTraceDetail =
+					" handoffMode=" + handoffMode +
+					" streamId=" + streamId +
+					" sequenceStart=" + std::to_string(sequenceStart) +
+					" sequenceEnd=" + std::to_string(sequenceEnd);
+			}
+			TraceSpeechBridgeOrder(
+				"startRecording.complete",
+				"method=gateway.speech.startRecording sessionId=" + sessionId +
+				" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true") +
+				artifactTraceDetail);
 
 			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
 				"recording",
@@ -4060,6 +4236,45 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				response.payloadJson.value(),
 				"audioPath",
 				audioPath);
+			std::string artifactTraceDetail;
+			std::string audioArtifactRaw;
+			if (blazeclaw::gateway::json::FindRawField(
+				response.payloadJson.value(),
+				"audioArtifact",
+				audioArtifactRaw) &&
+				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
+			{
+				std::string handoffMode;
+				std::string streamId;
+				std::uint64_t sequenceStart = 0;
+				std::uint64_t sequenceEnd = 0;
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"handoffMode",
+					handoffMode);
+				blazeclaw::gateway::json::FindStringField(
+					audioArtifactRaw,
+					"streamId",
+					streamId);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceStart",
+					sequenceStart);
+				blazeclaw::gateway::json::FindUInt64Field(
+					audioArtifactRaw,
+					"sequenceEnd",
+					sequenceEnd);
+				artifactTraceDetail =
+					" handoffMode=" + handoffMode +
+					" streamId=" + streamId +
+					" sequenceStart=" + std::to_string(sequenceStart) +
+					" sequenceEnd=" + std::to_string(sequenceEnd);
+			}
+			TraceSpeechBridgeOrder(
+				"stopRecording.complete",
+				"method=gateway.speech.stopRecording sessionId=" + sessionId +
+				" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true") +
+				artifactTraceDetail);
 			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
 				"stopped",
 				sessionId,

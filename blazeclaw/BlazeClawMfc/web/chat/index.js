@@ -2688,6 +2688,34 @@
                 });
             }
         };
+        const summarizeSpeechAudioArtifact = (audioArtifact) => {
+            const artifact = audioArtifact && typeof audioArtifact === "object"
+                ? audioArtifact
+                : null;
+            if (!artifact) {
+                return null;
+            }
+
+            return {
+                handoffMode: String(artifact.handoffMode || "").trim(),
+                streamId: String(artifact.streamId || "").trim(),
+                sequenceStart: Number.isFinite(Number(artifact.sequenceStart))
+                    ? Number(artifact.sequenceStart)
+                    : 0,
+                sequenceEnd: Number.isFinite(Number(artifact.sequenceEnd))
+                    ? Number(artifact.sequenceEnd)
+                    : 0,
+                sampleRate: Number.isFinite(Number(artifact.sampleRate))
+                    ? Number(artifact.sampleRate)
+                    : 0,
+                channels: Number.isFinite(Number(artifact.channels))
+                    ? Number(artifact.channels)
+                    : 0,
+                durationMs: Number.isFinite(Number(artifact.durationMs))
+                    ? Number(artifact.durationMs)
+                    : 0,
+            };
+        };
         const stopLiveSpeechPoll = () => {
             liveSpeechPollGeneration += 1;
             if (liveSpeechPollTimer !== null) {
@@ -2981,6 +3009,17 @@
                     ? payload.audioArtifact
                     : null;
 
+                const finalRunId = `speech-final-${Date.now()}`;
+                emitSpeechPreviewDiagnostic("speech.final.request_start", {
+                    livePreviewOnly: false,
+                    sessionId: state.sessionKey,
+                    runId: finalRunId,
+                    previewRunId: speechRunId,
+                    stage: String(state.speechSessionState && state.speechSessionState.stage || ""),
+                    audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    audioPath,
+                });
+
                 if (typeof controller.applySpeechLifecycleUpdate === "function") {
                     controller.applySpeechLifecycleUpdate({
                         stage: "stopped",
@@ -3006,9 +3045,20 @@
                     audioPath,
                     audioArtifact,
                     prompt,
+                    runId: finalRunId,
                 });
                 if (typeof controller.getSpeechSessionStateSnapshot === "function") {
                     state.speechSessionState = controller.getSpeechSessionStateSnapshot();
+                    emitSpeechPreviewDiagnostic("speech.final.request_end", {
+                        livePreviewOnly: false,
+                        sessionId: state.sessionKey,
+                        runId: finalRunId,
+                        stage: String(state.speechSessionState.stage || ""),
+                        responseRunId: String(state.speechSessionState.runId || ""),
+                        hasText: Boolean(state.speechSessionState.text || state.speechSessionState.segmentText),
+                        audioArtifact: summarizeSpeechAudioArtifact(
+                            state.speechSessionState.audioArtifact || audioArtifact),
+                    });
                 }
                 updateComposerState();
             } catch (e) {

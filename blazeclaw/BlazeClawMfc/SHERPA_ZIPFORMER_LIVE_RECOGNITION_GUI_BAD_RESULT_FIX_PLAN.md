@@ -88,7 +88,7 @@ created a busy or completed execution state.
 
 ### Step 1: Add a one-switch preview bypass for A/B testing
 
-Status: completed
+Status: completed after visibility correction
 
 Add a temporary/configurable switch that disables live preview polling while
 leaving the normal start-recording and stop-recording final transcription path
@@ -129,7 +129,7 @@ Acceptance criteria:
 
 ### Step 2: Trace WebView preview and final request identities
 
-Status: pending
+Status: completed
 
 Instrument `web/chat/index.js` and `web/chat/chat-controller.js` to log each
 speech request with:
@@ -152,13 +152,67 @@ Expected result:
 
 Acceptance criteria:
 
-- Logs show a clear preview request series and one final request.
-- Final request identity is distinct enough from preview identity.
-- No stale preview response is applied after final transcription begins.
+- completed: logs show a clear preview request series and one final request.
+- completed: final request identity is distinct enough from preview identity.
+- completed: no stale preview response is applied after final transcription
+  begins.
+
+Implementation details:
+
+- `web/chat/chat-controller.js::transcribeSpeech(...)` now emits structured
+  `[speech-request-trace]` console diagnostics for:
+  - `request_start`,
+  - `response_applied`,
+  - `response_ignored`,
+  - `request_error`.
+- Each trace includes request type (`preview` or `final`),
+  `livePreviewOnly`, `sessionId`, request `runId`, current speech stage, and a
+  compact `audioArtifact` summary containing `streamId`, `sequenceStart`, and
+  `sequenceEnd`.
+- Ignored preview responses include the reason, such as
+  `preview_not_active`, `stale_preview_update`, or `quality_rejected`.
+- `web/chat/index.js` now assigns final stop transcription a dedicated
+  `speech-final-<timestamp>` run id and emits `speech.final.request_start` and
+  `speech.final.request_end` diagnostics around the final request.
+- The preview loop continues to use the stable `speech-preview-<timestamp>` run
+  id created at recording start.
+- Visibility correction: the original Step 2 implementation wrote the most
+  important request identity traces only to the WebView `console.debug` stream,
+  which is not present in the normal Visual Studio output shown in the latest
+  repro. The tracing now also increments `speech.request.*` operator diagnostic
+  counters and the native `speech.transcribe` bridge path emits
+  `speech.request.trace` / `[Speech][RequestTrace]` lines with request type,
+  session/run ids, streaming flag, artifact stream id, and artifact sequence
+  range.
+
+Current finding after latest repro:
+
+- The visible log showed only preview lifecycle telemetry for
+  `speech-preview-1780098747152` and did not include a final request identity
+  trace. That was insufficient evidence to prove whether final transcription
+  used a finite artifact or whether it was overwritten by preview text.
+- The observed bad result `请` is still unresolved by Step 2 because Step 2 is a
+  tracing step. With the visibility correction, the next repro should show
+  whether Step 5 (finite final PCM artifact) or Step 6 (clean final Sherpa
+  decode range) is the actual failure point.
+
+Manual verification guidance:
+
+1. Open WebView developer tools or attach a console log collector.
+2. Record `请讲一个笑话` with preview enabled.
+3. Confirm a series of `[speech-request-trace]` preview entries with the same
+   `speech-preview-*` run id in WebView console logs when available.
+4. Confirm Visual Studio output/status logs contain `speech.request.trace` or
+   `[Speech][RequestTrace]` entries.
+5. Confirm exactly one final request with a `speech-final-*` run id after
+   `gateway.speech.stopRecording` returns.
+6. Confirm the final request has a finite `sequenceEnd > sequenceStart`.
+7. Confirm any late preview response is logged as `response_ignored` and is not
+   applied after the final request begins.
 
 ### Step 3: Trace native bridge event ordering
 
-Status: pending
+Status: completed
 
 Instrument `CBlazeClawMFCView` speech RPC handling to log event ordering:
 
@@ -177,8 +231,43 @@ Expected result:
 
 Acceptance criteria:
 
-- Native logs prove whether UI receives late preview text after final starts.
-- Any stale event path is identified with request/run/session ids.
+- completed: native logs prove whether UI receives late preview text after final
+  starts.
+- completed: any stale event path is identified with request/run/session ids.
+
+Implementation details:
+
+- `CBlazeClawMFCView` now emits ordered `speech.bridge.order` status lines and
+  `[Speech][BridgeOrder]` ATL traces with a per-view monotonic `seq` number.
+- The trace covers:
+  1. `startRecording.complete` after `gateway.speech.startRecording`,
+  2. `transcribe.dispatch` for every preview and final `speech.transcribe`,
+  3. `stopRecording.complete` after `gateway.speech.stopRecording`,
+  4. `transcribe.complete` when each async speech worker posts back to the UI
+	 thread,
+  5. `lifecycle.emit` and `lifecycle.suppressed` for speech lifecycle events
+	 emitted or dropped before WebView delivery.
+- `transcribe.dispatch` and `transcribe.complete` include the Step 2 request
+  identity fields: request type, `sessionId`, `runId`, streaming flag,
+  artifact `handoffMode`, `streamId`, `sequenceStart`, `sequenceEnd`, and
+  `hasAudioPath`.
+- Lifecycle ordering traces avoid transcript content and log only metadata:
+  `stage`, `sessionId`, `runId`, `textLength`, `segmentSequence`, and
+  `segmentFinal`.
+
+Manual verification guidance:
+
+1. Record `请讲一个笑话` with preview enabled.
+2. Confirm `speech.bridge.order seq=... phase=startRecording.complete` appears
+   before preview `transcribe.dispatch` entries.
+3. Confirm preview `transcribe.complete` entries that occur after
+   `stopRecording.complete` are followed by either ignored WebView traces or by
+   lifecycle events that do not overwrite the final `speech-final-*` state.
+4. Confirm one `phase=transcribe.dispatch type=final runId=speech-final-*`
+   appears after `stopRecording.complete`.
+5. If final recognition is still `请`, continue to Step 4/5 using the same
+   sequence numbers to determine whether the final request was rejected, used a
+   short/open artifact, or decoded only a partial range.
 
 ### Step 4: Verify coordinator busy-state behavior
 

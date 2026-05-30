@@ -1,7 +1,7 @@
 # Sherpa Zipformer Live Recognition GUI Step 2 - Live Preview Polling
 
 ## Status
-Completed.
+Completed after visibility correction.
 
 ## Scope
 This step refines the existing WebView live preview polling loop so interim speech recognition requests can run while recording is active without blocking the UI, without sending chat messages, and without allowing stale preview responses to overwrite stopped/finalizing state.
@@ -10,6 +10,7 @@ This step refines the existing WebView live preview polling loop so interim spee
 - `web/chat/index.js`
 - `web/chat/chat-controller.js`
 - `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_PLAN.md`
+- `SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_BAD_RESULT_FIX_PLAN.md`
 
 ## Implementation Summary
 
@@ -50,6 +51,60 @@ That id is:
 - passed into every preview `controller.transcribeSpeech(...)` call for that recording session
 
 `chat-controller.js::transcribeSpeech(...)` now accepts an optional `runId` in its options and uses it instead of always generating a new id.
+
+### Final request identity trace
+Final stop transcription now gets its own run id:
+
+```text
+speech-final-<timestamp>
+```
+
+That id is passed into the non-preview `controller.transcribeSpeech(...)` call
+after `gateway.speech.stopRecording` returns. This makes the final request
+distinguishable from the earlier `speech-preview-*` polling series in WebView
+logs and native bridge traces.
+
+### Request identity diagnostics
+`chat-controller.js::transcribeSpeech(...)` now emits structured
+`[speech-request-trace]` console diagnostics for:
+
+- `request_start`
+- `response_applied`
+- `response_ignored`
+- `request_error`
+
+Each trace includes:
+
+- request type: `preview` or `final`
+- `livePreviewOnly`
+- `sessionId`
+- request `runId`
+- current `speechSessionState.stage`
+- `audioArtifact.streamId`
+- `audioArtifact.sequenceStart`
+- `audioArtifact.sequenceEnd`
+
+Ignored preview responses also include a reason, such as
+`preview_not_active`, `stale_preview_update`, or `quality_rejected`, so late
+preview responses can be distinguished from accepted final text updates.
+
+`web/chat/index.js` also emits `speech.final.request_start` and
+`speech.final.request_end` diagnostics around the final transcription request,
+including the final `speech-final-*` run id, the previous preview run id, the
+current stage, and the audio artifact summary.
+
+The request traces are now visible through two paths:
+
+- WebView console: `[speech-request-trace]` and
+  `[speech-preview-diagnostic]` entries.
+- Visual Studio/native status output: `speech.request.trace` and
+  `[Speech][RequestTrace]` entries emitted by the `speech.transcribe` bridge
+  path.
+
+The native trace line includes request type, `sessionId`, `runId`, streaming
+flag, artifact `handoffMode`, `streamId`, `sequenceStart`, `sequenceEnd`, and
+whether an `audioPath` was supplied. This is the preferred evidence source when
+WebView console output is not available.
 
 ### Stale preview response suppression
 `web/chat/index.js` now uses a `liveSpeechPollGeneration` counter.
@@ -108,6 +163,12 @@ complete.
 - `liveSpeechPollBusy` continues to prevent overlapping preview requests.
 - `speech.transcribe` preview requests remain asynchronous through `CBlazeClawMFCView`, so the UI thread is not blocked by preview inference.
 - Preview requests do not send chat messages because they use `livePreviewOnly: true`.
+- WebView diagnostics now show preview requests as `speech-preview-*` and final
+  transcription as one `speech-final-*` request.
+- Stale or rejected preview responses are logged as ignored instead of silently
+  competing with the final response.
+- Normal Visual Studio logs now expose native request identity lines, so Step 2
+  evidence no longer depends on WebView developer tools being open.
 
 ## Follow-up Notes for Step 3
 Step 3 should verify that the `audioArtifact` used by preview calls is consistently a live `pcm_stream` artifact with a usable `streamId`, sequence range, sample rate, channel count, and bit depth.

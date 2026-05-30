@@ -95,6 +95,7 @@ protected:
 	std::string m_liveSpeechRunId;
 	std::string m_liveSpeechSegmentText;
 	std::uint64_t m_liveSpeechSegmentSequence = 0;
+	std::uint64_t m_speechBridgeOrderSequence = 0;
 	CEventTransport m_eventTransport;
 	CBridge m_bridge;
 
@@ -122,6 +123,9 @@ protected:
 	bool ShouldEmitSpeechLifecycleEvent(const std::string& payloadJson);
 	void ResetLiveSpeechPreviewState();
 	void EmitSpeechLifecycleEvent(const std::string& payloadJson);
+	void TraceSpeechBridgeOrder(
+		const char* phase,
+		const std::string& detail = std::string());
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
 	void ReportRunSkillPathsToToolOutput(const std::string& runId);
 	void ProcessRunSkillPathLookupResult(

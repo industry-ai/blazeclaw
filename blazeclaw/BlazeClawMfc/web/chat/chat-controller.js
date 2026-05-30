@@ -2378,6 +2378,57 @@
             }, timeoutMs);
         }
 
+        function summarizeSpeechAudioArtifact(audioArtifact) {
+            const artifact = audioArtifact && typeof audioArtifact === "object"
+                ? audioArtifact
+                : null;
+            if (!artifact) {
+                return null;
+            }
+
+            return {
+                handoffMode: String(artifact.handoffMode || "").trim(),
+                streamId: String(artifact.streamId || "").trim(),
+                sequenceStart: Number.isFinite(Number(artifact.sequenceStart))
+                    ? Number(artifact.sequenceStart)
+                    : 0,
+                sequenceEnd: Number.isFinite(Number(artifact.sequenceEnd))
+                    ? Number(artifact.sequenceEnd)
+                    : 0,
+                sampleRate: Number.isFinite(Number(artifact.sampleRate))
+                    ? Number(artifact.sampleRate)
+                    : 0,
+                channels: Number.isFinite(Number(artifact.channels))
+                    ? Number(artifact.channels)
+                    : 0,
+                durationMs: Number.isFinite(Number(artifact.durationMs))
+                    ? Number(artifact.durationMs)
+                    : 0,
+            };
+        }
+
+        function emitSpeechRequestTrace(eventName, details) {
+            const current = state.speechSessionState && typeof state.speechSessionState === "object"
+                ? state.speechSessionState
+                : {};
+            const trace = {
+                event: String(eventName || ""),
+                stage: String(current.stage || ""),
+                sessionId: String(current.sessionId || state.sessionKey || ""),
+                runId: String(current.runId || ""),
+                details: details && typeof details === "object" ? details : {},
+            };
+
+            emitOperatorDiagnostic(
+                `speech.request.${trace.event || "unknown"}`,
+                trace,
+                { minIntervalMs: 0 });
+
+            if (window.console && typeof window.console.debug === "function") {
+                window.console.debug("[speech-request-trace]", trace);
+            }
+        }
+
         async function transcribeSpeech(options) {
             const sendOptions = options && typeof options === "object"
                 ? options
@@ -2415,6 +2466,16 @@
                 transcriptRequest.audioArtifact = audioArtifact;
             }
 
+            emitSpeechRequestTrace("request_start", {
+                requestType: livePreviewOnly ? "preview" : "final",
+                livePreviewOnly,
+                sessionId: transcriptRequest.sessionId,
+                runId: transcriptRequest.runId,
+                audioPath,
+                audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                speechSessionStage: String(state.speechSessionState && state.speechSessionState.stage || ""),
+            });
+
             if (!livePreviewOnly) {
                 applySpeechLifecycleUpdate({
                     stage: "queued",
@@ -2451,9 +2512,32 @@
                 const previousStage = String(previousSpeechSessionState.stage || "").trim();
                 const livePreviewStillActive = isActiveSpeechPreviewStage(previousStage);
                 if (livePreviewOnly && !livePreviewStillActive) {
+                    emitSpeechRequestTrace("response_ignored", {
+                        requestType: "preview",
+                        reason: "preview_not_active",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        previousStage,
+                        responseStage: String(normalizedSpeechSessionState.stage || ""),
+                        responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                        audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
                     return;
                 }
                 if (livePreviewOnly && isStaleSpeechPreviewUpdate(normalizedSpeechSessionState, previousSpeechSessionState)) {
+                    emitSpeechRequestTrace("response_ignored", {
+                        requestType: "preview",
+                        reason: "stale_preview_update",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        previousStage,
+                        previousRunId: String(previousSpeechSessionState.runId || ""),
+                        responseStage: String(normalizedSpeechSessionState.stage || ""),
+                        responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                        audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
                     updateComposerState();
                     return;
                 }
@@ -2489,6 +2573,17 @@
                     const quality = assessTranscriptQuality(transcriptText);
                     if (!quality.accepted) {
                         if (livePreviewOnly) {
+                            emitSpeechRequestTrace("response_ignored", {
+                                requestType: "preview",
+                                reason: "quality_rejected",
+                                livePreviewOnly,
+                                sessionId: transcriptRequest.sessionId,
+                                runId: transcriptRequest.runId,
+                                responseStage: String(state.speechSessionState.stage || ""),
+                                responseRunId: String(state.speechSessionState.runId || ""),
+                                qualityReason: String(quality.reason || ""),
+                                audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                            });
                             updateComposerState();
                             return;
                         }
@@ -2520,6 +2615,16 @@
                             errorCode: "",
                             errorMessage: "",
                             errorClass: "status",
+                        });
+                        emitSpeechRequestTrace("response_applied", {
+                            requestType: "preview",
+                            livePreviewOnly,
+                            sessionId: transcriptRequest.sessionId,
+                            runId: transcriptRequest.runId,
+                            responseStage: String(state.speechSessionState.stage || ""),
+                            responseRunId: String(state.speechSessionState.runId || ""),
+                            responseTextLength: cleanedTranscriptText.length,
+                            audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
                         });
                         updateComposerState();
                         return;
@@ -2589,6 +2694,21 @@
                         errorMessage: "",
                         errorClass: "status",
                     });
+                    emitSpeechRequestTrace("response_applied", {
+                        requestType: "final",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        responseStage: String(state.speechSessionState.stage || ""),
+                        responseRunId: finalRunId,
+                        responseTextLength: cleanedTranscriptText.length,
+                        audioArtifact: summarizeSpeechAudioArtifact(
+                            payload.audioArtifact && typeof payload.audioArtifact === "object"
+                                ? payload.audioArtifact
+                                : payload.speechSession && payload.speechSession.audioArtifact && typeof payload.speechSession.audioArtifact === "object"
+                                    ? payload.speechSession.audioArtifact
+                                    : audioArtifact),
+                    });
                     emitOperatorDiagnostic("speech.final.replacement", {
                         runId: finalRunId,
                         sessionId: transcriptRequest.sessionId,
@@ -2622,6 +2742,16 @@
                 state.speechSessionState.errorClass = classified.behaviorClass;
 
                 if (!transcriptText && sessionErrorCode) {
+                    emitSpeechRequestTrace("response_applied", {
+                        requestType: livePreviewOnly ? "preview" : "final",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        responseStage: String(state.speechSessionState.stage || ""),
+                        responseRunId: String(state.speechSessionState.runId || ""),
+                        errorCode: sessionErrorCode,
+                        audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
                     if (classified.behaviorClass === "ignore") {
                         updateComposerState();
                         return;
@@ -2646,6 +2776,15 @@
             } catch (error) {
                 const errorMessage = String(error && error.message ? error.message : error || "speech transcribe failed");
                 const isTimeout = /timed out/i.test(errorMessage);
+                emitSpeechRequestTrace("request_error", {
+                    requestType: livePreviewOnly ? "preview" : "final",
+                    livePreviewOnly,
+                    sessionId: transcriptRequest.sessionId,
+                    runId: transcriptRequest.runId,
+                    errorMessage,
+                    errorCode: isTimeout ? "transcribe_timeout" : "transcribe_failed",
+                    audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                });
                 if (livePreviewOnly) {
                     updateComposerState();
                     return;

@@ -95,6 +95,10 @@ Implemented refinements:
 - `startLiveSpeechPoll(...)` now starts when either `audioPath` or the live `audioArtifact` is available, so preview can run before the final WAV path is available.
 - each recording session gets a stable `speech-preview-<timestamp>` preview run id that is reused by all preview ticks.
 - `controller.transcribeSpeech(...)` now accepts an optional `runId` for preview requests instead of always generating a new run id.
+- final stop transcription now uses a distinct `speech-final-<timestamp>` run id, so WebView diagnostics can separate the final request from the earlier preview poll series.
+- `chat-controller.js::transcribeSpeech(...)` emits `[speech-request-trace]` diagnostics for request start, accepted responses, ignored stale preview responses, and request errors, including request type, session/run ids, stage, and audio artifact sequence metadata.
+- the native `speech.transcribe` bridge path emits visible `speech.request.trace` / `[Speech][RequestTrace]` lines so preview/final identity evidence appears in normal Visual Studio logs, not only in WebView developer tools.
+- `CBlazeClawMFCView` now emits ordered `speech.bridge.order` / `[Speech][BridgeOrder]` diagnostics for start-recording completion, preview/final transcribe dispatch, stop-recording completion, async transcribe completion, and speech lifecycle emit/suppress decisions.
 - `liveSpeechPollGeneration` invalidates late preview responses after stop/failure-like transitions.
 - `livePreviewOnly` calls no longer emit a local queued update that clears interim transcript text before every poll.
 - stale live preview responses are ignored after the speech state leaves active preview stages.
@@ -120,6 +124,9 @@ Acceptance criteria:
 - completed: preview requests can run from the live artifact even before a final WAV path exists.
 - completed: requests stop before final stop transcription and stale preview results are suppressed by generation checks.
 - completed: preview inference remains asynchronous through the `CBlazeClawMFCView` speech RPC worker path and does not block the UI thread.
+- completed: WebView diagnostics expose preview/final request identities and stale-response decisions without logging transcript content.
+- completed: native bridge diagnostics expose request type, session/run ids, streaming flag, and artifact sequence range for each `speech.transcribe` request.
+- completed: native bridge ordering diagnostics expose whether preview workers complete after stop/final begins and whether any lifecycle event is emitted or suppressed before WebView delivery.
 
 ### Step 3: Ensure live preview requests use the ring-buffer PCM stream
 Status: completed
