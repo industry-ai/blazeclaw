@@ -178,7 +178,7 @@ TEST_CASE("Sherpa streaming engine emits finalized segment for speech energy", "
 	std::filesystem::remove_all(root);
 }
 
-TEST_CASE("Sherpa streaming engine final stream resets live preview state", "[speech][streaming][realtime]")
+TEST_CASE("Sherpa streaming engine final stream preserves compatible live preview state", "[speech][streaming][realtime]")
 {
 	using namespace blazeclaw::core::speechrecognition;
 
@@ -272,6 +272,9 @@ TEST_CASE("Sherpa streaming engine final stream resets live preview state", "[sp
 	REQUIRE_FALSE(finalDebug.sherpaLivePcmStream);
 	REQUIRE(finalDebug.sherpaFinalDrainComplete);
 	REQUIRE(finalDebug.sherpaFinalRemainingSamples == 0);
+	if (!liveResult.text.empty()) {
+		REQUIRE_FALSE(finalDebug.sherpaDecodedText.empty());
+	}
 	REQUIRE(finalDebug.sherpaFinalSequenceEnd == latestSequence);
 	REQUIRE(finalDebug.sherpaFinalCursorNext >= latestSequence);
 	REQUIRE(finalDebug.sherpaBaselineInputStartSequence == oldestSequence);

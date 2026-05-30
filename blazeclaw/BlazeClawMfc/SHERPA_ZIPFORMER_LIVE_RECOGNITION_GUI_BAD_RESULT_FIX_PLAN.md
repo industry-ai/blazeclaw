@@ -614,6 +614,11 @@ Implementation details:
   restores and displays stale preview text. Missing-final diagnostics now
   include final transcript source and ownership fields to distinguish empty
   native final decode from preview-owned rejection.
+- Fixed native Sherpa finalization to preserve compatible live preview stream
+  state when finalizing a finite PCM range. The final pass no longer always
+  resets decoder/token state before draining, so preview-decoded tokens can be
+  promoted into final-owned native transcript output when the live cursor is
+  within the final range.
 
 Preview enablement:
 
@@ -674,6 +679,9 @@ Acceptance criteria:
 - ready to validate: `Recognition failed` for `missing_final_transcript` shows
   the error message, not stale preview text such as `请你讲一个`, and logs include
   `finalTextSource`, `finalTextOwned`, and text-presence flags.
+- ready to validate: final Sherpa logs should show `cachedReset=0` when a
+  compatible preview state exists, and final response text should be present
+  instead of `missing_final_transcript`.
 
 ### Step 10: Validate with build and focused tests
 

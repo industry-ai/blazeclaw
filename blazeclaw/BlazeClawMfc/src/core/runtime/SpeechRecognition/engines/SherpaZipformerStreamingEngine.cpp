@@ -2163,8 +2163,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::lock_guard<std::mutex> lock(m_streamMutex);
 			auto& cachedState = m_streamStateByStreamId[streamingInput.source.streamId];
 			if (isFinalStreamRequest && streamingInput.source.sequenceEnd > 0) {
-				cachedState = StreamState{};
-				finalCachedStateReset = true;
+				const bool cachedStateHasTranscript =
+					!cachedState.partialText.empty() ||
+					!cachedState.emittedTokenIds.empty();
+				const bool cachedStateInRange =
+					cachedState.nextSequence >= streamingInput.source.sequenceStart &&
+					cachedState.nextSequence <= streamingInput.source.sequenceEnd;
+				if (!cachedStateHasTranscript || !cachedStateInRange) {
+					cachedState = StreamState{};
+					finalCachedStateReset = true;
+				}
 			}
 			if (cachedState.decoderContext.empty()) {
 				cachedState.decoderContext.assign(

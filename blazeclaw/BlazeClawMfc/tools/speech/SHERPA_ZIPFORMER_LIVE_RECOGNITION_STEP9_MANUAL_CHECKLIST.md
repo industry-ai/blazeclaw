@@ -92,6 +92,9 @@ Important evidence markers:
 - `Recognition failed` must not display stale preview text. For
   `missing_final_transcript`, the visible text should be the error message and
   diagnostics should include final transcript source/ownership fields.
+- native Sherpa finalization should preserve compatible live preview decoder
+  state. For preview-enabled runs that produced interim text, final logs should
+  show `cachedReset=0` and final transcript text should be present.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.
@@ -138,6 +141,8 @@ Preview text submitted when final text missing: yes | no
 Button returned from recording mode after missing final text: yes | no
 Recognition failed displayed stale preview text: yes | no
 Final extraction source: top_level | speech_session | segment | preview_owned | none
+Sherpa final cachedReset: 0 | 1
+Final transcript present after preview state preservation: yes | no
 Pass/fail:
 Notes:
 ```

@@ -148,6 +148,10 @@ Preview enablement:
   text and reports extraction diagnostics (`finalTextSource`, ownership, and
   top-level/nested/segment text flags), preventing stale preview text from
   appearing under `Recognition failed`.
+- Native Sherpa finalization now preserves compatible live preview stream state
+  instead of unconditionally resetting decoder/token state before final drain.
+  This allows preview-decoded tokens to become final-owned response text while
+  still resetting empty or out-of-range cached state.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the
