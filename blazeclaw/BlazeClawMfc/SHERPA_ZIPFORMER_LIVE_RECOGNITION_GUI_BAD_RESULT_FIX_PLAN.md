@@ -103,6 +103,12 @@ Implementation details:
 - `src/gateway/GatewayHost.Handlers.Runtime.SpeechRecognition.cpp` reads
   `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED` when registering speech handlers.
 - `speech.capabilities.get` now reports `stt.streamingPreviewEnabled`.
+- `speech.capabilities.get` now resolves
+  `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED` dynamically for every capability
+  request, so config `env.*` changes applied before or during runtime are not
+  hidden by handler-registration-time capture.
+- `speech.capabilities.get` also reports `stt.livePreviewToggleEnabled` and
+  `stt.livePreviewToggleSource` for diagnosing the active preview toggle.
 - `web/chat/chat-controller.js` preserves `streamingPreviewEnabled` in the
   speech capability snapshot.
 - `web/chat/index.js::startLiveSpeechPoll(...)` exits before starting preview
@@ -671,8 +677,9 @@ Use this section while executing the plan.
   `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` in
 	`BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, confirm the WebView header
   speech status shows `preview=off`, confirm the live preview box shows
-  `Live preview disabled`, record `请讲一个笑话`, and verify final stop
-  transcription still runs without live preview polling.
+	`Live preview disabled`, record `请讲一个笑话`, and verify the logs do not show
+  `requestType=preview` / `type=preview` dispatches while final stop
+  transcription still runs.
 
 ### WebView request identity trace
 

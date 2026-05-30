@@ -49,6 +49,9 @@ and final orchestration without relying on phrase-specific code paths.
 For each scenario, capture the following when present:
 
 - `speech.request.trace` / `[Speech][RequestTrace]`
+- `speech.capabilities.get` payload, when available, with
+  `streamingPreviewEnabled=false` and `livePreviewToggleEnabled=false` for the
+  disabled-preview run
 - `speech.bridge.order` / `[Speech][BridgeOrder]`
 - `SpeechTranscriptionCoordinator` `accept.*` and `execute.*` diagnostics
 - `[VoiceRecorder][artifact.preview]`
@@ -62,6 +65,8 @@ Important evidence markers:
 
 - preview requests use `requestType=preview`, `livePreviewOnly=true`, and a
   `speech-preview-*` run id.
+- disabled-preview runs must not emit `requestType=preview` or
+  `livePreviewOnly=true` dispatches after recording starts.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.

@@ -8,29 +8,56 @@
 #include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <algorithm>
 
 namespace blazeclaw::gateway {
 
 	namespace handlers::runtime {
 
 		void SpeechRecognitionHandlers::RegisterAll(GatewayHost& host) {
-			auto isEnvironmentFlagEnabled = [](const char* name, bool defaultValue) {
+			auto readEnvironmentFlag = [](const char* name) -> std::optional<bool> {
 				char* raw = nullptr;
 				size_t size = 0;
 				const int readStatus = _dupenv_s(&raw, &size, name);
 				if (readStatus != 0 || raw == nullptr) {
-					return defaultValue;
+					return std::nullopt;
 				}
 
 				std::string value(raw);
 				free(raw);
-				for (char& ch : value) {
-					if (ch >= 'A' && ch <= 'Z') {
-						ch = static_cast<char>(ch - 'A' + 'a');
-					}
+				value.erase(
+					value.begin(),
+					std::find_if(
+						value.begin(),
+						value.end(),
+						[](unsigned char ch) { return std::isspace(ch) == 0; }));
+				value.erase(
+					std::find_if(
+						value.rbegin(),
+						value.rend(),
+						[](unsigned char ch) { return std::isspace(ch) == 0; }).base(),
+					value.end());
+				std::transform(
+					value.begin(),
+					value.end(),
+					value.begin(),
+					[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+				if (value.empty()) {
+					return std::nullopt;
+				}
+				if (value == "0" || value == "false" || value == "off" || value == "no") {
+					return false;
+				}
+				if (value == "1" || value == "true" || value == "on" || value == "yes") {
+					return true;
 				}
 
-				return !(value == "0" || value == "false" || value == "off");
+				return std::nullopt;
+			};
+
+			auto isEnvironmentFlagEnabled = [readEnvironmentFlag](const char* name, bool defaultValue) {
+				return readEnvironmentFlag(name).value_or(defaultValue);
 			};
 
 			auto isRingStreamingFeatureEnabled = []() {
@@ -53,9 +80,9 @@ namespace blazeclaw::gateway {
 			};
 
 			const bool ringStreamingEnabled = isRingStreamingFeatureEnabled();
-			const bool speechLivePreviewEnabled = isEnvironmentFlagEnabled(
-				"BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED",
-				true);
+			auto isSpeechLivePreviewEnabled = [readEnvironmentFlag]() {
+				return readEnvironmentFlag("BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED").value_or(true);
+			};
 			auto* const hostPtr = &host;
 
 			auto elapsedGatewayMs = [](const std::chrono::steady_clock::time_point& start) {
@@ -274,12 +301,13 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"speech.capabilities.get",
-				[hostPtr, ringStreamingEnabled, speechLivePreviewEnabled](const protocol::RequestFrame& request) {
+				[hostPtr, ringStreamingEnabled, isSpeechLivePreviewEnabled](const protocol::RequestFrame& request) {
 					const bool runtimeConnected = hostPtr->IsRunning();
 					const auto sttRuntimeStatus = hostPtr->GetSpeechRecognitionRuntimeStatus();
 						const bool sherpaLayout = sttRuntimeStatus.modelLayout == "sherpa_zipformer_transducer";
 						const bool streamingConfigured = sttRuntimeStatus.streamingEnabled;
 						const bool streamingSupported = ringStreamingEnabled && streamingConfigured;
+						const bool speechLivePreviewEnabled = isSpeechLivePreviewEnabled();
 						const bool streamingPreviewEnabled = streamingSupported && speechLivePreviewEnabled;
 						const std::string audioHandoffMode = sherpaLayout
 							? std::string("pcm_stream")
@@ -309,6 +337,8 @@ namespace blazeclaw::gateway {
 								{ "audioContainer", JsonString("wav") },
 								{ "streamingSupported", JsonBool(streamingSupported) },
 								{ "streamingPreviewEnabled", JsonBool(streamingPreviewEnabled) },
+								{ "livePreviewToggleEnabled", JsonBool(speechLivePreviewEnabled) },
+								{ "livePreviewToggleSource", JsonString("BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED") },
 								{ "streamingMode", JsonString("artifact_metadata") },
 								{ "ringStreamingEnabled", JsonBool(ringStreamingEnabled) },
 								{ "streamingConfigured", JsonBool(streamingConfigured) },

@@ -119,6 +119,10 @@ Preview enablement:
 - Optionally set `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=true` to make the
   enablement explicit.
 - The WebView speech status shows `preview=off` only when preview is disabled.
+- `speech.capabilities.get` resolves the live-preview toggle dynamically from
+  `BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED` and exposes
+  `livePreviewToggleEnabled` / `livePreviewToggleSource` so disabled-preview
+  runs can be verified without relying only on UI text.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the
