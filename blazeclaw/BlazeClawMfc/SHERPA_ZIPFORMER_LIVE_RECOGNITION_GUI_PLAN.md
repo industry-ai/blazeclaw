@@ -155,13 +155,15 @@ Implementation notes:
 Implemented behavior:
 - `CVoiceRecorder::BuildStreamingAudioArtifact()` now returns an open-ended live `PcmStream` artifact while recording by setting `sequenceEnd` to `0`.
 - the live artifact is available immediately after recording starts, even before a final WAV path or captured sample range is available.
-- stopped/final artifacts continue to use a finite `sequenceEnd`, preserving final transcription behavior.
+- stopped/final artifacts use a preserved recording start sequence and finite `sequenceEnd`, preventing final transcription from starting at a later ring-buffer oldest sequence after the buffer advances.
+- `CVoiceRecorder` now emits `[VoiceRecorder][artifact.preview]` and `[VoiceRecorder][artifact.final]` diagnostics with stream id, sequence range, oldest/latest ring sequence, sample rate, channel count, duration, and start-before-oldest risk metadata.
 - `GatewayHost::ResolveNativeRecordingArtifact(...)` now accepts both finite PCM ranges and open-ended live PCM ranges.
 - `SpeechRecognitionRuntime::Transcribe(...)` now infers Sherpa `SpeechStreamingInputContract` from the provided PCM artifact, including `streamId`, sample rate, channels, bit depth, and open-ended `sequenceEnd`.
 
 Acceptance criteria:
 - completed: live preview requests can read from the ring-buffer PCM stream artifact rather than an incomplete WAV file.
 - completed: preview can start before the user clicks stop because the recording start path can return an open-ended artifact.
+- completed: final stop artifacts preserve the recording start sequence and expose a finite PCM range for final transcription.
 - completed: WAV-file fallback and final finite-range transcription remain available after stop.
 
 ### Step 4: Emit interim segments from the coordinator

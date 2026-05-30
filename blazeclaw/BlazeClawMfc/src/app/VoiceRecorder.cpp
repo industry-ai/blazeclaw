@@ -89,6 +89,7 @@ CVoiceRecorder::CVoiceRecorder()
     , m_pWaveHeaders(nullptr)
     , m_pBuffers(nullptr)
     , m_dwRecordedDataSize(0)
+    , m_recordingStartSequence(0)
     , m_vadNextSequence(0)
     , m_vadSpeechStartSequence(0)
     , m_vadLastSpeechSequence(0)
@@ -127,6 +128,9 @@ BOOL CVoiceRecorder::Initialize(HWND hWnd, const VoiceRecorderConfig& config)
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Idle;
     m_audioRingBuffer =
         std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
+    m_recordingStartSequence = m_audioRingBuffer != nullptr
+        ? m_audioRingBuffer->GetLatestSequence()
+        : 0;
     m_vadProvider = CreateVadProvider(m_config.vadProviderType);
     ResetVadState();
 
@@ -666,12 +670,22 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
         return std::nullopt;
     }
 
-    const uint64_t sequenceStart = m_audioRingBuffer->GetOldestAvailableSequence();
+    const uint64_t oldestAvailable = m_audioRingBuffer->GetOldestAvailableSequence();
+    const uint64_t sequenceStart = m_recordingStartSequence > 0
+        ? m_recordingStartSequence
+        : oldestAvailable;
     const uint64_t latestSequence = m_audioRingBuffer->GetLatestSequence();
     const bool liveRecording = m_state == VoiceRecorderState::Recording;
     if (!liveRecording && latestSequence <= sequenceStart) {
+        TRACE(
+            "[VoiceRecorder][artifact.final.invalid] reason=empty_or_reversed_range start=%llu latest=%llu oldestAvailable=%llu\n",
+            static_cast<unsigned long long>(sequenceStart),
+            static_cast<unsigned long long>(latestSequence),
+            static_cast<unsigned long long>(oldestAvailable));
         return std::nullopt;
     }
+
+    const bool startBeforeOldest = sequenceStart < oldestAvailable;
 
     blazeclaw::core::speechrecognition::SpeechAudioArtifact artifact;
     artifact.handoffMode =
@@ -695,6 +709,18 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
     artifact.durationMs = static_cast<std::uint32_t>((std::min)(
         durationMsRaw,
         static_cast<uint64_t>((std::numeric_limits<std::uint32_t>::max)())));
+    TRACE(
+        "[VoiceRecorder][artifact.%S] streamId=%S start=%llu end=%llu oldestAvailable=%llu latest=%llu startBeforeOldest=%d sampleRate=%u channels=%u durationMs=%u\n",
+        liveRecording ? "preview" : "final",
+        artifact.streamId.c_str(),
+        static_cast<unsigned long long>(artifact.sequenceStart),
+        static_cast<unsigned long long>(artifact.sequenceEnd),
+        static_cast<unsigned long long>(oldestAvailable),
+        static_cast<unsigned long long>(latestSequence),
+        startBeforeOldest ? 1 : 0,
+        artifact.sampleRate,
+        artifact.channels,
+        artifact.durationMs);
     return artifact;
 }
 

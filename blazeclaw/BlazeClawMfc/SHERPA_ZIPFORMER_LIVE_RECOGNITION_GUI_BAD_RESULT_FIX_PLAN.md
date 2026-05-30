@@ -345,7 +345,7 @@ Manual verification guidance:
 
 ### Step 5: Verify final request uses a finite PCM artifact
 
-Status: pending
+Status: completed
 
 Confirm the final request after stop uses:
 
@@ -363,8 +363,47 @@ Expected result:
 
 Acceptance criteria:
 
-- Final artifact metadata is logged and matches the captured utterance duration.
-- If final uses an open-ended live artifact, fix stop artifact resolution first.
+- completed: final artifact metadata is logged and matches the captured utterance
+  duration.
+- completed: if final uses an open-ended live artifact, stop artifact resolution
+  is corrected before final transcription.
+
+Implementation details:
+
+- `CVoiceRecorder` now preserves `m_recordingStartSequence` when recording
+  starts.
+- `CVoiceRecorder::BuildStreamingAudioArtifact()` uses the preserved recording
+  start sequence for artifact `sequenceStart` instead of recomputing it from the
+  ring buffer's current oldest available sequence.
+- Preview artifacts still remain open-ended while recording with
+  `sequenceEnd=0`.
+- Final artifacts after stop use a finite `sequenceEnd=latestSequence` and are
+  rejected if `latestSequence <= sequenceStart`.
+- Artifact diagnostics now emit `[VoiceRecorder][artifact.preview]`,
+  `[VoiceRecorder][artifact.final]`, and `[VoiceRecorder][artifact.final.invalid]`
+  lines with stream id, start, end, oldest available, latest, sample rate,
+  channel count, duration, and whether the preserved start precedes the current
+  oldest available sequence.
+
+Root-cause risk addressed:
+
+- Before this step, final artifacts were finite after stop, but their
+  `sequenceStart` was recomputed from `GetOldestAvailableSequence()`. If the
+  ring buffer advanced during recording, the final request could omit early
+  utterance audio and produce a partial transcript such as `请`.
+- The final request now carries the original recording start sequence so Step 6
+  can verify Sherpa drains the intended full range.
+
+Manual verification guidance:
+
+1. Record `请讲一个笑话` with preview enabled.
+2. Confirm preview logs may show `sequenceEnd=0`.
+3. Confirm final logs show `[VoiceRecorder][artifact.final]` with
+   `streamId=voice_recorder`, `start=<recording start>`, and
+   `end > start`.
+4. Confirm final request logs from Steps 2/3/4 carry the same finite range.
+5. If recognition is still partial, continue to Step 6 to verify Sherpa final
+   decode starts at this same `sequenceStart` and drains to `sequenceEnd`.
 
 ### Step 6: Verify Sherpa final decode is actually clean and full-range
 

@@ -213,6 +213,7 @@ private:
     std::vector<BYTE> m_recordedData;
     DWORD          m_dwRecordedDataSize;
     std::unique_ptr<AudioRingBuffer> m_audioRingBuffer;
+    uint64_t       m_recordingStartSequence;
     std::unique_ptr<IVoiceVadProvider> m_vadProvider;
     uint64_t       m_vadNextSequence;
     uint64_t       m_vadSpeechStartSequence;
