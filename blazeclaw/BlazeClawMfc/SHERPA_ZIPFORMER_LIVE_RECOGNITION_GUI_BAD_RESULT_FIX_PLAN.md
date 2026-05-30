@@ -610,6 +610,10 @@ Implementation details:
   present, the speech state becomes `failed` with
   `missing_final_transcript`, clears preview text, and allows the Transcribe
   button to return to retry/idle.
+- Fixed missing-final failed-state merging so `Recognition failed` no longer
+  restores and displays stale preview text. Missing-final diagnostics now
+  include final transcript source and ownership fields to distinguish empty
+  native final decode from preview-owned rejection.
 
 Preview enablement:
 
@@ -667,6 +671,9 @@ Acceptance criteria:
 - ready to validate: missing final text does not leave the Transcribe button in
   `Recording... (click to stop)` and does not repeatedly finalize the same
   stale audio artifact on subsequent clicks.
+- ready to validate: `Recognition failed` for `missing_final_transcript` shows
+  the error message, not stale preview text such as `请你讲一个`, and logs include
+  `finalTextSource`, `finalTextOwned`, and text-presence flags.
 
 ### Step 10: Validate with build and focused tests
 

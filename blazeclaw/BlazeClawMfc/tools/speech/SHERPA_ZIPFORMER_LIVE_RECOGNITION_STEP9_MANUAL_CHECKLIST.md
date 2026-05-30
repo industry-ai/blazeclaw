@@ -89,6 +89,9 @@ Important evidence markers:
 - when no final-owned transcript is available, the UI must leave recording mode
   and return the Transcribe button to retry/idle instead of keeping
   `Recording... (click to stop)`.
+- `Recognition failed` must not display stale preview text. For
+  `missing_final_transcript`, the visible text should be the error message and
+  diagnostics should include final transcript source/ownership fields.
 - final requests use `requestType=final`, `livePreviewOnly=false`, and a
   `speech-final-*` run id.
 - preview artifacts may be open-ended with `sequenceEnd=0`.
@@ -133,6 +136,8 @@ Late preview after final ignored: yes | no
 Final response text present: yes | no
 Preview text submitted when final text missing: yes | no
 Button returned from recording mode after missing final text: yes | no
+Recognition failed displayed stale preview text: yes | no
+Final extraction source: top_level | speech_session | segment | preview_owned | none
 Pass/fail:
 Notes:
 ```

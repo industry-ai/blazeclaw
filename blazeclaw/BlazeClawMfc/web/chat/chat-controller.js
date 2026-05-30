@@ -882,6 +882,11 @@
         }
 
         function extractFinalOwnedTranscriptText(payload, requestedRunId) {
+            const result = describeFinalOwnedTranscript(payload, requestedRunId);
+            return result.text;
+        }
+
+        function describeFinalOwnedTranscript(payload, requestedRunId) {
             const source = payload && typeof payload === "object"
                 ? payload
                 : {};
@@ -902,17 +907,39 @@
                 "").trim();
             const finalOwned = !isSpeechPreviewRunId(ownerRunId) ||
                 (requested && ownerRunId === requested);
+            const topLevelText = String(source.text || source.transcript || "").trim();
+            const nestedText = String(
+                speechSession && (speechSession.text || speechSession.transcript) ||
+                "").trim();
+            const segmentText = String(segment && segment.text || "").trim();
             if (!finalOwned) {
-                return "";
+                return {
+                    text: "",
+                    ownerRunId,
+                    finalOwned,
+                    hasTopLevelText: Boolean(topLevelText),
+                    hasNestedText: Boolean(nestedText),
+                    hasSegmentText: Boolean(segmentText),
+                    source: "preview_owned",
+                };
             }
 
-            return String(
-                source.text ||
-                source.transcript ||
-                speechSession && speechSession.text ||
-                speechSession && speechSession.transcript ||
-                segment && segment.text ||
-                "").trim();
+            const text = topLevelText || nestedText || segmentText;
+            return {
+                text,
+                ownerRunId,
+                finalOwned,
+                hasTopLevelText: Boolean(topLevelText),
+                hasNestedText: Boolean(nestedText),
+                hasSegmentText: Boolean(segmentText),
+                source: topLevelText
+                    ? "top_level"
+                    : nestedText
+                        ? "speech_session"
+                        : segmentText
+                            ? "segment"
+                            : "none",
+            };
         }
 
         function isActiveSpeechPreviewState(sessionState) {
@@ -2236,11 +2263,16 @@
                 normalized.segmentFinal = false;
             }
 
+            const clearsPreviousTranscript =
+                normalized.stage === "failed" &&
+                String(normalized.errorCode || "").trim() === "missing_final_transcript";
+
             let resolvedSegmentText = normalized.segmentText;
             if (!resolvedSegmentText && normalized.stage === "segment_finalized") {
                 resolvedSegmentText = normalized.text;
             }
-            if (!resolvedSegmentText &&
+            if (!clearsPreviousTranscript &&
+                !resolvedSegmentText &&
                 (normalized.stage === "queued" ||
                     normalized.stage === "stopped" ||
                     normalized.stage === "transcribing" ||
@@ -2249,7 +2281,8 @@
             }
 
             let resolvedText = normalized.text;
-            if (!resolvedText &&
+            if (!clearsPreviousTranscript &&
+                !resolvedText &&
                 (normalized.stage === "streaming" ||
                     normalized.stage === "queued" ||
                     normalized.stage === "stopped" ||
@@ -2647,7 +2680,8 @@
                         updatedAtMs: Date.now(),
                     }
                     : normalizedSpeechSessionState;
-                const finalPayloadText = extractFinalOwnedTranscriptText(payload, transcriptRequest.runId);
+                const finalTranscript = describeFinalOwnedTranscript(payload, transcriptRequest.runId);
+                const finalPayloadText = finalTranscript.text;
                 const previewPayloadText = String(
                     finalPayloadText ||
                     state.speechSessionState.segmentText ||
@@ -2667,6 +2701,12 @@
                         runId: transcriptRequest.runId,
                         responseStage: String(normalizedSpeechSessionState.stage || ""),
                         responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                        finalTextSource: String(finalTranscript.source || ""),
+                        finalTextOwnerRunId: String(finalTranscript.ownerRunId || ""),
+                        finalTextOwned: Boolean(finalTranscript.finalOwned),
+                        hasTopLevelText: Boolean(finalTranscript.hasTopLevelText),
+                        hasNestedText: Boolean(finalTranscript.hasNestedText),
+                        hasSegmentText: Boolean(finalTranscript.hasSegmentText),
                         preservedPreviewTextLength: String(
                             previousSpeechSessionState.segmentText ||
                             previousSpeechSessionState.text ||
@@ -4853,6 +4893,8 @@
                 "speech finalization should leave terminal failed state when final payload has no transcript");
             assertRegression(!snapshot.text && !snapshot.segmentText,
                 "speech finalization should clear preserved preview text when final payload has no transcript");
+            assertRegression(Number(state.operatorDiagnosticsCounters["speech.request.response_ignored"] || 0) >= 1,
+                "speech finalization should trace missing final transcript diagnostics");
             summary.push("speech final missing transcript does not reuse preview text");
         }
 

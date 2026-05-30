@@ -144,6 +144,10 @@ Preview enablement:
   `speechSession.segment.text`) when the response run is not preview-owned.
   If no final-owned transcript is present, the UI enters a terminal
   `missing_final_transcript` failed state so the Transcribe button can reset.
+- The `missing_final_transcript` failed state explicitly clears prior preview
+  text and reports extraction diagnostics (`finalTextSource`, ownership, and
+  top-level/nested/segment text flags), preventing stale preview text from
+  appearing under `Recognition failed`.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the
