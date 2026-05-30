@@ -266,6 +266,26 @@ TEST_CASE("Sherpa streaming engine final stream resets live preview state", "[sp
 
 	REQUIRE(finalResult.ok);
 	REQUIRE(*minReadStart == oldestSequence);
+	REQUIRE(finalResult.sessionState.debugInfo.has_value());
+	const auto& finalDebug = *finalResult.sessionState.debugInfo;
+	REQUIRE(finalDebug.sherpaFinalStreamRequest);
+	REQUIRE_FALSE(finalDebug.sherpaLivePcmStream);
+	REQUIRE(finalDebug.sherpaFinalDrainComplete);
+	REQUIRE(finalDebug.sherpaFinalRemainingSamples == 0);
+	REQUIRE(finalDebug.sherpaFinalSequenceEnd == latestSequence);
+	REQUIRE(finalDebug.sherpaFinalCursorNext >= latestSequence);
+	REQUIRE(finalDebug.sherpaBaselineInputStartSequence == oldestSequence);
+	REQUIRE(finalDebug.sherpaBaselineInputEndSequence == latestSequence);
+	REQUIRE(finalDebug.sherpaBaselineCursorNextSequence >= latestSequence);
+	REQUIRE(finalDebug.sherpaFinalOutcome != "live_stream_not_final");
+	REQUIRE(finalDebug.sherpaFinalOutcome != "finite_stream_not_drained");
+	REQUIRE(finalResult.sessionState.streamingInput.has_value());
+	REQUIRE(finalResult.sessionState.streamingInput->source.sequenceStart == oldestSequence);
+	REQUIRE(finalResult.sessionState.streamingInput->source.sequenceEnd == latestSequence);
+	REQUIRE(finalResult.sessionState.streamingInput->cursor.nextSequence >= latestSequence);
+	if (!finalDebug.sherpaDecodedText.empty()) {
+		REQUIRE(finalResult.text == finalDebug.sherpaDecodedText);
+	}
 
 	UnregisterStreamingAudioSource(streamId);
 	std::filesystem::remove_all(root);

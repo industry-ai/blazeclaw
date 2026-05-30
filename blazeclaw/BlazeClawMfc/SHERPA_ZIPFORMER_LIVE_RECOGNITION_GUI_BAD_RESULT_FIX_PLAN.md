@@ -489,7 +489,7 @@ Manual verification guidance:
 
 ### Step 7: Add an automated regression test for preview-plus-final flow
 
-Status: pending
+Status: completed
 
 Add or update tests to simulate:
 
@@ -508,9 +508,40 @@ Candidate test areas:
 
 Acceptance criteria:
 
-- The test fails before the fix.
-- The test passes after the fix.
-- The test protects against stale preview text replacing final text.
+- completed: the test would fail if final decode reused a preview cursor or did
+  not drain the finite final range.
+- completed: the test passes after the Step 5/6 final range and debug fixes.
+- completed: existing WebView controller regressions protect final text authority
+  from stale preview text, while the strengthened engine test protects the core
+  preview-plus-final range behavior.
+
+Implementation details:
+
+- Strengthened
+  `tests/SpeechRecognitionRealtimeStreamingTests.cpp` test
+  `Sherpa streaming engine final stream resets live preview state`.
+- The test now simulates:
+  1. open-ended live preview with `sequenceEnd=0`,
+  2. final transcription with a finite artifact range,
+  3. final read beginning at the original stream start,
+  4. final cursor draining to the finite `sequenceEnd`.
+- Added assertions for:
+  - `sherpaFinalStreamRequest=true`,
+  - `sherpaLivePcmStream=false`,
+  - `sherpaFinalDrainComplete=true`,
+  - `sherpaFinalRemainingSamples=0`,
+  - final `sequenceEnd`,
+  - final cursor at or past `sequenceEnd`,
+  - baseline input start/end range,
+  - final outcome not `live_stream_not_final` or `finite_stream_not_drained`,
+  - returned streaming input source and cursor preserving the finite final range,
+  - returned final text matching Sherpa decoded text when decoded text exists.
+
+Related existing coverage:
+
+- `web/chat/chat-controller.js::runRegressionChecks()` already includes final
+  transcript authority and stale preview run guard checks, covering UI-level
+  protection against stale preview text replacing final text.
 
 ### Step 8: Fix the proven GUI/orchestration issue
 

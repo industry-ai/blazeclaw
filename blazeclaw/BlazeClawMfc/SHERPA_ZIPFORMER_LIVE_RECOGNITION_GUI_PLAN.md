@@ -166,6 +166,7 @@ Acceptance criteria:
 - completed: preview can start before the user clicks stop because the recording start path can return an open-ended artifact.
 - completed: final stop artifacts preserve the recording start sequence and expose a finite PCM range for final transcription.
 - completed: Sherpa final decode diagnostics prove whether final transcription starts at the finite artifact range and drains to `sequenceEnd` independently of preview cursor state.
+- completed: realtime streaming regression coverage now asserts preview-plus-final flow drains the finite final range, advances the final cursor to `sequenceEnd`, and keeps final decoded text aligned with the Sherpa final result when present.
 - completed: WAV-file fallback and final finite-range transcription remain available after stop.
 
 ### Step 4: Emit interim segments from the coordinator
