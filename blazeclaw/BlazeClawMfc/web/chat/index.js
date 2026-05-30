@@ -162,7 +162,9 @@
         return normalizedStage === "recording" ||
             normalizedStage === "start_stream" ||
             normalizedStage === "streaming" ||
-            (normalizedStage === "queued" && previewRun);
+            ((normalizedStage === "queued" ||
+                normalizedStage === "completed" ||
+                normalizedStage === "segment_finalized") && previewRun);
     }
 
     function renderSpeechLivePreview() {

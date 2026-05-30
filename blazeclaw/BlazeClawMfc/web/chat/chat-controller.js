@@ -4714,6 +4714,35 @@
             summary.push("speech final lifecycle preview invalidation");
         }
 
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-5",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "completed",
+                sessionId: "main",
+                runId: "speech-preview-regression-5",
+                text: "preview terminal text",
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.stage === "streaming",
+                "speech preview terminal lifecycle should remain streaming while recording is active");
+            assertRegression(snapshot.runId === "speech-preview-regression-5",
+                "speech preview terminal lifecycle should preserve preview run id");
+            assertRegression(snapshot.text === "preview terminal text" || snapshot.segmentText === "preview terminal text",
+                "speech preview terminal lifecycle should preserve interim text without ending recording");
+            summary.push("speech preview terminal remains active");
+        }
+
         return {
             ok: true,
             checks: summary,

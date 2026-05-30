@@ -592,6 +592,10 @@ Implementation details:
 - Added a WebView controller regression check proving a late
   `speech-preview-*` lifecycle update cannot overwrite a stopped/final
   `speech-final-*` state.
+- Added UI active-state handling so preview `completed` or `segment_finalized`
+  lifecycle updates for `speech-preview-*` runs do not return the Transcribe
+  button to idle. The button remains `Recording... (click to stop)` until the
+  user explicitly stops recording.
 
 Preview enablement:
 
@@ -626,6 +630,7 @@ Manual validation matrix:
 | --- | --- | --- |
 | Disable preview, speak `请讲一个笑话`, stop | Final text correct | checklist ready; not run |
 | Enable preview, speak `请讲一个笑话`, stop | Preview may be partial; final text correct | checklist ready; not run |
+| Enable preview, wait through several preview ticks before stopping | Button remains click-to-stop; final runs after explicit stop | checklist ready; not run |
 | Enable preview, stop quickly | No stale preview overwrites final/empty state | checklist ready; not run |
 | Enable preview, speak English | Preview/final both remain sane | checklist ready; not run |
 | Enable preview, cancel recording | Preview is cleared/ignored; no chat send | checklist ready; not run |

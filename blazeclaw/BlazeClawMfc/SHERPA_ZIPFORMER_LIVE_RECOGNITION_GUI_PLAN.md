@@ -127,6 +127,10 @@ Preview enablement:
   preview only when capabilities explicitly report `streamingPreviewEnabled=true`.
   Missing/unloaded capability state is treated as preview disabled so final-only
   recording remains safe.
+- Preview terminal lifecycle events are scoped to the preview RPC and no longer
+  make the UI leave recording mode: `speech-preview-*` `completed` or
+  `segment_finalized` states keep the Transcribe button in
+  `Recording... (click to stop)` until the user explicitly stops recording.
 - When preview is disabled, the dedicated live preview box now shows
   `Live preview disabled` and `Preview is off; final transcription will run
   after stop.` during recording/finalizing, so users do not need to infer the
