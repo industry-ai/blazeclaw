@@ -184,6 +184,10 @@
         const stage = String(sessionState.stage || "").trim();
         const text = String(sessionState.segmentText || sessionState.text || "").trim();
         const errorMessage = String(sessionState.errorMessage || "").trim();
+        const capability = state.speechCapabilities && typeof state.speechCapabilities === "object"
+            ? state.speechCapabilities
+            : null;
+        const previewDisabled = capability && capability.streamingPreviewEnabled === false;
         const liveStages = new Set(["recording", "start_stream", "streaming"]);
         const finalizingStages = new Set(["queued", "stopped", "transcribing"]);
         const finalStages = new Set(["segment_finalized", "completed"]);
@@ -204,7 +208,10 @@
 
         let label = "Listening...";
         let modeClass = "listening";
-        if (stage === "streaming" && text) {
+        if (previewDisabled && (liveStages.has(stage) || finalizingStages.has(stage))) {
+            label = "Live preview disabled";
+            modeClass = finalizingStages.has(stage) ? "finalizing" : "disabled";
+        } else if (stage === "streaming" && text) {
             label = "Recognizing stream ...";
             modeClass = sessionState.segmentFinal ? "final" : "interim";
         } else if ((stage === "segment_finalized" || stage === "completed") && isSpeechPreviewRunId(sessionState.runId)) {
@@ -227,7 +234,9 @@
         speechLivePreviewEl.hidden = false;
         speechLivePreviewEl.className = `speech-live-preview ${modeClass}`;
         speechLivePreviewLabelEl.textContent = label;
-        speechLivePreviewTextEl.textContent = text || errorMessage || "Speak now";
+        speechLivePreviewTextEl.textContent = previewDisabled && (liveStages.has(stage) || finalizingStages.has(stage))
+            ? (text || errorMessage || "Preview is off; final transcription will run after stop.")
+            : (text || errorMessage || "Speak now");
     }
 
     function renderApprovalQueue() {

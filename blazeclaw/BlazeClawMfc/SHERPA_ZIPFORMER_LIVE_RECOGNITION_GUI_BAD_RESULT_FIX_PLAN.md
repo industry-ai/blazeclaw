@@ -596,6 +596,10 @@ Preview enablement:
 - To explicitly keep preview enabled, set the environment/config value to true:
   `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=true`.
 - The WebView status should no longer show `preview=off` when preview is enabled.
+- When preview is disabled, the header speech status shows `preview=off` and
+  the live preview box shows `Live preview disabled` with `Preview is off; final
+  transcription will run after stop.` This avoids confusing the adjacent
+  `Abort` button with the preview status surface.
 
 ### Step 9: Validate manually with controlled scenarios
 
@@ -665,9 +669,10 @@ Use this section while executing the plan.
   `tools/speech/SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md`.
   For the disabled-preview A/B run, uncomment or add
   `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` in
-  `BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, confirm WebView status shows
-  `preview=off`, record `请讲一个笑话`, and verify final stop transcription still
-  runs without live preview polling.
+	`BlazeClawMfc/blazeclaw.conf`, restart BlazeClaw, confirm the WebView header
+  speech status shows `preview=off`, confirm the live preview box shows
+  `Live preview disabled`, record `请讲一个笑话`, and verify final stop
+  transcription still runs without live preview polling.
 
 ### WebView request identity trace
 

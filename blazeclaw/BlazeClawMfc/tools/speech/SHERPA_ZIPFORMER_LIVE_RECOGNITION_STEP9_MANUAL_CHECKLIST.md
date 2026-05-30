@@ -24,7 +24,10 @@ and final orchestration without relying on phrase-specific code paths.
    `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false`
 
 2. Restart BlazeClaw.
-3. Confirm the WebView speech status includes `preview=off`.
+3. Confirm the WebView header speech status includes `preview=off`.
+4. Start recording and confirm the live preview box shows
+   `Live preview disabled` with `Preview is off; final transcription will run
+   after stop.` The nearby `Abort` button is not the preview status.
 
 ### Enable preview
 
@@ -37,7 +40,9 @@ and final orchestration without relying on phrase-specific code paths.
    `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=true`
 
 3. Restart BlazeClaw.
-4. Confirm the WebView speech status does not include `preview=off`.
+4. Confirm the WebView header speech status does not include `preview=off`.
+5. Start recording and confirm the live preview box shows normal listening or
+   recognition text rather than `Live preview disabled`.
 
 ## Required diagnostics to capture
 
@@ -70,7 +75,7 @@ Important evidence markers:
 
 | Scenario | Steps | Pass criteria | Result |
 | --- | --- | --- | --- |
-| Disable preview, speak `请讲一个笑话`, stop | Disable preview, restart, record the phrase, stop. | No preview polling; final request runs from finite artifact; final visible text is not the bad `请听` regression. | Not run |
+| Disable preview, speak `请讲一个笑话`, stop | Disable preview, restart, confirm header `preview=off`, confirm preview box `Live preview disabled`, record the phrase, stop. | No preview polling; final request runs from finite artifact; final visible text is not the bad `请听` regression. | Not run |
 | Enable preview, speak `请讲一个笑话`, stop | Enable preview, restart, record the phrase, allow at least one preview tick, stop. | Preview may be partial; final request uses `speech-final-*`; final visible text comes from final transcription and is not overwritten by preview. | Not run |
 | Enable preview, stop quickly | Enable preview, restart, start recording and stop before or during first preview response. | No stale preview overwrites final/empty state; late preview is ignored if it arrives. | Not run |
 | Enable preview, speak English | Enable preview, restart, record a short repeatable English phrase, stop. | Preview and final remain coherent; final text comes from final transcription. | Not run |
@@ -85,6 +90,7 @@ Scenario:
 Preview mode: enabled | disabled
 Config line:
 WebView status:
+Live preview box label/text:
 Spoken phrase:
 Preview run id(s):
 Final run id:
