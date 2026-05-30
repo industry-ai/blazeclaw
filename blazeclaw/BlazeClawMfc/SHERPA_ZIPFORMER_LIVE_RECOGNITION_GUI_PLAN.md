@@ -103,7 +103,22 @@ Implemented refinements:
 - `liveSpeechPollGeneration` invalidates late preview responses after stop/failure-like transitions.
 - `livePreviewOnly` calls no longer emit a local queued update that clears interim transcript text before every poll.
 - stale live preview responses are ignored after the speech state leaves active preview stages.
+- `chat-controller.js` now uses a state-aware final-authority guard so
+  `speech-preview-*` lifecycle or async response updates are accepted only while
+  the previous state is still actively recording/streaming, or queued with a
+  preview run id. After stop/final transcription starts, late preview updates are
+  ignored and traced as `speech.request.lifecycle_ignored` with
+  `final_authority_active`.
 - low-quality interim preview text is ignored instead of failing the whole speech session; final transcription keeps the quality gate.
+
+Preview enablement:
+- Preview is on by default when `streamingPreviewEnabled` is true.
+- If the A/B bypass was enabled, remove/comment
+  `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false` in
+  `BlazeClawMfc/blazeclaw.conf` and restart BlazeClaw.
+- Optionally set `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=true` to make the
+  enablement explicit.
+- The WebView speech status shows `preview=off` only when preview is disabled.
 
 Recommended refinement approach:
 - In WebView, keep the timer active while `speechSessionState.stage === "recording"` or `speechSessionState.stage === "streaming"`.

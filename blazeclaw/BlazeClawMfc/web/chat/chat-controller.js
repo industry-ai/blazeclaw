@@ -875,6 +875,33 @@
             return String(runId || "").trim().startsWith("speech-preview-");
         }
 
+        function isActiveSpeechPreviewState(sessionState) {
+            const source = sessionState && typeof sessionState === "object"
+                ? sessionState
+                : {};
+            const stage = String(source.stage || "").trim();
+            if (stage === "recording" || stage === "start_stream" || stage === "streaming") {
+                return true;
+            }
+
+            return stage === "queued" && isSpeechPreviewRunId(source.runId);
+        }
+
+        function isSpeechPreviewUpdate(normalized) {
+            const source = normalized && typeof normalized === "object"
+                ? normalized
+                : {};
+            return isSpeechPreviewRunId(source.runId);
+        }
+
+        function isPreviewUpdateBlockedByFinalAuthority(normalized, previous) {
+            if (!isSpeechPreviewUpdate(normalized)) {
+                return false;
+            }
+
+            return !isActiveSpeechPreviewState(previous);
+        }
+
         function isStaleSpeechPreviewUpdate(normalized, previous) {
             const next = normalized && typeof normalized === "object"
                 ? normalized
@@ -887,7 +914,7 @@
             }
 
             const previousStage = String(current.stage || "").trim();
-            if (previousStage && !isActiveSpeechPreviewStage(previousStage)) {
+            if (previousStage && !isActiveSpeechPreviewState(current)) {
                 return true;
             }
 
@@ -937,7 +964,7 @@
             }
 
             const previousStage = String(current.stage || "").trim();
-            if (!isActiveSpeechPreviewStage(previousStage)) {
+            if (!isActiveSpeechPreviewState(current)) {
                 return false;
             }
 
@@ -960,7 +987,7 @@
                 return false;
             }
 
-            return isActiveSpeechPreviewStage(String(current.stage || "").trim());
+            return isActiveSpeechPreviewState(current);
         }
 
         function classifySpeechError(errorCode, fallbackClass) {
@@ -2138,6 +2165,17 @@
             const previous = state.speechSessionState && typeof state.speechSessionState === "object"
                 ? state.speechSessionState
                 : {};
+            if (isPreviewUpdateBlockedByFinalAuthority(normalized, previous)) {
+                emitSpeechRequestTrace("lifecycle_ignored", {
+                    requestType: "preview",
+                    reason: "final_authority_active",
+                    previousStage: String(previous.stage || ""),
+                    previousRunId: String(previous.runId || ""),
+                    responseStage: String(normalized.stage || ""),
+                    responseRunId: String(normalized.runId || ""),
+                });
+                return { ...previous };
+            }
             if (isEmptyTerminalPreviewUpdate(normalized, previous)) {
                 return { ...previous };
             }
@@ -2510,7 +2548,7 @@
                     : {};
                 const normalizedSpeechSessionState = normalizeSpeechSessionPayload(payload);
                 const previousStage = String(previousSpeechSessionState.stage || "").trim();
-                const livePreviewStillActive = isActiveSpeechPreviewStage(previousStage);
+                const livePreviewStillActive = isActiveSpeechPreviewState(previousSpeechSessionState);
                 if (livePreviewOnly && !livePreviewStillActive) {
                     emitSpeechRequestTrace("response_ignored", {
                         requestType: "preview",
@@ -4631,6 +4669,47 @@
             assertRegression(snapshot.runId === "speech-final-regression-3",
                 "speech finalization should replace stale preview run id with requested final run id");
             summary.push("speech final stale preview run guard");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-4",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-4",
+                text: "live preview text",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "stopped",
+                sessionId: "main",
+                runId: "speech-final-regression-4",
+                text: "live preview text",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "completed",
+                sessionId: "main",
+                runId: "speech-preview-regression-4",
+                text: "late preview overwrite",
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.runId === "speech-final-regression-4",
+                "speech final authority should keep final run id after late preview lifecycle update");
+            assertRegression(snapshot.text === "live preview text",
+                "speech final authority should reject late preview lifecycle text overwrite");
+            assertRegression(Number(state.operatorDiagnosticsCounters["speech.request.lifecycle_ignored"] || 0) >= 1,
+                "speech final authority should emit ignored preview lifecycle diagnostic");
+            summary.push("speech final lifecycle preview invalidation");
         }
 
         return {

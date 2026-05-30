@@ -545,7 +545,7 @@ Related existing coverage:
 
 ### Step 8: Fix the proven GUI/orchestration issue
 
-Status: pending
+Status: completed
 
 Apply the smallest source-level fix based on the evidence.
 
@@ -561,10 +561,41 @@ Likely fixes include one or more of:
 
 Acceptance criteria:
 
-- The fix is structural and not phrase-specific.
-- Preview text can update during recording.
-- Final text is produced only by final transcription.
-- Late preview responses cannot overwrite final text.
+- completed: the fix is structural and uses speech state/run-id authority, not
+  phrase-specific text checks.
+- completed: preview text can still update during active recording/streaming
+  states.
+- completed: final text is produced by the non-preview final transcription path
+  with a distinct `speech-final-*` run id.
+- completed: late preview lifecycle or async response updates are ignored once
+  the previous speech state leaves active preview authority.
+
+Implementation details:
+
+- Added a state-aware active preview predicate in
+  `web/chat/chat-controller.js`.
+- Added a final-authority guard that rejects preview updates unless the previous
+  state is still recording, start-streaming, streaming, or queued with a preview
+  run id.
+- Routed ignored late preview lifecycle updates through
+  `speech.request.lifecycle_ignored` diagnostics with reason
+  `final_authority_active`.
+- Updated async preview response suppression in `transcribeSpeech(...)` to use
+  the same state-aware active preview authority check.
+- Added a WebView controller regression check proving a late
+  `speech-preview-*` lifecycle update cannot overwrite a stopped/final
+  `speech-final-*` state.
+
+Preview enablement:
+
+- Live preview is enabled by default when the speech capability reports
+  `streamingPreviewEnabled=true`.
+- To enable preview after using the diagnostic bypass, remove or comment out the
+  following line in `BlazeClawMfc/blazeclaw.conf`, then restart BlazeClaw:
+  `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=false`.
+- To explicitly keep preview enabled, set the environment/config value to true:
+  `env.BLAZECLAW_SPEECH_LIVE_PREVIEW_ENABLED=true`.
+- The WebView status should no longer show `preview=off` when preview is enabled.
 
 ### Step 9: Validate manually with controlled scenarios
 
