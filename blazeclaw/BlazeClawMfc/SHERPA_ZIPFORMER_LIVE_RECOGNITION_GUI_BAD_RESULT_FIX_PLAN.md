@@ -271,7 +271,7 @@ Manual verification guidance:
 
 ### Step 4: Verify coordinator busy-state behavior
 
-Status: pending
+Status: completed
 
 Inspect and instrument `SpeechTranscriptionCoordinator::Accept(...)` and
 `Execute(...)` for preview/final interactions.
@@ -290,8 +290,58 @@ Expected result:
 
 Acceptance criteria:
 
-- Logs show final request accepted independently.
-- If rejected, the exact existing run id/stage causing rejection is documented.
+- completed: logs show final request accepted independently when coordinator
+  allows it.
+- completed: if rejected, the exact existing run id/stage causing rejection is
+  documented.
+
+Implementation details:
+
+- `SpeechTranscriptionCoordinator::Accept(...)` now emits metadata-only
+  coordinator diagnostics for:
+  - `accept.begin`,
+  - `accept.accepted.detail`,
+  - `accept.rejected_busy_session.detail`,
+  - `accept.rejected_busy_run.detail`.
+- `SpeechTranscriptionCoordinator::Execute(...)` now emits metadata-only
+  coordinator diagnostics for:
+  - `execute.begin`,
+  - `execute.reuse_existing.detail`,
+  - `execute.rejected.detail`,
+  - `execute.start.detail`,
+  - `execute.completed.detail`.
+- Diagnostics include request type (`preview`, `final`, or `unknown`),
+  `sessionId`, explicit request `runId`, coordinator `trackingRunId`, whether a
+  streaming input exists, artifact `streamId`, `sequenceStart`, `sequenceEnd`,
+  and duration metadata.
+- Rejection diagnostics include the active mapped run id, existing request type,
+  existing run id, existing stage, existing streaming flag, cancel flag, and
+  existing transcript text length without logging transcript content.
+
+Current behavior to verify in repro logs:
+
+- Preview requests should show `requestType=preview` and
+  `trackingRunId=speech-preview-*`.
+- Final requests should show `requestType=final` and
+  `trackingRunId=speech-final-*`.
+- If final is blocked by preview, logs should contain
+  `accept.rejected_busy_session.detail requestType=final ...
+  existingRequestType=preview existingRunId=speech-preview-* existingStage=...`.
+- If final is accepted, logs should contain
+  `accept.accepted.detail requestType=final ... trackingRunId=speech-final-*`
+  followed by `execute.start.detail` and `execute.completed.detail` for the same
+  final run.
+
+Manual verification guidance:
+
+1. Record `请讲一个笑话` with preview enabled.
+2. Search output for `[SpeechTranscriptionCoordinator][accept.` and
+   `[SpeechTranscriptionCoordinator][execute.`.
+3. Confirm final request has a distinct `trackingRunId=speech-final-*`.
+4. If final is rejected, use `existingRunId` and `existingStage` from the
+   rejection line to identify the blocking preview/final path.
+5. If final is accepted but still recognizes only `请`, continue to Step 5 to
+   verify final artifact range and Step 6 to verify Sherpa final decode range.
 
 ### Step 5: Verify final request uses a finite PCM artifact
 

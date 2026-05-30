@@ -50,6 +50,61 @@ namespace blazeclaw::core {
 			return audioPath.substr(0, kMaxChars) + "...";
 		}
 
+		const char* RequestTypeFromRunId(const std::string& runId) {
+			if (runId.rfind("speech-preview-", 0) == 0) {
+				return "preview";
+			}
+			if (runId.rfind("speech-final-", 0) == 0) {
+				return "final";
+			}
+			return "unknown";
+		}
+
+		std::string ArtifactForLog(
+			const std::optional<speechrecognition::SpeechAudioArtifact>& artifact) {
+			if (!artifact.has_value()) {
+				return "artifact=none";
+			}
+
+			return "artifact=present streamId=" + artifact->streamId +
+				" sequenceStart=" + std::to_string(artifact->sequenceStart) +
+				" sequenceEnd=" + std::to_string(artifact->sequenceEnd) +
+				" durationMs=" + std::to_string(artifact->durationMs);
+		}
+
+		std::string RequestForLog(
+			const speechrecognition::SpeechExecutionRequest& request,
+			const std::string& trackingRunId) {
+			return "requestType=" + std::string(RequestTypeFromRunId(trackingRunId)) +
+				" sessionId=" + request.sessionId +
+				" requestRunId=" + request.runId +
+				" trackingRunId=" + trackingRunId +
+				" streamingInput=" + std::string(request.streamingInput.has_value() ? "true" : "false") +
+				" hasAudioPath=" + std::string(request.audioPath.empty() ? "false" : "true") +
+				" " + ArtifactForLog(request.audioArtifact);
+		}
+
+		std::string ExistingStateForLog(
+			const speechrecognition::SpeechExecutionState& state) {
+			return "existingRequestType=" + std::string(RequestTypeFromRunId(state.runId)) +
+				" existingSessionId=" + state.sessionId +
+				" existingRunId=" + state.runId +
+				" existingStage=" + ExecutionStageToString(state.stage) +
+				" existingStreamingInput=" + std::string(state.streamingInput.has_value() ? "true" : "false") +
+				" existingCancelRequested=" + std::string(state.cancelRequested ? "true" : "false") +
+				" existingTextLength=" + std::to_string(state.transcriptText.size()) +
+				" " + ArtifactForLog(state.audioArtifact);
+		}
+
+		void TraceCoordinator(
+			const char* phase,
+			const std::string& detail) {
+			TRACE(
+				"[SpeechTranscriptionCoordinator][%S] %S\n",
+				phase != nullptr ? phase : "unknown",
+				detail.c_str());
+		}
+
 		SpeechExecutionStage ToExecutionStage(const SpeechSessionStage stage) {
 			switch (stage) {
 			case SpeechSessionStage::Recording:
@@ -104,6 +159,9 @@ namespace blazeclaw::core {
 		const std::string trackingRunId = BuildTrackingRunId(request);
 		ExecutionState state = BuildInitialState(request);
 		ExecutionUpdateCallback callback;
+		TraceCoordinator(
+			"accept.begin",
+			RequestForLog(request, trackingRunId));
 
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
@@ -115,6 +173,11 @@ namespace blazeclaw::core {
 						accepted.accepted = false;
 						accepted.executionState = existingIt->second;
 						accepted.error = BuildBusySessionError(request.sessionId);
+						TraceCoordinator(
+							"accept.rejected_busy_session.detail",
+							RequestForLog(request, trackingRunId) +
+							" reason=session_in_flight mappedRunId=" + sessionRunIt->second +
+							" " + ExistingStateForLog(existingIt->second));
 						TRACE(
 							"[SpeechTranscriptionCoordinator][accept.rejected_busy_session] sessionId=%S runId=%S stage=%S\n",
 							request.sessionId.c_str(),
@@ -133,6 +196,10 @@ namespace blazeclaw::core {
 					.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
 					.message = "speech transcription run is already active",
 				};
+				TraceCoordinator(
+					"accept.rejected_busy_run.detail",
+					RequestForLog(request, trackingRunId) +
+					" reason=tracking_run_in_flight " + ExistingStateForLog(runIt->second));
 				TRACE(
 					"[SpeechTranscriptionCoordinator][accept.rejected_busy_run] runId=%S stage=%S\n",
 					trackingRunId.c_str(),
@@ -159,6 +226,10 @@ namespace blazeclaw::core {
 			state.runId.c_str(),
 			AudioPathForLog(state.audioPath).c_str(),
 			ExecutionStageToString(state.stage));
+		TraceCoordinator(
+			"accept.accepted.detail",
+			RequestForLog(request, trackingRunId) +
+			" acceptedStage=" + ExecutionStageToString(state.stage));
 		return accepted;
 	}
 
@@ -186,18 +257,35 @@ namespace blazeclaw::core {
 		const ExecutionRequest& request) {
 		ExecutionAccepted accepted;
 		const std::string trackingRunId = BuildTrackingRunId(request);
+		TraceCoordinator(
+			"execute.begin",
+			RequestForLog(request, trackingRunId));
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			const auto existing = m_executionByRunId.find(trackingRunId);
 			if (existing != m_executionByRunId.end() && !IsTerminal(existing->second.stage)) {
 				accepted.accepted = true;
 				accepted.executionState = existing->second;
+				TraceCoordinator(
+					"execute.reuse_existing.detail",
+					RequestForLog(request, trackingRunId) +
+					" " + ExistingStateForLog(existing->second));
 			}
 		}
 		if (!accepted.accepted) {
 			accepted = Accept(request);
 		}
 		if (!accepted.accepted) {
+			TraceCoordinator(
+				"execute.rejected.detail",
+				RequestForLog(request, trackingRunId) +
+				" errorCode=" + (accepted.error.has_value()
+					? speechrecognition::SpeechRecognitionErrorCodeToString(accepted.error->code)
+					: std::string()) +
+				" errorMessageLength=" + std::to_string(accepted.error.has_value()
+					? accepted.error->message.size()
+					: 0) +
+				" " + ExistingStateForLog(accepted.executionState));
 			TranscribeResult rejected;
 			rejected.ok = false;
 			rejected.cancelled = false;
@@ -263,6 +351,11 @@ namespace blazeclaw::core {
 			accepted.executionState.sessionId.c_str(),
 			accepted.executionState.runId.c_str(),
 			AudioPathForLog(accepted.executionState.audioPath).c_str());
+		TraceCoordinator(
+			"execute.start.detail",
+			RequestForLog(request, trackingRunId) +
+			" acceptedRunId=" + accepted.executionState.runId +
+			" acceptedStage=" + ExecutionStageToString(accepted.executionState.stage));
 
 		const auto result = runtime.Transcribe(speechrecognition::SpeechTranscribeRequest{
 			.runId = accepted.executionState.runId,
@@ -334,6 +427,15 @@ namespace blazeclaw::core {
 			ExecutionStageToString(completedState.stage),
 			completedState.cancelRequested ? 1 : 0,
 			completedState.latencyMs);
+		TraceCoordinator(
+			"execute.completed.detail",
+			RequestForLog(request, trackingRunId) +
+			" resultOk=" + std::string(result.ok ? "true" : "false") +
+			" resultCancelled=" + std::string(result.cancelled ? "true" : "false") +
+			" completedRunId=" + completedState.runId +
+			" completedStage=" + ExecutionStageToString(completedState.stage) +
+			" completedTextLength=" + std::to_string(completedState.transcriptText.size()) +
+			" latencyMs=" + std::to_string(completedState.latencyMs));
 
 		return result;
 	}

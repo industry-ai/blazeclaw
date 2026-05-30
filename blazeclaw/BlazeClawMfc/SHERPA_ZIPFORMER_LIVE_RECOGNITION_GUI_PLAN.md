@@ -99,6 +99,7 @@ Implemented refinements:
 - `chat-controller.js::transcribeSpeech(...)` emits `[speech-request-trace]` diagnostics for request start, accepted responses, ignored stale preview responses, and request errors, including request type, session/run ids, stage, and audio artifact sequence metadata.
 - the native `speech.transcribe` bridge path emits visible `speech.request.trace` / `[Speech][RequestTrace]` lines so preview/final identity evidence appears in normal Visual Studio logs, not only in WebView developer tools.
 - `CBlazeClawMFCView` now emits ordered `speech.bridge.order` / `[Speech][BridgeOrder]` diagnostics for start-recording completion, preview/final transcribe dispatch, stop-recording completion, async transcribe completion, and speech lifecycle emit/suppress decisions.
+- `SpeechTranscriptionCoordinator` now emits metadata-only accept/execute busy-state diagnostics showing request type, tracking run id, session id, active mapped run id, active stage, streaming flag, artifact sequence range, and rejection reason without logging transcript content.
 - `liveSpeechPollGeneration` invalidates late preview responses after stop/failure-like transitions.
 - `livePreviewOnly` calls no longer emit a local queued update that clears interim transcript text before every poll.
 - stale live preview responses are ignored after the speech state leaves active preview stages.
@@ -127,6 +128,7 @@ Acceptance criteria:
 - completed: WebView diagnostics expose preview/final request identities and stale-response decisions without logging transcript content.
 - completed: native bridge diagnostics expose request type, session/run ids, streaming flag, and artifact sequence range for each `speech.transcribe` request.
 - completed: native bridge ordering diagnostics expose whether preview workers complete after stop/final begins and whether any lifecycle event is emitted or suppressed before WebView delivery.
+- completed: coordinator diagnostics expose whether final transcription is accepted independently or rejected because a preview/final run is still mapped as in-flight for the session.
 
 ### Step 3: Ensure live preview requests use the ring-buffer PCM stream
 Status: completed
