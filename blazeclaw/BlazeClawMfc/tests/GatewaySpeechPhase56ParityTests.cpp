@@ -249,10 +249,15 @@ TEST_CASE(
 		"SpeechRecognition" /
 		"engines" /
 		"SherpaZipformerStreamingEngine.cpp";
+	const auto viewPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"app" /
+		"BlazeClawMFCView.cpp";
 
 	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
 	const std::string coordinator = ReadTextFile(ResolveProjectPath(coordinatorPath));
 	const std::string sherpaEngine = ReadTextFile(ResolveProjectPath(sherpaEnginePath));
+	const std::string view = ReadTextFile(ResolveProjectPath(viewPath));
 
 	REQUIRE(sherpaEngine.find("const bool missingFinalTranscript") != std::string::npos);
 	REQUIRE(sherpaEngine.find("const bool isWarmupRequest") != std::string::npos);
@@ -269,16 +274,24 @@ TEST_CASE(
 	REQUIRE(speechHandler.find("noSpeechOutcome") != std::string::npos);
 	REQUIRE(speechHandler.find("forceNoSpeechSemantic") != std::string::npos);
 	REQUIRE(speechHandler.find("mismatchNoSpeechMessage") != std::string::npos);
+	REQUIRE(speechHandler.find("normalizedErrorCode = \"no_speech_detected\"") != std::string::npos);
+	REQUIRE(speechHandler.find("transcribe.errorCode = normalizedErrorCode") != std::string::npos);
 	REQUIRE(speechHandler.find("microphone level/input channel") != std::string::npos);
 	REQUIRE(speechHandler.find("sherpaInputHealthIndex") != std::string::npos);
 	REQUIRE(speechHandler.find("sherpaChunkEnergyAvgPermille") != std::string::npos);
 	REQUIRE(speechHandler.find("captureChannelIndex") != std::string::npos);
 	REQUIRE(speechHandler.find("noSpeechTriage") != std::string::npos);
+	REQUIRE(speechHandler.find("capture looked healthy") != std::string::npos);
+	REQUIRE(speechHandler.find("selected recording device") != std::string::npos);
+	REQUIRE(speechHandler.find("speech.final.error_classification") != std::string::npos);
+	REQUIRE(view.find("speech.no_speech.triage") != std::string::npos);
 
 	REQUIRE(coordinator.find("!result.ok && result.sessionState.stage == SpeechSessionStage::Completed") != std::string::npos);
 	REQUIRE(coordinator.find("return SpeechExecutionStage::Failed") != std::string::npos);
 	REQUIRE(sherpaEngine.find("[SherpaStreaming][capture.quality]") != std::string::npos);
 	REQUIRE(sherpaEngine.find("streamState.chunkEnergySum") != std::string::npos);
+	REQUIRE(sherpaEngine.find("adaptiveSpeechEnergyFloor") != std::string::npos);
+	REQUIRE(sherpaEngine.find("voicedChunkStreak") != std::string::npos);
 	REQUIRE(sherpaEngine.find("sherpaInputHealthIndex") != std::string::npos);
 	REQUIRE(sherpaEngine.find("streamingInput.source.captureChannelIndex") != std::string::npos);
 
@@ -294,4 +307,14 @@ TEST_CASE(
 	REQUIRE(recorder.find("adaptiveRingCaptureMinStableChunks") != std::string::npos);
 	REQUIRE(recorder.find("adaptiveRingCaptureRelockFloorPermille") != std::string::npos);
 	REQUIRE(recorder.find("adaptiveRingCaptureRelockWindowFrames") != std::string::npos);
+	REQUIRE(recorder.find("m_captureAdaptiveLateReselectionUsed") != std::string::npos);
+	REQUIRE(recorder.find("allowShortRunLock") != std::string::npos);
+
+	const auto webIndexPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.js";
+	const std::string webIndex = ReadTextFile(ResolveProjectPath(webIndexPath));
+	REQUIRE(webIndex.find("finalNoSpeechFailed") != std::string::npos);
+	REQUIRE(webIndex.find("[triage: health=") != std::string::npos);
 }

@@ -124,6 +124,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 			float chunkEnergyMax = 0.0f;
 			bool chunkEnergyObserved = false;
 			std::uint64_t voicedChunkCount = 0;
+			std::uint64_t voicedChunkStreak = 0;
+			float adaptiveSpeechEnergyFloor = 0.0f;
 			std::uint64_t nearZeroChunkCount = 0;
 			std::uint64_t nearZeroSampleCount = 0;
 			std::uint64_t totalSampleCount = 0;

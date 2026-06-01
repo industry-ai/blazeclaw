@@ -1217,6 +1217,28 @@ namespace blazeclaw::gateway {
 					const std::string errorClass = resolveErrorClass(normalizedErrorCode, transcribe.cancelled);
 					const bool noSpeechDetected = normalizedErrorCode == "no_speech_detected";
 					const bool runtimeUnavailable = normalizedErrorCode == "runtime_unavailable";
+					const std::uint64_t triageInputHealthIndex =
+						debugInfo.has_value() ? debugInfo->sherpaInputHealthIndex : 0ULL;
+					const std::uint64_t triageVoicedChunkCount =
+						debugInfo.has_value() ? debugInfo->sherpaVoicedChunkCount : 0ULL;
+					const std::uint64_t triageNearZeroSamplePermille =
+						debugInfo.has_value() ? debugInfo->sherpaNearZeroSamplePermille : 0ULL;
+					const std::uint64_t triageChunkEnergyAvgPermille =
+						debugInfo.has_value() ? debugInfo->sherpaChunkEnergyAvgPermille : 0ULL;
+					const std::uint64_t triageCaptureChannelEnergyPermille =
+						runtimeArtifactPresent
+							? transcribe.sessionState.audioArtifact->captureChannelEnergyPermille
+							: 0ULL;
+					const bool captureWeak =
+						triageInputHealthIndex < 55 ||
+						triageVoicedChunkCount == 0 ||
+						triageNearZeroSamplePermille >= 920 ||
+						triageChunkEnergyAvgPermille <= 1 ||
+						triageCaptureChannelEnergyPermille <= 1;
+					const bool captureHealthyDecodeEmpty =
+						!captureWeak &&
+						triageInputHealthIndex >= 70 &&
+						triageChunkEnergyAvgPermille >= 3;
 					const bool retryable = runtimeUnavailable || transcribe.cancelled || noSpeechDetected;
 					const std::string retryStrategy = runtimeUnavailable ? "backoff" : "immediate";
 					const std::string retryGuidance = runtimeUnavailable
@@ -1224,9 +1246,11 @@ namespace blazeclaw::gateway {
 						: (transcribe.cancelled
 							? "Transcription cancelled. Retry if needed."
 							: (noSpeechDetected
-								? (requestPreflightHealthIndex < 55
-									? "No speech detected with low capture health. Check microphone level/input channel and retry."
-									: "No speech detected. Capture looked healthy; speak clearly and retry.")
+								? (captureWeak
+									? "No speech detected with weak capture signal. Check microphone level, input channel, and selected recording device, then retry."
+									: (captureHealthyDecodeEmpty
+										? "No speech detected although capture looked healthy. Retry and verify Sherpa runtime/model readiness if issue persists."
+										: "No speech detected. Capture looked healthy; speak clearly and retry."))
 								: "Retry after checking microphone/audio input and runtime readiness."));
 
 					EmitTelemetryEvent(

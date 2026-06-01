@@ -2564,7 +2564,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 			++streamState.chunkCount;
 
 			const float energy = ComputeFrameEnergy(chunk);
-			const bool frameSpeech = energy >= kSpeechEnergyThreshold;
+			const float rollingEnergyAvg = streamState.chunkCount > 1
+				? static_cast<float>(streamState.chunkEnergySum / static_cast<double>(streamState.chunkCount - 1))
+				: energy;
+			const float adaptiveFloor = (std::max)(
+				kSpeechEnergyThreshold * 0.35f,
+				rollingEnergyAvg * 0.5f);
+			streamState.adaptiveSpeechEnergyFloor = adaptiveFloor;
+			const bool frameSpeech = energy >= kSpeechEnergyThreshold || energy >= adaptiveFloor;
 			streamState.chunkEnergySum += static_cast<double>(energy);
 			if (!streamState.chunkEnergyObserved) {
 				streamState.chunkEnergyMin = energy;
@@ -2577,6 +2584,13 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 			if (frameSpeech) {
 				++streamState.voicedChunkCount;
+				++streamState.voicedChunkStreak;
+				if (!streamState.speechActive && streamState.voicedChunkStreak < 2) {
+					streamState.silenceChunkCount = 0;
+				}
+			}
+			else {
+				streamState.voicedChunkStreak = 0;
 			}
 			if (energy <= (kSpeechEnergyThreshold * 0.25f)) {
 				++streamState.nearZeroChunkCount;
@@ -2591,7 +2605,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 				TRACE(L"[SherpaStreaming] chunkCount=%llu energy=%f frameSpeech=%d\n",
 					streamState.chunkCount, energy, frameSpeech);
 			}
-			if (frameSpeech) {
+			const bool speechConsistent = streamState.voicedChunkStreak >= 2 || streamState.speechActive;
+			if (frameSpeech && speechConsistent) {
 				streamState.speechActive = true;
 				streamState.silenceChunkCount = 0;
 			}

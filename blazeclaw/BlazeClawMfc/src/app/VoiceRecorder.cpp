@@ -98,6 +98,7 @@ CVoiceRecorder::CVoiceRecorder()
     , m_vadSpeechActive(false)
     , m_selectedCaptureChannelIndex(0)
     , m_captureChannelLocked(false)
+    , m_captureAdaptiveLateReselectionUsed(false)
     , m_captureAdaptiveLastBestChannel(0)
     , m_captureAdaptiveStableChunks(0)
     , m_captureAdaptiveObservedFrames(0)
@@ -967,6 +968,7 @@ void CVoiceRecorder::ResetCaptureChannelSelection()
     m_captureAdaptiveObservedFrames = 0;
     m_captureAdaptiveObservedFramesSinceLock = 0;
     m_captureAdaptiveStableChunks = 0;
+    m_captureAdaptiveLateReselectionUsed = false;
     m_captureAdaptiveLastBestChannel = 0;
     m_captureAdaptiveEnergyByChannel.clear();
 
@@ -1058,9 +1060,18 @@ size_t CVoiceRecorder::ResolveCaptureChannelIndex(
     const uint64_t relockWindowFrames = (std::max)(
         static_cast<uint64_t>(1),
         static_cast<uint64_t>(m_config.adaptiveRingCaptureRelockWindowFrames));
+    const uint64_t shortRunDecisionFrames = (std::max)(
+        static_cast<uint64_t>(1),
+        decisionFrames / 2);
+    const bool allowShortRunLock =
+        m_captureAdaptiveObservedFrames >= shortRunDecisionFrames &&
+        m_captureAdaptiveStableChunks >= (std::max)(
+            static_cast<uint64_t>(1),
+            minStableChunks / 2);
     if (!m_captureChannelLocked &&
-        m_captureAdaptiveObservedFrames >= decisionFrames &&
-        m_captureAdaptiveStableChunks >= minStableChunks) {
+        ((m_captureAdaptiveObservedFrames >= decisionFrames &&
+            m_captureAdaptiveStableChunks >= minStableChunks) ||
+            allowShortRunLock)) {
         m_selectedCaptureChannelIndex = bestChannel;
         m_captureChannelLocked = true;
         m_captureAdaptiveObservedFramesSinceLock = 0;
@@ -1076,13 +1087,19 @@ size_t CVoiceRecorder::ResolveCaptureChannelIndex(
                     : 0.0,
                 1000000.0));
         const bool relockAllowed = m_captureAdaptiveObservedFramesSinceLock >= relockWindowFrames;
+        const bool lateReselectAllowed =
+            !m_captureAdaptiveLateReselectionUsed &&
+            m_captureAdaptiveObservedFramesSinceLock >= shortRunDecisionFrames;
         const bool lockedEnergyCollapsed =
             lockedEnergyPermille <= static_cast<std::uint64_t>(m_config.adaptiveRingCaptureRelockFloorPermille);
-        if (relockAllowed && lockedEnergyCollapsed && bestChannel != lockedChannel) {
+        if ((relockAllowed || lateReselectAllowed) &&
+            lockedEnergyCollapsed &&
+            bestChannel != lockedChannel) {
             m_captureChannelLocked = false;
             m_captureAdaptiveStableChunks = 1;
             m_captureAdaptiveLastBestChannel = bestChannel;
             m_captureAdaptiveObservedFramesSinceLock = 0;
+            m_captureAdaptiveLateReselectionUsed = true;
         }
     }
 

@@ -2971,9 +2971,15 @@
                     if (!state.speechSessionState.retryGuidance) {
                         state.speechSessionState.retryGuidance = "No speech detected. Check microphone level/input channel and retry.";
                     }
+                    state.speechSessionState.retryable = true;
+                    if (!String(state.speechSessionState.retryStrategy || "").trim()) {
+                        state.speechSessionState.retryStrategy = "immediate";
+                    }
                 }
+                const effectiveSessionErrorCode = normalizeSpeechErrorCode(
+                    state.speechSessionState.errorCode || "");
                 const classified = classifySpeechError(
-                    forceNoSpeechSemantic ? "no_speech_detected" : sessionErrorCode,
+                    effectiveSessionErrorCode,
                     String(state.speechSessionState.errorClass || "").trim());
                 if (classified.retryDescriptor && state.speechSessionState.retryGuidance === "") {
                     state.speechSessionState.retryGuidance = String(classified.retryDescriptor.guidance || "").trim();
@@ -2989,7 +2995,7 @@
                 }
                 state.speechSessionState.errorClass = classified.behaviorClass;
 
-                if (!transcriptText && sessionErrorCode) {
+                if (!transcriptText && effectiveSessionErrorCode) {
                     const noSpeechTriage = state.speechSessionState.noSpeechTriage && typeof state.speechSessionState.noSpeechTriage === "object"
                         ? state.speechSessionState.noSpeechTriage
                         : null;
@@ -3000,9 +3006,21 @@
                         runId: transcriptRequest.runId,
                         responseStage: String(state.speechSessionState.stage || ""),
                         responseRunId: String(state.speechSessionState.runId || ""),
-                        errorCode: sessionErrorCode,
+                        errorCode: effectiveSessionErrorCode,
+                        errorClass: classified.behaviorClass,
+                        noSpeechSemanticForced: forceNoSpeechSemantic,
                         noSpeechTriage,
                         audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
+                    emitOperatorDiagnostic("speech.final.error_classification", {
+                        runId: String(state.speechSessionState.runId || transcriptRequest.runId || "").trim(),
+                        sessionId: transcriptRequest.sessionId,
+                        errorCode: effectiveSessionErrorCode,
+                        errorClass: classified.behaviorClass,
+                        noSpeechSemanticForced: forceNoSpeechSemantic,
+                        noSpeechTriage,
+                    }, {
+                        minIntervalMs: 0,
                     });
                     if (classified.behaviorClass === "ignore") {
                         updateComposerState();
@@ -3014,8 +3032,8 @@
                         ? ` (${state.speechSessionState.retryGuidance})`
                         : "";
                     const msg = detail
-                        ? `speech transcribe ${sessionErrorCode}: ${detail}${guidance}`
-                        : `speech transcribe ${sessionErrorCode}${guidance}`;
+                        ? `speech transcribe ${effectiveSessionErrorCode}: ${detail}${guidance}`
+                        : `speech transcribe ${effectiveSessionErrorCode}${guidance}`;
                     if (classified.behaviorClass === "status") {
                         state.speechSessionState.errorMessage = msg;
                     } else if (classified.behaviorClass === "toast") {
@@ -5212,6 +5230,14 @@
                                 audioPath: "final.wav",
                                 errorCode: "inference_failed",
                                 errorMessage: "final transcript unavailable: no_speech_detected",
+                                noSpeechTriage: {
+                                    sherpaChunkEnergyAvgPermille: 2,
+                                    sherpaVoicedChunkCount: 0,
+                                    sherpaNearZeroSamplePermille: 946,
+                                    sherpaInputHealthIndex: 43,
+                                    captureChannelIndex: 1,
+                                    captureChannelEnergyPermille: 1,
+                                },
                             },
                         };
                     }
@@ -5237,8 +5263,12 @@
                 "speech finalization should classify no-speech empty-final responses with no_speech_detected code");
             assertRegression(snapshot.errorClass === "status",
                 "speech finalization should classify no_speech_detected as status guidance");
-            assertRegression(snapshot.noSpeechTriage === null,
-                "speech no-speech defensive normalization should not require triage payload to classify status guidance");
+            assertRegression(String(snapshot.errorMessage || "").startsWith("speech transcribe no_speech_detected:"),
+                "speech stale-label regression should render no_speech_detected as the final message prefix");
+            assertRegression(snapshot.noSpeechTriage &&
+                Number(snapshot.noSpeechTriage.sherpaInputHealthIndex) === 43 &&
+                Number(snapshot.noSpeechTriage.captureChannelIndex) === 1,
+                "speech final no-speech path should retain triage payload fields for diagnostics and status guidance");
             assertRegression(addMessageCalls.length === 0,
                 "speech final no_speech_detected should not emit toast/error chat messages");
             summary.push("speech transcribe no-speech classification and status guidance parity");

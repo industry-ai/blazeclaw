@@ -241,6 +241,7 @@ private:
     VoiceRecorderTelemetry m_telemetry;
     size_t         m_selectedCaptureChannelIndex;
     bool           m_captureChannelLocked;
+    bool           m_captureAdaptiveLateReselectionUsed;
     size_t         m_captureAdaptiveLastBestChannel;
     uint32_t       m_captureAdaptiveStableChunks;
     uint64_t       m_captureAdaptiveObservedFrames;

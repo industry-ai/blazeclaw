@@ -2593,6 +2593,55 @@ void CBlazeClawMFCView::EmitSpeechLifecycleEvent(const std::string& payloadJson)
 		" textLength=" + std::to_string(text.size()) +
 		" segmentSequence=" + std::to_string(segmentSequence) +
 		" segmentFinal=" + std::string(segmentFinal ? "true" : "false");
+
+	std::string errorCode;
+	blazeclaw::gateway::json::FindStringField(payloadJson, "errorCode", errorCode);
+	if (stage == "failed" && !errorCode.empty())
+	{
+		std::string noSpeechTriageRaw;
+		if (blazeclaw::gateway::json::FindRawField(
+			payloadJson,
+			"noSpeechTriage",
+			noSpeechTriageRaw) &&
+			blazeclaw::gateway::json::IsJsonObjectShape(noSpeechTriageRaw))
+		{
+			std::uint64_t energyMinPermille = 0;
+			std::uint64_t energyMaxPermille = 0;
+			std::uint64_t energyAvgPermille = 0;
+			std::uint64_t voicedChunkCount = 0;
+			std::uint64_t nearZeroSamplePermille = 0;
+			std::uint64_t inputHealthIndex = 0;
+			std::uint64_t captureChannelIndex = 0;
+			std::uint64_t captureChannelEnergyPermille = 0;
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaChunkEnergyMinPermille", energyMinPermille);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaChunkEnergyMaxPermille", energyMaxPermille);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaChunkEnergyAvgPermille", energyAvgPermille);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaVoicedChunkCount", voicedChunkCount);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaNearZeroSamplePermille", nearZeroSamplePermille);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "sherpaInputHealthIndex", inputHealthIndex);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "captureChannelIndex", captureChannelIndex);
+			blazeclaw::gateway::json::FindUInt64Field(noSpeechTriageRaw, "captureChannelEnergyPermille", captureChannelEnergyPermille);
+
+			const bool finalRun = runId.rfind("speech-final-", 0) == 0;
+			if (finalRun)
+			{
+				const std::string noSpeechTraceDetail =
+					"runId=" + runId +
+					" errorCode=" + errorCode +
+					" sherpaChunkEnergyMinPermille=" + std::to_string(energyMinPermille) +
+					" sherpaChunkEnergyMaxPermille=" + std::to_string(energyMaxPermille) +
+					" sherpaChunkEnergyAvgPermille=" + std::to_string(energyAvgPermille) +
+					" sherpaVoicedChunkCount=" + std::to_string(voicedChunkCount) +
+					" sherpaNearZeroSamplePermille=" + std::to_string(nearZeroSamplePermille) +
+					" sherpaInputHealthIndex=" + std::to_string(inputHealthIndex) +
+					" captureChannelIndex=" + std::to_string(captureChannelIndex) +
+					" captureChannelEnergyPermille=" + std::to_string(captureChannelEnergyPermille);
+				AppendChatProcedureStatusLine(
+					L"speech.no_speech.triage",
+					noSpeechTraceDetail);
+			}
+		}
+	}
 	if (!ShouldEmitSpeechLifecycleEvent(payloadJson))
 	{
 		TraceSpeechBridgeOrder(

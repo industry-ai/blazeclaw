@@ -233,6 +233,37 @@
             modeClass = "error";
         }
 
+        const noSpeechTriage = sessionState.noSpeechTriage && typeof sessionState.noSpeechTriage === "object"
+            ? sessionState.noSpeechTriage
+            : null;
+        const noSpeechDetected = String(sessionState.errorCode || "").trim() === "no_speech_detected";
+        const finalNoSpeechFailed = stage === "failed" && noSpeechDetected;
+        if (finalNoSpeechFailed && noSpeechTriage) {
+            const energyAvg = Number.isFinite(Number(noSpeechTriage.sherpaChunkEnergyAvgPermille))
+                ? Number(noSpeechTriage.sherpaChunkEnergyAvgPermille)
+                : 0;
+            const voiced = Number.isFinite(Number(noSpeechTriage.sherpaVoicedChunkCount))
+                ? Number(noSpeechTriage.sherpaVoicedChunkCount)
+                : 0;
+            const nearZero = Number.isFinite(Number(noSpeechTriage.sherpaNearZeroSamplePermille))
+                ? Number(noSpeechTriage.sherpaNearZeroSamplePermille)
+                : 0;
+            const health = Number.isFinite(Number(noSpeechTriage.sherpaInputHealthIndex))
+                ? Number(noSpeechTriage.sherpaInputHealthIndex)
+                : 0;
+            const channelIndex = Number.isFinite(Number(noSpeechTriage.captureChannelIndex))
+                ? Number(noSpeechTriage.captureChannelIndex)
+                : 0;
+            const channelEnergy = Number.isFinite(Number(noSpeechTriage.captureChannelEnergyPermille))
+                ? Number(noSpeechTriage.captureChannelEnergyPermille)
+                : 0;
+            const triageText =
+                ` [triage: health=${health}, energyAvg=${energyAvg}, voiced=${voiced}, nearZero=${nearZero}, ch=${channelIndex}, chEnergy=${channelEnergy}]`;
+            speechLivePreviewTextEl.textContent =
+                (text || errorMessage || "No speech detected") + triageText;
+            return;
+        }
+
         speechLivePreviewEl.hidden = false;
         speechLivePreviewEl.className = `speech-live-preview ${modeClass}`;
         speechLivePreviewLabelEl.textContent = label;
