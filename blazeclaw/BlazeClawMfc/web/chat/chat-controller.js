@@ -5231,12 +5231,17 @@
                                 errorCode: "inference_failed",
                                 errorMessage: "final transcript unavailable: no_speech_detected",
                                 noSpeechTriage: {
-                                    sherpaChunkEnergyAvgPermille: 2,
+                                    sherpaChunkEnergyAvgPermille: 0,
                                     sherpaVoicedChunkCount: 0,
-                                    sherpaNearZeroSamplePermille: 946,
-                                    sherpaInputHealthIndex: 43,
+                                    sherpaNearZeroSamplePermille: 1000,
+                                    sherpaInputHealthIndex: 45,
                                     captureChannelIndex: 1,
-                                    captureChannelEnergyPermille: 1,
+                                    captureChannelEnergyPermille: 0,
+                                },
+                                audioArtifact: {
+                                    streamId: "voice_recorder",
+                                    sequenceStart: 0,
+                                    sequenceEnd: 56289,
                                 },
                             },
                         };
@@ -5266,9 +5271,12 @@
             assertRegression(String(snapshot.errorMessage || "").startsWith("speech transcribe no_speech_detected:"),
                 "speech stale-label regression should render no_speech_detected as the final message prefix");
             assertRegression(snapshot.noSpeechTriage &&
-                Number(snapshot.noSpeechTriage.sherpaInputHealthIndex) === 43 &&
+                Number(snapshot.noSpeechTriage.sherpaInputHealthIndex) === 45 &&
                 Number(snapshot.noSpeechTriage.captureChannelIndex) === 1,
                 "speech final no-speech path should retain triage payload fields for diagnostics and status guidance");
+            assertRegression(
+                String(snapshot.retryGuidance || "").indexOf("selected recording device") >= 0,
+                "speech final full-silence no-speech should provide device-selection-first retry guidance");
             assertRegression(addMessageCalls.length === 0,
                 "speech final no_speech_detected should not emit toast/error chat messages");
             summary.push("speech transcribe no-speech classification and status guidance parity");

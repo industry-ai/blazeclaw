@@ -51,6 +51,7 @@ public:
 
 	blazeclaw::core::ServiceManager& Services() noexcept;
 	const blazeclaw::core::ServiceManager& Services() const noexcept;
+	const blazeclaw::config::AppConfig& Config() const noexcept;
 	bool EnsureServiceRunning(std::string* outError = nullptr);
 	blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
 		const blazeclaw::gateway::protocol::RequestFrame& request);

@@ -1247,6 +1247,10 @@ const blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() const noexce
 	return m_serviceManager;
 }
 
+const blazeclaw::config::AppConfig& CBlazeClawMFCApp::Config() const noexcept {
+	return m_config;
+}
+
 // CBlazeClawMFCApp message handlers
 
 

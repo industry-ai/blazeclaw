@@ -1235,6 +1235,16 @@ namespace blazeclaw::gateway {
 						triageNearZeroSamplePermille >= 920 ||
 						triageChunkEnergyAvgPermille <= 1 ||
 						triageCaptureChannelEnergyPermille <= 1;
+					const bool captureRangeNonEmpty =
+						runtimeArtifactPresent &&
+						transcribe.sessionState.audioArtifact->sequenceEnd >
+							transcribe.sessionState.audioArtifact->sequenceStart;
+					const bool fullSilenceWithDataRange =
+						captureRangeNonEmpty &&
+						triageChunkEnergyAvgPermille == 0 &&
+						triageVoicedChunkCount == 0 &&
+						triageNearZeroSamplePermille >= 995 &&
+						triageCaptureChannelEnergyPermille == 0;
 					const bool captureHealthyDecodeEmpty =
 						!captureWeak &&
 						triageInputHealthIndex >= 70 &&
@@ -1246,11 +1256,13 @@ namespace blazeclaw::gateway {
 						: (transcribe.cancelled
 							? "Transcription cancelled. Retry if needed."
 							: (noSpeechDetected
-								? (captureWeak
+								? (fullSilenceWithDataRange
+									? "No speech detected with silent capture despite non-empty stream range. Check selected recording device/input source first, then verify microphone level and channel routing."
+									: (captureWeak
 									? "No speech detected with weak capture signal. Check microphone level, input channel, and selected recording device, then retry."
 									: (captureHealthyDecodeEmpty
 										? "No speech detected although capture looked healthy. Retry and verify Sherpa runtime/model readiness if issue persists."
-										: "No speech detected. Capture looked healthy; speak clearly and retry."))
+										: "No speech detected. Capture looked healthy; speak clearly and retry.")))
 								: "Retry after checking microphone/audio input and runtime readiness."));
 
 					EmitTelemetryEvent(

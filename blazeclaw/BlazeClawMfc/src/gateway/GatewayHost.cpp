@@ -969,6 +969,37 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
+		void AppendSharedChatStatusLine(const std::string& utf8Line) {
+			if (utf8Line.empty()) {
+				return;
+			}
+			if (auto* app = AfxGetApp(); app != nullptr && app->m_pMainWnd != nullptr) {
+				auto* line = new CString(CA2W(utf8Line.c_str(), CP_UTF8));
+				if (!app->m_pMainWnd->PostMessage(
+					kMsgAppendToolStatusLine,
+					0,
+					reinterpret_cast<LPARAM>(line))) {
+					delete line;
+				}
+			}
+		}
+
+		std::string BuildCapturePolicySummary(
+			const VoiceRecorderConfig& recorderConfig,
+			const std::uint32_t selectedCaptureChannel,
+			const std::uint64_t selectedCaptureEnergyPermille) {
+			return std::string("fixedOverride=") +
+				(recorderConfig.ringCaptureChannelFixedOverride ? "true" : "false") +
+				" adaptiveEnabled=" +
+				(recorderConfig.adaptiveRingCaptureChannelEnabled ? "true" : "false") +
+				" configuredChannel=" +
+				std::to_string(recorderConfig.ringCaptureChannelIndex) +
+				" selectedChannel=" +
+				std::to_string(selectedCaptureChannel) +
+				" selectedChannelEnergyPermille=" +
+				std::to_string(selectedCaptureEnergyPermille);
+		}
+
 		struct FallbackRecordingState {
 			CVoiceRecorder recorder;
 			CStringW lastFilePath;
@@ -1123,11 +1154,44 @@ namespace blazeclaw::gateway {
 
 		auto& fallback = GetFallbackRecordingState();
 		if (!fallback.initialized) {
-			if (!fallback.recorder.Initialize(main->GetSafeHwnd())) {
+			VoiceRecorderConfig recorderConfig;
+			std::int32_t configuredInputDevice = -1;
+			if (const auto* appConfig = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+				appConfig != nullptr) {
+				recorderConfig = BuildVoiceRecorderConfigFromSpeechConfig(
+					appConfig->Config().speechRecognition);
+				configuredInputDevice = appConfig->Config().speechRecognition.inputDeviceIndex;
+			}
+			if (!fallback.recorder.Initialize(main->GetSafeHwnd(), recorderConfig)) {
 				result.ok = false;
 				result.errorMessage = "failed to initialize fallback recorder";
 				return result;
 			}
+			if (configuredInputDevice >= 0) {
+				fallback.recorder.SetInputDevice(
+					static_cast<int>(configuredInputDevice));
+			}
+			wchar_t inputDeviceName[256] = {};
+			const bool hasInputDeviceName =
+				configuredInputDevice >= 0 &&
+				CVoiceRecorder::GetInputDeviceName(
+					static_cast<int>(configuredInputDevice),
+					inputDeviceName,
+					static_cast<int>(_countof(inputDeviceName)));
+			const VoiceRecorderTelemetry fallbackTelemetry =
+				fallback.recorder.GetTelemetrySnapshot();
+			AppendSharedChatStatusLine(
+				std::string("[Chat] speech.capture.binding - path=fallback_webview ") +
+				"inputDeviceIndex=" + std::to_string(configuredInputDevice) +
+				" inputDeviceName=" +
+				(hasInputDeviceName
+					? ToNarrow(std::wstring(inputDeviceName))
+					: std::string("auto_or_unresolved")) +
+				" recorderChannels=" + std::to_string(recorderConfig.nChannels) +
+				" " + BuildCapturePolicySummary(
+					recorderConfig,
+					static_cast<std::uint32_t>(fallbackTelemetry.captureChannelIndex),
+					fallbackTelemetry.captureChannelEnergyPermille));
 			fallback.initialized = true;
 		}
 
@@ -1136,6 +1200,19 @@ namespace blazeclaw::gateway {
 			result.ok = false;
 			result.errorMessage = "failed to start recording";
 			return result;
+		}
+		const VoiceRecorderTelemetry fallbackTelemetry =
+			fallback.recorder.GetTelemetrySnapshot();
+		if (fallbackTelemetry.captureProbeWeakSignal &&
+			fallbackTelemetry.captureProbeSampleCount > 0) {
+			AppendSharedChatStatusLine(
+				std::string("[Chat] speech.capture.warning - path=fallback_webview weakSignal=true ") +
+				"probeSamples=" +
+				std::to_string(fallbackTelemetry.captureProbeSampleCount) +
+				" probeRmsPermille=" +
+				std::to_string(fallbackTelemetry.captureProbeRmsPermille) +
+				" probeNearZeroSamplePermille=" +
+				std::to_string(fallbackTelemetry.captureProbeNearZeroSamplePermille));
 		}
 
 		result.ok = true;

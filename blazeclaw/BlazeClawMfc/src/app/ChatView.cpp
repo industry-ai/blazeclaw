@@ -431,7 +431,38 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 	// Initialize voice recorder
 	m_voiceRecorder.SetCallback(this);
-	m_voiceRecorder.Initialize(m_hWnd);
+	VoiceRecorderConfig recorderConfig;
+	if (const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()); app != nullptr) {
+		recorderConfig = BuildVoiceRecorderConfigFromSpeechConfig(
+			app->Config().speechRecognition);
+	}
+	m_voiceRecorder.Initialize(m_hWnd, recorderConfig);
+	if (const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()); app != nullptr) {
+		const auto configuredInputDevice = app->Config().speechRecognition.inputDeviceIndex;
+		if (configuredInputDevice >= 0) {
+			m_voiceRecorder.SetInputDevice(static_cast<int>(configuredInputDevice));
+		}
+		wchar_t inputDeviceName[256] = {};
+		const bool hasInputDeviceName =
+			configuredInputDevice >= 0 &&
+			CVoiceRecorder::GetInputDeviceName(
+				static_cast<int>(configuredInputDevice),
+				inputDeviceName,
+				static_cast<int>(_countof(inputDeviceName)));
+		const VoiceRecorderTelemetry telemetry = m_voiceRecorder.GetTelemetrySnapshot();
+		CString captureBindingLine;
+		captureBindingLine.Format(
+			L"[Chat] speech.capture.binding - path=chat_view inputDeviceIndex=%d inputDeviceName=%s recorderChannels=%u fixedOverride=%s adaptiveEnabled=%s configuredChannel=%u selectedChannel=%llu selectedChannelEnergyPermille=%llu",
+			static_cast<int>(configuredInputDevice),
+			hasInputDeviceName ? inputDeviceName : L"auto_or_unresolved",
+			recorderConfig.nChannels,
+			recorderConfig.ringCaptureChannelFixedOverride ? L"true" : L"false",
+			recorderConfig.adaptiveRingCaptureChannelEnabled ? L"true" : L"false",
+			recorderConfig.ringCaptureChannelIndex,
+			static_cast<unsigned long long>(telemetry.captureChannelIndex),
+			static_cast<unsigned long long>(telemetry.captureChannelEnergyPermille));
+		AddStatusMessage(captureBindingLine);
+	}
 
 	m_chatState.connected = IsGatewayConnected();
 	LoadChatHistoryNative();

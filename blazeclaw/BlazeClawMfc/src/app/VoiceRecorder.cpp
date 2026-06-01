@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <cmath>
 
 namespace {
 
@@ -77,7 +78,37 @@ uint64_t DurationMsToSamples(
 
 const char* kVoiceRecorderStreamId = "voice_recorder";
 
+VoiceRecorderConfig BuildVoiceRecorderConfigFromSpeechConfigImpl(
+    const blazeclaw::config::SpeechRecognitionConfig& speechConfig)
+{
+    VoiceRecorderConfig recorderConfig;
+    recorderConfig.nChannels = (std::max)(1U, speechConfig.recorderChannels);
+    recorderConfig.nSamplesPerSec =
+        (std::max)(1U, speechConfig.sampleRate);
+    recorderConfig.ringCaptureChannelIndex =
+        speechConfig.recorderCaptureChannelIndex;
+    recorderConfig.ringCaptureChannelFixedOverride =
+        speechConfig.recorderCaptureChannelFixedOverride;
+    recorderConfig.adaptiveRingCaptureChannelEnabled =
+        speechConfig.recorderAdaptiveCaptureChannelEnabled;
+    recorderConfig.adaptiveRingCaptureDecisionFrames =
+        (std::max)(1U, speechConfig.recorderAdaptiveCaptureDecisionFrames);
+    recorderConfig.adaptiveRingCaptureMinStableChunks =
+        (std::max)(1U, speechConfig.recorderAdaptiveCaptureMinStableChunks);
+    recorderConfig.adaptiveRingCaptureRelockFloorPermille =
+        speechConfig.recorderAdaptiveCaptureRelockFloorPermille;
+    recorderConfig.adaptiveRingCaptureRelockWindowFrames =
+        (std::max)(1U, speechConfig.recorderAdaptiveCaptureRelockWindowFrames);
+    return recorderConfig;
+}
+
 } // namespace
+
+VoiceRecorderConfig BuildVoiceRecorderConfigFromSpeechConfig(
+    const blazeclaw::config::SpeechRecognitionConfig& speechConfig)
+{
+    return BuildVoiceRecorderConfigFromSpeechConfigImpl(speechConfig);
+}
 
 CVoiceRecorder::CVoiceRecorder()
     : m_hNotifyWnd(nullptr)
@@ -642,18 +673,42 @@ bool CVoiceRecorder::ReadLatestSamples(
 bool CVoiceRecorder::ReadSamplesBySequence(
     std::vector<float>& out,
     uint64_t startSequence,
-    size_t sampleCount) const
+    size_t sampleCount)
 {
     if (m_audioRingBuffer == nullptr) {
         out.clear();
         return false;
     }
 
-    return m_audioRingBuffer->ReadWindowBySequence(
+    bool ok = m_audioRingBuffer->ReadWindowBySequence(
         out,
         startSequence,
         sampleCount,
         AudioRingBuffer::kDefaultReadSpinCount);
+    if (ok && !out.empty()) {
+        std::uint64_t nearZeroCount = 0;
+        double sumSquares = 0.0;
+        for (const float sample : out) {
+            if (std::fabs(sample) <= 1.0e-6f) {
+                ++nearZeroCount;
+            }
+            sumSquares += static_cast<double>(sample) * static_cast<double>(sample);
+        }
+        const std::uint64_t sampleCountLocal = static_cast<std::uint64_t>(out.size());
+        const double rms = std::sqrt(sumSquares / static_cast<double>(out.size()));
+        const std::uint64_t rmsPermille = static_cast<std::uint64_t>((std::min)(
+            rms * 1000.0,
+            1000000.0));
+        const std::uint64_t nearZeroPermille = sampleCountLocal > 0
+            ? (nearZeroCount * 1000ULL) / sampleCountLocal
+            : 0ULL;
+        m_telemetry.captureProbeSampleCount = sampleCountLocal;
+        m_telemetry.captureProbeNearZeroSamplePermille = nearZeroPermille;
+        m_telemetry.captureProbeRmsPermille = rmsPermille;
+        m_telemetry.captureProbeWeakSignal =
+            nearZeroPermille >= 980ULL || rmsPermille <= 1ULL;
+    }
+    return ok;
 }
 
 uint64_t CVoiceRecorder::GetRingLatestSequence() const

@@ -1259,6 +1259,74 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"speech.input_device_index=", 0) == 0) {
+				std::int32_t value = -1;
+				if (TryParseInt(trimmedLine.substr(25), value)) {
+					outConfig.speechRecognition.inputDeviceIndex = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.channels=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(24), value) && value > 0) {
+					outConfig.speechRecognition.recorderChannels = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.capture_channel_index=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(37), value)) {
+					outConfig.speechRecognition.recorderCaptureChannelIndex = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.capture_channel_fixed_override=", 0) == 0) {
+				outConfig.speechRecognition.recorderCaptureChannelFixedOverride =
+					ParseBool(trimmedLine.substr(46), false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.adaptive_capture_channel_enabled=", 0) == 0) {
+				outConfig.speechRecognition.recorderAdaptiveCaptureChannelEnabled =
+					ParseBool(trimmedLine.substr(48), true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.adaptive_capture_decision_frames=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(48), value) && value > 0) {
+					outConfig.speechRecognition.recorderAdaptiveCaptureDecisionFrames = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.adaptive_capture_min_stable_chunks=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(50), value) && value > 0) {
+					outConfig.speechRecognition.recorderAdaptiveCaptureMinStableChunks = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.adaptive_capture_relock_floor_permille=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(53), value)) {
+					outConfig.speechRecognition.recorderAdaptiveCaptureRelockFloorPermille = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"speech.recorder.adaptive_capture_relock_window_frames=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(54), value) && value > 0) {
+					outConfig.speechRecognition.recorderAdaptiveCaptureRelockWindowFrames = value;
+				}
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"speech.streaming.enabled=", 0) == 0) {
 				outConfig.speechRecognition.streamingEnabled =
 					ParseBool(trimmedLine.substr(24), true);
@@ -2151,6 +2219,34 @@ namespace blazeclaw::config {
 		if (outConfig.speechRecognition.sampleRate == 0) {
 			outConfig.speechRecognition.sampleRate = 16000;
 		}
+
+		outConfig.speechRecognition.inputDeviceIndex =
+			(std::clamp)(
+				outConfig.speechRecognition.inputDeviceIndex,
+				std::int32_t{ -1 },
+				std::int32_t{ 512 });
+
+		if (outConfig.speechRecognition.recorderChannels == 0) {
+			outConfig.speechRecognition.recorderChannels = 1;
+		}
+		outConfig.speechRecognition.recorderChannels =
+			(std::clamp)(
+				outConfig.speechRecognition.recorderChannels,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 8 });
+
+		outConfig.speechRecognition.recorderAdaptiveCaptureDecisionFrames =
+			(std::max)(
+				std::uint32_t{ 1 },
+				outConfig.speechRecognition.recorderAdaptiveCaptureDecisionFrames);
+		outConfig.speechRecognition.recorderAdaptiveCaptureMinStableChunks =
+			(std::max)(
+				std::uint32_t{ 1 },
+				outConfig.speechRecognition.recorderAdaptiveCaptureMinStableChunks);
+		outConfig.speechRecognition.recorderAdaptiveCaptureRelockWindowFrames =
+			(std::max)(
+				std::uint32_t{ 1 },
+				outConfig.speechRecognition.recorderAdaptiveCaptureRelockWindowFrames);
 
 		if (outConfig.speechRecognition.threads == 0) {
 			outConfig.speechRecognition.threads = 4;

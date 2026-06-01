@@ -253,11 +253,16 @@ TEST_CASE(
 		"src" /
 		"app" /
 		"BlazeClawMFCView.cpp";
+	const auto webControllerPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
 
 	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
 	const std::string coordinator = ReadTextFile(ResolveProjectPath(coordinatorPath));
 	const std::string sherpaEngine = ReadTextFile(ResolveProjectPath(sherpaEnginePath));
 	const std::string view = ReadTextFile(ResolveProjectPath(viewPath));
+	const std::string webController = ReadTextFile(ResolveProjectPath(webControllerPath));
 
 	REQUIRE(sherpaEngine.find("const bool missingFinalTranscript") != std::string::npos);
 	REQUIRE(sherpaEngine.find("const bool isWarmupRequest") != std::string::npos);
@@ -283,7 +288,8 @@ TEST_CASE(
 	REQUIRE(speechHandler.find("noSpeechTriage") != std::string::npos);
 	REQUIRE(speechHandler.find("capture looked healthy") != std::string::npos);
 	REQUIRE(speechHandler.find("selected recording device") != std::string::npos);
-	REQUIRE(speechHandler.find("speech.final.error_classification") != std::string::npos);
+	REQUIRE(speechHandler.find("silent capture despite non-empty stream range") != std::string::npos);
+	REQUIRE(webController.find("speech.final.error_classification") != std::string::npos);
 	REQUIRE(view.find("speech.no_speech.triage") != std::string::npos);
 
 	REQUIRE(coordinator.find("!result.ok && result.sessionState.stage == SpeechSessionStage::Completed") != std::string::npos);
@@ -309,6 +315,16 @@ TEST_CASE(
 	REQUIRE(recorder.find("adaptiveRingCaptureRelockWindowFrames") != std::string::npos);
 	REQUIRE(recorder.find("m_captureAdaptiveLateReselectionUsed") != std::string::npos);
 	REQUIRE(recorder.find("allowShortRunLock") != std::string::npos);
+	REQUIRE(recorder.find("captureProbeWeakSignal") != std::string::npos);
+
+	const auto gatewayHostPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.cpp";
+	const std::string gatewayHost = ReadTextFile(ResolveProjectPath(gatewayHostPath));
+	REQUIRE(gatewayHost.find("speech.capture.binding - path=fallback_webview") != std::string::npos);
+	REQUIRE(gatewayHost.find("speech.capture.warning - path=fallback_webview weakSignal=true") != std::string::npos);
+	REQUIRE(gatewayHost.find("BuildVoiceRecorderConfigFromSpeechConfig") != std::string::npos);
 
 	const auto webIndexPath = std::filesystem::path("BlazeClawMfc") /
 		"web" /

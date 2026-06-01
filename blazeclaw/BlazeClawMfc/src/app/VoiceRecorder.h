@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionContracts.h"
+#include "../config/ConfigModels.h"
 #include "AudioRingBuffer.h"
 
 #include <mmsystem.h>
@@ -47,6 +48,10 @@ struct VoiceRecorderTelemetry
     bool captureAdaptiveEnabled = false;
     bool captureAdaptiveLocked = false;
     uint64_t captureAdaptiveObservedFrames = 0;
+    uint64_t captureProbeSampleCount = 0;
+    uint64_t captureProbeNearZeroSamplePermille = 0;
+    uint64_t captureProbeRmsPermille = 0;
+    bool captureProbeWeakSignal = false;
 };
 
 class IVoiceVadProvider
@@ -108,6 +113,9 @@ struct VoiceRecorderConfig
     }
 };
 
+VoiceRecorderConfig BuildVoiceRecorderConfigFromSpeechConfig(
+    const blazeclaw::config::SpeechRecognitionConfig& speechConfig);
+
 // Recording data callback interface
 class IVoiceRecorderCallback
 {
@@ -158,7 +166,7 @@ public:
     bool ReadSamplesBySequence(
         std::vector<float>& out,
         uint64_t startSequence,
-        size_t sampleCount) const;
+        size_t sampleCount);
     uint64_t GetRingLatestSequence() const;
     uint64_t GetRingOldestAvailableSequence() const;
     std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>

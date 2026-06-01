@@ -2,6 +2,7 @@
 
 #include "../BlazeClawMfc/src/app/VoiceRecorder.h"
 #include "../BlazeClawMfc/src/app/ChatView.h"
+#include "../BlazeClawMfc/src/app/BlazeClawMfcApp.h"
 
 CVoiceRecorder::CVoiceRecorder() = default;
 CVoiceRecorder::~CVoiceRecorder() = default;
@@ -71,6 +72,26 @@ BOOL CVoiceRecorder::SetInputDevice(int) {
 	return TRUE;
 }
 
+const blazeclaw::config::AppConfig& CBlazeClawMFCApp::Config() const noexcept {
+	static blazeclaw::config::AppConfig config;
+	return config;
+}
+
+VoiceRecorderConfig BuildVoiceRecorderConfigFromSpeechConfig(
+	const blazeclaw::config::SpeechRecognitionConfig& speechConfig) {
+	VoiceRecorderConfig config;
+	config.nChannels = (std::max)(1U, speechConfig.recorderChannels);
+	config.nSamplesPerSec = (std::max)(1U, speechConfig.sampleRate);
+	config.ringCaptureChannelIndex = speechConfig.recorderCaptureChannelIndex;
+	config.ringCaptureChannelFixedOverride = speechConfig.recorderCaptureChannelFixedOverride;
+	config.adaptiveRingCaptureChannelEnabled = speechConfig.recorderAdaptiveCaptureChannelEnabled;
+	config.adaptiveRingCaptureDecisionFrames = (std::max)(1U, speechConfig.recorderAdaptiveCaptureDecisionFrames);
+	config.adaptiveRingCaptureMinStableChunks = (std::max)(1U, speechConfig.recorderAdaptiveCaptureMinStableChunks);
+	config.adaptiveRingCaptureRelockFloorPermille = speechConfig.recorderAdaptiveCaptureRelockFloorPermille;
+	config.adaptiveRingCaptureRelockWindowFrames = (std::max)(1U, speechConfig.recorderAdaptiveCaptureRelockWindowFrames);
+	return config;
+}
+
 bool CVoiceRecorder::ReadLatestSamples(std::vector<float>& out, size_t sampleCount) const {
 	if (!m_audioRingBuffer) {
 		out.clear();
@@ -82,7 +103,7 @@ bool CVoiceRecorder::ReadLatestSamples(std::vector<float>& out, size_t sampleCou
 bool CVoiceRecorder::ReadSamplesBySequence(
 	std::vector<float>& out,
 	uint64_t startSequence,
-	size_t sampleCount) const {
+	size_t sampleCount) {
 	if (!m_audioRingBuffer) {
 		out.clear();
 		return false;

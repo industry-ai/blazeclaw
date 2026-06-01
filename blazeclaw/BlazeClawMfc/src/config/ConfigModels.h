@@ -509,6 +509,15 @@ namespace blazeclaw::config {
 		std::vector<std::wstring> allowedLanguages = { L"en", L"zh" };
 		bool enforceAllowedLanguages = false;
 		std::uint32_t sampleRate = 16000;
+		std::int32_t inputDeviceIndex = -1; // -1 means system default mapper
+		std::uint32_t recorderChannels = 1;
+		std::uint32_t recorderCaptureChannelIndex = 0;
+		bool recorderCaptureChannelFixedOverride = false;
+		bool recorderAdaptiveCaptureChannelEnabled = true;
+		std::uint32_t recorderAdaptiveCaptureDecisionFrames = 2400;
+		std::uint32_t recorderAdaptiveCaptureMinStableChunks = 3;
+		std::uint32_t recorderAdaptiveCaptureRelockFloorPermille = 1;
+		std::uint32_t recorderAdaptiveCaptureRelockWindowFrames = 1600;
 		bool streamingEnabled = true;
 		std::uint32_t streamingChunkMs = 1000;
 		std::uint32_t streamingLookbackMs = 320;
