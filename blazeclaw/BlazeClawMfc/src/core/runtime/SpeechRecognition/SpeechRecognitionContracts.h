@@ -66,6 +66,8 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint32_t bitsPerSample = 16;
 		std::uint64_t sequenceStart = 0;
 		std::uint64_t sequenceEnd = 0;
+		std::uint32_t captureChannelIndex = 0;
+		std::uint64_t captureChannelEnergyPermille = 0;
 	};
 
 	struct SpeechStreamingCursor {
@@ -99,6 +101,8 @@ namespace blazeclaw::core::speechrecognition {
 		std::uint64_t sequenceStart = 0;
 		std::uint64_t sequenceEnd = 0;
 		std::uint32_t durationMs = 0;
+		std::uint32_t captureChannelIndex = 0;
+		std::uint64_t captureChannelEnergyPermille = 0;
 	};
 
 	struct SpeechTranscriptSegment {
@@ -202,6 +206,17 @@ namespace blazeclaw::core::speechrecognition {
 		std::string sherpaBaselineTokenIds;
 		std::string sherpaBaselineTokenPieces;
 		std::string sherpaBaselineDiagnosticPath;
+		std::uint64_t sherpaChunkEnergyMinPermille = 0;
+		std::uint64_t sherpaChunkEnergyMaxPermille = 0;
+		std::uint64_t sherpaChunkEnergyAvgPermille = 0;
+		std::uint64_t sherpaVoicedChunkCount = 0;
+		std::uint64_t sherpaNearZeroChunkCount = 0;
+		std::uint64_t sherpaNearZeroSamplePermille = 0;
+		std::uint64_t sherpaRequestedSequenceStart = 0;
+		std::uint64_t sherpaRequestedSequenceEnd = 0;
+		std::uint64_t sherpaConsumedSequenceStart = 0;
+		std::uint64_t sherpaConsumedSequenceEnd = 0;
+		std::uint64_t sherpaInputHealthIndex = 0;
 	};
 
 	struct SpeechSessionState {

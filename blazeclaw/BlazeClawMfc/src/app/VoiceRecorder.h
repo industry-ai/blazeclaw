@@ -42,6 +42,11 @@ struct VoiceRecorderTelemetry
     uint64_t chunkEnqueueLatencyUs = 0;
     uint64_t silenceSegmentationLatencyUs = 0;
     uint64_t boundarySignalCount = 0;
+    uint64_t captureChannelIndex = 0;
+    uint64_t captureChannelEnergyPermille = 0;
+    bool captureAdaptiveEnabled = false;
+    bool captureAdaptiveLocked = false;
+    uint64_t captureAdaptiveObservedFrames = 0;
 };
 
 class IVoiceVadProvider
@@ -68,6 +73,9 @@ struct VoiceRecorderConfig
     UINT nBitsPerSample = 16;     // Bits per sample: 16bit
     UINT ringBufferDurationSeconds = 30; // Ring retention window
     UINT ringCaptureChannelIndex = 0; // Interleaved channel index captured into ring
+    bool ringCaptureChannelFixedOverride = false;
+    bool adaptiveRingCaptureChannelEnabled = true;
+    UINT adaptiveRingCaptureDecisionFrames = 2400;
     bool vadEnabled = true;
     VoiceVadProviderType vadProviderType = VoiceVadProviderType::NoOp;
     UINT vadFrameDurationMs = 20;
@@ -193,6 +201,11 @@ protected:
         uint64_t chunkLatencyUs = 0);
     std::unique_ptr<IVoiceVadProvider> CreateVadProvider(
         VoiceVadProviderType providerType) const;
+    size_t ResolveCaptureChannelIndex(
+        const int16_t* data,
+        size_t frameCount,
+        size_t channelCount);
+    void ResetCaptureChannelSelection();
 
 private:
     HWND           m_hNotifyWnd;
@@ -223,6 +236,12 @@ private:
     bool           m_vadSpeechActive;
     std::vector<float> m_vadFrameBuffer;
     VoiceRecorderTelemetry m_telemetry;
+    size_t         m_selectedCaptureChannelIndex;
+    bool           m_captureChannelLocked;
+    size_t         m_captureAdaptiveLastBestChannel;
+    uint32_t       m_captureAdaptiveStableChunks;
+    uint64_t       m_captureAdaptiveObservedFrames;
+    std::vector<double> m_captureAdaptiveEnergyByChannel;
 
     BOOL           m_bInitialized;
 };

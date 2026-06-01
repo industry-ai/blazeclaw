@@ -746,6 +746,16 @@ Use this section while executing the plan.
 - Status: pending
 - Notes:
 
+### Empty-final native failure normalization (implementation update)
+
+- Status: implemented
+- Notes:
+  - WebView now sends explicit `livePreviewOnly` for every `speech.transcribe` request.
+  - Native Sherpa finalization now returns explicit failed result when final transcript text is empty.
+	- Gateway normalizes `completed + empty transcript` into failed state with explicit `inference_failed` mapping for final flows only (`!livePreviewOnly`).
+  - WebView preserves native final error codes for empty-final responses and only uses `missing_final_transcript` as legacy fallback when no native error is present.
+  - Warmup runs (`speech-warmup-*`) are excluded from transcript-required failure semantics to prevent startup `warmup_failed` caused solely by empty decoded transcript.
+
 ### Sherpa final decode trace
 
 - Status: pending

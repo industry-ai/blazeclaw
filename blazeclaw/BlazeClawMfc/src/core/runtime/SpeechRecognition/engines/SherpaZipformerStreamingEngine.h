@@ -119,6 +119,15 @@ namespace blazeclaw::core::speechrecognition::engines {
 			std::vector<std::vector<std::int64_t>> encoderInt64StateCacheShapes;
 			std::vector<std::vector<std::int64_t>> encoderFloatStateCacheShapes;
 			std::uint64_t chunkCount = 0;
+			double chunkEnergySum = 0.0;
+			float chunkEnergyMin = 0.0f;
+			float chunkEnergyMax = 0.0f;
+			bool chunkEnergyObserved = false;
+			std::uint64_t voicedChunkCount = 0;
+			std::uint64_t nearZeroChunkCount = 0;
+			std::uint64_t nearZeroSampleCount = 0;
+			std::uint64_t totalSampleCount = 0;
+			std::uint64_t requestedSequenceStart = 0;
 			std::uint64_t decodedTokenCount = 0;
 			std::uint64_t encoderFrameCount = 0;
 			std::uint64_t joinerCallCount = 0;

@@ -2201,6 +2201,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		std::uint64_t nextSequence = streamState.nextSequence;
 		const std::uint64_t requestedStartSequence = streamingInput.source.sequenceStart;
 		const std::uint64_t initialCursorNextSequence = nextSequence;
+		streamState.requestedSequenceStart = requestedStartSequence;
 
 		const auto oldestOpt =
 			GetStreamingAudioOldestSequence(streamingInput.source.streamId);
@@ -2564,6 +2565,28 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 			const float energy = ComputeFrameEnergy(chunk);
 			const bool frameSpeech = energy >= kSpeechEnergyThreshold;
+			streamState.chunkEnergySum += static_cast<double>(energy);
+			if (!streamState.chunkEnergyObserved) {
+				streamState.chunkEnergyMin = energy;
+				streamState.chunkEnergyMax = energy;
+				streamState.chunkEnergyObserved = true;
+			}
+			else {
+				streamState.chunkEnergyMin = (std::min)(streamState.chunkEnergyMin, energy);
+				streamState.chunkEnergyMax = (std::max)(streamState.chunkEnergyMax, energy);
+			}
+			if (frameSpeech) {
+				++streamState.voicedChunkCount;
+			}
+			if (energy <= (kSpeechEnergyThreshold * 0.25f)) {
+				++streamState.nearZeroChunkCount;
+			}
+			for (const float sample : chunk) {
+				if (std::fabs(sample) <= 0.0001f) {
+					++streamState.nearZeroSampleCount;
+				}
+			}
+			streamState.totalSampleCount += static_cast<std::uint64_t>(chunk.size());
 			if (IsSherpaVerboseTraceEnabled() && streamState.chunkCount % 10 == 1) {
 				TRACE(L"[SherpaStreaming] chunkCount=%llu energy=%f frameSpeech=%d\n",
 					streamState.chunkCount, energy, frameSpeech);
@@ -3676,11 +3699,60 @@ namespace blazeclaw::core::speechrecognition::engines {
 				false);
 		}
 
-		result.ok = true;
-		result.cancelled = false;
-		result.language = result.sessionState.language;
-		result.sessionState.stage = SpeechSessionStage::Completed;
-		result.sessionState.error = std::nullopt;
+		const bool isWarmupRequest =
+			request.runId.rfind("speech-warmup-", 0) == 0;
+		const bool requireFinalTranscript =
+			shouldTreatInputAsFinal &&
+			!isWarmupRequest;
+		const bool missingFinalTranscript =
+			requireFinalTranscript &&
+			result.sessionState.transcriptText.empty();
+
+		const std::uint64_t energyMinPermille = streamState.chunkEnergyObserved
+			? static_cast<std::uint64_t>((std::max)(0.0f, streamState.chunkEnergyMin) * 1000.0f)
+			: 0ULL;
+		const std::uint64_t energyMaxPermille = streamState.chunkEnergyObserved
+			? static_cast<std::uint64_t>((std::max)(0.0f, streamState.chunkEnergyMax) * 1000.0f)
+			: 0ULL;
+		const std::uint64_t energyAvgPermille = streamState.chunkCount > 0
+			? static_cast<std::uint64_t>((streamState.chunkEnergySum / static_cast<double>(streamState.chunkCount)) * 1000.0)
+			: 0ULL;
+		const std::uint64_t nearZeroSamplePermille = streamState.totalSampleCount > 0
+			? (streamState.nearZeroSampleCount * 1000ULL) / streamState.totalSampleCount
+			: 0ULL;
+
+		std::uint64_t inputHealthIndex = 0;
+		if (streamState.chunkCount > 0) {
+			inputHealthIndex += 25;
+		}
+		if (streamState.voicedChunkCount > 0) {
+			inputHealthIndex += 35;
+		}
+		if (nearZeroSamplePermille < 980ULL) {
+			inputHealthIndex += 20;
+		}
+		if (streamingInput.source.sequenceEnd == 0 || nextSequence >= streamingInput.source.sequenceEnd) {
+			inputHealthIndex += 20;
+		}
+		if (missingFinalTranscript) {
+			result.ok = false;
+			result.cancelled = false;
+			result.text.clear();
+			result.sessionState.stage = SpeechSessionStage::Failed;
+			result.sessionState.error = SpeechRecognitionError{
+				.code = SpeechRecognitionErrorCode::InferenceFailed,
+				.message = "final transcript unavailable: " +
+					(finalOutcome.empty() ? std::string("empty_final_result") : finalOutcome),
+			};
+			result.error = result.sessionState.error;
+		}
+		else {
+			result.ok = true;
+			result.cancelled = false;
+			result.language = result.sessionState.language;
+			result.sessionState.stage = SpeechSessionStage::Completed;
+			result.sessionState.error = std::nullopt;
+		}
 		result.latencyMs = static_cast<std::uint32_t>(streamState.chunkCount * chunkMs);
 		result.sessionState.latencyMs = result.latencyMs;
 		if (result.sessionState.streamingInput.has_value()) {
@@ -3787,7 +3859,38 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaBaselineDiagnosticPath = baselineDiagnosticPath.has_value()
 				? baselineDiagnosticPath->string()
 				: std::string{},
+			.sherpaChunkEnergyMinPermille = energyMinPermille,
+			.sherpaChunkEnergyMaxPermille = energyMaxPermille,
+			.sherpaChunkEnergyAvgPermille = energyAvgPermille,
+			.sherpaVoicedChunkCount = streamState.voicedChunkCount,
+			.sherpaNearZeroChunkCount = streamState.nearZeroChunkCount,
+			.sherpaNearZeroSamplePermille = nearZeroSamplePermille,
+			.sherpaRequestedSequenceStart = streamState.requestedSequenceStart,
+			.sherpaRequestedSequenceEnd = streamingInput.source.sequenceEnd,
+			.sherpaConsumedSequenceStart = requestedStartSequence,
+			.sherpaConsumedSequenceEnd = nextSequence,
+			.sherpaInputHealthIndex = inputHealthIndex,
 		};
+
+		if (IsSherpaVerboseTraceEnabled()) {
+			TRACE(
+				"[SherpaStreaming][capture.quality] runId=%S chunkCount=%llu voicedChunkCount=%llu nearZeroChunkCount=%llu nearZeroSamplePermille=%llu energyMinPermille=%llu energyMaxPermille=%llu energyAvgPermille=%llu requestedStart=%llu requestedEnd=%llu consumedStart=%llu consumedEnd=%llu captureChannelIndex=%u captureChannelEnergyPermille=%llu inputHealthIndex=%llu\n",
+				request.runId.c_str(),
+				streamState.chunkCount,
+				streamState.voicedChunkCount,
+				streamState.nearZeroChunkCount,
+				nearZeroSamplePermille,
+				energyMinPermille,
+				energyMaxPermille,
+				energyAvgPermille,
+				streamState.requestedSequenceStart,
+				streamingInput.source.sequenceEnd,
+				requestedStartSequence,
+				nextSequence,
+				streamingInput.source.captureChannelIndex,
+				streamingInput.source.captureChannelEnergyPermille,
+				inputHealthIndex);
+		}
 		if (isFinalStreamRequest) {
 			TRACE(
 				"[SherpaStreaming][final.summary] runId=%S streamId=%S final=%d cachedReset=%d requestedStart=%llu effectiveStart=%llu sequenceEnd=%llu finalCursor=%llu drained=%d remaining=%llu chunkCount=%llu loopCount=%llu decodedText=%S finalOutcome=%S diagnosticPath=%S\n",

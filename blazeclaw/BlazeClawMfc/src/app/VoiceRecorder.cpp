@@ -96,6 +96,11 @@ CVoiceRecorder::CVoiceRecorder()
     , m_vadSilenceSamples(0)
     , m_vadBoundarySignalSequence(0)
     , m_vadSpeechActive(false)
+    , m_selectedCaptureChannelIndex(0)
+    , m_captureChannelLocked(false)
+    , m_captureAdaptiveLastBestChannel(0)
+    , m_captureAdaptiveStableChunks(0)
+    , m_captureAdaptiveObservedFrames(0)
     , m_bInitialized(FALSE)
 {
     m_szFilePath[0] = L'\0';
@@ -133,6 +138,7 @@ BOOL CVoiceRecorder::Initialize(HWND hWnd, const VoiceRecorderConfig& config)
         : 0;
     m_vadProvider = CreateVadProvider(m_config.vadProviderType);
     ResetVadState();
+    ResetCaptureChannelSelection();
 
     m_bInitialized = TRUE;
     return TRUE;
@@ -191,6 +197,7 @@ BOOL CVoiceRecorder::StartRecording(const wchar_t* pszFilePath)
         std::make_unique<AudioRingBuffer>(ResolveRingCapacitySamples(m_config));
     m_vadProvider = CreateVadProvider(m_config.vadProviderType);
     ResetVadState();
+    ResetCaptureChannelSelection();
     m_sessionState = {};
     m_sessionState.stage = blazeclaw::core::speechrecognition::SpeechSessionStage::Recording;
     m_sessionState.audioPath = ToNarrow(m_szFilePath);
@@ -428,13 +435,15 @@ void CVoiceRecorder::HandleWaveInMessage(UINT uMsg, WPARAM wParam, LPARAM lParam
                 const size_t blockAlign = static_cast<size_t>(m_config.GetBlockAlign());
                 if (blockAlign > 0) {
                     const size_t frameCount = static_cast<size_t>(dwLen) / blockAlign;
+                    const size_t selectedChannel = ResolveCaptureChannelIndex(
+                        reinterpret_cast<const int16_t*>(pData),
+                        frameCount,
+                        static_cast<size_t>(m_config.nChannels));
                     m_audioRingBuffer->PushInterleavedPcm16(
                         reinterpret_cast<const int16_t*>(pData),
                         frameCount,
                         static_cast<size_t>(m_config.nChannels),
-                        (std::min)(
-                            static_cast<size_t>(m_config.ringCaptureChannelIndex),
-                            static_cast<size_t>(m_config.nChannels - 1)));
+                        selectedChannel);
 
                     ProcessVadFromRing();
                 }
@@ -700,6 +709,8 @@ CVoiceRecorder::BuildStreamingAudioArtifact() const
     artifact.frameSamples = static_cast<std::uint32_t>(m_config.nSamplesPerSec / 100);
     artifact.sequenceStart = sequenceStart;
     artifact.sequenceEnd = liveRecording ? 0ULL : latestSequence;
+    artifact.captureChannelIndex = static_cast<std::uint32_t>(m_selectedCaptureChannelIndex);
+    artifact.captureChannelEnergyPermille = m_telemetry.captureChannelEnergyPermille;
 
     const uint64_t availableSamples = latestSequence > sequenceStart
         ? latestSequence - sequenceStart
@@ -913,13 +924,16 @@ void CVoiceRecorder::PushPcm16ChunkForTest(
         m_vadProvider = CreateVadProvider(m_config.vadProviderType);
     }
 
+    const size_t selectedChannel = ResolveCaptureChannelIndex(
+        data,
+        frameCount,
+        channelCount);
+
     m_audioRingBuffer->PushInterleavedPcm16(
         data,
         frameCount,
         channelCount,
-        (std::min)(
-            static_cast<size_t>(m_config.ringCaptureChannelIndex),
-            channelCount - 1));
+        selectedChannel);
 
     m_telemetry.chunkEnqueueLatencyUs = enqueueLatencyUs;
     const uint64_t ringCapacity =
@@ -945,4 +959,118 @@ std::unique_ptr<IVoiceVadProvider> CVoiceRecorder::CreateVadProvider(
     default:
         return std::make_unique<NoOpVoiceVadProvider>();
     }
+}
+
+void CVoiceRecorder::ResetCaptureChannelSelection()
+{
+    m_captureAdaptiveObservedFrames = 0;
+    m_captureAdaptiveStableChunks = 0;
+    m_captureAdaptiveLastBestChannel = 0;
+    m_captureAdaptiveEnergyByChannel.clear();
+
+    const size_t configuredChannel = static_cast<size_t>(m_config.ringCaptureChannelIndex);
+    const bool fixedOverride = m_config.ringCaptureChannelFixedOverride;
+    const bool adaptiveEnabled = m_config.adaptiveRingCaptureChannelEnabled && !fixedOverride;
+
+    m_selectedCaptureChannelIndex = configuredChannel;
+    m_captureChannelLocked = fixedOverride || !adaptiveEnabled;
+
+    m_telemetry.captureChannelIndex = static_cast<uint64_t>(m_selectedCaptureChannelIndex);
+    m_telemetry.captureChannelEnergyPermille = 0;
+    m_telemetry.captureAdaptiveEnabled = adaptiveEnabled;
+    m_telemetry.captureAdaptiveLocked = m_captureChannelLocked;
+    m_telemetry.captureAdaptiveObservedFrames = 0;
+}
+
+size_t CVoiceRecorder::ResolveCaptureChannelIndex(
+    const int16_t* data,
+    size_t frameCount,
+    size_t channelCount)
+{
+    if (channelCount == 0) {
+        return 0;
+    }
+
+    const size_t maxChannelIndex = channelCount - 1;
+    const size_t configuredChannel = (std::min)(
+        static_cast<size_t>(m_config.ringCaptureChannelIndex),
+        maxChannelIndex);
+
+    if (m_config.ringCaptureChannelFixedOverride || !m_config.adaptiveRingCaptureChannelEnabled) {
+        m_selectedCaptureChannelIndex = configuredChannel;
+        m_captureChannelLocked = true;
+        m_telemetry.captureChannelIndex = static_cast<uint64_t>(m_selectedCaptureChannelIndex);
+        m_telemetry.captureAdaptiveEnabled = false;
+        m_telemetry.captureAdaptiveLocked = true;
+        return m_selectedCaptureChannelIndex;
+    }
+
+    if (data == nullptr || frameCount == 0 || channelCount == 1) {
+        m_selectedCaptureChannelIndex = configuredChannel;
+        m_telemetry.captureChannelIndex = static_cast<uint64_t>(m_selectedCaptureChannelIndex);
+        return m_selectedCaptureChannelIndex;
+    }
+
+    if (m_captureAdaptiveEnergyByChannel.size() != channelCount) {
+        m_captureAdaptiveEnergyByChannel.assign(channelCount, 0.0);
+    }
+
+    std::vector<double> chunkEnergyByChannel(channelCount, 0.0);
+    for (size_t frame = 0; frame < frameCount; ++frame) {
+        const size_t frameOffset = frame * channelCount;
+        for (size_t channel = 0; channel < channelCount; ++channel) {
+            const float sample = static_cast<float>(data[frameOffset + channel]) / 32768.0f;
+            const double energy = static_cast<double>(sample) * static_cast<double>(sample);
+            chunkEnergyByChannel[channel] += energy;
+            m_captureAdaptiveEnergyByChannel[channel] += energy;
+        }
+    }
+
+    size_t bestChannel = 0;
+    double bestChunkEnergy = chunkEnergyByChannel[0];
+    for (size_t channel = 1; channel < channelCount; ++channel) {
+        if (chunkEnergyByChannel[channel] > bestChunkEnergy) {
+            bestChunkEnergy = chunkEnergyByChannel[channel];
+            bestChannel = channel;
+        }
+    }
+
+    if (bestChannel == m_captureAdaptiveLastBestChannel) {
+        ++m_captureAdaptiveStableChunks;
+    }
+    else {
+        m_captureAdaptiveStableChunks = 1;
+        m_captureAdaptiveLastBestChannel = bestChannel;
+    }
+
+    m_captureAdaptiveObservedFrames += static_cast<uint64_t>(frameCount);
+    const uint64_t decisionFrames = (std::max)(
+        static_cast<uint64_t>(1),
+        static_cast<uint64_t>(m_config.adaptiveRingCaptureDecisionFrames));
+    if (!m_captureChannelLocked &&
+        m_captureAdaptiveObservedFrames >= decisionFrames &&
+        m_captureAdaptiveStableChunks >= 2) {
+        m_selectedCaptureChannelIndex = bestChannel;
+        m_captureChannelLocked = true;
+    }
+
+    if (!m_captureChannelLocked) {
+        m_selectedCaptureChannelIndex = bestChannel;
+    }
+
+    const size_t selectedChannel = (std::min)(m_selectedCaptureChannelIndex, maxChannelIndex);
+    const double selectedEnergy = chunkEnergyByChannel[selectedChannel];
+    const double averageSelectedEnergy = frameCount > 0
+        ? selectedEnergy / static_cast<double>(frameCount)
+        : 0.0;
+    const uint64_t selectedEnergyPermille = static_cast<uint64_t>(
+        (std::min)(averageSelectedEnergy * 1000.0, 1000000.0));
+
+    m_telemetry.captureChannelIndex = static_cast<uint64_t>(selectedChannel);
+    m_telemetry.captureChannelEnergyPermille = selectedEnergyPermille;
+    m_telemetry.captureAdaptiveEnabled = true;
+    m_telemetry.captureAdaptiveLocked = m_captureChannelLocked;
+    m_telemetry.captureAdaptiveObservedFrames = m_captureAdaptiveObservedFrames;
+
+    return selectedChannel;
 }

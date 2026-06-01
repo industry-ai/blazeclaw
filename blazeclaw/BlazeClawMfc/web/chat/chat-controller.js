@@ -837,6 +837,9 @@
                 gatewayNativePayloadReadyOffsetMs: Number.isFinite(Number(source.gatewayNativePayloadReadyOffsetMs))
                     ? Number(source.gatewayNativePayloadReadyOffsetMs)
                     : 0,
+                preflight: source.preflight && typeof source.preflight === "object"
+                    ? { ...source.preflight }
+                    : null,
                 updatedAtMs: Date.now(),
             };
         }
@@ -2571,6 +2574,7 @@
                 sessionId: state.sessionKey,
                 runId: requestedRunId || nextId(),
                 prompt: prompt || String(state.inputEl && state.inputEl.value || "").trim(),
+                livePreviewOnly,
             };
             const transcriptionTimeoutMs = Number.isFinite(Number(sendOptions.timeoutMs)) && Number(sendOptions.timeoutMs) > 0
                 ? Number(sendOptions.timeoutMs)
@@ -2693,6 +2697,48 @@
                     ? previewPayloadText
                     : finalPayloadText;
                 if (!livePreviewOnly && !transcriptText) {
+                    const nativeEmptyFinalErrorCode = String(
+                        normalizedSpeechSessionState.errorCode ||
+                        payload.errorCode ||
+                        "").trim();
+                    const nativeEmptyFinalErrorMessage = String(
+                        normalizedSpeechSessionState.errorMessage ||
+                        payload.errorMessage ||
+                        "").trim();
+                    if (nativeEmptyFinalErrorCode) {
+                        emitSpeechRequestTrace("response_ignored", {
+                            requestType: "final",
+                            reason: "native_final_error_no_transcript",
+                            livePreviewOnly,
+                            sessionId: transcriptRequest.sessionId,
+                            runId: transcriptRequest.runId,
+                            responseStage: String(normalizedSpeechSessionState.stage || ""),
+                            responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                            nativeErrorCode: nativeEmptyFinalErrorCode,
+                            nativeErrorMessageLength: nativeEmptyFinalErrorMessage.length,
+                            finalTextSource: String(finalTranscript.source || ""),
+                            finalTextOwnerRunId: String(finalTranscript.ownerRunId || ""),
+                            finalTextOwned: Boolean(finalTranscript.finalOwned),
+                            hasTopLevelText: Boolean(finalTranscript.hasTopLevelText),
+                            hasNestedText: Boolean(finalTranscript.hasNestedText),
+                            hasSegmentText: Boolean(finalTranscript.hasSegmentText),
+                            audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                        });
+                        if (String(state.speechSessionState.stage || "").trim() === "completed") {
+                            applySpeechLifecycleUpdate({
+                                stage: "failed",
+                                sessionId: transcriptRequest.sessionId,
+                                runId: transcriptRequest.runId,
+                                audioPath,
+                                audioArtifact,
+                                text: "",
+                                segmentText: "",
+                                errorCode: nativeEmptyFinalErrorCode,
+                                errorMessage: nativeEmptyFinalErrorMessage || "speech final response returned an explicit error without transcript text",
+                                errorClass: "status",
+                            });
+                        }
+                    } else {
                     emitSpeechRequestTrace("response_ignored", {
                         requestType: "final",
                         reason: "missing_final_transcript",
@@ -2725,6 +2771,7 @@
                         errorMessage: "speech final response did not contain transcript text",
                         errorClass: "status",
                     });
+                    }
                 }
                 if (transcriptText) {
                     const quality = assessTranscriptQuality(transcriptText);
@@ -4997,6 +5044,154 @@
             assertRegression(snapshot.text === "preview terminal text" || snapshot.segmentText === "preview terminal text",
                 "speech preview terminal lifecycle should preserve interim text without ending recording");
             summary.push("speech preview terminal remains active");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-8",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-8",
+                text: "partial preview",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "preview.wav",
+                runId: "speech-preview-regression-8",
+                livePreviewOnly: true,
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: params.runId,
+                                audioPath: "preview.wav",
+                                text: "",
+                                speechSession: {
+                                    stage: "completed",
+                                    sessionId: "main",
+                                    runId: params.runId,
+                                    audioPath: "preview.wav",
+                                    text: "",
+                                },
+                            },
+                        };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.stage === "streaming",
+                "speech preview empty completed response should remain non-terminal while recording");
+            assertRegression(snapshot.runId === "speech-preview-regression-8",
+                "speech preview empty completed response should preserve active preview run id");
+            assertRegression(String(snapshot.errorCode || "").trim() === "",
+                "speech preview empty completed response should not force preview failed error state");
+            summary.push("speech preview empty response remains non-terminal");
+        }
+
+        {
+            const state = createRegressionState();
+            const sendCalls = [];
+            const transcribeCalls = [];
+            const addMessageCalls = [];
+            const controller = createController({
+                state,
+                addMessage: function (text, kind) {
+                    addMessageCalls.push({ text, kind });
+                },
+            });
+
+            controller.applySpeechLifecycleUpdate({
+                stage: "recording",
+                sessionId: "main",
+                runId: "speech-preview-regression-7",
+            });
+            controller.applySpeechLifecycleUpdate({
+                stage: "streaming",
+                sessionId: "main",
+                runId: "speech-preview-regression-7",
+                text: "preview in flight",
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "preview.wav",
+                runId: "speech-preview-regression-7",
+                livePreviewOnly: true,
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        transcribeCalls.push({ ...params });
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: params.runId,
+                                audioPath: "preview.wav",
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "unexpected-preview-chat-send" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            await controller.transcribeSpeech({
+                audioPath: "final.wav",
+                runId: "speech-final-regression-7",
+                requestOverride: async (method, params) => {
+                    if (method === "speech.transcribe") {
+                        transcribeCalls.push({ ...params });
+                        return {
+                            payload: {
+                                stage: "completed",
+                                sessionId: "main",
+                                runId: params.runId,
+                                audioPath: "final.wav",
+                                errorCode: "inference_failed",
+                                errorMessage: "final transcript unavailable: no_speech_detected",
+                            },
+                        };
+                    }
+                    if (method === "chat.send") {
+                        sendCalls.push(params);
+                        return { payload: { runId: "unexpected-final-chat-send" } };
+                    }
+                    return { payload: {} };
+                },
+            });
+
+            assertRegression(transcribeCalls.length >= 2,
+                "speech regression should capture preview and final transcribe dispatch payloads");
+            assertRegression(transcribeCalls[0].livePreviewOnly === true,
+                "speech preview transcribe payload should explicitly set livePreviewOnly=true");
+            assertRegression(transcribeCalls[1].livePreviewOnly === false,
+                "speech final transcribe payload should explicitly set livePreviewOnly=false");
+            assertRegression(sendCalls.length === 0,
+                "speech finalization should not submit chat message when native final error is returned without transcript");
+
+            const snapshot = controller.getSpeechSessionStateSnapshot();
+            assertRegression(snapshot.stage === "failed" && snapshot.errorCode === "no_speech_detected",
+                "speech finalization should classify no-speech empty-final responses with no_speech_detected code");
+            assertRegression(snapshot.errorClass === "status",
+                "speech finalization should classify no_speech_detected as status guidance");
+            assertRegression(addMessageCalls.length === 0,
+                "speech final no_speech_detected should not emit toast/error chat messages");
+            summary.push("speech transcribe no-speech classification and status guidance parity");
         }
 
         return {

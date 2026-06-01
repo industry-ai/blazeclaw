@@ -2313,6 +2313,14 @@ namespace blazeclaw::core::speechrecognition {
 						hasPcmStreamArtifact && request.audioArtifact->bitsPerSample > 0
 						? request.audioArtifact->bitsPerSample
 						: 16;
+					inferredStreamingInput.source.captureChannelIndex =
+						hasPcmStreamArtifact
+						? request.audioArtifact->captureChannelIndex
+						: 0;
+					inferredStreamingInput.source.captureChannelEnergyPermille =
+						hasPcmStreamArtifact
+						? request.audioArtifact->captureChannelEnergyPermille
+						: 0;
 					const std::uint64_t requestedStart = hasPcmStreamArtifact
 						? request.audioArtifact->sequenceStart
 						: *oldestSequence;

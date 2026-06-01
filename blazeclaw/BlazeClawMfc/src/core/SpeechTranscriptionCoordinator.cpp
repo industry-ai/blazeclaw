@@ -127,6 +127,10 @@ namespace blazeclaw::core {
 		SpeechExecutionStage ResolveCompletedExecutionStage(
 			const bool isStreamingRequest,
 			const speechrecognition::SpeechTranscribeResult& result) {
+			if (!result.ok && result.sessionState.stage == SpeechSessionStage::Completed) {
+				return SpeechExecutionStage::Failed;
+			}
+
 			if (isStreamingRequest &&
 				result.ok &&
 				result.sessionState.segment.has_value() &&

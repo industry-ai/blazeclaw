@@ -149,6 +149,8 @@ namespace blazeclaw::gateway {
 						{ "sequenceStart", JsonNumber(artifact.sequenceStart) },
 						{ "sequenceEnd", JsonNumber(artifact.sequenceEnd) },
 						{ "durationMs", JsonNumber(static_cast<std::uint64_t>(artifact.durationMs)) },
+						{ "captureChannelIndex", JsonNumber(static_cast<std::uint64_t>(artifact.captureChannelIndex)) },
+						{ "captureChannelEnergyPermille", JsonNumber(artifact.captureChannelEnergyPermille) },
 					});
 				};
 
@@ -219,6 +221,8 @@ namespace blazeclaw::gateway {
 						artifact.sequenceStart = parsed.value("sequenceStart", artifact.sequenceStart);
 						artifact.sequenceEnd = parsed.value("sequenceEnd", artifact.sequenceEnd);
 						artifact.durationMs = parsed.value("durationMs", artifact.durationMs);
+						artifact.captureChannelIndex = parsed.value("captureChannelIndex", artifact.captureChannelIndex);
+						artifact.captureChannelEnergyPermille = parsed.value("captureChannelEnergyPermille", artifact.captureChannelEnergyPermille);
 						return artifact;
 					}
 					catch (...) {
@@ -488,6 +492,12 @@ namespace blazeclaw::gateway {
 									{ "strategy", JsonString("immediate") },
 									{ "guidance", JsonString("Transcription was cancelled. Retry if needed.") },
 								}) },
+							{ "no_speech_detected", JsonObject({
+								{ "class", JsonString("status") },
+								{ "retryable", JsonBool(true) },
+								{ "strategy", JsonString("immediate") },
+								{ "guidance", JsonString("No speech was detected. Check microphone level/input channel, then retry.") },
+							}) },
 							}) },
 							{ "map", JsonObject({
 								{ "none", JsonString("status") },
@@ -507,7 +517,11 @@ namespace blazeclaw::gateway {
 								{ "feature_extraction_failed", JsonString("toast") },
 								{ "tokenizer_load_failed", JsonString("blocking") },
 								{ "decoder_failed", JsonString("toast") },
+							{ "no_speech_detected", JsonString("status") },
 								{ "inference_failed", JsonString("toast") },
+							{ "transcribe_timeout", JsonString("toast") },
+							{ "transcribe_failed", JsonString("toast") },
+							{ "recording_failed", JsonString("toast") },
 							}) },
 						}));
 				});
@@ -726,6 +740,42 @@ namespace blazeclaw::gateway {
 						audioArtifact = hostPtr->ResolveNativeRecordingArtifact(audioPath);
 					}
 
+					auto computePreflightHealthIndex =
+						[](const std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>& artifact,
+							const bool finalRequest) {
+							if (!finalRequest || !artifact.has_value()) {
+								return static_cast<std::uint64_t>(0);
+							}
+
+							std::uint64_t healthIndex = 0;
+							healthIndex += 20;
+							if (artifact->captureChannelEnergyPermille >= 3) {
+								healthIndex += 30;
+							}
+							else if (artifact->captureChannelEnergyPermille >= 1) {
+								healthIndex += 15;
+							}
+
+							const bool hasFiniteReadableRange =
+								artifact->sequenceEnd > artifact->sequenceStart;
+							if (hasFiniteReadableRange) {
+								healthIndex += 30;
+							}
+
+							if (artifact->durationMs >= 600) {
+								healthIndex += 20;
+							}
+							else if (artifact->durationMs >= 200) {
+								healthIndex += 10;
+							}
+
+							return (std::min)(healthIndex, static_cast<std::uint64_t>(100));
+						};
+
+					const std::uint64_t requestPreflightHealthIndex = computePreflightHealthIndex(
+						audioArtifact,
+						!livePreviewOnly);
+
 					const auto accepted = hostPtr->AcceptSpeechTranscription(
 						GatewayHost::SpeechExecutionRequest{
 							.runId = runId,
@@ -791,6 +841,19 @@ namespace blazeclaw::gateway {
 							}));
 					}
 
+					if (!livePreviewOnly) {
+						EmitTelemetryEvent(
+							"gateway.speech.preflight",
+							JsonObject({
+								{ "sessionId", JsonString(sessionId) },
+								{ "runId", JsonString(runId) },
+								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
+								{ "audioArtifact", audioArtifact.has_value()
+									? buildAudioArtifactJson(*audioArtifact)
+									: std::string("null") },
+							}));
+					}
+
 					auto transcribe = hostPtr->TranscribeSpeech(
 						GatewayHost::SpeechTranscribeRequest{
 							.runId = accepted.executionState.runId,
@@ -829,12 +892,12 @@ namespace blazeclaw::gateway {
 							});
 					}
 
-					const std::string normalizedStage = stageToString(transcribe.sessionState.stage);
+					std::string normalizedStage = stageToString(transcribe.sessionState.stage);
 					const std::string normalizedLanguage =
 						transcribe.language.empty()
 						? (transcribe.sessionState.language.empty() ? std::string("und") : transcribe.sessionState.language)
 						: transcribe.language;
-					const std::string normalizedText =
+					std::string normalizedText =
 						transcribe.sessionState.transcriptText.empty()
 						? transcribe.text
 						: transcribe.sessionState.transcriptText;
@@ -896,7 +959,43 @@ namespace blazeclaw::gateway {
 						}
 						return normalized;
 					};
-					const std::string normalizedErrorCode = normalizeSpeechErrorCode(transcribe.errorCode);
+					std::string normalizedErrorCode = normalizeSpeechErrorCode(transcribe.errorCode);
+
+					const bool completedWithoutTranscript =
+						!livePreviewOnly &&
+						normalizedStage == "completed" &&
+						normalizedText.empty() &&
+						!transcribe.cancelled;
+					if (completedWithoutTranscript) {
+						const bool noSpeechOutcome =
+							transcribe.sessionState.debugInfo.has_value() &&
+							transcribe.sessionState.debugInfo->sherpaFinalOutcome == "no_speech_detected";
+						normalizedStage = "failed";
+						transcribe.ok = false;
+						transcribe.sessionState.stage =
+							blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
+
+						if (normalizedErrorCode.empty()) {
+							normalizedErrorCode = noSpeechOutcome ? "no_speech_detected" : "inference_failed";
+							transcribe.errorCode = normalizedErrorCode;
+						}
+
+						if (transcribe.errorMessage.empty()) {
+							transcribe.errorMessage = noSpeechOutcome
+								? "final transcript unavailable: no_speech_detected"
+								: "final speech response completed without transcript text";
+						}
+
+						if (!transcribe.sessionState.error.has_value()) {
+							transcribe.sessionState.error =
+								blazeclaw::core::speechrecognition::SpeechRecognitionError{
+									.code = noSpeechOutcome
+										? blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InvalidInput
+										: blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InferenceFailed,
+									.message = transcribe.errorMessage,
+								};
+						}
+					}
 
 					const bool requestArtifactPresent = audioArtifact.has_value();
 					const bool runtimeArtifactPresent = transcribe.sessionState.audioArtifact.has_value();
@@ -1057,6 +1156,17 @@ namespace blazeclaw::gateway {
 							{ "sherpaBaselineTokenIds", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenIds : std::string()) },
 							{ "sherpaBaselineTokenPieces", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineTokenPieces : std::string()) },
 							{ "sherpaBaselineDiagnosticPath", JsonString(debugInfo.has_value() ? debugInfo->sherpaBaselineDiagnosticPath : std::string()) },
+							{ "sherpaChunkEnergyMinPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyMinPermille : 0ULL) },
+							{ "sherpaChunkEnergyMaxPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyMaxPermille : 0ULL) },
+							{ "sherpaChunkEnergyAvgPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyAvgPermille : 0ULL) },
+							{ "sherpaVoicedChunkCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaVoicedChunkCount : 0ULL) },
+							{ "sherpaNearZeroChunkCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaNearZeroChunkCount : 0ULL) },
+							{ "sherpaNearZeroSamplePermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaNearZeroSamplePermille : 0ULL) },
+							{ "sherpaRequestedSequenceStart", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRequestedSequenceStart : 0ULL) },
+							{ "sherpaRequestedSequenceEnd", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaRequestedSequenceEnd : 0ULL) },
+							{ "sherpaConsumedSequenceStart", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaConsumedSequenceStart : 0ULL) },
+							{ "sherpaConsumedSequenceEnd", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaConsumedSequenceEnd : 0ULL) },
+							{ "sherpaInputHealthIndex", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaInputHealthIndex : 0ULL) },
 								{ "firstTokenTiming", firstTokenTimingJson },
 								{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
@@ -1070,6 +1180,9 @@ namespace blazeclaw::gateway {
 						}
 						if (errorCode == "aborted" || errorCode == "no_speech") {
 							return std::string("ignore");
+						}
+						if (errorCode == "no_speech_detected") {
+							return std::string("status");
 						}
 						if (errorCode == "runtime_unavailable" ||
 							errorCode == "speech_recognition_disabled" ||
@@ -1085,6 +1198,19 @@ namespace blazeclaw::gateway {
 						return std::string("status");
 					};
 					const std::string errorClass = resolveErrorClass(normalizedErrorCode, transcribe.cancelled);
+					const bool noSpeechDetected = normalizedErrorCode == "no_speech_detected";
+					const bool runtimeUnavailable = normalizedErrorCode == "runtime_unavailable";
+					const bool retryable = runtimeUnavailable || transcribe.cancelled || noSpeechDetected;
+					const std::string retryStrategy = runtimeUnavailable ? "backoff" : "immediate";
+					const std::string retryGuidance = runtimeUnavailable
+						? "Speech runtime unavailable. Verify runtime/services are ready and retry."
+						: (transcribe.cancelled
+							? "Transcription cancelled. Retry if needed."
+							: (noSpeechDetected
+								? (requestPreflightHealthIndex < 55
+									? "No speech detected with low capture health. Check microphone level/input channel and retry."
+									: "No speech detected. Capture looked healthy; speak clearly and retry.")
+								: "Retry after checking microphone/audio input and runtime readiness."));
 
 					EmitTelemetryEvent(
 						"gateway.speech.lifecycle",
@@ -1103,6 +1229,14 @@ namespace blazeclaw::gateway {
 							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorClass", JsonString(errorClass) },
+							{ "preflight", JsonObject({
+								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
+							}) },
+							{ "retry", JsonObject({
+								{ "retryable", JsonBool(retryable) },
+								{ "strategy", JsonString(retryStrategy) },
+								{ "guidance", JsonString(retryGuidance) },
+							}) },
 						}));
 
 					if (hasSegment) {
@@ -1136,6 +1270,9 @@ namespace blazeclaw::gateway {
 							{ "segment", segmentJson },
 								{ "firstTokenTiming", firstTokenTimingJson },
 							{ "speechRuntime", speechRuntimeProviderJson },
+							{ "preflight", JsonObject({
+								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
+							}) },
 						});
 
 					return protocol::OkResponse(
@@ -1155,6 +1292,9 @@ namespace blazeclaw::gateway {
 							{ "firstTokenTiming", firstTokenTimingJson },
 							{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
+							{ "preflight", JsonObject({
+								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
+							}) },
 							{ "speechSession", speechSessionJson },
 							{ "executionState", JsonObject({
 								{ "sessionId", JsonString(effectiveSessionId) },
@@ -1199,13 +1339,9 @@ namespace blazeclaw::gateway {
 							{ "errorMessage", JsonString(transcribe.errorMessage) },
 							{ "errorClass", JsonString(errorClass) },
 							{ "retry", JsonObject({
-								{ "retryable", JsonBool(normalizedErrorCode == "runtime_unavailable" || transcribe.cancelled) },
-								{ "strategy", JsonString(normalizedErrorCode == "runtime_unavailable" ? "backoff" : "immediate") },
-								{ "guidance", JsonString(normalizedErrorCode == "runtime_unavailable"
-									? "Speech runtime unavailable. Verify runtime/services are ready and retry."
-									: (transcribe.cancelled
-										? "Transcription cancelled. Retry if needed."
-										: "Retry after checking microphone/audio input and runtime readiness.")) },
+								{ "retryable", JsonBool(retryable) },
+								{ "strategy", JsonString(retryStrategy) },
+								{ "guidance", JsonString(retryGuidance) },
 							}) },
 							{ "forwardedOk", JsonBool(forwardedOk) },
 							{ "forwardedMethod", JsonString(forwardedMethod) },
