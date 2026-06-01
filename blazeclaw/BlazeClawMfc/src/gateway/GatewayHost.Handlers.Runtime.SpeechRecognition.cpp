@@ -970,26 +970,33 @@ namespace blazeclaw::gateway {
 						const bool noSpeechOutcome =
 							transcribe.sessionState.debugInfo.has_value() &&
 							transcribe.sessionState.debugInfo->sherpaFinalOutcome == "no_speech_detected";
+						const bool mismatchNoSpeechMessage =
+							transcribe.errorMessage.find("no_speech_detected") != std::string::npos;
+						const bool forceNoSpeechSemantic = noSpeechOutcome || mismatchNoSpeechMessage;
 						normalizedStage = "failed";
 						transcribe.ok = false;
 						transcribe.sessionState.stage =
 							blazeclaw::core::speechrecognition::SpeechSessionStage::Failed;
 
-						if (normalizedErrorCode.empty()) {
-							normalizedErrorCode = noSpeechOutcome ? "no_speech_detected" : "inference_failed";
+						if (forceNoSpeechSemantic) {
+							normalizedErrorCode = "no_speech_detected";
+							transcribe.errorCode = normalizedErrorCode;
+						}
+						else if (normalizedErrorCode.empty()) {
+							normalizedErrorCode = "inference_failed";
 							transcribe.errorCode = normalizedErrorCode;
 						}
 
-						if (transcribe.errorMessage.empty()) {
-							transcribe.errorMessage = noSpeechOutcome
+						if (transcribe.errorMessage.empty() || forceNoSpeechSemantic) {
+							transcribe.errorMessage = forceNoSpeechSemantic
 								? "final transcript unavailable: no_speech_detected"
 								: "final speech response completed without transcript text";
 						}
 
-						if (!transcribe.sessionState.error.has_value()) {
+						if (forceNoSpeechSemantic || !transcribe.sessionState.error.has_value()) {
 							transcribe.sessionState.error =
 								blazeclaw::core::speechrecognition::SpeechRecognitionError{
-									.code = noSpeechOutcome
+									.code = forceNoSpeechSemantic
 										? blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InvalidInput
 										: blazeclaw::core::speechrecognition::SpeechRecognitionErrorCode::InferenceFailed,
 									.message = transcribe.errorMessage,
@@ -1040,6 +1047,16 @@ namespace blazeclaw::gateway {
 					const std::uint64_t normalizedTextLength = static_cast<std::uint64_t>(normalizedText.size());
 					const std::uint64_t segmentTextLength = static_cast<std::uint64_t>(effectiveSegmentText.size());
 					const auto& debugInfo = transcribe.sessionState.debugInfo;
+					const std::string noSpeechTriageJson = JsonObject({
+						{ "sherpaChunkEnergyMinPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyMinPermille : 0ULL) },
+						{ "sherpaChunkEnergyMaxPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyMaxPermille : 0ULL) },
+						{ "sherpaChunkEnergyAvgPermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaChunkEnergyAvgPermille : 0ULL) },
+						{ "sherpaVoicedChunkCount", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaVoicedChunkCount : 0ULL) },
+						{ "sherpaNearZeroSamplePermille", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaNearZeroSamplePermille : 0ULL) },
+						{ "sherpaInputHealthIndex", JsonNumber(debugInfo.has_value() ? debugInfo->sherpaInputHealthIndex : 0ULL) },
+						{ "captureChannelIndex", JsonNumber(runtimeArtifactPresent ? static_cast<std::uint64_t>(transcribe.sessionState.audioArtifact->captureChannelIndex) : 0ULL) },
+						{ "captureChannelEnergyPermille", JsonNumber(runtimeArtifactPresent ? transcribe.sessionState.audioArtifact->captureChannelEnergyPermille : 0ULL) },
+					});
 					const std::string firstTokenTimingJson = buildFirstTokenTimingJson(debugInfo);
 					const std::uint64_t gatewayNativePayloadReadyOffsetMs = elapsedGatewayMs(
 						gatewayTranscribeReceivedAt);
@@ -1229,6 +1246,7 @@ namespace blazeclaw::gateway {
 							{ "speechRuntime", speechRuntimeProviderJson },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorClass", JsonString(errorClass) },
+							{ "noSpeechTriage", noSpeechTriageJson },
 							{ "preflight", JsonObject({
 								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
 							}) },
@@ -1270,6 +1288,7 @@ namespace blazeclaw::gateway {
 							{ "segment", segmentJson },
 								{ "firstTokenTiming", firstTokenTimingJson },
 							{ "speechRuntime", speechRuntimeProviderJson },
+							{ "noSpeechTriage", noSpeechTriageJson },
 							{ "preflight", JsonObject({
 								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
 							}) },
@@ -1292,6 +1311,7 @@ namespace blazeclaw::gateway {
 							{ "firstTokenTiming", firstTokenTimingJson },
 							{ "gatewayNativePayloadReadyOffsetMs", JsonNumber(gatewayNativePayloadReadyOffsetMs) },
 							{ "speechRuntime", speechRuntimeProviderJson },
+							{ "noSpeechTriage", noSpeechTriageJson },
 							{ "preflight", JsonObject({
 								{ "healthIndex", JsonNumber(requestPreflightHealthIndex) },
 							}) },
@@ -1309,6 +1329,7 @@ namespace blazeclaw::gateway {
 								{ "segment", segmentJson },
 								{ "firstTokenTiming", firstTokenTimingJson },
 								{ "speechRuntime", speechRuntimeProviderJson },
+								{ "noSpeechTriage", noSpeechTriageJson },
 							}) },
 							{ "transcriptInjection", JsonObject({
 								{ "source", JsonString("voice") },
@@ -1334,6 +1355,7 @@ namespace blazeclaw::gateway {
 								{ "audioArtifact", audioArtifactJson },
 								{ "firstTokenTiming", firstTokenTimingJson },
 								{ "speechRuntime", speechRuntimeProviderJson },
+								{ "noSpeechTriage", noSpeechTriageJson },
 							}) },
 							{ "errorCode", JsonString(transcribe.errorCode) },
 							{ "errorMessage", JsonString(transcribe.errorMessage) },

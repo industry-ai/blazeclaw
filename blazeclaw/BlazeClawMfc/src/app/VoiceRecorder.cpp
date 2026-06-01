@@ -101,6 +101,7 @@ CVoiceRecorder::CVoiceRecorder()
     , m_captureAdaptiveLastBestChannel(0)
     , m_captureAdaptiveStableChunks(0)
     , m_captureAdaptiveObservedFrames(0)
+    , m_captureAdaptiveObservedFramesSinceLock(0)
     , m_bInitialized(FALSE)
 {
     m_szFilePath[0] = L'\0';
@@ -964,6 +965,7 @@ std::unique_ptr<IVoiceVadProvider> CVoiceRecorder::CreateVadProvider(
 void CVoiceRecorder::ResetCaptureChannelSelection()
 {
     m_captureAdaptiveObservedFrames = 0;
+    m_captureAdaptiveObservedFramesSinceLock = 0;
     m_captureAdaptiveStableChunks = 0;
     m_captureAdaptiveLastBestChannel = 0;
     m_captureAdaptiveEnergyByChannel.clear();
@@ -1044,14 +1046,44 @@ size_t CVoiceRecorder::ResolveCaptureChannelIndex(
     }
 
     m_captureAdaptiveObservedFrames += static_cast<uint64_t>(frameCount);
+    if (m_captureChannelLocked) {
+        m_captureAdaptiveObservedFramesSinceLock += static_cast<uint64_t>(frameCount);
+    }
     const uint64_t decisionFrames = (std::max)(
         static_cast<uint64_t>(1),
         static_cast<uint64_t>(m_config.adaptiveRingCaptureDecisionFrames));
+    const uint64_t minStableChunks = (std::max)(
+        static_cast<uint64_t>(1),
+        static_cast<uint64_t>(m_config.adaptiveRingCaptureMinStableChunks));
+    const uint64_t relockWindowFrames = (std::max)(
+        static_cast<uint64_t>(1),
+        static_cast<uint64_t>(m_config.adaptiveRingCaptureRelockWindowFrames));
     if (!m_captureChannelLocked &&
         m_captureAdaptiveObservedFrames >= decisionFrames &&
-        m_captureAdaptiveStableChunks >= 2) {
+        m_captureAdaptiveStableChunks >= minStableChunks) {
         m_selectedCaptureChannelIndex = bestChannel;
         m_captureChannelLocked = true;
+        m_captureAdaptiveObservedFramesSinceLock = 0;
+    }
+
+    if (m_captureChannelLocked) {
+        const size_t lockedChannel = (std::min)(m_selectedCaptureChannelIndex, maxChannelIndex);
+        const double lockedChunkEnergy = chunkEnergyByChannel[lockedChannel];
+        const std::uint64_t lockedEnergyPermille = static_cast<std::uint64_t>(
+            (std::min)(
+                frameCount > 0
+                    ? (lockedChunkEnergy / static_cast<double>(frameCount)) * 1000.0
+                    : 0.0,
+                1000000.0));
+        const bool relockAllowed = m_captureAdaptiveObservedFramesSinceLock >= relockWindowFrames;
+        const bool lockedEnergyCollapsed =
+            lockedEnergyPermille <= static_cast<std::uint64_t>(m_config.adaptiveRingCaptureRelockFloorPermille);
+        if (relockAllowed && lockedEnergyCollapsed && bestChannel != lockedChannel) {
+            m_captureChannelLocked = false;
+            m_captureAdaptiveStableChunks = 1;
+            m_captureAdaptiveLastBestChannel = bestChannel;
+            m_captureAdaptiveObservedFramesSinceLock = 0;
+        }
     }
 
     if (!m_captureChannelLocked) {

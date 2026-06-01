@@ -76,6 +76,9 @@ struct VoiceRecorderConfig
     bool ringCaptureChannelFixedOverride = false;
     bool adaptiveRingCaptureChannelEnabled = true;
     UINT adaptiveRingCaptureDecisionFrames = 2400;
+    UINT adaptiveRingCaptureMinStableChunks = 3;
+    UINT adaptiveRingCaptureRelockFloorPermille = 1;
+    UINT adaptiveRingCaptureRelockWindowFrames = 1600;
     bool vadEnabled = true;
     VoiceVadProviderType vadProviderType = VoiceVadProviderType::NoOp;
     UINT vadFrameDurationMs = 20;
@@ -241,6 +244,7 @@ private:
     size_t         m_captureAdaptiveLastBestChannel;
     uint32_t       m_captureAdaptiveStableChunks;
     uint64_t       m_captureAdaptiveObservedFrames;
+    uint64_t       m_captureAdaptiveObservedFramesSinceLock;
     std::vector<double> m_captureAdaptiveEnergyByChannel;
 
     BOOL           m_bInitialized;

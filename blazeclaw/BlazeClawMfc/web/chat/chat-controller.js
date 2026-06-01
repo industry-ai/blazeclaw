@@ -840,6 +840,9 @@
                 preflight: source.preflight && typeof source.preflight === "object"
                     ? { ...source.preflight }
                     : null,
+                noSpeechTriage: source.noSpeechTriage && typeof source.noSpeechTriage === "object"
+                    ? { ...source.noSpeechTriage }
+                    : null,
                 updatedAtMs: Date.now(),
             };
         }
@@ -849,6 +852,35 @@
                 .trim()
                 .toLowerCase()
                 .replace(/\s+/g, "_");
+        }
+
+        function inferNoSpeechSignal(sessionStateLike) {
+            const source = sessionStateLike && typeof sessionStateLike === "object"
+                ? sessionStateLike
+                : {};
+            const normalizedCode = normalizeSpeechErrorCode(source.errorCode);
+            if (normalizedCode === "no_speech_detected") {
+                return true;
+            }
+
+            const message = String(source.errorMessage || "").toLowerCase();
+            if (message.includes("no_speech_detected")) {
+                return true;
+            }
+
+            const debugInfo = source.debugInfo && typeof source.debugInfo === "object"
+                ? source.debugInfo
+                : null;
+            if (debugInfo && String(debugInfo.sherpaFinalOutcome || "").trim() === "no_speech_detected") {
+                return true;
+            }
+
+            const preflight = source.preflight && typeof source.preflight === "object"
+                ? source.preflight
+                : null;
+            const healthIndex = Number(preflight && preflight.healthIndex);
+            return Number.isFinite(healthIndex) && healthIndex > 0 && healthIndex < 55 &&
+                (normalizedCode === "inference_failed" || message.includes("final transcript unavailable"));
         }
 
         function normalizeSpeechErrorPolicyPayload(payload) {
@@ -2928,8 +2960,20 @@
                 }
 
                 const sessionErrorCode = String(state.speechSessionState.errorCode || "").trim();
+                const forceNoSpeechSemantic = inferNoSpeechSignal(state.speechSessionState);
+                if (forceNoSpeechSemantic && sessionErrorCode !== "no_speech_detected") {
+                    state.speechSessionState.errorCode = "no_speech_detected";
+                    if (!String(state.speechSessionState.errorMessage || "").trim() ||
+                        /inference_failed/i.test(String(state.speechSessionState.errorMessage || ""))) {
+                        state.speechSessionState.errorMessage = "final transcript unavailable: no_speech_detected";
+                    }
+                    state.speechSessionState.errorClass = "status";
+                    if (!state.speechSessionState.retryGuidance) {
+                        state.speechSessionState.retryGuidance = "No speech detected. Check microphone level/input channel and retry.";
+                    }
+                }
                 const classified = classifySpeechError(
-                    sessionErrorCode,
+                    forceNoSpeechSemantic ? "no_speech_detected" : sessionErrorCode,
                     String(state.speechSessionState.errorClass || "").trim());
                 if (classified.retryDescriptor && state.speechSessionState.retryGuidance === "") {
                     state.speechSessionState.retryGuidance = String(classified.retryDescriptor.guidance || "").trim();
@@ -2946,6 +2990,9 @@
                 state.speechSessionState.errorClass = classified.behaviorClass;
 
                 if (!transcriptText && sessionErrorCode) {
+                    const noSpeechTriage = state.speechSessionState.noSpeechTriage && typeof state.speechSessionState.noSpeechTriage === "object"
+                        ? state.speechSessionState.noSpeechTriage
+                        : null;
                     emitSpeechRequestTrace("response_applied", {
                         requestType: livePreviewOnly ? "preview" : "final",
                         livePreviewOnly,
@@ -2954,6 +3001,7 @@
                         responseStage: String(state.speechSessionState.stage || ""),
                         responseRunId: String(state.speechSessionState.runId || ""),
                         errorCode: sessionErrorCode,
+                        noSpeechTriage,
                         audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
                     });
                     if (classified.behaviorClass === "ignore") {
@@ -5189,6 +5237,8 @@
                 "speech finalization should classify no-speech empty-final responses with no_speech_detected code");
             assertRegression(snapshot.errorClass === "status",
                 "speech finalization should classify no_speech_detected as status guidance");
+            assertRegression(snapshot.noSpeechTriage === null,
+                "speech no-speech defensive normalization should not require triage payload to classify status guidance");
             assertRegression(addMessageCalls.length === 0,
                 "speech final no_speech_detected should not emit toast/error chat messages");
             summary.push("speech transcribe no-speech classification and status guidance parity");

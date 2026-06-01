@@ -267,10 +267,13 @@ TEST_CASE(
 	REQUIRE(speechHandler.find("inference_failed") != std::string::npos);
 	REQUIRE(speechHandler.find("no_speech_detected") != std::string::npos);
 	REQUIRE(speechHandler.find("noSpeechOutcome") != std::string::npos);
+	REQUIRE(speechHandler.find("forceNoSpeechSemantic") != std::string::npos);
+	REQUIRE(speechHandler.find("mismatchNoSpeechMessage") != std::string::npos);
 	REQUIRE(speechHandler.find("microphone level/input channel") != std::string::npos);
 	REQUIRE(speechHandler.find("sherpaInputHealthIndex") != std::string::npos);
 	REQUIRE(speechHandler.find("sherpaChunkEnergyAvgPermille") != std::string::npos);
 	REQUIRE(speechHandler.find("captureChannelIndex") != std::string::npos);
+	REQUIRE(speechHandler.find("noSpeechTriage") != std::string::npos);
 
 	REQUIRE(coordinator.find("!result.ok && result.sessionState.stage == SpeechSessionStage::Completed") != std::string::npos);
 	REQUIRE(coordinator.find("return SpeechExecutionStage::Failed") != std::string::npos);
@@ -288,4 +291,7 @@ TEST_CASE(
 	REQUIRE(recorder.find("adaptiveRingCaptureChannelEnabled") != std::string::npos);
 	REQUIRE(recorder.find("ringCaptureChannelFixedOverride") != std::string::npos);
 	REQUIRE(recorder.find("captureChannelEnergyPermille") != std::string::npos);
+	REQUIRE(recorder.find("adaptiveRingCaptureMinStableChunks") != std::string::npos);
+	REQUIRE(recorder.find("adaptiveRingCaptureRelockFloorPermille") != std::string::npos);
+	REQUIRE(recorder.find("adaptiveRingCaptureRelockWindowFrames") != std::string::npos);
 }

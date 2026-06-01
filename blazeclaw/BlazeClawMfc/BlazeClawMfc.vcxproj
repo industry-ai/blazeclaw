@@ -614,6 +614,7 @@
     <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />
     <None Include="tools\speech\SHERPA_MISSING_FINAL_TRANSCRIPT_ROOT_CAUSE_PLAN.md" />
     <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_CAPTURE_ROOT_CAUSE_PLAN.md" />
+    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_INFERENCE_FAILED_CLASSIFICATION_ROOT_CAUSE_PLAN.md" />
     <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_ROOT_CAUSE_PLAN.md" />
     <None Include="tools\speech\SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md" />
     <None Include="tools\speech\Test-SherpaFirstTokenBenchmarkSummary.ps1" />
