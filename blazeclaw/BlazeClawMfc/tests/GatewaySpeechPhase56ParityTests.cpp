@@ -334,3 +334,59 @@ TEST_CASE(
 	REQUIRE(webIndex.find("finalNoSpeechFailed") != std::string::npos);
 	REQUIRE(webIndex.find("[triage: health=") != std::string::npos);
 }
+
+TEST_CASE(
+	"Sherpa preview-to-final handoff preserves final authority across coordinator, gateway, and WebView",
+	"[speech][sherpa][handoff][final-authority]")
+{
+	const auto coordinatorPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SpeechTranscriptionCoordinator.cpp";
+	const auto speechContractsPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"runtime" /
+		"SpeechRecognition" /
+		"ISpeechRecognitionRuntime.h";
+	const auto speechStateContractsPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"runtime" /
+		"SpeechRecognition" /
+		"SpeechRecognitionContracts.h";
+	const auto speechHandlerPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.SpeechRecognition.cpp";
+	const auto webControllerPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	const auto webIndexPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.js";
+
+	const std::string coordinator = ReadTextFile(ResolveProjectPath(coordinatorPath));
+	const std::string speechContracts = ReadTextFile(ResolveProjectPath(speechContractsPath));
+	const std::string speechStateContracts = ReadTextFile(ResolveProjectPath(speechStateContractsPath));
+	const std::string speechHandler = ReadTextFile(ResolveProjectPath(speechHandlerPath));
+	const std::string webController = ReadTextFile(ResolveProjectPath(webControllerPath));
+	const std::string webIndex = ReadTextFile(ResolveProjectPath(webIndexPath));
+
+	REQUIRE(speechContracts.find("livePreviewOnly") != std::string::npos);
+	REQUIRE(speechStateContracts.find("bool livePreviewOnly = false") != std::string::npos);
+
+	REQUIRE(coordinator.find("accept.preempt_preview.detail") != std::string::npos);
+	REQUIRE(coordinator.find("preview execution preempted by final speech request") != std::string::npos);
+
+	REQUIRE(speechHandler.find("preview_preempting_finalization") != std::string::npos);
+	REQUIRE(speechHandler.find("busyPreviewConflict") != std::string::npos);
+
+	REQUIRE(webController.find("preview_state_blocked_by_final_authority") != std::string::npos);
+	REQUIRE(webController.find("finalRunId") != std::string::npos);
+
+	REQUIRE(webIndex.find("previewStageBlockedByFinalAuthority") != std::string::npos);
+	REQUIRE(webIndex.find("hasSpeechFinalAuthority") != std::string::npos);
+}

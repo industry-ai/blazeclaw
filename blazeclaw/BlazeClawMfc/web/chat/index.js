@@ -156,6 +156,18 @@
         return String(runId || "").trim().startsWith("speech-preview-");
     }
 
+    function isSpeechFinalRunId(runId) {
+        return String(runId || "").trim().startsWith("speech-final-");
+    }
+
+    function hasSpeechFinalAuthority(sessionState) {
+        const source = sessionState && typeof sessionState === "object"
+            ? sessionState
+            : {};
+        return isSpeechFinalRunId(source.finalRunId) ||
+            isSpeechFinalRunId(source.runId);
+    }
+
     function isRecordingSpeechStage(stage, runId) {
         const normalizedStage = String(stage || "").trim();
         const previewRun = isSpeechPreviewRunId(runId);
@@ -2591,13 +2603,19 @@
             const speechRunId = speechSessionState
                 ? String(speechSessionState.runId || "").trim()
                 : "";
+            const finalAuthorityActive = hasSpeechFinalAuthority(speechSessionState);
             const speechBusy = speechStage === "queued" ||
                 speechStage === "recording" ||
                 speechStage === "start_stream" ||
                 speechStage === "streaming" ||
                 speechStage === "stopped" ||
                 speechStage === "transcribing";
-            const recordingActive = isRecordingSpeechStage(speechStage, speechRunId);
+            const previewStageBlockedByFinalAuthority =
+                finalAuthorityActive &&
+                isSpeechPreviewRunId(speechRunId);
+            const recordingActive =
+                !previewStageBlockedByFinalAuthority &&
+                isRecordingSpeechStage(speechStage, speechRunId);
             state.speechTranscribeBtn.disabled = !state.bridgeAvailable || !speechReady || (speechBusy && !recordingActive);
             if (speechCapabilities && speechCapabilities.loaded === true && !speechCapabilities.sttSupported) {
                 state.speechTranscribeBtn.disabled = true;
@@ -2605,6 +2623,8 @@
 
             if (recordingActive) {
                 state.speechTranscribeBtn.textContent = "Recording... (click to stop)";
+            } else if (previewStageBlockedByFinalAuthority) {
+                state.speechTranscribeBtn.textContent = "Finalizing...";
             } else if (speechStage === "queued") {
                 state.speechTranscribeBtn.textContent = "Queued...";
             } else if (speechStage === "stopped") {

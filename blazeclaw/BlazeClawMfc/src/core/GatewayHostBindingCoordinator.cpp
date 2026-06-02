@@ -348,9 +348,10 @@ namespace blazeclaw::core {
 						.sessionId = request.sessionId,
 						.audioPath = request.audioPath,
 						.audioArtifact = request.audioArtifact,
-					.streamingInput = streamingInput,
+						.streamingInput = streamingInput,
 						.language = request.language,
 						.prompt = request.prompt,
+						.livePreviewOnly = request.livePreviewOnly,
 					});
 
 				blazeclaw::gateway::GatewayHost::SpeechExecutionAccepted gatewayAccepted;
@@ -396,9 +397,10 @@ namespace blazeclaw::core {
 						.sessionId = request.sessionId,
 						.audioPath = request.audioPath,
 						.audioArtifact = request.audioArtifact,
-					.streamingInput = streamingInput,
+						.streamingInput = streamingInput,
 						.language = request.language,
 						.prompt = request.prompt,
+						.livePreviewOnly = request.livePreviewOnly,
 					});
 				manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
 

@@ -793,6 +793,44 @@ namespace blazeclaw::gateway {
 							? existingExecution.executionState
 							: accepted.executionState;
 						const std::string busySegmentJson = buildSegmentJson(busyState.segment);
+						const bool busyPreviewConflict =
+							!livePreviewOnly &&
+							busyState.livePreviewOnly &&
+							(busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::Queued ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::StartStream ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::Streaming ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::SegmentFinalized ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::Recording ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::Stopped ||
+								busyState.stage == blazeclaw::core::speechrecognition::SpeechExecutionStage::Transcribing);
+						const std::string responseRunId =
+							busyPreviewConflict
+							? (!runId.empty() ? runId : accepted.executionState.runId)
+							: (!busyState.runId.empty() ? busyState.runId : runId);
+						const std::string responseSessionId =
+							busyPreviewConflict
+							? (!sessionId.empty() ? sessionId : busyState.sessionId)
+							: (!busyState.sessionId.empty() ? busyState.sessionId : sessionId);
+						const std::string responseStage =
+							busyPreviewConflict
+							? std::string("transcribing")
+							: executionStageToString(busyState.stage);
+						const std::string responseText =
+							busyPreviewConflict
+							? std::string()
+							: busyState.transcriptText;
+						const std::string responseErrorCode =
+							busyPreviewConflict
+							? std::string("preview_preempting_finalization")
+							: accepted.errorCode;
+						const std::string responseErrorMessage =
+							busyPreviewConflict
+							? std::string("preview request is still in-flight while finalization is starting; retry final transcription immediately")
+							: accepted.errorMessage;
+						const std::string responseSegmentJson =
+							busyPreviewConflict
+							? std::string("null")
+							: busySegmentJson;
 						return protocol::OkResponse(
 							request,
 							JsonObject({
@@ -800,40 +838,42 @@ namespace blazeclaw::gateway {
 								{ "cancelled", JsonBool(false) },
 								{ "text", JsonString("") },
 								{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
-								{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
-								{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
-								{ "stage", JsonString(executionStageToString(busyState.stage)) },
+								{ "sessionId", JsonString(responseSessionId) },
+								{ "runId", JsonString(responseRunId) },
+								{ "stage", JsonString(responseStage) },
 								{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
-								{ "segment", busySegmentJson },
+								{ "segment", responseSegmentJson },
 								{ "speechSession", JsonObject({
-									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
-									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
-									{ "stage", JsonString(executionStageToString(busyState.stage)) },
+									{ "sessionId", JsonString(responseSessionId) },
+									{ "runId", JsonString(responseRunId) },
+									{ "stage", JsonString(responseStage) },
 									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
-									{ "text", JsonString(busyState.transcriptText) },
+									{ "text", JsonString(responseText) },
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
 									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
 									{ "cancelled", JsonBool(busyState.cancelRequested) },
-									{ "segment", busySegmentJson },
+									{ "segment", responseSegmentJson },
 								}) },
 								{ "executionState", JsonObject({
-									{ "sessionId", JsonString(!busyState.sessionId.empty() ? busyState.sessionId : sessionId) },
-									{ "runId", JsonString(!busyState.runId.empty() ? busyState.runId : runId) },
-									{ "stage", JsonString(executionStageToString(busyState.stage)) },
+									{ "sessionId", JsonString(responseSessionId) },
+									{ "runId", JsonString(responseRunId) },
+									{ "stage", JsonString(responseStage) },
 									{ "audioPath", JsonString(!busyState.audioPath.empty() ? busyState.audioPath : audioPath) },
-									{ "text", JsonString(busyState.transcriptText) },
+									{ "text", JsonString(responseText) },
 									{ "language", JsonString(!busyState.language.empty() ? busyState.language : (language.empty() ? std::string("und") : language)) },
 									{ "latencyMs", JsonNumber(static_cast<std::uint64_t>(busyState.latencyMs)) },
 									{ "cancelRequested", JsonBool(busyState.cancelRequested) },
-									{ "segment", busySegmentJson },
+									{ "segment", responseSegmentJson },
 								}) },
-								{ "errorCode", JsonString(accepted.errorCode) },
-								{ "errorMessage", JsonString(accepted.errorMessage) },
+								{ "errorCode", JsonString(responseErrorCode) },
+								{ "errorMessage", JsonString(responseErrorMessage) },
 								{ "errorClass", JsonString("status") },
 								{ "retry", JsonObject({
-									{ "retryable", JsonBool(false) },
-									{ "strategy", JsonString("wait") },
-									{ "guidance", JsonString("Speech transcription is already active for this session. Wait for completion before retrying.") },
+									{ "retryable", JsonBool(busyPreviewConflict) },
+									{ "strategy", JsonString(busyPreviewConflict ? "immediate" : "wait") },
+									{ "guidance", JsonString(busyPreviewConflict
+										? "Preview is being superseded by final transcription; retry immediately."
+										: "Speech transcription is already active for this session. Wait for completion before retrying.") },
 								}) },
 								{ "forwardedOk", JsonBool(false) },
 								{ "forwardedMethod", JsonString("") },

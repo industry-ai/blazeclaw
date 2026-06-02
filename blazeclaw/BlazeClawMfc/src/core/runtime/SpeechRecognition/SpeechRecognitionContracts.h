@@ -239,6 +239,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::string sessionId;
 		std::string runId;
 		SpeechExecutionStage stage = SpeechExecutionStage::Queued;
+		bool livePreviewOnly = false;
 		std::string audioPath;
 		std::optional<SpeechAudioArtifact> audioArtifact;
 		std::optional<SpeechStreamingInputContract> streamingInput;

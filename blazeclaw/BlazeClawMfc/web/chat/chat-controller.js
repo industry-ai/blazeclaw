@@ -916,6 +916,15 @@
             return String(runId || "").trim().startsWith("speech-final-");
         }
 
+        function hasSpeechFinalAuthority(sessionState) {
+            const source = sessionState && typeof sessionState === "object"
+                ? sessionState
+                : {};
+            const finalRunId = String(source.finalRunId || "").trim();
+            const runId = String(source.runId || "").trim();
+            return isSpeechFinalRunId(finalRunId) || isSpeechFinalRunId(runId);
+        }
+
         function extractFinalOwnedTranscriptText(payload, requestedRunId) {
             const result = describeFinalOwnedTranscript(payload, requestedRunId);
             return result.text;
@@ -2666,6 +2675,7 @@
                 const normalizedSpeechSessionState = normalizeSpeechSessionPayload(payload);
                 const previousStage = String(previousSpeechSessionState.stage || "").trim();
                 const livePreviewStillActive = isActiveSpeechPreviewState(previousSpeechSessionState);
+                const finalAuthorityActive = !livePreviewOnly && hasSpeechFinalAuthority(previousSpeechSessionState);
                 if (livePreviewOnly && !livePreviewStillActive) {
                     emitSpeechRequestTrace("response_ignored", {
                         requestType: "preview",
@@ -2678,6 +2688,25 @@
                         responseRunId: String(normalizedSpeechSessionState.runId || ""),
                         audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
                     });
+                    return;
+                }
+                if (!livePreviewOnly &&
+                    finalAuthorityActive &&
+                    isSpeechPreviewRunId(normalizedSpeechSessionState.runId)) {
+                    emitSpeechRequestTrace("response_ignored", {
+                        requestType: "final",
+                        reason: "preview_state_blocked_by_final_authority",
+                        livePreviewOnly,
+                        sessionId: transcriptRequest.sessionId,
+                        runId: transcriptRequest.runId,
+                        previousStage,
+                        previousRunId: String(previousSpeechSessionState.runId || ""),
+                        previousFinalRunId: String(previousSpeechSessionState.finalRunId || ""),
+                        responseStage: String(normalizedSpeechSessionState.stage || ""),
+                        responseRunId: String(normalizedSpeechSessionState.runId || ""),
+                        audioArtifact: summarizeSpeechAudioArtifact(audioArtifact),
+                    });
+                    updateComposerState();
                     return;
                 }
                 if (livePreviewOnly && isStaleSpeechPreviewUpdate(normalizedSpeechSessionState, previousSpeechSessionState)) {

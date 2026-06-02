@@ -60,6 +60,24 @@ namespace blazeclaw::core {
 			return "unknown";
 		}
 
+		bool IsPreviewRequest(
+			const speechrecognition::SpeechExecutionRequest& request,
+			const std::string& trackingRunId) {
+			if (request.livePreviewOnly) {
+				return true;
+			}
+
+			return std::string(RequestTypeFromRunId(trackingRunId)) == "preview";
+		}
+
+		bool IsPreviewExecution(const speechrecognition::SpeechExecutionState& state) {
+			if (state.livePreviewOnly) {
+				return true;
+			}
+
+			return std::string(RequestTypeFromRunId(state.runId)) == "preview";
+		}
+
 		std::string ArtifactForLog(
 			const std::optional<speechrecognition::SpeechAudioArtifact>& artifact) {
 			if (!artifact.has_value()) {
@@ -75,10 +93,11 @@ namespace blazeclaw::core {
 		std::string RequestForLog(
 			const speechrecognition::SpeechExecutionRequest& request,
 			const std::string& trackingRunId) {
-			return "requestType=" + std::string(RequestTypeFromRunId(trackingRunId)) +
+			return "requestType=" + std::string(IsPreviewRequest(request, trackingRunId) ? "preview" : "final") +
 				" sessionId=" + request.sessionId +
 				" requestRunId=" + request.runId +
 				" trackingRunId=" + trackingRunId +
+				" livePreviewOnly=" + std::string(request.livePreviewOnly ? "true" : "false") +
 				" streamingInput=" + std::string(request.streamingInput.has_value() ? "true" : "false") +
 				" hasAudioPath=" + std::string(request.audioPath.empty() ? "false" : "true") +
 				" " + ArtifactForLog(request.audioArtifact);
@@ -86,10 +105,11 @@ namespace blazeclaw::core {
 
 		std::string ExistingStateForLog(
 			const speechrecognition::SpeechExecutionState& state) {
-			return "existingRequestType=" + std::string(RequestTypeFromRunId(state.runId)) +
+			return "existingRequestType=" + std::string(IsPreviewExecution(state) ? "preview" : "final") +
 				" existingSessionId=" + state.sessionId +
 				" existingRunId=" + state.runId +
 				" existingStage=" + ExecutionStageToString(state.stage) +
+				" existingLivePreviewOnly=" + std::string(state.livePreviewOnly ? "true" : "false") +
 				" existingStreamingInput=" + std::string(state.streamingInput.has_value() ? "true" : "false") +
 				" existingCancelRequested=" + std::string(state.cancelRequested ? "true" : "false") +
 				" existingTextLength=" + std::to_string(state.transcriptText.size()) +
@@ -163,6 +183,7 @@ namespace blazeclaw::core {
 		const std::string trackingRunId = BuildTrackingRunId(request);
 		ExecutionState state = BuildInitialState(request);
 		ExecutionUpdateCallback callback;
+		std::optional<ExecutionState> preemptedPreviewState;
 		TraceCoordinator(
 			"accept.begin",
 			RequestForLog(request, trackingRunId));
@@ -174,6 +195,23 @@ namespace blazeclaw::core {
 				if (sessionRunIt != m_sessionRunBySessionId.end()) {
 					const auto existingIt = m_executionByRunId.find(sessionRunIt->second);
 					if (existingIt != m_executionByRunId.end() && IsSessionInFlight(existingIt->second.stage)) {
+						const bool incomingFinalRequest = !request.livePreviewOnly;
+						const bool existingPreviewRequest = IsPreviewExecution(existingIt->second);
+						if (incomingFinalRequest && existingPreviewRequest) {
+							existingIt->second.cancelRequested = true;
+							existingIt->second.stage = SpeechExecutionStage::Cancelled;
+							existingIt->second.error = SpeechRecognitionError{
+								.code = SpeechRecognitionErrorCode::Cancelled,
+								.message = "preview execution preempted by final speech request",
+							};
+							preemptedPreviewState = existingIt->second;
+							TraceCoordinator(
+								"accept.preempt_preview.detail",
+								RequestForLog(request, trackingRunId) +
+								" preemptedRunId=" + existingIt->second.runId +
+								" preemptedStage=" + ExecutionStageToString(existingIt->second.stage));
+						}
+						else {
 						accepted.accepted = false;
 						accepted.executionState = existingIt->second;
 						accepted.error = BuildBusySessionError(request.sessionId);
@@ -188,6 +226,7 @@ namespace blazeclaw::core {
 							existingIt->second.runId.c_str(),
 							ExecutionStageToString(existingIt->second.stage));
 						return accepted;
+						}
 					}
 				}
 			}
@@ -222,6 +261,9 @@ namespace blazeclaw::core {
 		}
 
 		if (callback) {
+			if (preemptedPreviewState.has_value()) {
+				callback(*preemptedPreviewState);
+			}
 			callback(state);
 		}
 		TRACE(
@@ -369,6 +411,7 @@ namespace blazeclaw::core {
 			.streamingInput = request.streamingInput,
 			.language = request.language,
 			.prompt = request.prompt,
+			.livePreviewOnly = request.livePreviewOnly,
 		});
 
 		if (isStreamingRequest && result.sessionState.segment.has_value()) {
@@ -560,6 +603,7 @@ namespace blazeclaw::core {
 		state.runId = BuildTrackingRunId(request);
 		state.sessionId = request.sessionId;
 		state.stage = SpeechExecutionStage::Queued;
+		state.livePreviewOnly = request.livePreviewOnly;
 		state.audioPath = request.audioPath;
 		state.audioArtifact = request.audioArtifact;
 		state.streamingInput = request.streamingInput;

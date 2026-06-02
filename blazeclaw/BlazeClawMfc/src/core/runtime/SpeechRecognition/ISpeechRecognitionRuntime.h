@@ -88,6 +88,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string language;
 		std::string prompt;
+		bool livePreviewOnly = false;
 	};
 
 	struct SpeechExecutionAccepted {
@@ -109,6 +110,7 @@ namespace blazeclaw::core::speechrecognition {
 		std::optional<SpeechStreamingInputContract> streamingInput;
 		std::string language;
 		std::string prompt;
+		bool livePreviewOnly = false;
 	};
 
 	struct SpeechTranscribeResult {
