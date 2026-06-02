@@ -592,18 +592,6 @@
   <ItemGroup>
     <None Include="..\docs\readme.md" />
     <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_BAD_RESULT_FIX_PLAN.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_PLAN.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP10_DIAGNOSTICS_AND_TESTS.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP1_ENTRY_POINTS.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP2_LIVE_PREVIEW_POLLING.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP3_RING_PCM_STREAM.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP4_COORDINATOR_INTERIM_SEGMENTS.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP5_GATEWAY_SEGMENT_PAYLOADS.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP6_WEBVIEW_LIVE_PREVIEW.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP7_NATIVE_VIEW_LIFECYCLE.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP8_PREVIEW_CONCURRENCY.md" />
-    <None Include="SHERPA_ZIPFORMER_LIVE_RECOGNITION_GUI_STEP9_CLEAN_STOP_FINALIZATION.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
     <None Include="tools\.tmp_sherpa_no_output_baseline.json" />
@@ -612,15 +600,6 @@
     <None Include="tools\speech\Invoke-SherpaProviderBenchmarkSummary.ps1" />
     <None Include="tools\speech\New-SherpaCpuFallbackTuningMatrix.ps1" />
     <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />
-    <None Include="tools\speech\SHERPA_MISSING_FINAL_TRANSCRIPT_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_CAPTURE_PIPELINE_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_CAPTURE_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_INFERENCE_FAILED_CLASSIFICATION_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_STALE_ERROR_LABEL_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_NO_SPEECH_DETECTED_WEBVIEW_FALLBACK_RECORDER_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_TRANSCRIBE_BUTTON_STUCK_RECORDING_ROOT_CAUSE_PLAN.md" />
-    <None Include="tools\speech\SHERPA_ZIPFORMER_LIVE_RECOGNITION_STEP9_MANUAL_CHECKLIST.md" />
     <None Include="tools\speech\Test-SherpaFirstTokenBenchmarkSummary.ps1" />
     <None Include="VOICE_STREAM_TO_ASR_REPEAT_WORD_ROOT_CAUSE_AND_FIX_PLAN.md" />
     <None Include="VOICE_STREAM_TO_ASR_SHERPA_NO_OUTPUT_ROOT_CAUSE_PLAN.md" />

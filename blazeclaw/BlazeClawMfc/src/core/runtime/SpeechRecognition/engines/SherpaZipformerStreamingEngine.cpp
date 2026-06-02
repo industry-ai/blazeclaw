@@ -3,6 +3,7 @@
 
 #include "../SpeechCudaCompatibilityGuard.h"
 #include "../StreamingAudioSourceRegistry.h"
+#include "../../debug_switch.h"
 
 #include <kaldi-native-fbank/csrc/online-feature.h>
 
@@ -1867,6 +1868,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		return std::filesystem::path(value);
 	}
 
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
 	std::string SherpaZipformerStreamingEngine::ResolveBaselineExpectedText() {
 		return ReadEnvironmentString("BLAZECLAW_SHERPA_BASELINE_EXPECTED_TEXT");
 	}
@@ -2017,6 +2019,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		return path;
 	}
+#endif
 
 	void SherpaZipformerStreamingEngine::ClearStreamState(
 		const std::string& streamId) const {
@@ -2036,8 +2039,10 @@ namespace blazeclaw::core::speechrecognition::engines {
 		result.sessionState.language = request.language.empty() ? "und" : request.language;
 		result.sessionState.stage = SpeechSessionStage::Transcribing;
 
+		result.ok = false;
+
 		if (!m_loaded) {
-			result.ok = false;
+			//result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
 				.message = "sherpa streaming engine is not loaded",
@@ -2048,7 +2053,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		}
 
 		if (!request.streamingInput.has_value()) {
-			result.ok = false;
+			//result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::InvalidInput,
 				.message = "streamingInput is required for sherpa streaming transcription",
@@ -2060,7 +2065,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 
 		const auto& streamingInput = *request.streamingInput;
 		if (streamingInput.source.streamId.empty()) {
-			result.ok = false;
+			//result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::InvalidInput,
 				.message = "streamingInput.source.streamId is required",
@@ -2069,30 +2074,9 @@ namespace blazeclaw::core::speechrecognition::engines {
 			result.sessionState.error = result.error;
 			return result;
 		}
-#if !BLAZECLAW_HAS_ONNXRUNTIME
-		result.ok = false;
-		result.error = SpeechRecognitionError{
-			.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
-			.message = "onnxruntime is unavailable for sherpa streaming",
-		};
-		result.sessionState.stage = SpeechSessionStage::Failed;
-		result.sessionState.error = result.error;
-		return result;
-#else
-		if (!m_encoderSession || !m_decoderSession || !m_joinerSession) {
-			result.ok = false;
-			result.error = SpeechRecognitionError{
-				.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
-				.message = "sherpa encoder/decoder/joiner sessions are unavailable",
-			};
-			result.sessionState.stage = SpeechSessionStage::Failed;
-			result.sessionState.error = result.error;
-			return result;
-		}
-#endif
 
 #if !BLAZECLAW_HAS_ONNXRUNTIME
-		result.ok = false;
+		//result.ok = false;
 		result.error = SpeechRecognitionError{
 			.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
 			.message = "onnxruntime is unavailable for sherpa streaming",
@@ -2102,7 +2086,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 		return result;
 #else
 		if (!m_encoderSession || !m_decoderSession || !m_joinerSession) {
-			result.ok = false;
+			//result.ok = false;
 			result.error = SpeechRecognitionError{
 				.code = SpeechRecognitionErrorCode::RuntimeUnavailable,
 				.message = "sherpa encoder/decoder/joiner sessions are unavailable",
@@ -2130,15 +2114,17 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const std::size_t maxSpinCount =
 			streamingInput.chunkPolicy.maxSpinCount == 0
 			? std::size_t{ 64 }
-			: streamingInput.chunkPolicy.maxSpinCount;
+		: streamingInput.chunkPolicy.maxSpinCount;
 		const bool isPcmStream =
 			request.audioArtifact.has_value() &&
 			request.audioArtifact->handoffMode == SpeechAudioHandoffMode::PcmStream;
 		const bool isFinalStreamRequest =
 			IsFinalStreamRequest(streamingInput, request.audioArtifact);
 		const bool isLivePcmStream = isPcmStream && !isFinalStreamRequest;
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
 		const std::string baselineExpectedText = ResolveBaselineExpectedText();
 		const bool baselinePersistenceEnabled = IsBaselinePersistenceEnabled();
+#endif
 		const auto sampleScalingPolicy = ResolveSherpaFbankSampleScalingPolicy();
 #if BLAZECLAW_HAS_ONNXRUNTIME
 		const std::string encoderStateCacheSummary = FormatStateCacheSummary(m_encoderStateCacheBindings);
@@ -2157,10 +2143,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 		const std::string decoderJoinerContractSummary;
 #endif
 
+		/*
+			Load or initialize the per-stream cached `StreamState` for `streamingInput.source.streamId`, 
+		possibly reset it for a final request, and copy it into a local `streamState` for further processing.
+		*/
 		StreamState streamState;
 		bool finalCachedStateReset = false;
 		{
-			std::lock_guard<std::mutex> lock(m_streamMutex);
+			std::lock_guard<std::mutex> lock(m_streamMutex);	// for m_streamStateByStreamId
 			auto& cachedState = m_streamStateByStreamId[streamingInput.source.streamId];
 			if (isFinalStreamRequest && streamingInput.source.sequenceEnd > 0) {
 				const bool cachedStateHasTranscript =
@@ -2169,8 +2159,8 @@ namespace blazeclaw::core::speechrecognition::engines {
 				const bool cachedStateInRange =
 					cachedState.nextSequence >= streamingInput.source.sequenceStart &&
 					cachedState.nextSequence <= streamingInput.source.sequenceEnd;
-				if (!cachedStateHasTranscript || !cachedStateInRange) {
-					cachedState = StreamState{};
+				if (!cachedStateHasTranscript || !cachedStateInRange) {	// no transcript or the cached state is out of range
+					cachedState = StreamState{};	// reset to initial state
 					finalCachedStateReset = true;
 				}
 			}
@@ -2185,17 +2175,18 @@ namespace blazeclaw::core::speechrecognition::engines {
 					),
 					m_blankId);
 			}
-			if (cachedState.nextSequence == 0) {
+			if (cachedState.nextSequence == 0) {	// initialize nextSequence for new streams or reset streams
 				cachedState.nextSequence = streamingInput.cursor.nextSequence > 0
 					? streamingInput.cursor.nextSequence
 					: streamingInput.source.sequenceStart;
 			}
+			// Copy contract/summary metadata into the cached state
 			cachedState.contractStateCacheSummary = encoderStateCacheSummary;
 			cachedState.contractDecoderJoinerSummary = decoderJoinerContractSummary;
 			if (cachedState.firstTokenTraceStart == std::chrono::steady_clock::time_point{}) {
 				cachedState.firstTokenTraceStart = std::chrono::steady_clock::now();
 			}
-			streamState = cachedState;
+			streamState = cachedState;	// Copy the (possibly modified) cachedState out into the local streamState variable
 		}
 
 		std::uint64_t nextSequence = streamState.nextSequence;
@@ -3172,254 +3163,254 @@ namespace blazeclaw::core::speechrecognition::engines {
 												while (!advanceFrame && symbolsThisFrame < kSherpaMaxSymbolsPerFrame) {
 													++streamState.rnntInnerLoopCount;
 
-									std::vector<Ort::Value> joinerInputs;
-									std::vector<const char*> joinerInputNames;
-									std::vector<std::vector<std::int64_t>> joinerInt64Buffers;
-									std::vector<std::vector<float>> joinerFloatBuffers;
-												joinerInputs.reserve(m_joinerInputBindings.size());
-												joinerInputNames.reserve(m_joinerInputBindings.size());
-									joinerInt64Buffers.reserve(m_joinerInputBindings.size());
-									joinerFloatBuffers.reserve(m_joinerInputBindings.size());
+													std::vector<Ort::Value> joinerInputs;
+													std::vector<const char*> joinerInputNames;
+													std::vector<std::vector<std::int64_t>> joinerInt64Buffers;
+													std::vector<std::vector<float>> joinerFloatBuffers;
+													joinerInputs.reserve(m_joinerInputBindings.size());
+													joinerInputNames.reserve(m_joinerInputBindings.size());
+													joinerInt64Buffers.reserve(m_joinerInputBindings.size());
+													joinerFloatBuffers.reserve(m_joinerInputBindings.size());
 
-												for (const auto& binding : m_joinerInputBindings) {
-													std::vector<std::int64_t> shape = binding.shape;
-													for (auto& dim : shape) {
-														if (dim <= 0) {
-															dim = 1;
+													for (const auto& binding : m_joinerInputBindings) {
+														std::vector<std::int64_t> shape = binding.shape;
+														for (auto& dim : shape) {
+															if (dim <= 0) {
+																dim = 1;
+															}
 														}
-													}
 
-													if (binding.kind == TensorBindingKind::EncoderOut) {
-											const auto resolvedShape = ResolveJoinerInputShape(binding, encoderFrame.size());
-											if (!resolvedShape.has_value()) {
-												++streamState.decoderJoinerContractFailureCount;
-												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
-													"joiner encoder input resolve",
-													binding.name,
-													binding.shape,
-													{},
-													encoderFrame.size(),
-													0);
-												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
-												inferenceFailed = true;
-												break;
-											}
-											shape = *resolvedShape;
-											const auto expectedElements = ComputeResolvedElementCount(shape);
-											if (expectedElements != encoderFrame.size()) {
-												++streamState.decoderJoinerContractFailureCount;
-												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
-													"joiner encoder input elements",
-													binding.name,
-													binding.shape,
-													shape,
-													encoderFrame.size(),
-													static_cast<std::size_t>(expectedElements));
-												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
-												inferenceFailed = true;
-												break;
-											}
-														streamState.contractJoinerEncoderInputShape = FormatShape(shape);
-														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
-															memoryInfo,
-															encoderFrame.data(),
-															encoderFrame.size(),
-															shape.data(),
-															shape.size()));
-													}
-													else if (binding.kind == TensorBindingKind::DecoderOut) {
-											const auto resolvedShape = ResolveJoinerInputShape(binding, decoderVector.size());
-											if (!resolvedShape.has_value()) {
-												++streamState.decoderJoinerContractFailureCount;
-												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
-													"joiner decoder input resolve",
-													binding.name,
-													binding.shape,
-													{},
-													decoderVector.size(),
-													0);
-												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
-												inferenceFailed = true;
-												break;
-											}
-											shape = *resolvedShape;
-											const auto expectedElements = ComputeResolvedElementCount(shape);
-											if (expectedElements != decoderVector.size()) {
-												++streamState.decoderJoinerContractFailureCount;
-												streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
-													"joiner decoder input elements",
-													binding.name,
-													binding.shape,
-													shape,
-													decoderVector.size(),
-													static_cast<std::size_t>(expectedElements));
-												inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
-												inferenceFailed = true;
-												break;
-											}
-														streamState.contractJoinerDecoderInputShape = FormatShape(shape);
-														joinerInputs.push_back(Ort::Value::CreateTensor<float>(
-															memoryInfo,
-															decoderVector.data(),
-															decoderVector.size(),
-															shape.data(),
-															shape.size()));
-													}
-													else {
-														const std::size_t elements = static_cast<std::size_t>((std::max)(
-															std::int64_t{ 1 },
-															std::accumulate(
-																shape.begin(),
-																shape.end(),
-																std::int64_t{ 1 },
-																[](std::int64_t a, std::int64_t b) {
-																	return a * ((std::max)(std::int64_t{ 1 }, b));
-																})));
-
-														if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
-									joinerInt64Buffers.emplace_back(elements, 0);
-									auto& zerosRef = joinerInt64Buffers.back();
-															joinerInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
+														if (binding.kind == TensorBindingKind::EncoderOut) {
+															const auto resolvedShape = ResolveJoinerInputShape(binding, encoderFrame.size());
+															if (!resolvedShape.has_value()) {
+																++streamState.decoderJoinerContractFailureCount;
+																streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+																	"joiner encoder input resolve",
+																	binding.name,
+																	binding.shape,
+																	{},
+																	encoderFrame.size(),
+																	0);
+																inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+																inferenceFailed = true;
+																break;
+															}
+															shape = *resolvedShape;
+															const auto expectedElements = ComputeResolvedElementCount(shape);
+															if (expectedElements != encoderFrame.size()) {
+																++streamState.decoderJoinerContractFailureCount;
+																streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+																	"joiner encoder input elements",
+																	binding.name,
+																	binding.shape,
+																	shape,
+																	encoderFrame.size(),
+																	static_cast<std::size_t>(expectedElements));
+																inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+																inferenceFailed = true;
+																break;
+															}
+															streamState.contractJoinerEncoderInputShape = FormatShape(shape);
+															joinerInputs.push_back(Ort::Value::CreateTensor<float>(
 																memoryInfo,
-										zerosRef.data(),
-										zerosRef.size(),
+																encoderFrame.data(),
+																encoderFrame.size(),
+																shape.data(),
+																shape.size()));
+														}
+														else if (binding.kind == TensorBindingKind::DecoderOut) {
+															const auto resolvedShape = ResolveJoinerInputShape(binding, decoderVector.size());
+															if (!resolvedShape.has_value()) {
+																++streamState.decoderJoinerContractFailureCount;
+																streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+																	"joiner decoder input resolve",
+																	binding.name,
+																	binding.shape,
+																	{},
+																	decoderVector.size(),
+																	0);
+																inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+																inferenceFailed = true;
+																break;
+															}
+															shape = *resolvedShape;
+															const auto expectedElements = ComputeResolvedElementCount(shape);
+															if (expectedElements != decoderVector.size()) {
+																++streamState.decoderJoinerContractFailureCount;
+																streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+																	"joiner decoder input elements",
+																	binding.name,
+																	binding.shape,
+																	shape,
+																	decoderVector.size(),
+																	static_cast<std::size_t>(expectedElements));
+																inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+																inferenceFailed = true;
+																break;
+															}
+															streamState.contractJoinerDecoderInputShape = FormatShape(shape);
+															joinerInputs.push_back(Ort::Value::CreateTensor<float>(
+																memoryInfo,
+																decoderVector.data(),
+																decoderVector.size(),
 																shape.data(),
 																shape.size()));
 														}
 														else {
-									joinerFloatBuffers.emplace_back(elements, 0.0f);
-									auto& zerosRef = joinerFloatBuffers.back();
-															joinerInputs.push_back(Ort::Value::CreateTensor<float>(
-																memoryInfo,
-										zerosRef.data(),
-										zerosRef.size(),
-																shape.data(),
-																shape.size()));
+															const std::size_t elements = static_cast<std::size_t>((std::max)(
+																std::int64_t{ 1 },
+																std::accumulate(
+																	shape.begin(),
+																	shape.end(),
+																	std::int64_t{ 1 },
+																	[](std::int64_t a, std::int64_t b) {
+																		return a * ((std::max)(std::int64_t{ 1 }, b));
+																	})));
+
+															if (binding.elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+																joinerInt64Buffers.emplace_back(elements, 0);
+																auto& zerosRef = joinerInt64Buffers.back();
+																joinerInputs.push_back(Ort::Value::CreateTensor<std::int64_t>(
+																	memoryInfo,
+																	zerosRef.data(),
+																	zerosRef.size(),
+																	shape.data(),
+																	shape.size()));
+															}
+															else {
+																joinerFloatBuffers.emplace_back(elements, 0.0f);
+																auto& zerosRef = joinerFloatBuffers.back();
+																joinerInputs.push_back(Ort::Value::CreateTensor<float>(
+																	memoryInfo,
+																	zerosRef.data(),
+																	zerosRef.size(),
+																	shape.data(),
+																	shape.size()));
+															}
 														}
+
+														joinerInputNames.push_back(binding.name.c_str());
+													}
+													if (inferenceFailed) {
+														break;
 													}
 
-													joinerInputNames.push_back(binding.name.c_str());
-												}
-									if (inferenceFailed) {
-										break;
-									}
+													std::vector<const char*> joinerOutputNames;
+													joinerOutputNames.reserve(m_joinerOutputNames.size());
+													for (const auto& outputName : m_joinerOutputNames) {
+														joinerOutputNames.push_back(outputName.c_str());
+													}
 
-												std::vector<const char*> joinerOutputNames;
-												joinerOutputNames.reserve(m_joinerOutputNames.size());
-												for (const auto& outputName : m_joinerOutputNames) {
-													joinerOutputNames.push_back(outputName.c_str());
-												}
-
-											if (streamState.firstTokenJoinerStartOffsetMs == 0) {
-												streamState.firstTokenJoinerStartOffsetMs = ElapsedMsSince(
-													streamState.firstTokenTraceStart);
-											}
-											++streamState.joinerCallCount;
-											auto joinerOutputs = m_joinerSession->Run(
-													Ort::RunOptions{ nullptr },
-													joinerInputNames.data(),
-													joinerInputs.data(),
-													joinerInputs.size(),
-													joinerOutputNames.data(),
-													joinerOutputNames.size());
+													if (streamState.firstTokenJoinerStartOffsetMs == 0) {
+														streamState.firstTokenJoinerStartOffsetMs = ElapsedMsSince(
+															streamState.firstTokenTraceStart);
+													}
+													++streamState.joinerCallCount;
+													auto joinerOutputs = m_joinerSession->Run(
+														Ort::RunOptions{ nullptr },
+														joinerInputNames.data(),
+														joinerInputs.data(),
+														joinerInputs.size(),
+														joinerOutputNames.data(),
+														joinerOutputNames.size());
 
 													if (joinerOutputs.empty()) {
 														advanceFrame = true;
-													continue;
-												}
+														continue;
+													}
 
-											auto isUsableJoinerTensor = [](const Ort::Value& value) {
-												if (!value.IsTensor()) {
-													return false;
-												}
-												auto info = value.GetTensorTypeAndShapeInfo();
-												if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-													return false;
-												}
-												const auto shape = info.GetShape();
-												return !shape.empty() && info.GetElementCount() > 0;
-											};
+													auto isUsableJoinerTensor = [](const Ort::Value& value) {
+														if (!value.IsTensor()) {
+															return false;
+														}
+														auto info = value.GetTensorTypeAndShapeInfo();
+														if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+															return false;
+														}
+														const auto shape = info.GetShape();
+														return !shape.empty() && info.GetElementCount() > 0;
+														};
 
-										 std::size_t joinerMainIndex = m_joinerMainOutputIndex;
-										 if (joinerMainIndex >= joinerOutputs.size() || !isUsableJoinerTensor(joinerOutputs[joinerMainIndex])) {
-											 std::size_t bestIndex = static_cast<std::size_t>(-1);
-											 size_t bestLastDim = 0;
-											 for (std::size_t i = 0; i < joinerOutputs.size(); ++i) {
-												 if (!isUsableJoinerTensor(joinerOutputs[i])) {
-													 continue;
-												 }
-												 auto info = joinerOutputs[i].GetTensorTypeAndShapeInfo();
-												 const auto shape = info.GetShape();
-												 const size_t lastDim = shape.empty() ? 0 : static_cast<size_t>((std::max)(std::int64_t{ 0 }, shape.back()));
-												 if (bestIndex == static_cast<std::size_t>(-1) || lastDim > bestLastDim) {
-													 bestIndex = i;
-													 bestLastDim = lastDim;
-												 }
-											 }
-														 if (bestIndex == static_cast<std::size_t>(-1)) {
-															 advanceFrame = true;
-												 continue;
-											 }
-											 joinerMainIndex = bestIndex;
-										 }
+													std::size_t joinerMainIndex = m_joinerMainOutputIndex;
+													if (joinerMainIndex >= joinerOutputs.size() || !isUsableJoinerTensor(joinerOutputs[joinerMainIndex])) {
+														std::size_t bestIndex = static_cast<std::size_t>(-1);
+														size_t bestLastDim = 0;
+														for (std::size_t i = 0; i < joinerOutputs.size(); ++i) {
+															if (!isUsableJoinerTensor(joinerOutputs[i])) {
+																continue;
+															}
+															auto info = joinerOutputs[i].GetTensorTypeAndShapeInfo();
+															const auto shape = info.GetShape();
+															const size_t lastDim = shape.empty() ? 0 : static_cast<size_t>((std::max)(std::int64_t{ 0 }, shape.back()));
+															if (bestIndex == static_cast<std::size_t>(-1) || lastDim > bestLastDim) {
+																bestIndex = i;
+																bestLastDim = lastDim;
+															}
+														}
+														if (bestIndex == static_cast<std::size_t>(-1)) {
+															advanceFrame = true;
+															continue;
+														}
+														joinerMainIndex = bestIndex;
+													}
 
-										 auto& joinerMain = joinerOutputs[joinerMainIndex];
-															if (!joinerMain.IsTensor()) {
-																advanceFrame = true;
-													continue;
-												}
+													auto& joinerMain = joinerOutputs[joinerMainIndex];
+													if (!joinerMain.IsTensor()) {
+														advanceFrame = true;
+														continue;
+													}
 
-												auto joinerInfo = joinerMain.GetTensorTypeAndShapeInfo();
-												if (joinerInfo.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-																advanceFrame = true;
-													continue;
-												}
+													auto joinerInfo = joinerMain.GetTensorTypeAndShapeInfo();
+													if (joinerInfo.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+														advanceFrame = true;
+														continue;
+													}
 
-												const std::size_t logitsCount =
-													joinerInfo.GetElementCount() > 0
-													? static_cast<std::size_t>(joinerInfo.GetElementCount())
-													: std::size_t{ 1 };
-												const auto joinerShape = joinerInfo.GetShape();
+													const std::size_t logitsCount =
+														joinerInfo.GetElementCount() > 0
+														? static_cast<std::size_t>(joinerInfo.GetElementCount())
+														: std::size_t{ 1 };
+													const auto joinerShape = joinerInfo.GetShape();
 													streamState.contractJoinerOutputShape = FormatShape(joinerShape);
-												const float* logits = joinerMain.GetTensorData<float>();
-															if (logits == nullptr || logitsCount == 0) {
-																advanceFrame = true;
-													continue;
-												}
+													const float* logits = joinerMain.GetTensorData<float>();
+													if (logits == nullptr || logitsCount == 0) {
+														advanceFrame = true;
+														continue;
+													}
 
-												std::size_t vocabSize = logitsCount;
-												if (!joinerShape.empty() && joinerShape.back() > 0) {
-													vocabSize = static_cast<std::size_t>(joinerShape.back());
-												}
-												if (vocabSize == 0 || vocabSize > logitsCount) {
-											++streamState.decoderJoinerContractFailureCount;
-											streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
-												"joiner logits vocab axis",
-												m_joinerOutputNames.empty() ? std::string{} : m_joinerOutputNames[joinerMainIndex],
-												joinerShape,
-												joinerShape,
-												vocabSize,
-												logitsCount);
-											inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
-											inferenceFailed = true;
-											break;
-												}
-												const std::size_t logitsOffset = logitsCount - vocabSize;
-										{
-											std::ostringstream slice;
-											slice << "offset=" << logitsOffset
-												<< ",vocabSize=" << vocabSize
-												<< ",total=" << logitsCount;
-											streamState.contractJoinerLogitsSlice = slice.str();
-										}
-										++streamState.decoderJoinerValidatedCallCount;
+													std::size_t vocabSize = logitsCount;
+													if (!joinerShape.empty() && joinerShape.back() > 0) {
+														vocabSize = static_cast<std::size_t>(joinerShape.back());
+													}
+													if (vocabSize == 0 || vocabSize > logitsCount) {
+														++streamState.decoderJoinerContractFailureCount;
+														streamState.contractDecoderJoinerLastError = FormatDecoderJoinerContractError(
+															"joiner logits vocab axis",
+															m_joinerOutputNames.empty() ? std::string{} : m_joinerOutputNames[joinerMainIndex],
+															joinerShape,
+															joinerShape,
+															vocabSize,
+															logitsCount);
+														inferenceFailureMessage = streamState.contractDecoderJoinerLastError;
+														inferenceFailed = true;
+														break;
+													}
+													const std::size_t logitsOffset = logitsCount - vocabSize;
+													{
+														std::ostringstream slice;
+														slice << "offset=" << logitsOffset
+															<< ",vocabSize=" << vocabSize
+															<< ",total=" << logitsCount;
+														streamState.contractJoinerLogitsSlice = slice.str();
+													}
+													++streamState.decoderJoinerValidatedCallCount;
 													streamState.contractJoinerTopTokens = FormatTopTokens(
 														logits + logitsOffset,
 														vocabSize);
 													if (IsSherpaVerboseTraceEnabled() &&
 														(streamState.joinerCallCount <= 3 || streamState.joinerCallCount % 50 == 0)) {
-				TRACE(L"[SherpaContract] fbankScaling=%S featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
-					streamState.contractFbankSampleScalingMode.c_str(),
+														TRACE(L"[SherpaContract] fbankScaling=%S featureShape=%S featureLength=%S real=%llu padded=%llu encoderShape=%S validFrames=%llu decoderContext=%S decoderShape=%S joinerEncoderShape=%S joinerDecoderShape=%S joinerOutputShape=%S topTokens=%S\n",
+															streamState.contractFbankSampleScalingMode.c_str(),
 															streamState.contractFeatureInputShape.c_str(),
 															streamState.contractFeatureLengthValue.c_str(),
 															(unsigned long long)streamState.contractFeatureRealFrameCount,
@@ -3434,114 +3425,114 @@ namespace blazeclaw::core::speechrecognition::engines {
 															streamState.contractJoinerTopTokens.c_str());
 													}
 
-												const auto bestIt = std::max_element(
-													logits + logitsOffset,
-													logits + logitsOffset + vocabSize);
-															if (bestIt == logits + logitsOffset + vocabSize) {
-																advanceFrame = true;
-													continue;
-												}
-
-												const std::int64_t tokenId = static_cast<std::int64_t>(bestIt - (logits + logitsOffset));
-												streamState.lastBestTokenId = tokenId;
-												streamState.lastBestTokenScore = *bestIt;
-												streamState.lastSecondBestTokenId = -1;
-												streamState.lastSecondBestTokenScore = 0.0f;
-												for (std::size_t i = 0; i < vocabSize; ++i) {
-													const auto* candidate = logits + logitsOffset + i;
-													if (candidate == bestIt) {
+													const auto bestIt = std::max_element(
+														logits + logitsOffset,
+														logits + logitsOffset + vocabSize);
+													if (bestIt == logits + logitsOffset + vocabSize) {
+														advanceFrame = true;
 														continue;
 													}
-													if (streamState.lastSecondBestTokenId < 0 ||
-														*candidate > streamState.lastSecondBestTokenScore) {
-														streamState.lastSecondBestTokenId = static_cast<std::int64_t>(i);
-														streamState.lastSecondBestTokenScore = *candidate;
-													}
-												}
-														if (IsSherpaVerboseTraceEnabled() && tokenId != m_blankId) {
-													TRACE(L"[SherpaStreaming] emitted tokenId=%lld value=%f blankId=%lld\n",
-														(long long)tokenId, *bestIt, (long long)m_blankId);
-												}
-												if (tokenId == m_blankId || tokenId == m_eosId) {
-													if (tokenId == m_blankId) {
-														++streamState.blankTokenCount;
-													}
-													advanceFrame = true;
-													continue;
-												}
 
-										if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
-											++streamState.rnntRepeatedTokenCount;
-								streamState.repeatedTokenNgramLength = 1;
-								streamState.repeatedTokenNgramCount = 2;
-								streamState.repeatedTokenNgramUnit = JoinTokenNgramUnit(
-									streamState.emittedTokenIds,
-									streamState.emittedTokenIds.size() - 1,
-									1);
-								streamState.repeatGuardAction = "immediate_token_suppressed";
-				streamState.rnntLastFrameStopReason = "immediate_token_repeat";
-											advanceFrame = true;
-											continue;
-										}
-							{
-								const auto candidateRepeat = ClassifyCandidateTokenRepeat(
-									streamState.emittedTokenIds,
-									tokenId);
-								if (IsSuppressibleTokenRepeat(candidateRepeat)) {
-									++streamState.rnntRepeatedTokenCount;
-									streamState.repeatedTokenNgramLength =
-										static_cast<std::uint64_t>(candidateRepeat.repeatedUnitLength);
-									streamState.repeatedTokenNgramCount =
-										static_cast<std::uint64_t>(candidateRepeat.repeatedUnitCount);
-									streamState.repeatedTokenNgramUnit = candidateRepeat.repeatedUnit;
-									streamState.repeatGuardAction = "ngram_suppressed";
-									streamState.rnntLastFrameStopReason = "ngram_repeat";
-									advanceFrame = true;
-									continue;
-								}
-							}
-										streamState.emittedTokenIds.push_back(tokenId);
-								streamState.baselineTokenIds.push_back(tokenId);
-								{
-									const auto tokenRepeat = ClassifyTrailingTokenRepeats(
-										streamState.emittedTokenIds,
-										2,
-										8);
-									if (tokenRepeat.repeatedUnitCount > 0) {
-										streamState.repeatedTokenNgramLength =
-											static_cast<std::uint64_t>(tokenRepeat.repeatedUnitLength);
-										streamState.repeatedTokenNgramCount =
-											static_cast<std::uint64_t>(tokenRepeat.repeatedUnitCount);
-										streamState.repeatedTokenNgramUnit = tokenRepeat.repeatedUnit;
-										streamState.repeatGuardAction = "diagnostic_only";
-									}
-								}
-												++streamState.decodedTokenCount;
-												++symbolsThisFrame;
-												streamState.decoderContext.push_back(tokenId);
-												const std::size_t contextSize = (std::max)(std::size_t{ 1 }, m_decoderContextSize);
-												if (streamState.decoderContext.size() > contextSize) {
-													streamState.decoderContext.erase(
-														streamState.decoderContext.begin(),
-														streamState.decoderContext.end() - static_cast<std::ptrdiff_t>(contextSize));
-												}
+													const std::int64_t tokenId = static_cast<std::int64_t>(bestIt - (logits + logitsOffset));
+													streamState.lastBestTokenId = tokenId;
+													streamState.lastBestTokenScore = *bestIt;
+													streamState.lastSecondBestTokenId = -1;
+													streamState.lastSecondBestTokenScore = 0.0f;
+													for (std::size_t i = 0; i < vocabSize; ++i) {
+														const auto* candidate = logits + logitsOffset + i;
+														if (candidate == bestIt) {
+															continue;
+														}
+														if (streamState.lastSecondBestTokenId < 0 ||
+															*candidate > streamState.lastSecondBestTokenScore) {
+															streamState.lastSecondBestTokenId = static_cast<std::int64_t>(i);
+															streamState.lastSecondBestTokenScore = *candidate;
+														}
+													}
+													if (IsSherpaVerboseTraceEnabled() && tokenId != m_blankId) {
+														TRACE(L"[SherpaStreaming] emitted tokenId=%lld value=%f blankId=%lld\n",
+															(long long)tokenId, *bestIt, (long long)m_blankId);
+													}
+													if (tokenId == m_blankId || tokenId == m_eosId) {
+														if (tokenId == m_blankId) {
+															++streamState.blankTokenCount;
+														}
+														advanceFrame = true;
+														continue;
+													}
 
-										const float bestTokenMargin =
-											streamState.lastSecondBestTokenId >= 0
-											? streamState.lastBestTokenScore - streamState.lastSecondBestTokenScore
-											: kSherpaAdaptiveFrameStopMinLogitMargin;
-										if (symbolsThisFrame > 0 && bestTokenMargin < kSherpaAdaptiveFrameStopMinLogitMargin) {
-											++streamState.rnntAdaptiveFrameStopCount;
-											streamState.rnntLastFrameStopReason = "weak_margin_after_symbol";
-											advanceFrame = true;
-										}
-										else if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
-											streamState.rnntLastFrameStopReason = "max_tokens_per_utterance";
-													advanceFrame = true;
-												}
-												else {
-													updateDecoderFromContext(decoderVector);
-												}
+													if (!streamState.emittedTokenIds.empty() && streamState.emittedTokenIds.back() == tokenId) {
+														++streamState.rnntRepeatedTokenCount;
+														streamState.repeatedTokenNgramLength = 1;
+														streamState.repeatedTokenNgramCount = 2;
+														streamState.repeatedTokenNgramUnit = JoinTokenNgramUnit(
+															streamState.emittedTokenIds,
+															streamState.emittedTokenIds.size() - 1,
+															1);
+														streamState.repeatGuardAction = "immediate_token_suppressed";
+														streamState.rnntLastFrameStopReason = "immediate_token_repeat";
+														advanceFrame = true;
+														continue;
+													}
+													{
+														const auto candidateRepeat = ClassifyCandidateTokenRepeat(
+															streamState.emittedTokenIds,
+															tokenId);
+														if (IsSuppressibleTokenRepeat(candidateRepeat)) {
+															++streamState.rnntRepeatedTokenCount;
+															streamState.repeatedTokenNgramLength =
+																static_cast<std::uint64_t>(candidateRepeat.repeatedUnitLength);
+															streamState.repeatedTokenNgramCount =
+																static_cast<std::uint64_t>(candidateRepeat.repeatedUnitCount);
+															streamState.repeatedTokenNgramUnit = candidateRepeat.repeatedUnit;
+															streamState.repeatGuardAction = "ngram_suppressed";
+															streamState.rnntLastFrameStopReason = "ngram_repeat";
+															advanceFrame = true;
+															continue;
+														}
+													}
+													streamState.emittedTokenIds.push_back(tokenId);
+													streamState.baselineTokenIds.push_back(tokenId);
+													{
+														const auto tokenRepeat = ClassifyTrailingTokenRepeats(
+															streamState.emittedTokenIds,
+															2,
+															8);
+														if (tokenRepeat.repeatedUnitCount > 0) {
+															streamState.repeatedTokenNgramLength =
+																static_cast<std::uint64_t>(tokenRepeat.repeatedUnitLength);
+															streamState.repeatedTokenNgramCount =
+																static_cast<std::uint64_t>(tokenRepeat.repeatedUnitCount);
+															streamState.repeatedTokenNgramUnit = tokenRepeat.repeatedUnit;
+															streamState.repeatGuardAction = "diagnostic_only";
+														}
+													}
+													++streamState.decodedTokenCount;
+													++symbolsThisFrame;
+													streamState.decoderContext.push_back(tokenId);
+													const std::size_t contextSize = (std::max)(std::size_t{ 1 }, m_decoderContextSize);
+													if (streamState.decoderContext.size() > contextSize) {
+														streamState.decoderContext.erase(
+															streamState.decoderContext.begin(),
+															streamState.decoderContext.end() - static_cast<std::ptrdiff_t>(contextSize));
+													}
+
+													const float bestTokenMargin =
+														streamState.lastSecondBestTokenId >= 0
+														? streamState.lastBestTokenScore - streamState.lastSecondBestTokenScore
+														: kSherpaAdaptiveFrameStopMinLogitMargin;
+													if (symbolsThisFrame > 0 && bestTokenMargin < kSherpaAdaptiveFrameStopMinLogitMargin) {
+														++streamState.rnntAdaptiveFrameStopCount;
+														streamState.rnntLastFrameStopReason = "weak_margin_after_symbol";
+														advanceFrame = true;
+													}
+													else if (streamState.emittedTokenIds.size() >= kSherpaMaxTokensPerUtterance) {
+														streamState.rnntLastFrameStopReason = "max_tokens_per_utterance";
+														advanceFrame = true;
+													}
+													else {
+														updateDecoderFromContext(decoderVector);
+													}
 											}
 											if (symbolsThisFrame > 1) {
 												++streamState.rnntMultiSymbolFrameCount;
@@ -3571,14 +3562,14 @@ namespace blazeclaw::core::speechrecognition::engines {
 				if (inferenceFailed) {
 					break;
 				}
-					const bool hadPartialText = !streamState.partialText.empty();
-					streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
-					if (!hadPartialText &&
-						!streamState.partialText.empty() &&
-						streamState.firstTokenPartialTextOffsetMs == 0) {
-						streamState.firstTokenPartialTextOffsetMs = ElapsedMsSince(
-							streamState.firstTokenTraceStart);
-					}
+				const bool hadPartialText = !streamState.partialText.empty();
+				streamState.partialText = DecodeTokenIdsToText(streamState.emittedTokenIds);
+				if (!hadPartialText &&
+					!streamState.partialText.empty() &&
+					streamState.firstTokenPartialTextOffsetMs == 0) {
+					streamState.firstTokenPartialTextOffsetMs = ElapsedMsSince(
+						streamState.firstTokenTraceStart);
+				}
 				{
 					const auto decodedRepeat = ClassifyDecodedRepeats(streamState.partialText);
 					ApplyDecodedRepeatDiagnostics(streamState, decodedRepeat, "diagnostic_only");
@@ -3685,7 +3676,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 #else
 						std::size_t{ 2 }
 #endif
-					),
+						),
 					m_blankId);
 				streamState.pendingFeatureFrames.clear();
 				streamState.pendingFeatureFrameCount = 0;
@@ -3695,6 +3686,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			}
 		}
 
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
 		std::optional<std::filesystem::path> baselineDiagnosticPath;
 		if (baselinePersistenceEnabled && shouldTreatInputAsFinal) {
 			streamState.nextSequence = nextSequence;
@@ -3713,6 +3705,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 				result.sessionState.segment.has_value(),
 				false);
 		}
+#endif
 
 		const bool isWarmupRequest =
 			request.runId.rfind("speech-warmup-", 0) == 0;
@@ -3860,6 +3853,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaFinalCursorNext = nextSequence,
 			.sherpaFinalRemainingSamples = finalRemainingSamples,
 			.sherpaFinalOutcome = finalOutcome,
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
 			.sherpaBaselineSampleRate = sampleRate,
 			.sherpaBaselineChunkSamples = static_cast<std::uint64_t>(chunkSamples),
 			.sherpaBaselineInputStartSequence = streamingInput.source.sequenceStart,
@@ -3874,6 +3868,7 @@ namespace blazeclaw::core::speechrecognition::engines {
 			.sherpaBaselineDiagnosticPath = baselineDiagnosticPath.has_value()
 				? baselineDiagnosticPath->string()
 				: std::string{},
+#endif
 			.sherpaChunkEnergyMinPermille = energyMinPermille,
 			.sherpaChunkEnergyMaxPermille = energyMaxPermille,
 			.sherpaChunkEnergyAvgPermille = energyAvgPermille,
@@ -3921,11 +3916,16 @@ namespace blazeclaw::core::speechrecognition::engines {
 				static_cast<unsigned long long>(finalRemainingSamples),
 				static_cast<unsigned long long>(streamState.chunkCount),
 				static_cast<unsigned long long>(loopGuard),
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
 				baselineDecodedText.c_str(),
-				finalOutcome.c_str(),
-				baselineDiagnosticPath.has_value()
-					? baselineDiagnosticPath->string().c_str()
-					: "");
+#endif
+				finalOutcome.c_str()
+#ifdef BASELINE_SPEECH_RECOGNITION_DEBUG
+				,baselineDiagnosticPath.has_value()
+				? baselineDiagnosticPath->string().c_str()
+				: ""
+#endif
+			);
 		}
 
 		streamState.nextSequence = nextSequence;
