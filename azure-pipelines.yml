@@ -8,6 +8,7 @@ pool:
 variables:
   # Must match local developer docs (blazeclaw/README.md, blazeclaw/docs/BUILD_AND_CI.md)
   VcpkgTriplet: 'x64-windows'
+  Catch2Seed: '2862792625'
 
 jobs:
 - job: BlazeClaw_Build
@@ -47,7 +48,7 @@ jobs:
       msbuildArgs: '/p:Platform=x64 /p:CodePage=65001'
 
   - task: PowerShell@2
-    displayName: 'Run Catch2 (blazeclaw/ CWD, parity-friendly; Debug only)'
+    displayName: 'Run validation phases (without tests; Debug only)'
     condition: and(succeeded(), eq(variables['buildConfiguration'], 'Debug'))
     inputs:
       targetType: 'inline'
@@ -55,5 +56,23 @@ jobs:
         $ErrorActionPreference = "Stop"
         $root = "$(System.DefaultWorkingDirectory)"
         $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-BlazeClawOptimizationValidation.ps1"
-        # S6: Invoke-BlazeClawOptimizationValidation runs [lifecycle-parity-ci] before the full suite.
-        & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug
+        & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -Configuration Debug
+
+  - task: PowerShell@2
+    displayName: 'Run Catch2 with deterministic summary (Debug only)'
+    condition: and(succeeded(), eq(variables['buildConfiguration'], 'Debug'))
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $root = "$(System.DefaultWorkingDirectory)"
+        $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-Catch2CiWithSummary.ps1"
+        $output = Join-Path "$(Build.ArtifactStagingDirectory)" "catch2"
+        & $script -RepoRoot $root -Configuration Debug -Seed "$(Catch2Seed)" -OutputDir $output
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Catch2 summary artifacts (Debug only)'
+    condition: and(always(), eq(variables['buildConfiguration'], 'Debug'))
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)/catch2'
+      ArtifactName: 'catch2-summary-debug'

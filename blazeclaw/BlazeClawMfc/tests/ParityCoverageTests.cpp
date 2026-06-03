@@ -17,8 +17,38 @@
 #include <fstream>
 #include <iterator>
 #include <cstdlib>
+#include <vector>
 
 using namespace blazeclaw::gateway;
+
+namespace {
+
+	std::filesystem::path ResolveWorkspacePath(const std::filesystem::path& relativePath)
+	{
+		const auto cwd = std::filesystem::current_path();
+		std::vector<std::filesystem::path> candidates = {
+			cwd / relativePath,
+			cwd / "blazeclaw" / relativePath,
+		};
+
+		for (auto cursor = cwd; !cursor.empty(); cursor = cursor.parent_path()) {
+			candidates.push_back(cursor / relativePath);
+			candidates.push_back(cursor / "blazeclaw" / relativePath);
+			if (cursor == cursor.parent_path()) {
+				break;
+			}
+		}
+
+		for (const auto& candidate : candidates) {
+			if (std::filesystem::exists(candidate)) {
+				return candidate;
+			}
+		}
+
+		return cwd / relativePath;
+	}
+
+} // namespace
 
 TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted for chat.send", "[parity][router][telemetry]") {
 	GatewayHost host;
@@ -2440,11 +2470,11 @@ TEST_CASE(
 TEST_CASE(
 	"Parity coverage: MFC email config persistence targets canonical .env path",
 	"[parity][config][mfc][email]") {
-	const auto sourcePath = std::filesystem::path("blazeclaw") /
-		"BlazeClawMfc" /
+	const auto sourcePath = ResolveWorkspacePath(
+		std::filesystem::path("BlazeClawMfc") /
 		"src" /
 		"app" /
-		"BlazeClawMFCDoc.cpp";
+		"BlazeClawMFCDoc.cpp");
 	std::ifstream in(sourcePath.string());
 	REQUIRE(in.is_open());
 
@@ -2461,11 +2491,11 @@ TEST_CASE(
 TEST_CASE(
 	"Parity coverage: OutputWnd contract freeze removes placeholder rows and preserves runtime append path",
 	"[parity][contract][mfc][output]") {
-	const auto sourcePath = std::filesystem::path("blazeclaw") /
-		"BlazeClawMfc" /
+	const auto sourcePath = ResolveWorkspacePath(
+		std::filesystem::path("BlazeClawMfc") /
 		"src" /
 		"app" /
-		"OutputWnd.cpp";
+		"OutputWnd.cpp");
 	std::ifstream in(sourcePath.string());
 	REQUIRE(in.is_open());
 
@@ -3482,6 +3512,108 @@ TEST_CASE(
 	}
 
 	host.Stop();
+}
+
+TEST_CASE(
+	"Parity regression: GatewayHost scope exit cleanup prevents ordering crash after upstream failure",
+	"[parity][regression][sigsegv][cleanup]") {
+	{
+		GatewayHost upstreamHost;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(upstreamHost.StartLocalOnly(gatewayConfig));
+
+		upstreamHost.SetEmbeddedOrchestrationPath("legacy_only");
+		upstreamHost.SetChatRuntimeCallback(
+			[](const GatewayHost::ChatRuntimeRequest&) {
+				GatewayHost::ChatRuntimeResult result;
+				result.ok = true;
+				result.assistantText = "upstream failure path cleanup check";
+				result.modelId = "default";
+				return result;
+			});
+
+		const auto upstreamSend = upstreamHost.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "sigsegv-cleanup-upstream-send",
+				.method = "chat.send",
+				.paramsJson = std::string(
+					"{\"sessionKey\":\"main\",\"message\":\"cleanup upstream\"}"),
+			});
+
+		REQUIRE(upstreamSend.ok);
+		REQUIRE(upstreamSend.payloadJson.has_value());
+	}
+
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "ordered lifecycle response";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "sigsegv-cleanup-ordering-send",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"ordering\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	const auto eventsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "sigsegv-cleanup-ordering-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+		});
+
+	REQUIRE(eventsResponse.ok);
+	REQUIRE(eventsResponse.payloadJson.has_value());
+	REQUIRE(eventsResponse.payloadJson->find("\"state\":\"queued\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity regression: GatewayHost destructor cleanup stays safe after explicit stop",
+	"[parity][regression][sigsegv][cleanup]") {
+	{
+		GatewayHost host;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(host.StartLocalOnly(gatewayConfig));
+		host.Stop();
+	}
+
+	GatewayHost nextHost;
+	blazeclaw::config::GatewayConfig nextConfig;
+	REQUIRE(nextHost.StartLocalOnly(nextConfig));
+	nextHost.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "destructor cleanup response";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto response = nextHost.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "sigsegv-cleanup-next-host-send",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"destructor cleanup\"}"),
+		});
+
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+	nextHost.Stop();
 }
 
 TEST_CASE(

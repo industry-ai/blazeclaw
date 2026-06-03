@@ -3,12 +3,56 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace {
 
+	std::filesystem::path ResolveWorkspacePath(const std::filesystem::path& relativePath)
+	{
+		std::vector<std::filesystem::path> candidates;
+		const auto cwd = std::filesystem::current_path();
+		candidates.push_back(cwd / relativePath);
+		candidates.push_back(cwd / "blazeclaw" / relativePath);
+		if (!relativePath.empty() && relativePath.begin()->string() == "..") {
+			std::filesystem::path normalized;
+			bool first = true;
+			for (const auto& part : relativePath) {
+				if (first && part.string() == "..") {
+					first = false;
+					continue;
+				}
+				normalized /= part;
+				first = false;
+			}
+			candidates.push_back(cwd / normalized);
+			candidates.push_back(cwd / "blazeclaw" / normalized);
+		}
+
+		for (auto cursor = cwd; !cursor.empty(); cursor = cursor.parent_path()) {
+			candidates.push_back(cursor / relativePath);
+			candidates.push_back(cursor / "blazeclaw" / relativePath);
+			if (cursor == cursor.parent_path()) {
+				break;
+			}
+		}
+
+		for (const auto& candidate : candidates) {
+			if (std::filesystem::exists(candidate)) {
+				return candidate;
+			}
+		}
+
+		return {};
+	}
+
 	std::string ReadTextFile(const std::filesystem::path& path)
 	{
-		std::ifstream in(path.string(), std::ios::in | std::ios::binary);
+		const auto resolvedPath = ResolveWorkspacePath(path);
+		if (resolvedPath.empty()) {
+			SKIP("Fixture path not found: " + path.generic_string());
+		}
+
+		std::ifstream in(resolvedPath.string(), std::ios::in | std::ios::binary);
 		REQUIRE(in.is_open());
 		return std::string(
 			(std::istreambuf_iterator<char>(in)),

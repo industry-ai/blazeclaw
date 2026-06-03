@@ -45,6 +45,18 @@
 
 namespace blazeclaw::gateway {
 
+	GatewayHost::~GatewayHost() noexcept {
+		if (!m_running && !m_initialized && !m_dispatchInitialized) {
+			return;
+		}
+
+		try {
+			Stop();
+		}
+		catch (...) {
+		}
+	}
+
 	std::vector<std::string> GatewayHost::ListReservedChatSlashCommandNames() {
 		return std::vector<std::string>{
 			"help",

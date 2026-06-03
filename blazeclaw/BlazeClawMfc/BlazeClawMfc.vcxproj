@@ -597,6 +597,7 @@
     <None Include="tools\.tmp_sherpa_no_output_baseline.json" />
     <None Include="tools\compare_sherpa_baseline.py" />
     <None Include="tools\freeze_sherpa_no_output_baseline.py" />
+    <None Include="tools\Invoke-Catch2CiWithSummary.ps1" />
     <None Include="tools\speech\Invoke-SherpaProviderBenchmarkSummary.ps1" />
     <None Include="tools\speech\New-SherpaCpuFallbackTuningMatrix.ps1" />
     <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />

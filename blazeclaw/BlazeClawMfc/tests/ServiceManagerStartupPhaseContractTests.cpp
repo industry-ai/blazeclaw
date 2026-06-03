@@ -733,30 +733,57 @@ TEST_CASE(
 	"[servicemanager][s6][contract]")
 {
 	const std::filesystem::path capabilityDoc =
+		std::filesystem::path("docs") /
+		"compare" /
+		"server.impl.ts" /
+		"OPENCLAW_SERVER_IMPL_TS_CAPABILITY_PARITY_ANALYSIS.md";
+	const std::filesystem::path capabilityDocFallback =
 		std::filesystem::path("..") /
 		"docs" /
 		"compare" /
 		"server.impl.ts" /
 		"OPENCLAW_SERVER_IMPL_TS_CAPABILITY_PARITY_ANALYSIS.md";
-	REQUIRE(std::filesystem::exists(capabilityDoc));
+	REQUIRE((
+		std::filesystem::exists(capabilityDoc) ||
+		std::filesystem::exists(capabilityDocFallback)));
 
 	const std::filesystem::path mechanicalDoc =
 		std::filesystem::path("docs") / "GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md";
-	REQUIRE(std::filesystem::exists(mechanicalDoc));
+	const std::filesystem::path mechanicalDocFallback =
+		std::filesystem::path("..") /
+		"docs" /
+		"GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md";
+	REQUIRE((
+		std::filesystem::exists(mechanicalDoc) ||
+		std::filesystem::exists(mechanicalDocFallback)));
 
 	const std::filesystem::path methodsListPlanDoc =
+		std::filesystem::path("docs") /
+		"compare" /
+		"server-methods-list.ts" /
+		"OPENCLAW_SERVER_METHODS_LIST_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md";
+	const std::filesystem::path methodsListPlanDocFallback =
 		std::filesystem::path("..") /
 		"docs" /
 		"compare" /
 		"server-methods-list.ts" /
 		"OPENCLAW_SERVER_METHODS_LIST_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md";
-	REQUIRE(std::filesystem::exists(methodsListPlanDoc));
+	REQUIRE((
+		std::filesystem::exists(methodsListPlanDoc) ||
+		std::filesystem::exists(methodsListPlanDocFallback)));
 
 	const std::filesystem::path methodsListMatrixDoc =
+		std::filesystem::path("docs") /
+		"compare" /
+		"server-methods-list.ts" /
+		"OPENCLAW_SERVER_METHODS_LIST_TS_EVENT_MATRIX_S0_S2.md";
+	const std::filesystem::path methodsListMatrixDocFallback =
 		std::filesystem::path("..") /
 		"docs" /
 		"compare" /
 		"server-methods-list.ts" /
 		"OPENCLAW_SERVER_METHODS_LIST_TS_EVENT_MATRIX_S0_S2.md";
-	REQUIRE(std::filesystem::exists(methodsListMatrixDoc));
+	REQUIRE((
+		std::filesystem::exists(methodsListMatrixDoc) ||
+		std::filesystem::exists(methodsListMatrixDocFallback)));
 }

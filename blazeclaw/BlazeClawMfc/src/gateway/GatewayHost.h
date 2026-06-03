@@ -517,6 +517,7 @@ namespace blazeclaw::gateway {
 
 		[[nodiscard]] static std::vector<std::string>
 			ListReservedChatSlashCommandNames();
+		~GatewayHost() noexcept;
 
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		bool StartLocalOnly(const blazeclaw::config::GatewayConfig& config);
