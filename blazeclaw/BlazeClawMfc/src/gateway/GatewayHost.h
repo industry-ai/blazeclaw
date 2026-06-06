@@ -19,6 +19,7 @@
 #include "GatewayEventFanoutService.h"
 #include "TransportRecipientRegistry.h"
 #include "GatewayHostRegistrationCoordinator.h"
+#include "GatewayHostRuntimeBootstrapCoordinator.h"
 #include "GatewayNodePairingService.h"
 #include "GatewayNodeCatalogService.h"
 #include "GatewayNodeCanvasCapabilityService.h"
@@ -756,6 +757,7 @@ namespace blazeclaw::gateway {
 
 		void RegisterDefaultHandlers();
 		friend void GatewayHostRegistration::RegisterDefaultHandlerSequence(GatewayHost& host);
+		friend struct GatewayHostRuntimeBootstrap::Access;
 		void RegisterToolExecutionHistoryHandlers();
 		void RegisterGatewayEventCatalogQueryHandlers();
 		void RegisterGatewayRegistryIntrospectionHandlers();

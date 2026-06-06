@@ -246,6 +246,7 @@
     <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h" />
     <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h" />
     <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h" />
+    <ClInclude Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.h" />
     <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
@@ -477,6 +478,7 @@
     <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostModelHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostProtocolHelpers.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.cpp" />
     <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />

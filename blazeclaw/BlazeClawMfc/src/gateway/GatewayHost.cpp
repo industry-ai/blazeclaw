@@ -861,99 +861,6 @@ namespace blazeclaw::gateway {
 			return params.dump();
 		}
 
-		void EnsureOpsToolsRuntimeRegistered(GatewayToolRegistry& registry) {
-			const ToolPreviewResult weatherPreview = registry.Preview("weather.lookup");
-			const ToolPreviewResult emailPreview = registry.Preview("email.schedule");
-			if (weatherPreview.allowed && emailPreview.allowed) {
-				return;
-			}
-
-			const auto loadResult = PluginHostAdapter::LoadExtensionRuntime("ops-tools");
-			if (!loadResult.ok) {
-				return;
-			}
-
-			const auto weatherResolve =
-				PluginHostAdapter::ResolveExecutor("ops-tools", "weather.lookup", "");
-			if (weatherResolve.resolved && weatherResolve.executor) {
-				registry.RegisterRuntimeTool(
-					ToolCatalogEntry{
-						.id = "weather.lookup",
-						.label = "Weather Lookup",
-						.category = "data",
-						.enabled = true,
-					},
-					weatherResolve.executor);
-			}
-
-			const auto emailResolve =
-				PluginHostAdapter::ResolveExecutor("ops-tools", "email.schedule", "");
-			if (emailResolve.resolved && emailResolve.executor) {
-				registry.RegisterRuntimeTool(
-					ToolCatalogEntry{
-						.id = "email.schedule",
-						.label = "Email Schedule",
-						.category = "communication",
-						.enabled = true,
-					},
-					emailResolve.executor);
-			}
-		}
-
-		void EnsurePdfGeneratorRuntimeRegistered(GatewayToolRegistry& registry) {
-			registry.RegisterRuntimeTool(
-				ToolCatalogEntry{
-					.id = "pdf_generator.generate",
-					.label = "PDF Generator",
-					.category = "document",
-					.enabled = true,
-				},
-				python::PythonRuntimeDispatcher::CreateExecutor());
-		}
-
-		std::string ResolveExtensionsCatalogPath() {
-			const std::filesystem::path preferred =
-				std::filesystem::path("blazeclaw") /
-				"extensions" /
-				"extensions.catalog.json";
-			if (std::filesystem::exists(preferred)) {
-				return preferred.string();
-			}
-
-			const std::filesystem::path fallback =
-				std::filesystem::path("extensions") /
-				"extensions.catalog.json";
-			if (std::filesystem::exists(fallback)) {
-				return fallback.string();
-			}
-
-			char modulePathBuffer[MAX_PATH] = {};
-			const DWORD moduleChars =
-				GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
-			if (moduleChars == 0 || moduleChars >= MAX_PATH) {
-				return preferred.string();
-			}
-
-			const std::filesystem::path exeDir =
-				std::filesystem::path(modulePathBuffer).parent_path();
-
-			const std::vector<std::filesystem::path> relativeCandidates = {
-				std::filesystem::path("..") / ".." / "extensions" / "extensions.catalog.json",
-				std::filesystem::path("..") / ".." / ".." / "extensions" / "extensions.catalog.json",
-				std::filesystem::path("..") / "blazeclaw" / "extensions" / "extensions.catalog.json",
-			};
-
-			for (const auto& relativeCandidate : relativeCandidates) {
-				const std::filesystem::path candidate =
-					std::filesystem::weakly_canonical(exeDir / relativeCandidate);
-				if (std::filesystem::exists(candidate)) {
-					return candidate.string();
-				}
-			}
-
-			return preferred.string();
-		}
-
 		std::string ReadEnvironmentVariable(const char* name) {
 			if (name == nullptr) {
 				return {};
@@ -1331,8 +1238,8 @@ namespace blazeclaw::gateway {
 		}
 
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
-		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
-		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 		RegisterDefaultHandlers();
 		m_dispatchInitialized = true;
 		m_runtimeHandlersInitialized = true;
@@ -1388,8 +1295,8 @@ namespace blazeclaw::gateway {
 
 	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
-		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
-		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
 			"blazeclaw/skills",
 			"skills",
@@ -1450,135 +1357,7 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayHost::StartRuntimeServices() {
-		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
-		m_runtimeDeepSeekApiKey = ReadEnvironmentVariable("DEEPSEEK_API_KEY");
-		const std::string deepSeekBaseUrl =
-			ReadEnvironmentVariable("DEEPSEEK_BASE_URL");
-		if (!deepSeekBaseUrl.empty()) {
-			m_runtimeDeepSeekBaseUrl = deepSeekBaseUrl;
-		}
-
-		if (!m_runtimeDeepSeekApiKey.empty() &&
-			(m_runtimeAgentModel == GatewayModel::kDefaultModelId ||
-				m_runtimeAgentModel == GatewayModel::kReasonerModelId)) {
-			m_runtimeAgentModel = m_runtimeDeepSeekDefaultModel;
-		}
-
-		const std::string catalogPath = ResolveExtensionsCatalogPath();
-		const auto extensionCatalogLoadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
-		const auto extensionCatalogLoadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		EmitTelemetryEvent(
-			"gateway.startup.extensions.catalog_load",
-			std::string("{\"catalogPath\":") + JsonString(catalogPath) +
-			",\"elapsedMs\":" +
-			std::to_string(extensionCatalogLoadEndMs >= extensionCatalogLoadStartMs
-				? (extensionCatalogLoadEndMs - extensionCatalogLoadStartMs)
-				: 0) +
-			"}");
-		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
-			"blazeclaw/skills-bundled",
-			"blazeclaw/skills",
-			"blazeclaw/skills-openclaw-original",
-			"skills",
-			"skills-openclaw-original",
-		});
-		EmitSkillRootDiagnostics("start_runtime_services", m_runtimeResolvedSkillDirectories);
-		const auto startupSkillLoadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		std::size_t startupSkillLoadedTotal = 0;
-		for (const auto& directory : m_runtimeResolvedSkillDirectories) {
-			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::system_clock::now().time_since_epoch()).count();
-			const auto loadedCount = m_toolRegistry.LoadSkillToolsFromDirectory(directory);
-			startupSkillLoadedTotal += loadedCount;
-			const auto loadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::system_clock::now().time_since_epoch()).count();
-			EmitTelemetryEvent(
-				"gateway.skills.root.load",
-				std::string("{\"stage\":\"start_runtime_services\",\"root\":") + JsonString(directory) +
-				",\"loadedCount\":" + std::to_string(loadedCount) +
-				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
-				"}");
-		}
-		const auto startupSkillLoadEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		EmitTelemetryEvent(
-			"gateway.startup.skills.aggregate_load",
-			std::string("{\"roots\":") + std::to_string(m_runtimeResolvedSkillDirectories.size()) +
-			",\"loadedTotal\":" + std::to_string(startupSkillLoadedTotal) +
-			",\"elapsedMs\":" +
-			std::to_string(startupSkillLoadEndMs >= startupSkillLoadStartMs
-				? (startupSkillLoadEndMs - startupSkillLoadStartMs)
-				: 0) +
-			"}");
-
-		const auto extensionActivationStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		m_extensionLifecycle.LoadCatalog(catalogPath);
-		m_extensionLifecycle.ActivateAll(m_toolRegistry);
-		const auto extensionActivationEndMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now().time_since_epoch()).count();
-		EmitTelemetryEvent(
-			"gateway.startup.extensions.activation",
-			std::string("{\"catalogPath\":") + JsonString(catalogPath) +
-			",\"elapsedMs\":" +
-			std::to_string(extensionActivationEndMs >= extensionActivationStartMs
-				? (extensionActivationEndMs - extensionActivationStartMs)
-				: 0) +
-			"}");
-		const auto* extensionRegistry =
-			m_pluginRuntimeState.RequireActiveRegistry(
-				&m_extensionLifecycle.GetExtensions(),
-				catalogPath,
-				std::filesystem::current_path().string(),
-				PluginRuntimeSubagentMode::GatewayBindable);
-		for (const auto& extension : *extensionRegistry) {
-			m_pluginRuntimeState.RecordImportedPluginId(extension.id);
-		}
-		m_pluginRuntimeState.ActivateRuntimeRegistry(
-			extensionRegistry,
-			catalogPath,
-			std::filesystem::current_path().string(),
-			PluginRuntimeSubagentMode::GatewayBindable,
-			true,
-			true);
-		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
-		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
-		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
-		LoadPersistedTaskDeltas();
-
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "python.script.run",
-				.label = "Python Script Run",
-				.category = "runtime",
-				.enabled = true,
-			},
-			python::PythonRuntimeDispatcher::CreateExecutor());
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "python.runtime.health",
-				.label = "Python Runtime Health",
-				.category = "runtime",
-				.enabled = true,
-			},
-			python::PythonRuntimeDispatcher::CreateDiagnosticsExecutor());
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "pdf_generator.generate",
-				.label = "PDF Generator",
-				.category = "document",
-				.enabled = true,
-			},
-			python::PythonRuntimeDispatcher::CreateExecutor());
-
-		WireCronProductionIntegration();
-		cron::GetCronOpsService().StartBackgroundScheduler();
-
-		return true;
+		return GatewayHostRuntimeBootstrap::RunStartRuntimeServices(*this);
 	}
 
 	bool GatewayHost::AttachTransportRuntime() {
@@ -3173,7 +2952,7 @@ namespace blazeclaw::gateway {
 			};
 
 		const std::vector<std::string> before = sortNames(m_dispatcher);
-		const std::string catalogPath = ResolveExtensionsCatalogPath();
+		const std::string catalogPath = GatewayHostRuntimeBootstrap::ResolveExtensionsCatalogPath();
 
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
 		m_pluginRuntimeState.DeactivateRuntimeRegistry();
@@ -3195,8 +2974,8 @@ namespace blazeclaw::gateway {
 			PluginRuntimeSubagentMode::GatewayBindable,
 			true,
 			true);
-		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
-		EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		GatewayHostRuntimeBootstrap::EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
 
 		const std::vector<std::string> after = sortNames(m_dispatcher);
 		std::vector<std::string> added;
