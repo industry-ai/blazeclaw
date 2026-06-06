@@ -16,6 +16,7 @@
 
 #include "CBridge.h"
 #include "EventTransport.h"
+#include "webview_routers/WebViewRouterContext.h"
 
 #include <cstdint>
 #include <optional>
@@ -103,6 +104,7 @@ protected:
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
 	bool HandleEmailConfigBridgeMessage(const std::string& messageJson);
 	bool HandleSkillConfigBridgeMessage(const std::string& messageJson);
+	blazeclaw::webview_routers::WebViewRouterContext BuildRouterContext();
 	bool OpenEmailConfigDocument();
 	void PersistEmailConfigFromPayload(const std::string& payloadJson);
 	void LoadEmailConfigToBridge();

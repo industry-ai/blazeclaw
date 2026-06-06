@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ProjectConfiguration Include="Debug|x64">
@@ -94,16 +94,12 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionOfflineOptimizationTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechCudaCompatibilityGuardTests.cpp" />
-   <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionModelLayoutDetectionTests.cpp" />
-   <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionRealtimeStreamingTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionModelLayoutDetectionTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SpeechRecognitionRealtimeStreamingTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\VoiceRecorderRingArtifactIntegrationTests.cpp" />
-        <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
-    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
-    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />
-    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
-    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewSpeechRpcRouter.cpp" /><ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayChannelRegistry.cpp" />
@@ -274,5 +270,3 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
-
-

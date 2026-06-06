@@ -27,6 +27,12 @@
 #include "ChatUiStartupResolver.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/GatewayProtocolModels.h"
+#include "webview_routers/WebViewRouterContext.h"
+#include "webview_routers/WebViewLifecyclePushRouter.h"
+#include "webview_routers/WebViewOpenClawShimRouter.h"
+#include "webview_routers/WebViewGatewayRpcRouter.h"
+#include "webview_routers/WebViewSpeechRpcRouter.h"
+#include "webview_routers/WebViewToolLifecycleInstrumentation.h"
 
 #include <functional>
 
@@ -3579,10 +3585,135 @@ void CBlazeClawMFCView::ProcessRunSkillPathLookupResult(
 	}
 }
 
+blazeclaw::webview_routers::WebViewRouterContext CBlazeClawMFCView::BuildRouterContext()
+{
+	blazeclaw::webview_routers::WebViewRouterContext ctx;
+	ctx.bridge = &m_bridge;
+	ctx.eventTransport = &m_eventTransport;
+	ctx.app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	ctx.viewHwnd = GetSafeHwnd();
+	ctx.bridgeSessionId = m_bridgeSessionId;
+
+	// Diagnostics callbacks
+	ctx.appendChatProcedureStatusLine = [this](const wchar_t* stage)
+	{
+		AppendChatProcedureStatusLine(stage);
+	};
+	ctx.appendChatProcedureStatusLineWithDetail = [this](const wchar_t* stage, const std::string& detail)
+	{
+		AppendChatProcedureStatusLine(stage, detail);
+	};
+	ctx.appendFindSkillPathStatus = [this](const wchar_t* stage, const std::string& detail)
+	{
+		AppendFindSkillPathStatus(stage, detail);
+	};
+	ctx.traceBridgeTraffic = [this](const std::string& kind, const std::string& detail)
+	{
+		TraceBridgeTraffic(kind.c_str(), detail);
+	};
+	ctx.traceSpeechBridgeOrder = [this](const std::string& phase, const std::string& detail)
+	{
+		TraceSpeechBridgeOrder(phase.c_str(), detail);
+	};
+	ctx.flushBridgeTraceIfNeeded = [this]()
+	{
+		FlushBridgeTraceIfNeeded();
+	};
+
+	// WebView communication callbacks
+	ctx.postBridgeMessageJson = [this](const std::wstring& json)
+	{
+		PostBridgeMessageJson(json);
+	};
+	ctx.postOpenClawWsFrameJson = [this](const std::string& frameJson)
+	{
+		PostOpenClawWsFrameJson(frameJson);
+	};
+
+	// Response builders
+	ctx.buildOpenClawWsResponseFrameJson = [](
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		const std::string& correlationId) -> std::string
+	{
+		return BuildOpenClawWsResponseFrameJson(response, correlationId);
+	};
+	ctx.buildOpenClawHelloPayloadJson = []() -> std::string
+	{
+		return BuildOpenClawHelloPayloadJson();
+	};
+	ctx.buildBridgeRpcResultJson = [](
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		const std::string& correlationId) -> std::string
+	{
+		return BuildBridgeRpcResultJson(response, correlationId);
+	};
+
+	// Tool lifecycle helpers
+	ctx.buildToolStartDetail = [](const std::optional<std::string>& paramsJson) -> std::string
+	{
+		return BuildToolStartDetail(paramsJson);
+	};
+	ctx.buildToolResultDetail = [](
+		const blazeclaw::gateway::protocol::ResponseFrame& response) -> std::string
+	{
+		return BuildToolResultDetail(response);
+	};
+
+	// Speech lifecycle helpers
+	ctx.buildSpeechLifecyclePayloadJson = [](
+		const std::string& state,
+		const std::string& sessionId,
+		const std::string& runId,
+		const std::string& audioPath,
+		const std::string& text,
+		const std::string& errorCode,
+		std::uint64_t sequenceNumber,
+		bool isFinal,
+		const std::string& requestType,
+		const std::string& segmentKind,
+		const std::string& eventKind) -> std::string
+	{
+		return BuildSpeechLifecyclePayloadJson(
+			state,
+			sessionId,
+			runId,
+			audioPath,
+			text,
+			errorCode,
+			sequenceNumber,
+			isFinal,
+			requestType,
+			segmentKind,
+			eventKind);
+	};
+	ctx.emitSpeechLifecycleEvent = [this](const std::string& payloadJson)
+	{
+		EmitSpeechLifecycleEvent(payloadJson);
+	};
+
+	// Utility callbacks
+	ctx.extractTerminalRunIds = [](const std::string& eventsRaw) -> std::vector<std::string>
+	{
+		return ExtractTerminalRunIds(eventsRaw);
+	};
+	ctx.reportRunSkillPathsToToolOutput = [this](const std::string& runId)
+	{
+		ReportRunSkillPathsToToolOutput(runId);
+	};
+	ctx.isToolExecuteMethod = [](const std::string& method) -> bool
+	{
+		return IsToolExecuteMethod(method);
+	};
+
+	return ctx;
+}
+
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
 	const std::string message = ToNarrow(webMessageJson);
+
+	// Early-exit filters for skill/email config
 	if (HandleSkillConfigBridgeMessage(message))
 	{
 		return;
@@ -3593,6 +3724,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		return;
 	}
 
+	// Extract channel
 	std::string channel;
 	if (!blazeclaw::gateway::json::FindStringField(message, "channel", channel))
 	{
@@ -3600,6 +3732,10 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		return;
 	}
 
+	// Build router context
+	blazeclaw::webview_routers::WebViewRouterContext ctx = BuildRouterContext();
+
+	// Register CMgrMessage handlers for lifecycle/push (backward compatibility)
 	std::unordered_map<std::string, std::function<bool()>> localHandlers;
 	localHandlers.emplace(
 		"blazeclaw.gateway.lifecycle.subscribe",
@@ -3678,207 +3814,42 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		return;
 	}
 
-	if (channel == "blazeclaw.gateway.lifecycle.subscribe")
+	// Delegate to lifecycle/push router
+	if (blazeclaw::webview_routers::WebViewLifecyclePushRouter::RouteMessage(ctx, channel, message))
 	{
-		m_bridge.ResetLifecycle();
-		PumpBridgeLifecycle();
 		return;
 	}
 
-	if (channel == "blazeclaw.gateway.chat.push.state")
+	// Delegate to OpenClaw WS shim router
+	if (blazeclaw::webview_routers::WebViewOpenClawShimRouter::RouteMessage(ctx, channel, message))
 	{
-		std::string state;
-		std::string reason;
-		blazeclaw::gateway::json::FindStringField(message, "state", state);
-		blazeclaw::gateway::json::FindStringField(message, "reason", reason);
-		const std::string lowered = ToLowerAscii(state);
-		if (lowered == "connected" || lowered == "reconnected")
-		{
-			m_bridge.HandlePushConnected(reason.empty() ? "push-state-connected" : reason);
-		}
-		else if (lowered == "disconnected" || lowered == "degraded")
-		{
-			m_bridge.HandlePushDisconnected(reason.empty() ? "push-state-disconnected" : reason);
-		}
 		return;
 	}
 
-	if (channel == "blazeclaw.gateway.chat.push.event")
+	// Delegate to gateway RPC router (non-speech)
+	if (channel == "blazeclaw.gateway.rpc")
 	{
-		// Push-path call chain:
-		// HandleWebMessageJson(channel=blazeclaw.gateway.chat.push.event)
-		// -> CBridge::HandlePushChatEventFrame
-		// -> CBridge::HandleInboundEventsBatch
-		// -> bridgeDeps.handleEventsBatch.
-		std::string eventRaw;
-		if (!blazeclaw::gateway::json::FindRawField(message, "event", eventRaw))
+		if (blazeclaw::webview_routers::WebViewGatewayRpcRouter::RouteMessage(ctx, channel, message))
 		{
 			return;
 		}
-		std::string seqRaw;
-		std::optional<std::uint64_t> seq;
-		if (blazeclaw::gateway::json::FindRawField(message, "seq", seqRaw))
-		{
-			try
-			{
-				seq = static_cast<std::uint64_t>(std::stoull(blazeclaw::gateway::json::Trim(seqRaw)));
-			}
-			catch (...)
-			{
-				seq = std::nullopt;
-			}
-		}
-		m_bridge.HandlePushChatEventFrame(eventRaw, seq);
-		return;
-	}
 
-	if (channel == "openclaw.ws.shim.ready")
-	{
-		AppendChatProcedureStatusLine(L"runtime.shim.ready", message);
-		return;
-	}
-
-	if (channel == "openclaw.ws.req")
-	{
-		m_bridge.IncrementReqCount();
-		TraceBridgeTraffic("ws.req.channel", message);
-		AppendChatProcedureStatusLine(L"bridge.ws.req");
-		FlushBridgeTraceIfNeeded();
-
-		std::string frameRaw;
-		if (!blazeclaw::gateway::json::FindRawField(message, "frame", frameRaw))
-		{
-			TraceBridgeTraffic("ws.req.invalid", "missing frame field");
-			return;
-		}
-
-		std::string frameType;
-		blazeclaw::gateway::json::FindStringField(frameRaw, "type", frameType);
-		if (frameType != "req")
-		{
-			TraceBridgeTraffic("ws.req.ignored", frameType);
-			FlushBridgeTraceIfNeeded();
-			return;
-		}
-
-		TraceBridgeTraffic("ws.req", frameRaw);
-
+		// Delegate to speech RPC router for speech methods
+		// Speech router needs parsed fields from message
 		std::string correlationId;
-		if (!blazeclaw::gateway::json::FindStringField(frameRaw, "id", correlationId))
+		if (!blazeclaw::gateway::json::FindStringField(message, "id", correlationId))
 		{
-			correlationId = "openclaw-unknown";
+			correlationId = "rpc-unknown";
 		}
 
 		std::string method;
-		blazeclaw::gateway::json::FindStringField(frameRaw, "method", method);
-		if (method.empty())
-		{
-			TraceBridgeTraffic("ws.req.invalid", "missing method");
-			AppendChatProcedureStatusLine(L"bridge.ws.req.invalid");
-			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
-				.id = correlationId,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = blazeclaw::gateway::protocol::ErrorShape{
-					.code = "invalid_frame",
-					.message = "WebView bridge frame missing method.",
-					.detailsJson = std::nullopt,
-					.retryable = false,
-					.retryAfterMs = std::nullopt,
-				},
-			};
-			PostOpenClawWsFrameJson(
-				BuildOpenClawWsResponseFrameJson(errorResponse, correlationId));
-			return;
-		}
+		blazeclaw::gateway::json::FindStringField(message, "method", method);
 
-		if (method == "connect.challenge")
-		{
-			TraceBridgeTraffic("ws.req.challenge", correlationId);
-			AppendChatProcedureStatusLine(L"bridge.connect.challenge");
-			AppendChatProcedureStatusLine(
-				L"runtime.handshake",
-				"connect.challenge handled");
-			const std::uint64_t seq = m_bridge.NextEventSeq();
-			const std::string eventFrame =
-				"{\"type\":\"event\",\"event\":\"connect.challenge\","
-				"\"payload\":{\"nonce\":\"blazeclaw-bridge\"},"
-				"\"seq\":" +
-				std::to_string(seq) +
-				"}";
-			PostOpenClawWsFrameJson(eventFrame);
-			return;
-		}
-
-		if (method == "connect")
-		{
-			TraceBridgeTraffic("ws.req.connect", correlationId);
-			AppendChatProcedureStatusLine(L"bridge.connect");
-			AppendChatProcedureStatusLine(
-				L"runtime.handshake",
-				"connect handled");
-			const blazeclaw::gateway::protocol::ResponseFrame helloResponse{
-				.id = correlationId,
-				.ok = true,
-				.payloadJson = BuildOpenClawHelloPayloadJson(),
-				.error = std::nullopt,
-			};
-			PostOpenClawWsFrameJson(
-				BuildOpenClawWsResponseFrameJson(helloResponse, correlationId));
-			return;
-		}
-
+		std::string paramsJsonRaw;
 		std::optional<std::string> paramsJson;
-		std::string paramsRaw;
-		if (blazeclaw::gateway::json::FindRawField(frameRaw, "params", paramsRaw))
+		if (blazeclaw::gateway::json::FindRawField(message, "params", paramsJsonRaw))
 		{
-			paramsJson = blazeclaw::gateway::json::Trim(paramsRaw);
-		}
-
-		if (IsToolExecuteMethod(method))
-		{
-			const std::string startDetail = BuildToolStartDetail(paramsJson);
-			AppendChatProcedureStatusLine(
-				L"tools.execute.start",
-				startDetail);
-			AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
-			const std::string lifecycleStart = BuildToolLifecycleStartJson(
-				"openclaw.ws.req",
-				correlationId,
-				paramsJson);
-			m_eventTransport.EmitTopic(
-				BridgeEventTopic::ToolsLifecycle,
-				lifecycleStart);
-		}
-
-		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-		if (app == nullptr)
-		{
-			TraceBridgeTraffic("ws.req.error", "app unavailable");
-			AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
-			if (IsToolExecuteMethod(method))
-			{
-				const std::string errorDetail = "status=error code=app_unavailable";
-				AppendChatProcedureStatusLine(
-					L"tools.execute.error",
-					errorDetail);
-				AppendFindSkillPathStatus(L"tools.execute.error", errorDetail);
-			}
-			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
-				.id = correlationId,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = blazeclaw::gateway::protocol::ErrorShape{
-					.code = "app_unavailable",
-					.message = "Application context unavailable.",
-					.detailsJson = std::nullopt,
-					.retryable = false,
-					.retryAfterMs = std::nullopt,
-				},
-			};
-			PostOpenClawWsFrameJson(
-				BuildOpenClawWsResponseFrameJson(errorResponse, correlationId));
-			return;
+			paramsJson = blazeclaw::gateway::json::Trim(paramsJsonRaw);
 		}
 
 		const blazeclaw::gateway::protocol::RequestFrame request{
@@ -3886,494 +3857,13 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			.method = method,
 			.paramsJson = paramsJson,
 		};
-		const auto response = app->RouteGatewayRequest(request);
-		TraceBridgeTraffic("ws.req.route", method);
-		AppendChatProcedureStatusLine(L"bridge.req.route", method);
-		if (method == "chat.events.poll" &&
-			response.ok &&
-			response.payloadJson.has_value())
+
+		if (blazeclaw::webview_routers::WebViewSpeechRpcRouter::RouteMessage(
+			ctx, method, correlationId, paramsJson, request))
 		{
-			std::string eventsRaw;
-			if (blazeclaw::gateway::json::FindRawField(
-				response.payloadJson.value(),
-				"events",
-				eventsRaw))
-			{
-				for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
-				{
-					ReportRunSkillPathsToToolOutput(runId);
-				}
-			}
-		}
-		if (IsToolExecuteMethod(method))
-		{
-			const wchar_t* toolStage = response.ok
-				? L"tools.execute.result"
-				: L"tools.execute.error";
-			const std::string resultDetail = BuildToolResultDetail(response);
-			AppendChatProcedureStatusLine(
-				toolStage,
-				resultDetail);
-			AppendFindSkillPathStatus(toolStage, resultDetail);
-			const std::string lifecycleResult = BuildToolLifecycleResultJson(
-				"openclaw.ws.req",
-				correlationId,
-				response);
-			m_eventTransport.EmitTopic(
-				BridgeEventTopic::ToolsLifecycle,
-				lifecycleResult);
-		}
-		PostOpenClawWsFrameJson(
-			BuildOpenClawWsResponseFrameJson(response, correlationId));
-		return;
-	}
-
-	if (channel != "blazeclaw.gateway.rpc")
-	{
-		return;
-	}
-
-	std::string correlationId;
-	if (!blazeclaw::gateway::json::FindStringField(message, "id", correlationId))
-	{
-		correlationId = "rpc-unknown";
-	}
-
-	std::string method;
-	blazeclaw::gateway::json::FindStringField(message, "method", method);
-
-	std::string paramsJsonRaw;
-	std::optional<std::string> paramsJson;
-	if (blazeclaw::gateway::json::FindRawField(message, "params", paramsJsonRaw))
-	{
-		paramsJson = blazeclaw::gateway::json::Trim(paramsJsonRaw);
-	}
-
-	if (IsToolExecuteMethod(method))
-	{
-		const std::string startDetail = BuildToolStartDetail(paramsJson);
-		AppendChatProcedureStatusLine(
-			L"tools.execute.start",
-			startDetail);
-		AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
-		const std::string lifecycleStart = BuildToolLifecycleStartJson(
-			"blazeclaw.gateway.rpc",
-			correlationId,
-			paramsJson);
-		m_eventTransport.EmitTopic(
-			BridgeEventTopic::ToolsLifecycle,
-			lifecycleStart);
-	}
-
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (app == nullptr)
-	{
-		if (IsToolExecuteMethod(method))
-		{
-			const std::string errorDetail = "status=error code=app_unavailable";
-			AppendChatProcedureStatusLine(
-				L"tools.execute.error",
-				errorDetail);
-			AppendFindSkillPathStatus(L"tools.execute.error", errorDetail);
-		}
-		const std::string errorJson =
-			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
-			JsonString(correlationId) +
-			",\"ok\":false,\"error\":{\"code\":\"app_unavailable\",\"message\":\"Application context unavailable.\"}}";
-		m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, errorJson);
-		return;
-	}
-
-	const blazeclaw::gateway::protocol::RequestFrame request{
-		.id = correlationId,
-		.method = method,
-		.paramsJson = paramsJson,
-	};
-
-	if (method == "speech.transcribe")
-	{
-		const HWND hwnd = GetSafeHwnd();
-		if (hwnd == nullptr)
-		{
-			const std::string errorJson =
-				"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
-				JsonString(correlationId) +
-				",\"ok\":false,\"error\":{\"code\":\"view_unavailable\",\"message\":\"Speech transcription view unavailable.\"}}";
-			m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, errorJson);
 			return;
 		}
-
-		std::string sessionId;
-		if (paramsJson.has_value())
-		{
-			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
-		}
-		if (sessionId.empty())
-		{
-			sessionId = m_bridgeSessionId;
-		}
-
-		std::string runId;
-		if (paramsJson.has_value())
-		{
-			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "runId", runId);
-		}
-
-		bool streamingRequest = false;
-		std::string artifactHandoffMode;
-		std::string artifactStreamId;
-		std::uint64_t artifactSequenceStart = 0;
-		std::uint64_t artifactSequenceEnd = 0;
-		if (paramsJson.has_value())
-		{
-			std::string audioArtifactRaw;
-			if (blazeclaw::gateway::json::FindRawField(
-				paramsJson.value(),
-				"audioArtifact",
-				audioArtifactRaw) &&
-				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
-			{
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"handoffMode",
-					artifactHandoffMode);
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"streamId",
-					artifactStreamId);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceStart",
-					artifactSequenceStart);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceEnd",
-					artifactSequenceEnd);
-				streamingRequest = (artifactHandoffMode == "pcm_stream");
-			}
-		}
-
-		std::string audioPath;
-		if (paramsJson.has_value())
-		{
-			blazeclaw::gateway::json::FindStringField(paramsJson.value(), "audioPath", audioPath);
-		}
-
-		const bool previewRequest =
-			runId.rfind("speech-preview-", 0) == 0;
-		const bool finalRequest =
-			runId.rfind("speech-final-", 0) == 0;
-		const std::string requestType =
-			previewRequest ? "preview" : finalRequest ? "final" : "unknown";
-		const std::string speechRequestTraceDetail =
-			"type=" + requestType +
-			" sessionId=" + sessionId +
-			" runId=" + runId +
-			" streaming=" + std::string(streamingRequest ? "true" : "false") +
-			" handoffMode=" + artifactHandoffMode +
-			" streamId=" + artifactStreamId +
-			" sequenceStart=" + std::to_string(artifactSequenceStart) +
-			" sequenceEnd=" + std::to_string(artifactSequenceEnd) +
-			" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true");
-		AppendChatProcedureStatusLine(
-			L"speech.request.trace",
-			speechRequestTraceDetail);
-		ATLTRACE(
-			atlTraceGeneral,
-			0,
-			L"[Speech][RequestTrace] %S\n",
-			speechRequestTraceDetail.c_str());
-		TraceSpeechBridgeOrder(
-			"transcribe.dispatch",
-			"method=speech.transcribe " + speechRequestTraceDetail);
-
-		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-			"queued",
-			sessionId,
-			runId,
-			audioPath,
-			"",
-			"",
-			0,
-			false,
-			"",
-			"",
-			"status"));
-		EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-			streamingRequest ? "start_stream" : "transcribing",
-			sessionId,
-			runId,
-			audioPath,
-			"",
-			"",
-			0,
-			false,
-			"",
-			"",
-			"status"));
-		if (streamingRequest)
-		{
-			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-				"streaming",
-				sessionId,
-				runId,
-				audioPath,
-				"",
-				"",
-				0,
-				false,
-				"",
-				"",
-				"status"));
-		}
-		else
-		{
-			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-				"transcribing",
-			sessionId,
-			runId,
-			audioPath,
-			"",
-			"",
-			0,
-			false,
-			"",
-			"",
-			"status"));
-		}
-
-		std::thread(
-			[
-				hwnd,
-				request,
-				correlationId,
-				sessionId,
-				runId,
-				requestType,
-				speechRequestTraceDetail]()
-			{
-				auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-				blazeclaw::gateway::protocol::ResponseFrame response;
-				if (app == nullptr)
-				{
-					response = blazeclaw::gateway::protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = blazeclaw::gateway::protocol::ErrorShape{
-							.code = "app_unavailable",
-							.message = "Application context unavailable.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
-					};
-				}
-				else
-				{
-					response = app->RouteGatewayRequest(request);
-				}
-
-				auto* payload = new SpeechRpcCompletionPayload{
-					.correlationId = correlationId,
-					.sessionId = sessionId,
-					.runId = runId,
-					.requestType = requestType,
-					.requestTraceDetail = speechRequestTraceDetail,
-					.response = std::move(response),
-				};
-				CMgrMessage::Instance().PostOwnedPayloadToHwnd(
-					hwnd,
-					kSpeechRpcCompletedMessage,
-					payload,
-					true,
-					[](void* raw)
-					{
-						delete static_cast<SpeechRpcCompletionPayload*>(raw);
-					});
-			})
-			.detach();
-		return;
 	}
-
-	const auto response = app->RouteGatewayRequest(request);
-	if (response.ok && response.payloadJson.has_value())
-	{
-		if (method == "gateway.speech.startRecording")
-		{
-			std::string sessionId;
-			if (paramsJson.has_value())
-			{
-				blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
-			}
-			if (sessionId.empty())
-			{
-				sessionId = m_bridgeSessionId;
-			}
-			std::string audioPath;
-			blazeclaw::gateway::json::FindStringField(
-				response.payloadJson.value(),
-				"audioPath",
-				audioPath);
-			std::string artifactTraceDetail;
-			std::string audioArtifactRaw;
-			if (blazeclaw::gateway::json::FindRawField(
-				response.payloadJson.value(),
-				"audioArtifact",
-				audioArtifactRaw) &&
-				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
-			{
-				std::string handoffMode;
-				std::string streamId;
-				std::uint64_t sequenceStart = 0;
-				std::uint64_t sequenceEnd = 0;
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"handoffMode",
-					handoffMode);
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"streamId",
-					streamId);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceStart",
-					sequenceStart);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceEnd",
-					sequenceEnd);
-				artifactTraceDetail =
-					" handoffMode=" + handoffMode +
-					" streamId=" + streamId +
-					" sequenceStart=" + std::to_string(sequenceStart) +
-					" sequenceEnd=" + std::to_string(sequenceEnd);
-			}
-			TraceSpeechBridgeOrder(
-				"startRecording.complete",
-				"method=gateway.speech.startRecording sessionId=" + sessionId +
-				" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true") +
-				artifactTraceDetail);
-
-			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-				"recording",
-				sessionId,
-				"",
-				"",
-				"",
-				"",
-				0,
-				false,
-				"",
-				"",
-				"status"));
-		}
-		else if (method == "gateway.speech.stopRecording")
-		{
-			std::string sessionId;
-			if (paramsJson.has_value())
-			{
-				blazeclaw::gateway::json::FindStringField(paramsJson.value(), "sessionId", sessionId);
-			}
-			if (sessionId.empty())
-			{
-				sessionId = m_bridgeSessionId;
-			}
-
-			std::string audioPath;
-			blazeclaw::gateway::json::FindStringField(
-				response.payloadJson.value(),
-				"audioPath",
-				audioPath);
-			std::string artifactTraceDetail;
-			std::string audioArtifactRaw;
-			if (blazeclaw::gateway::json::FindRawField(
-				response.payloadJson.value(),
-				"audioArtifact",
-				audioArtifactRaw) &&
-				blazeclaw::gateway::json::IsJsonObjectShape(audioArtifactRaw))
-			{
-				std::string handoffMode;
-				std::string streamId;
-				std::uint64_t sequenceStart = 0;
-				std::uint64_t sequenceEnd = 0;
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"handoffMode",
-					handoffMode);
-				blazeclaw::gateway::json::FindStringField(
-					audioArtifactRaw,
-					"streamId",
-					streamId);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceStart",
-					sequenceStart);
-				blazeclaw::gateway::json::FindUInt64Field(
-					audioArtifactRaw,
-					"sequenceEnd",
-					sequenceEnd);
-				artifactTraceDetail =
-					" handoffMode=" + handoffMode +
-					" streamId=" + streamId +
-					" sequenceStart=" + std::to_string(sequenceStart) +
-					" sequenceEnd=" + std::to_string(sequenceEnd);
-			}
-			TraceSpeechBridgeOrder(
-				"stopRecording.complete",
-				"method=gateway.speech.stopRecording sessionId=" + sessionId +
-				" hasAudioPath=" + std::string(audioPath.empty() ? "false" : "true") +
-				artifactTraceDetail);
-			EmitSpeechLifecycleEvent(BuildSpeechLifecyclePayloadJson(
-				"stopped",
-				sessionId,
-				"",
-				audioPath,
-				"",
-				"",
-				0,
-				false,
-				"",
-				"",
-				"status"));
-		}
-	}
-	if (method == "chat.events.poll" &&
-		response.ok &&
-		response.payloadJson.has_value())
-	{
-		std::string eventsRaw;
-		if (blazeclaw::gateway::json::FindRawField(
-			response.payloadJson.value(),
-			"events",
-			eventsRaw))
-		{
-			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
-			{
-				ReportRunSkillPathsToToolOutput(runId);
-			}
-		}
-	}
-	if (IsToolExecuteMethod(method))
-	{
-		const wchar_t* toolStage = response.ok
-			? L"tools.execute.result"
-			: L"tools.execute.error";
-		const std::string resultDetail = BuildToolResultDetail(response);
-		AppendChatProcedureStatusLine(
-			toolStage,
-			resultDetail);
-		AppendFindSkillPathStatus(toolStage, resultDetail);
-		const std::string lifecycleResult = BuildToolLifecycleResultJson(
-			"blazeclaw.gateway.rpc",
-			correlationId,
-			response);
-		m_eventTransport.EmitTopic(
-			BridgeEventTopic::ToolsLifecycle,
-			lifecycleResult);
-	}
-	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
-	m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, responseJson);
 #else
 	UNREFERENCED_PARAMETER(webMessageJson);
 #endif
