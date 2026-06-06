@@ -99,7 +99,11 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\VoiceRecorderRingArtifactIntegrationTests.cpp" />
-    <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
+        <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\webview_routers\WebViewSpeechRpcRouter.cpp" /><ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayChannelRegistry.cpp" />

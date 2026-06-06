@@ -335,7 +335,11 @@
   <ItemGroup>
     <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\BlazeClawMarkdownView.cpp" />
-    <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
+        <ClCompile Include="src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp" /><ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
     <ClCompile Include="src\app\calendarbar.cpp" />
