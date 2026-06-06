@@ -34,6 +34,8 @@
 #include "webview_routers/WebViewSpeechRpcRouter.h"
 #include "webview_routers/WebViewToolLifecycleInstrumentation.h"
 #include "speech_bridge/SpeechBridgeCoordinator.h"
+#include "config_bridge/SkillConfigHandler.h"
+#include "config_bridge/EmailConfigHandler.h"
 
 #include <functional>
 
@@ -3715,6 +3717,67 @@ blazeclaw::speech_bridge::SpeechBridgeContext CBlazeClawMFCView::BuildSpeechBrid
 	return ctx;
 }
 
+blazeclaw::config_bridge::ConfigBridgeContext CBlazeClawMFCView::BuildConfigBridgeContext()
+{
+	blazeclaw::config_bridge::ConfigBridgeContext ctx;
+
+	// Bridge posting callback
+	ctx.postBridgeMessageJson = [this](const std::wstring& jsonMessage)
+	{
+		PostBridgeMessageJson(jsonMessage);
+	};
+
+	// Diagnostics callback
+	ctx.appendChatProcedureStatusLine = [this](const std::wstring& marker, const std::string& detail)
+	{
+		AppendChatProcedureStatusLine(marker.c_str(), detail);
+	};
+
+	// Document context accessor
+	ctx.getDocument = [this]() -> CBlazeClawMFCDoc*
+	{
+		return GetDocument();
+	};
+
+	// Gateway skills refresh callback
+	ctx.refreshGatewaySkills = []() -> std::string
+	{
+		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (app == nullptr)
+		{
+			return "application context unavailable";
+		}
+
+		const auto refreshResponse = app->RouteGatewayRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "skill.config.refresh",
+				.method = "gateway.skills.refresh",
+				.paramsJson = std::nullopt,
+			});
+
+		if (!refreshResponse.ok)
+		{
+			return refreshResponse.error.has_value()
+				? refreshResponse.error->message
+				: "gateway refresh failed";
+		}
+
+		return {};
+	};
+
+	// Skill view refresh callback
+	ctx.refreshSkillView = []()
+	{
+		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame != nullptr)
+		{
+			mainFrame->RefreshSkillView();
+		}
+	};
+
+	return ctx;
+}
+
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
@@ -3879,83 +3942,8 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 bool CBlazeClawMFCView::HandleSkillConfigBridgeMessage(
 	const std::string& messageJson)
 {
-	std::string channel;
-	if (!blazeclaw::gateway::json::FindStringField(messageJson, "channel", channel))
-	{
-		return false;
-	}
-
-	if (channel != "blazeclaw.skill.config.ready" &&
-		channel != "blazeclaw.skill.config.save" &&
-		channel != "blazeclaw.skill.config.cancel" &&
-		channel != "blazeclaw.skill.config.validate")
-	{
-		return false;
-	}
-
-	std::string skillKey;
-	blazeclaw::gateway::json::FindStringField(messageJson, "skillKey", skillKey);
-	if (blazeclaw::gateway::json::Trim(skillKey).empty())
-	{
-		const std::string response =
-			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":\"\",\"code\":\"missing_skill_key\",\"message\":\"skillKey is required.\"}";
-		PostBridgeMessageJson(ToWide(response));
-		return true;
-	}
-
-	std::string correlationId;
-	blazeclaw::gateway::json::FindStringField(messageJson, "id", correlationId);
-	if (correlationId.empty())
-	{
-		correlationId = "skill-config";
-	}
-
-	if (channel == "blazeclaw.skill.config.ready")
-	{
-		LoadSkillConfigToBridge(skillKey, correlationId);
-		return true;
-	}
-
-	if (channel == "blazeclaw.skill.config.save")
-	{
-		std::string payloadJson;
-		if (blazeclaw::gateway::json::FindRawField(messageJson, "payload", payloadJson))
-		{
-			PersistSkillConfigFromPayload(skillKey, correlationId, payloadJson);
-		}
-		else
-		{
-			PersistSkillConfigFromPayload(skillKey, correlationId, messageJson);
-		}
-
-		return true;
-	}
-
-	if (channel == "blazeclaw.skill.config.validate")
-	{
-		const std::string response =
-			"{\"channel\":\"blazeclaw.skill.config.validation\",\"skillKey\":" +
-			JsonString(skillKey) +
-			",\"id\":" +
-			JsonString(correlationId) +
-			",\"ok\":true,\"fieldErrors\":[]}";
-		PostBridgeMessageJson(ToWide(response));
-		return true;
-	}
-
-	if (channel == "blazeclaw.skill.config.cancel")
-	{
-		const std::string response =
-			"{\"channel\":\"blazeclaw.skill.config.cancelled\",\"skillKey\":" +
-			JsonString(skillKey) +
-			",\"id\":" +
-			JsonString(correlationId) +
-			",\"ok\":true}";
-		PostBridgeMessageJson(ToWide(response));
-		return true;
-	}
-
-	return false;
+	const auto ctx = BuildConfigBridgeContext();
+	return blazeclaw::config_bridge::SkillConfigHandler::HandleMessage(messageJson, ctx);
 }
 
 void CBlazeClawMFCView::LoadSkillConfigToBridge(
@@ -4244,6 +4232,7 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 		return false;
 	}
 
+	// Handle email config document open channels (require view-specific state)
 	if (channel == "blazeclaw.email.config.open")
 	{
 		const bool opened = OpenEmailConfigDocument();
@@ -4254,12 +4243,6 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 				? "}"
 				: ",\"error\":\"Failed to open email config document.\"}");
 		PostBridgeMessageJson(ToWide(json));
-		return true;
-	}
-
-	if (channel == "blazeclaw.email.config.ready")
-	{
-		LoadEmailConfigToBridge();
 		return true;
 	}
 
@@ -4280,30 +4263,9 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 		return true;
 	}
 
-	if (channel == "blazeclaw.email.config.save")
-	{
-		std::string payloadJson;
-		if (blazeclaw::gateway::json::FindRawField(messageJson, "payload", payloadJson))
-		{
-			PersistEmailConfigFromPayload(payloadJson);
-		}
-		else
-		{
-			PersistEmailConfigFromPayload(messageJson);
-		}
-
-		return true;
-	}
-
-	if (channel == "blazeclaw.email.config.cancel")
-	{
-		AppendChatProcedureStatusLine(L"email.config.cancelled");
-		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.cancelled\",\"ok\":true}");
-		return true;
-	}
-
-	return false;
+	// Delegate remaining email config channels to handler
+	const auto ctx = BuildConfigBridgeContext();
+	return blazeclaw::config_bridge::EmailConfigHandler::HandleMessage(messageJson, ctx);
 }
 
 void CBlazeClawMFCView::LoadEmailConfigToBridge()

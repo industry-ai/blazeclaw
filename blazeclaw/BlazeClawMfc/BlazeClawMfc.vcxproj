@@ -341,6 +341,9 @@
     <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp" />
     <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp" />
+    <ClCompile Include="src\app\config_bridge\ConfigBridgeUtils.cpp" />
+    <ClCompile Include="src\app\config_bridge\SkillConfigHandler.cpp" />
+    <ClCompile Include="src\app\config_bridge\EmailConfigHandler.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
