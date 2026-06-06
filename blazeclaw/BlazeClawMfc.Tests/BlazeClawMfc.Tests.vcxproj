@@ -108,6 +108,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostCatalogHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostModelHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostProtocolHelpers.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeBootstrapCoordinator.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostProtocolIngressPipeline.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonBuilder.cpp" />

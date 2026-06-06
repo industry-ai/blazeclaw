@@ -20,6 +20,7 @@
 #include "TransportRecipientRegistry.h"
 #include "GatewayHostRegistrationCoordinator.h"
 #include "GatewayHostRuntimeBootstrapCoordinator.h"
+#include "GatewayHostProtocolIngressPipeline.h"
 #include "GatewayNodePairingService.h"
 #include "GatewayNodeCatalogService.h"
 #include "GatewayNodeCanvasCapabilityService.h"
@@ -758,6 +759,9 @@ namespace blazeclaw::gateway {
 		void RegisterDefaultHandlers();
 		friend void GatewayHostRegistration::RegisterDefaultHandlerSequence(GatewayHost& host);
 		friend struct GatewayHostRuntimeBootstrap::Access;
+		friend std::string GatewayHostProtocolIngressPipeline::ExecuteInboundTextPipeline(
+			const std::string&,
+			const GatewayHostProtocolIngressPipeline::PipelineContext&);
 		void RegisterToolExecutionHistoryHandlers();
 		void RegisterGatewayEventCatalogQueryHandlers();
 		void RegisterGatewayRegistryIntrospectionHandlers();
