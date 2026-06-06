@@ -177,6 +177,7 @@
     <ClInclude Include="src\cron\CronOpsService.h" />
     <ClInclude Include="src\cron\CronStoreService.h" />
     <ClInclude Include="src\cron\CronTimerService.h" />
+    <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h" />
     <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
@@ -421,6 +422,7 @@
     <ClCompile Include="src\cron\CronStoreService.cpp" />
     <ClCompile Include="src\cron\CronTimerService.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />

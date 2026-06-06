@@ -16,10 +16,4 @@ void ResetGatewayModelCatalogCacheForTest() noexcept;
 /// Wires cron production runtime adapters and task-ledger hooks on a local-dispatch gateway host.
 void WireCronProductionIntegrationForTest(GatewayHost& host);
 
-/// Injects an active non-cron chat run for deterministic cron busy-lane tests.
-void SetCronSessionBusyForTest(
-	GatewayHost& host,
-	const std::string& sessionKey,
-	bool busy);
-
 } // namespace blazeclaw::gateway::test_hooks

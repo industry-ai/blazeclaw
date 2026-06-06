@@ -21,6 +21,7 @@
 #include "GatewayHostRegistrationCoordinator.h"
 #include "GatewayHostRuntimeBootstrapCoordinator.h"
 #include "GatewayHostProtocolIngressPipeline.h"
+#include "GatewayHostCronProductionAdapter.h"
 #include "GatewayNodePairingService.h"
 #include "GatewayNodeCatalogService.h"
 #include "GatewayNodeCanvasCapabilityService.h"
@@ -655,11 +656,8 @@ namespace blazeclaw::gateway {
 
 	private:
 		friend class GatewayHostEx;
+		friend class GatewayHostCronProductionAdapter;
 		friend void test_hooks::WireCronProductionIntegrationForTest(GatewayHost& host);
-		friend void test_hooks::SetCronSessionBusyForTest(
-			GatewayHost& host,
-			const std::string& sessionKey,
-			bool busy);
 		friend struct handlers::event_catalog_query::EventCatalogQueryHandlers;
 		friend struct handlers::registry_introspection::RegistryIntrospectionHandlers;
 		friend struct handlers::agent_session_mutation::AgentSessionMutationHandlers;
@@ -787,21 +785,6 @@ namespace blazeclaw::gateway {
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
 		void WireCronProductionIntegration();
-		[[nodiscard]] std::optional<nlohmann::json> ExecuteCronMainSessionRuntime(
-			const nlohmann::json& job,
-			std::int64_t nowMs);
-		[[nodiscard]] std::optional<nlohmann::json> ExecuteCronIsolatedSessionRuntime(
-			const nlohmann::json& job,
-			std::int64_t nowMs);
-		void HandleCronTaskLedgerCreateRunning(const nlohmann::json& payload);
-		void HandleCronTaskLedgerComplete(const nlohmann::json& payload);
-		void HandleCronTaskLedgerFail(const nlohmann::json& payload);
-		void DispatchCronScheduleAutoDisableNotification(
-			const cron::CronScheduleNotificationEvent& event);
-		void DispatchCronFailureAlertNotification(const nlohmann::json& payload);
-		void DispatchCronAnnounceDeliveryNotification(const nlohmann::json& payload);
-		void BroadcastCronRealtimeEvent(const cron::CronRealtimeEvent& event);
-		void UpsertCronTaskLedgerEntry(const nlohmann::json& payload, bool terminal);
 		[[nodiscard]] bool IsCronChatSessionBusy(const std::string& sessionKey) const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
 		void EnsureFixtureParityValidated();
@@ -931,8 +914,7 @@ namespace blazeclaw::gateway {
 		SpeechRecognitionRuntimeStatusCallback m_speechRecognitionRuntimeStatusCallback;
 		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
-		mutable std::mutex m_cronProductionMutex;
-		bool m_cronProductionWired = false;
+		GatewayHostCronProductionAdapter m_cronAdapter;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
 		GatewayHostRouter m_hostRouter;
 		GatewayRequestPolicyGuard m_requestPolicyGuard;
