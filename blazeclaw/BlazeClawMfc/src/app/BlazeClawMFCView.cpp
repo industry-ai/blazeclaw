@@ -33,6 +33,7 @@
 #include "webview_routers/WebViewGatewayRpcRouter.h"
 #include "webview_routers/WebViewSpeechRpcRouter.h"
 #include "webview_routers/WebViewToolLifecycleInstrumentation.h"
+#include "speech_bridge/SpeechBridgeCoordinator.h"
 
 #include <functional>
 
@@ -98,20 +99,9 @@ namespace {
 		blazeclaw::gateway::protocol::ResponseFrame response;
 	};
 
-	struct SpeechRpcCompletionPayload
-	{
-		std::string correlationId;
-		std::string sessionId;
-		std::string runId;
-		std::string requestType;
-		std::string requestTraceDetail;
-		blazeclaw::gateway::protocol::ResponseFrame response;
-	};
-
-	struct SpeechLifecycleDispatchPayload
-	{
-		std::string payloadJson;
-	};
+	// Speech payload definitions moved to blazeclaw::speech_bridge::SpeechBridgeCoordinator.h
+	using SpeechRpcCompletionPayload = blazeclaw::speech_bridge::SpeechRpcCompletionPayload;
+	using SpeechLifecycleDispatchPayload = blazeclaw::speech_bridge::SpeechLifecycleDispatchPayload;
 
 	std::uint32_t ComputeFailureBackoffMs(const std::uint32_t failureCount)
 	{
@@ -3138,29 +3128,13 @@ LRESULT CBlazeClawMFCView::OnSpeechRpcCompleted(
 
 	auto* payload =
 		reinterpret_cast<SpeechRpcCompletionPayload*>(wParam);
-	if (payload == nullptr)
-	{
-		return 0;
-	}
-	TraceSpeechBridgeOrder(
-		"transcribe.complete",
-		"method=speech.transcribe ok=" +
-		std::string(payload->response.ok ? "true" : "false") +
-		" correlationId=" + payload->correlationId +
-		" " + payload->requestTraceDetail);
 
-	const std::string lifecyclePayloadJson =
-		BuildSpeechLifecyclePayloadFromTranscribeResponse(payload->response);
-	if (!lifecyclePayloadJson.empty())
-	{
-		EmitSpeechLifecycleEvent(lifecyclePayloadJson);
-	}
+	// Build speech bridge context and delegate to coordinator
+	const auto context = BuildSpeechBridgeContext();
+	blazeclaw::speech_bridge::SpeechBridgeCoordinator::HandleSpeechRpcCompletion(
+		context,
+		payload);
 
-	const std::string responseJson = BuildBridgeRpcResultJson(
-		payload->response,
-		payload->correlationId);
-	m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, responseJson);
-	delete payload;
 	return 0;
 }
 
@@ -3172,17 +3146,13 @@ LRESULT CBlazeClawMFCView::OnSpeechLifecycleDispatched(
 
 	auto* payload =
 		reinterpret_cast<SpeechLifecycleDispatchPayload*>(wParam);
-	if (payload == nullptr)
-	{
-		return 0;
-	}
 
-	if (!payload->payloadJson.empty())
-	{
-		EmitSpeechLifecycleEvent(payload->payloadJson);
-	}
+	// Build speech bridge context and delegate to coordinator
+	const auto context = BuildSpeechBridgeContext();
+	blazeclaw::speech_bridge::SpeechBridgeCoordinator::HandleSpeechLifecycleDispatch(
+		context,
+		payload);
 
-	delete payload;
 	return 0;
 }
 
@@ -3703,6 +3673,43 @@ blazeclaw::webview_routers::WebViewRouterContext CBlazeClawMFCView::BuildRouterC
 	ctx.isToolExecuteMethod = [](const std::string& method) -> bool
 	{
 		return IsToolExecuteMethod(method);
+	};
+
+	return ctx;
+}
+
+blazeclaw::speech_bridge::SpeechBridgeContext CBlazeClawMFCView::BuildSpeechBridgeContext()
+{
+	blazeclaw::speech_bridge::SpeechBridgeContext ctx;
+	ctx.eventTransport = &m_eventTransport;
+
+	// Diagnostics callbacks
+	ctx.appendChatProcedureStatusLineWithDetail = [this](const std::wstring& marker, const std::string& detail)
+	{
+		AppendChatProcedureStatusLine(marker.c_str(), detail);
+	};
+	ctx.traceSpeechBridgeOrder = [this](const std::string& marker, const std::string& detail)
+	{
+		TraceSpeechBridgeOrder(marker.c_str(), detail);
+	};
+
+	// Speech lifecycle helpers
+	ctx.buildSpeechLifecyclePayloadFromTranscribeResponse = [](
+		const blazeclaw::gateway::protocol::ResponseFrame& response) -> std::string
+	{
+		return BuildSpeechLifecyclePayloadFromTranscribeResponse(response);
+	};
+	ctx.emitSpeechLifecycleEvent = [this](const std::string& lifecyclePayloadJson)
+	{
+		EmitSpeechLifecycleEvent(lifecyclePayloadJson);
+	};
+
+	// Bridge RPC response builder
+	ctx.buildBridgeRpcResultJson = [](
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		const std::string& correlationId) -> std::string
+	{
+		return BuildBridgeRpcResultJson(response, correlationId);
 	};
 
 	return ctx;

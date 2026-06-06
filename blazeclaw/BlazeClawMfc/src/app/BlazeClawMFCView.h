@@ -17,6 +17,7 @@
 #include "CBridge.h"
 #include "EventTransport.h"
 #include "webview_routers/WebViewRouterContext.h"
+#include "speech_bridge/SpeechBridgeContext.h"
 
 #include <cstdint>
 #include <optional>
@@ -105,6 +106,7 @@ protected:
 	bool HandleEmailConfigBridgeMessage(const std::string& messageJson);
 	bool HandleSkillConfigBridgeMessage(const std::string& messageJson);
 	blazeclaw::webview_routers::WebViewRouterContext BuildRouterContext();
+	blazeclaw::speech_bridge::SpeechBridgeContext BuildSpeechBridgeContext();
 	bool OpenEmailConfigDocument();
 	void PersistEmailConfigFromPayload(const std::string& payloadJson);
 	void LoadEmailConfigToBridge();
