@@ -270,6 +270,381 @@ TEST_CASE("ConfigLoader parses agent/default skills allowlist semantics", "[conf
 }
 
 TEST_CASE(
+	"ConfigLoader normalizes speech latency aliases with deterministic precedence",
+	"[config][speech][streaming][alias]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_streaming_alias_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto aliasWinsPath = root / "streaming-alias-wins.conf";
+	{
+		std::wofstream out(aliasWinsPath);
+		REQUIRE(out.is_open());
+		out << L"speech.streaming.latency_profile=balanced\n";
+		out << L"speech.streaming.latency_profile=low-latency\n";
+	}
+
+	blazeclaw::config::AppConfig aliasWinsConfig;
+	REQUIRE(loader.LoadFromFile(aliasWinsPath.wstring(), aliasWinsConfig));
+	REQUIRE(aliasWinsConfig.speechRecognition.streamingLatencyProfile == L"low_latency");
+
+	const auto canonicalWinsPath = root / "streaming-canonical-wins.conf";
+	{
+		std::wofstream out(canonicalWinsPath);
+		REQUIRE(out.is_open());
+		out << L"speech.streaming.latency_profile=low-latency\n";
+		out << L"speech.streaming.latency_profile=balanced\n";
+	}
+
+	blazeclaw::config::AppConfig canonicalWinsConfig;
+	REQUIRE(loader.LoadFromFile(canonicalWinsPath.wstring(), canonicalWinsConfig));
+	REQUIRE(canonicalWinsConfig.speechRecognition.streamingLatencyProfile == L"balanced");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader normalizes skills config key aliases with last-write precedence",
+	"[config][skills][entries][normalize][precedence]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_skills_key_alias_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto aliasWinsPath = root / "skills-key-alias-wins.conf";
+	{
+		std::wofstream out(aliasWinsPath);
+		REQUIRE(out.is_open());
+		out << L"skills.entries.demo.config.timeoutms=1000\n";
+		out << L"skills.entries.demo.config.Timeout Ms=3000\n";
+	}
+
+	blazeclaw::config::AppConfig aliasWinsConfig;
+	REQUIRE(loader.LoadFromFile(aliasWinsPath.wstring(), aliasWinsConfig));
+	const auto aliasWinsIt = aliasWinsConfig.skills.entries.find(L"demo");
+	REQUIRE(aliasWinsIt != aliasWinsConfig.skills.entries.end());
+	REQUIRE(aliasWinsIt->second.config.size() == 1);
+	REQUIRE(aliasWinsIt->second.config.contains(L"timeoutms"));
+	REQUIRE(aliasWinsIt->second.config.at(L"timeoutms") == L"3000");
+
+	const auto canonicalWinsPath = root / "skills-key-canonical-wins.conf";
+	{
+		std::wofstream out(canonicalWinsPath);
+		REQUIRE(out.is_open());
+		out << L"skills.entries.demo.config.Timeout Ms=3000\n";
+		out << L"skills.entries.demo.config.timeoutms=1000\n";
+	}
+
+	blazeclaw::config::AppConfig canonicalWinsConfig;
+	REQUIRE(loader.LoadFromFile(canonicalWinsPath.wstring(), canonicalWinsConfig));
+	const auto canonicalWinsIt = canonicalWinsConfig.skills.entries.find(L"demo");
+	REQUIRE(canonicalWinsIt != canonicalWinsConfig.skills.entries.end());
+	REQUIRE(canonicalWinsIt->second.config.size() == 1);
+	REQUIRE(canonicalWinsIt->second.config.contains(L"timeoutms"));
+	REQUIRE(canonicalWinsIt->second.config.at(L"timeoutms") == L"1000");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader applies deterministic precedence for repeated models.alias mappings",
+	"[config][models][alias][mapping]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_model_alias_mapping_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "models-alias-mapping.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"models.alias.fast=gpt-4o\n";
+		out << L"models.alias.fast=gpt-4.1\n";
+		out << L"models.alias.fast-mini=gpt-4o-mini\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+	REQUIRE(config.models.aliases.size() == 2);
+	REQUIRE(config.models.aliases.contains(L"fast"));
+	REQUIRE(config.models.aliases.at(L"fast") == L"gpt-4.1");
+	REQUIRE(config.models.aliases.contains(L"fast-mini"));
+	REQUIRE(config.models.aliases.at(L"fast-mini") == L"gpt-4o-mini");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader applies stable fallbacks for invalid bool numeric and string forms",
+	"[config][normalize][edge][fallback]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_edge_fallback_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "edge-fallback.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"agent.streaming=not-a-bool\n";
+		out << L"acp.enabled=not-a-bool\n";
+		out << L"embedded.enabled=not-a-bool\n";
+		out << L"chat.localModel.provider=unsupported-provider\n";
+		out << L"embedded.orchestrationPath=unsupported-mode\n";
+		out << L"speech.streaming.latency_profile=unexpected-profile\n";
+		out << L"speech.model_variant=unexpected-variant\n";
+		out << L"speech.runtime_hot_mode=unexpected-mode\n";
+		out << L"speech.threads=not-a-number\n";
+		out << L"speech.sample_rate=not-a-number\n";
+		out << L"embeddings.dimension=not-a-number\n";
+		out << L"chat.localModel.maxTokens=not-a-number\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.agent.enableStreaming);
+	REQUIRE_FALSE(config.acp.enabled);
+	REQUIRE(config.embedded.enabled);
+	REQUIRE(config.localModel.provider == L"onnx");
+	REQUIRE(config.embedded.orchestrationPath == L"dynamic_task_delta");
+	REQUIRE(config.speechRecognition.streamingLatencyProfile == L"balanced");
+	REQUIRE(config.speechRecognition.modelVariant == L"auto");
+	REQUIRE(config.speechRecognition.runtimeHotMode == L"always_online");
+	REQUIRE(config.speechRecognition.threads == 4);
+	REQUIRE(config.speechRecognition.sampleRate == 16000);
+	REQUIRE(config.embeddings.dimension == 384);
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader normalizes malformed CSV and list inputs to stable shapes",
+	"[config][normalize][edge][csv]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_edge_csv_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "edge-csv.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.allowed_languages=en,, ; zh-CN ; ; en\n";
+		out << L"speech.cuda.dll_preload_names=cublas64_12.dll, , ; cudnn64_9.dll;;\n";
+		out << L"email.policy.default.backends=Himalaya, , ; imap-smtp-email ; ; himalaya\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.speechRecognition.allowedLanguages.size() == 2);
+	REQUIRE(config.speechRecognition.allowedLanguages[0] == L"en");
+	REQUIRE(config.speechRecognition.allowedLanguages[1] == L"zh-cn");
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames.size() == 2);
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames[0] == L"cublas64_12.dll");
+	REQUIRE(config.speechRecognition.cudaDllPreloadNames[1] == L"cudnn64_9.dll");
+	REQUIRE(config.email.policy.defaults.backends.size() == 2);
+	REQUIRE(config.email.policy.defaults.backends[0] == L"himalaya");
+	REQUIRE(config.email.policy.defaults.backends[1] == L"imap-smtp-email");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader handles quoted speech hotwords input with stable non-empty output",
+	"[config][speech][hotwords][edge][quotes]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_edge_hotwords_quotes_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "edge-hotwords-quotes.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.hotwords_max_count=8\n";
+		out << L"speech.hotwords=[\" 火龙虾 \", \" 云深科技 \"]\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.speechRecognition.hotwords.size() == 1);
+	const auto& firstHotword = config.speechRecognition.hotwords[0];
+	REQUIRE_FALSE(firstHotword.empty());
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader regression snapshot: speech streaming normalization remains stable",
+	"[config][snapshot][speech][streaming]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_snapshot_speech_streaming_" +
+			std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "snapshot-speech-streaming.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"# snapshot\n";
+		out << L"speech.streaming.chunk_ms=90\n";
+		out << L"speech.streaming.lookback_ms=9999\n";
+		out << L"speech.streaming.latency_profile=low-latency\n";
+		out << L"speech.streaming.preview_chunk_ms=2000\n";
+		out << L"speech.streaming.preview_lookback_ms=5000\n";
+		out << L"speech.chunk_ms=100\n";
+		out << L"speech.overlap_ms=9999\n";
+		out << L"speech.execution_mode=PARALLEL\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.speechRecognition.streamingLatencyProfile == L"low_latency");
+	REQUIRE(config.speechRecognition.streamingPreviewChunkMs == 1500);
+	REQUIRE(config.speechRecognition.streamingPreviewLookbackMs == 1499);
+	REQUIRE(config.speechRecognition.chunkMs == 320);
+	REQUIRE(config.speechRecognition.overlapMs == 319);
+	REQUIRE(config.speechRecognition.executionMode == L"parallel");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader regression snapshot: email fallback policy profile mapping remains stable",
+	"[config][snapshot][email][policy]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_snapshot_email_policy_" +
+			std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "snapshot-email-policy.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"# snapshot\n";
+		out << L"email.policy.default.backends=IMAP-SMTP-EMAIL,Himalaya,himalaya\n";
+		out << L"email.policy.default.actions.unavailable=retry_then_continue\n";
+		out << L"email.policy.default.actions.authError=bad-value\n";
+		out << L"email.policy.default.actions.execError=continue\n";
+		out << L"email.policy.default.retry.maxAttempts=9\n";
+		out << L"email.policy.default.retry.retryDelayMs=500000\n";
+		out << L"email.policy.default.approval.requiresApproval=no\n";
+		out << L"email.policy.default.approval.tokenTtlMinutes=0\n";
+		out << L"email.policy.capability.SMTP.actions.authError=continue\n";
+		out << L"email.policy.tool.Send_Email.retry.retryDelayMs=42\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.email.policy.defaults.id == L"default");
+	REQUIRE(config.email.policy.defaults.backends.size() == 2);
+	REQUIRE(config.email.policy.defaults.backends[0] == L"himalaya");
+	REQUIRE(config.email.policy.defaults.backends[1] == L"imap-smtp-email");
+	REQUIRE(config.email.policy.defaults.actions.unavailable == L"retry_then_continue");
+	REQUIRE(config.email.policy.defaults.actions.authError == L"stop");
+	REQUIRE(config.email.policy.defaults.actions.execError == L"continue");
+	REQUIRE(config.email.policy.defaults.retry.maxAttempts == 8);
+	REQUIRE(config.email.policy.defaults.retry.retryDelayMs == 300000);
+	REQUIRE_FALSE(config.email.policy.defaults.approval.requiresApproval);
+	REQUIRE(config.email.policy.defaults.approval.tokenTtlMinutes == 60);
+
+	REQUIRE(config.email.policy.capability.contains(L"smtp"));
+	const auto& smtpProfile = config.email.policy.capability.at(L"smtp");
+	REQUIRE(smtpProfile.id == L"smtp");
+	REQUIRE(smtpProfile.backends == config.email.policy.defaults.backends);
+	REQUIRE(smtpProfile.actions.authError == L"continue");
+	REQUIRE(smtpProfile.retry.maxAttempts == 1);
+
+	REQUIRE(config.email.policy.tool.contains(L"send_email"));
+	const auto& sendEmailProfile = config.email.policy.tool.at(L"send_email");
+	REQUIRE(sendEmailProfile.id == L"send_email");
+	REQUIRE(sendEmailProfile.retry.retryDelayMs == 42);
+	REQUIRE(sendEmailProfile.backends == config.email.policy.defaults.backends);
+
+	auto resolved = blazeclaw::config::ResolveEmailFallbackPolicy(
+		config.email.policy,
+		L"send_email",
+		L"smtp");
+	REQUIRE(resolved.profileId == L"send_email");
+	REQUIRE(resolved.retryDelayMs == 42);
+	REQUIRE(resolved.onAuthError == L"stop");
+
+	resolved = blazeclaw::config::ResolveEmailFallbackPolicy(
+		config.email.policy,
+		L"unknown_tool",
+		L"smtp");
+	REQUIRE(resolved.profileId == L"smtp");
+	REQUIRE(resolved.onAuthError == L"continue");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader regression snapshot: skill filter and backend normalization remain stable",
+	"[config][snapshot][skills][filter][backend]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_snapshot_skills_filters_" +
+			std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "snapshot-skills-filter-backend.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"# snapshot\n";
+		out << L"agents.defaults.skills=beta-skill,alpha-skill,beta-skill\n";
+		out << L"agents.list.worker.skills=delta-skill,alpha-skill,delta-skill\n";
+		out << L"skills.install.nodeManager=YARN\n";
+		out << L"skills.remoteEligibility.platform=Windows\n";
+		out << L"skills.remoteEligibility.platform=win32\n";
+		out << L"skills.remoteEligibility.platform=linux\n";
+		out << L"email.policy.default.backends=IMAP-SMTP-EMAIL,Himalaya,IMAP-SMTP-EMAIL\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.agents.defaults.skills.has_value());
+	REQUIRE(config.agents.defaults.skills->size() == 2);
+	REQUIRE(config.agents.defaults.skills->at(0) == L"alpha-skill");
+	REQUIRE(config.agents.defaults.skills->at(1) == L"beta-skill");
+
+	REQUIRE(config.agents.entries.contains(L"worker"));
+	const auto& workerSkills = config.agents.entries.at(L"worker").skills;
+	REQUIRE(workerSkills.has_value());
+	REQUIRE(workerSkills->size() == 2);
+	REQUIRE(workerSkills->at(0) == L"alpha-skill");
+	REQUIRE(workerSkills->at(1) == L"delta-skill");
+
+	REQUIRE(config.skills.install.nodeManager == L"yarn");
+	REQUIRE_FALSE(config.skills.remoteEligibility.platforms.empty());
+
+	REQUIRE(config.email.policy.defaults.backends.size() == 2);
+	REQUIRE(config.email.policy.defaults.backends[0] == L"himalaya");
+	REQUIRE(config.email.policy.defaults.backends[1] == L"imap-smtp-email");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
 	"ConfigLoader S1: LoadFromFile and BuildGatewayStartupConfigFileSnapshot share stable digest",
 	"[config][loader][s1]")
 {
