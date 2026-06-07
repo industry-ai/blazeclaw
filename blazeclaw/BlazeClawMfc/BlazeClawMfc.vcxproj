@@ -225,6 +225,7 @@
     <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
     <ClInclude Include="src\core\GatewayHostBindingCoordinator.h" />
     <ClInclude Include="src\core\ServiceLifecycleStartupCoordinator.h" />
+    <ClInclude Include="src\core\startup\ServiceStartupPhaseModule.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
@@ -478,6 +479,7 @@
     <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp" />
     <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />
+    <ClCompile Include="src\core\startup\ServiceStartupPhaseModule.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.cpp" />

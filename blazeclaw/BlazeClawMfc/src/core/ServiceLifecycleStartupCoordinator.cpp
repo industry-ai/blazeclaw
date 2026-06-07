@@ -7,6 +7,7 @@
 #include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
+#include "startup/ServiceStartupPhaseModule.h"
 
 #include <algorithm>
 #include <cctype>
@@ -117,6 +118,10 @@ std::filesystem::path ResolveWorkspaceRootForSkills(
 void ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies(
 	ServiceManager& manager,
 	const blazeclaw::config::AppConfig& config) {
+	startup::ServiceStartupPhaseModuleRunner::Execute(
+		startup::ServiceStartupPhaseModule{
+			.id = "configure_policies",
+			.execute = [&manager, &config]() {
 		manager.m_activeConfig = config;
 		manager.m_activeChatProvider = config.chat.activeProvider.empty()
 			? "local"
@@ -203,10 +208,15 @@ void ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies(
 				L"email policy rollout gate activated runtime policy profile monitor/enforce mode.");
 		}
 		AppendStartupTrace("ServiceManager.Start.policy.ready");
-
+			},
+		});
 }
 
 void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& manager) {
+	startup::ServiceStartupPhaseModuleRunner::Execute(
+		startup::ServiceStartupPhaseModule{
+			.id = "initialize_modules",
+			.execute = [&manager]() {
 		manager.m_agentsScope = manager.m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
 			manager.m_activeConfig);
@@ -773,6 +783,8 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 					AppendStartupTrace(stage);
 				},
 			});
+			},
+		});
 
 }
 

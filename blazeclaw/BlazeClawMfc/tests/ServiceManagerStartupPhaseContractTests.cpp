@@ -20,6 +20,21 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadServiceStartupPhaseModuleSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"startup" /
+			"ServiceStartupPhaseModule.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 	std::string ReadServiceLifecycleStartupCoordinatorSource()
 	{
 		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
@@ -725,6 +740,26 @@ TEST_CASE(
 		lifecycleSource.find("ResolveEmailPolicySettings(") != std::string::npos);
 	REQUIRE(
 		lifecycleSource.find("AppendStartupTrace(\"ServiceManager.Start.policy.ready\")") !=
+		std::string::npos);
+	REQUIRE(
+		lifecycleSource.find("startup::ServiceStartupPhaseModuleRunner::Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		lifecycleSource.find(".id = \"configure_policies\"") !=
+		std::string::npos);
+	REQUIRE(
+		lifecycleSource.find(".id = \"initialize_modules\"") !=
+		std::string::npos);
+
+	const std::string startupPhaseModuleSource =
+		ReadServiceStartupPhaseModuleSource();
+	REQUIRE(
+		startupPhaseModuleSource.find(
+			"void ServiceStartupPhaseModuleRunner::Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		startupPhaseModuleSource.find(
+			"void ServiceStartupPhaseModuleRunner::ExecuteAll(") !=
 		std::string::npos);
 }
 
