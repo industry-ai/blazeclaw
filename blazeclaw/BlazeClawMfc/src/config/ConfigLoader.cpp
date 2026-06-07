@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ConfigLoader.h"
+#include "ConfigLoaderSpeechNormalizationHelpers.h"
 
 #include <algorithm>
 #include <chrono>
@@ -32,110 +33,24 @@ namespace blazeclaw::config {
 		}
 
 		std::vector<std::wstring> SplitCsvValues(const std::wstring& raw) {
-			std::vector<std::wstring> values;
-			std::wstring token;
-			for (const wchar_t ch : raw) {
-				if (ch == L',' || ch == L';') {
-					const std::wstring trimmed = Trim(token);
-					if (!trimmed.empty()) {
-						values.push_back(trimmed);
-					}
-					token.clear();
-					continue;
-				}
-
-				token.push_back(ch);
-			}
-
-			const std::wstring trimmed = Trim(token);
-			if (!trimmed.empty()) {
-				values.push_back(trimmed);
-			}
-
-			return values;
-		}
-
-		std::wstring TrimMatchingQuotes(const std::wstring& raw) {
-			const std::wstring trimmed = Trim(raw);
-			if (trimmed.size() >= 2) {
-				const wchar_t first = trimmed.front();
-				const wchar_t last = trimmed.back();
-				if ((first == L'"' && last == L'"') ||
-					(first == L'\'' && last == L'\'')) {
-					return trimmed.substr(1, trimmed.size() - 2);
-				}
-			}
-
-			return trimmed;
+			return speech_normalization::SplitCsvValues(raw);
 		}
 
 		std::wstring NormalizeSpeechStreamingLatencyProfile(const std::wstring& raw) {
-			const std::wstring normalized = ToLowerTrim(raw);
-			if (normalized == L"balanced" ||
-				normalized == L"low_latency" ||
-				normalized == L"low-latency" ||
-				normalized == L"aggressive") {
-				return normalized == L"low-latency" ? L"low_latency" : normalized;
-			}
-
-			return L"balanced";
+			return speech_normalization::NormalizeSpeechStreamingLatencyProfile(raw);
 		}
 
 		std::pair<std::uint32_t, std::uint32_t> ResolveSpeechStreamingPreviewProfile(
 			const std::wstring& profile) {
-			const std::wstring normalized = NormalizeSpeechStreamingLatencyProfile(profile);
-			if (normalized == L"aggressive") {
-				return { 240u, 160u };
-			}
-
-			if (normalized == L"low_latency") {
-				return { 320u, 320u };
-			}
-
-			return { 640u, 320u };
+			return speech_normalization::ResolveSpeechStreamingPreviewProfile(profile);
 		}
 
 		std::vector<std::wstring> ParseSpeechHotwordsValue(const std::wstring& raw) {
-			const std::wstring trimmed = Trim(raw);
-			if (trimmed.empty()) {
-				return {};
-			}
-
-			std::wstring body = trimmed;
-			if (body.size() >= 2 && body.front() == L'[' && body.back() == L']') {
-				body = body.substr(1, body.size() - 2);
-			}
-
-			auto values = SplitCsvValues(body);
-			for (auto& value : values) {
-				value = TrimMatchingQuotes(value);
-			}
-
-			values.erase(
-				std::remove_if(
-					values.begin(),
-					values.end(),
-					[](const std::wstring& value) { return value.empty(); }),
-				values.end());
-			return values;
+			return speech_normalization::ParseSpeechHotwordsValue(raw);
 		}
 
 		void NormalizeSpeechHotwordsInPlace(std::vector<std::wstring>& hotwords) {
-			std::vector<std::wstring> normalized;
-			normalized.reserve(hotwords.size());
-			std::unordered_set<std::wstring> seen;
-			for (auto& hotword : hotwords) {
-				hotword = Trim(hotword);
-				if (hotword.empty()) {
-					continue;
-				}
-
-				if (seen.insert(hotword).second) {
-					normalized.push_back(hotword);
-				}
-			}
-
-			hotwords = std::move(normalized);
+			speech_normalization::NormalizeSpeechHotwordsInPlace(hotwords);
 		}
 
 		std::optional<std::vector<std::wstring>> ParseOptionalSkillFilter(
@@ -1207,25 +1122,25 @@ namespace blazeclaw::config {
 			}
 
 			if (trimmedLine.rfind(L"speech.hotwords=", 0) == 0) {
-				outConfig.speechRecognition.hotwords = ParseSpeechHotwordsValue(trimmedLine.substr(15));
+				outConfig.speechRecognition.hotwords = ParseSpeechHotwordsValue(trimmedLine.substr(16));
 				continue;
 			}
 
 			if (trimmedLine.rfind(L"speech.hotwords_max_count=", 0) == 0) {
 				std::uint32_t value = 0;
-				if (TryParseUInt(trimmedLine.substr(25), value)) {
+				if (TryParseUInt(trimmedLine.substr(26), value)) {
 					outConfig.speechRecognition.hotwordsMaxCount = value;
 				}
 				continue;
 			}
 
 			if (trimmedLine.rfind(L"speech.hotwords_apply_stage=", 0) == 0) {
-				outConfig.speechRecognition.hotwordsApplyStage = ToLowerTrim(trimmedLine.substr(27));
+				outConfig.speechRecognition.hotwordsApplyStage = ToLowerTrim(trimmedLine.substr(28));
 				continue;
 			}
 
 			if (trimmedLine.rfind(L"speech.hotwords_debug_dump_prompt=", 0) == 0) {
-				outConfig.speechRecognition.hotwordsDebugDumpPrompt = ParseBool(trimmedLine.substr(33), false);
+				outConfig.speechRecognition.hotwordsDebugDumpPrompt = ParseBool(trimmedLine.substr(34), false);
 				continue;
 			}
 

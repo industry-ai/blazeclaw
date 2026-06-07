@@ -23,6 +23,7 @@
 #include "tools/ToolProcessRunner.h"
 #include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
+#include "ServiceManagerTextHelpers.h"
 
 #include <cctype>
 #include <chrono>
@@ -75,62 +76,19 @@ namespace blazeclaw::core {
 		}
 
 		bool SuppressStartupMigrationsFromEnv() {
-			wchar_t* raw = nullptr;
-			size_t rawSize = 0;
-			if (_wdupenv_s(&raw, &rawSize, L"BLAZECLAW_GATEWAY_SUPPRESS_STARTUP_MIGRATIONS") != 0 ||
-				raw == nullptr) {
-				return false;
-			}
-
-			const std::wstring v = ToLower(Trim(std::wstring(raw)));
-			free(raw);
-			return v == L"1" || v == L"true" || v == L"yes" || v == L"on";
+			return servicemanager_text::SuppressStartupMigrationsFromEnv();
 		}
 
 		std::wstring Utf8ToWideLocal(const std::string& value) {
-			if (value.empty()) {
-				return {};
-			}
-
-			const int required = MultiByteToWideChar(
-				CP_UTF8,
-				0,
-				value.c_str(),
-				static_cast<int>(value.size()),
-				nullptr,
-				0);
-			if (required <= 0) {
-				return std::wstring(value.begin(), value.end());
-			}
-
-			std::wstring output(static_cast<std::size_t>(required), L'\0');
-			const int converted = MultiByteToWideChar(
-				CP_UTF8,
-				0,
-				value.c_str(),
-				static_cast<int>(value.size()),
-				output.data(),
-				required);
-			if (converted <= 0) {
-				return std::wstring(value.begin(), value.end());
-			}
-
-			return output;
+			return servicemanager_text::Utf8ToWideLocal(value);
 		}
 
 		bool IsLlamaLocalModelId(const std::string& modelId) {
-			return modelId.rfind("llama/", 0) == 0;
+			return servicemanager_text::IsLlamaLocalModelId(modelId);
 		}
 
 		std::string ToNarrow(const std::wstring& value) {
-			std::string output;
-			output.reserve(value.size());
-
-			for (const wchar_t ch : value) {
-				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-
-			return output;
+			return servicemanager_text::ToNarrowAscii(value);
 		}
 
 

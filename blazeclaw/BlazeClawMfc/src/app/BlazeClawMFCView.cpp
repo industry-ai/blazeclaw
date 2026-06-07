@@ -36,6 +36,7 @@
 #include "speech_bridge/SpeechBridgeCoordinator.h"
 #include "config_bridge/SkillConfigHandler.h"
 #include "config_bridge/EmailConfigHandler.h"
+#include "BlazeClawMFCViewTextHelpers.h"
 
 #include <functional>
 

@@ -53,7 +53,7 @@ TEST_CASE("ConfigLoader parses and normalizes speech hotwords policy", "[config]
 		std::wofstream out(configPath);
 		REQUIRE(out.is_open());
 		out << L"speech.hotwords_enabled=true\n";
-		out << L"speech.hotwords=[\"火龙虾\", \"火龙虾\", \" 云深科技 \"]\n";
+		out << L"speech.hotwords=[\"火龙虾\", \"火龙虾\", \" 炎图科技 \"]\n";
 		out << L"speech.hotwords_max_count=2\n";
 		out << L"speech.hotwords_apply_stage=decoder_init_and_step\n";
 		out << L"speech.hotwords_debug_dump_prompt=true\n";
@@ -68,7 +68,7 @@ TEST_CASE("ConfigLoader parses and normalizes speech hotwords policy", "[config]
 	REQUIRE(config.speechRecognition.hotwordsDebugDumpPrompt);
 	REQUIRE(config.speechRecognition.hotwords.size() == 2);
 	REQUIRE(config.speechRecognition.hotwords[0] == L"火龙虾");
-	REQUIRE(config.speechRecognition.hotwords[1] == L"云深科技");
+	REQUIRE(config.speechRecognition.hotwords[1] == L"炎图科技");
 
 	std::filesystem::remove_all(root);
 }
