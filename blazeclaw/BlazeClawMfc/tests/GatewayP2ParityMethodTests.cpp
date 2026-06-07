@@ -4,6 +4,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
+
 using blazeclaw::gateway::GatewayHost;
 using blazeclaw::gateway::protocol::RequestFrame;
 
@@ -486,4 +488,101 @@ TEST_CASE("P2 parity methods: cron mutation handlers validate params and return 
 	REQUIRE(cronRemove.payloadJson.has_value());
 	REQUIRE(cronRemove.payloadJson.value().find("\"removed\":true") != std::string::npos);
 	REQUIRE(cronRemove.payloadJson.value().find("\"ok\":true") != std::string::npos);
+}
+
+TEST_CASE("P2 parity crash regression PD-006: alias routes remain stable under repeated dispatch", "[gateway][parity][p2][regression][pd006]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	struct RouteProbe {
+		const char* method;
+		const char* expectedToken;
+		std::optional<std::string> paramsJson;
+	};
+
+	const std::array<RouteProbe, 6> probes = {{
+		{"agent.identity.get", "\"agent\"", std::nullopt},
+		{"agent.wait", "\"status\":\"idle\"", std::nullopt},
+		{"wake", "\"mode\":\"now\"", std::nullopt},
+		{"last-heartbeat", "\"lastHeartbeatMs\"", std::nullopt},
+		{"gateway.identity.get", "\"blazeclaw.gateway\"", std::nullopt},
+		{"tools.effective", "\"tools\"", std::string("{\"sessionId\":\"main\",\"agentId\":\"default\"}")},
+	}};
+
+	for (std::size_t iteration = 0; iteration < 32; ++iteration) {
+		for (const auto& probe : probes) {
+			const auto response = Route(
+				host,
+				"pd006-" + std::to_string(iteration) + "-" + probe.method,
+				probe.method,
+				probe.paramsJson);
+			REQUIRE(response.ok);
+			REQUIRE(response.payloadJson.has_value());
+			REQUIRE(response.payloadJson.value().find(probe.expectedToken) != std::string::npos);
+		}
+	}
+}
+
+TEST_CASE("P2 parity crash regression PD-007: cron mutation sequence remains stable under repeated cycles", "[gateway][parity][p2][cron][mutation][regression][pd007]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	for (std::size_t iteration = 0; iteration < 16; ++iteration) {
+		const auto cronAdd = Route(
+			host,
+			"pd007-cron-add-" + std::to_string(iteration),
+			"cron.add",
+			std::string("{\"name\":\"PD007 cycle ") +
+				std::to_string(iteration) +
+				"\",\"enabled\":true,\"schedule\":{\"kind\":\"every\",\"everyMs\":60000},\"payload\":{\"kind\":\"systemEvent\",\"text\":\"sync\"}}");
+		REQUIRE(cronAdd.ok);
+		REQUIRE(cronAdd.payloadJson.has_value());
+		const nlohmann::json cronAdded = nlohmann::json::parse(cronAdd.payloadJson.value());
+		REQUIRE(cronAdded.is_object());
+		REQUIRE(cronAdded.contains("id"));
+		REQUIRE(cronAdded["id"].is_string());
+		const std::string cronId = cronAdded["id"].get<std::string>();
+		REQUIRE_FALSE(cronId.empty());
+
+		const auto cronRun = Route(
+			host,
+			"pd007-cron-run-" + std::to_string(iteration),
+			"cron.run",
+			std::string("{\"id\":\"") + cronId + "\",\"mode\":\"force\"}");
+		REQUIRE(cronRun.ok);
+		REQUIRE(cronRun.payloadJson.has_value());
+		const nlohmann::json runEnvelope = nlohmann::json::parse(cronRun.payloadJson.value());
+		REQUIRE(runEnvelope.is_object());
+		REQUIRE(runEnvelope.value("enqueued", false));
+		REQUIRE(runEnvelope.contains("runId"));
+		REQUIRE(runEnvelope["runId"].is_string());
+
+		const auto cronRuns = Route(
+			host,
+			"pd007-cron-runs-" + std::to_string(iteration),
+			"cron.runs",
+			std::string("{\"scope\":\"job\",\"id\":\"") + cronId +
+				"\",\"limit\":20,\"offset\":0,\"sortDir\":\"desc\"}");
+		REQUIRE(cronRuns.ok);
+		REQUIRE(cronRuns.payloadJson.has_value());
+		const nlohmann::json runsPayload = nlohmann::json::parse(cronRuns.payloadJson.value());
+		REQUIRE(runsPayload.is_object());
+		REQUIRE(runsPayload.contains("entries"));
+		REQUIRE(runsPayload["entries"].is_array());
+
+		const auto cronRemove = Route(
+			host,
+			"pd007-cron-remove-" + std::to_string(iteration),
+			"cron.remove",
+			std::string("{\"id\":\"") + cronId + "\"}");
+		REQUIRE(cronRemove.ok);
+		REQUIRE(cronRemove.payloadJson.has_value());
+		const nlohmann::json removeEnvelope = nlohmann::json::parse(cronRemove.payloadJson.value());
+		REQUIRE(removeEnvelope.is_object());
+		REQUIRE(removeEnvelope.value("ok", false));
+		REQUIRE(removeEnvelope.contains("removed"));
+		REQUIRE(removeEnvelope["removed"].is_boolean());
+	}
 }
