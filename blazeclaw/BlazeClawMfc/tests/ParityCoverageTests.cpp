@@ -25,15 +25,28 @@ namespace {
 
 	std::filesystem::path ResolveWorkspacePath(const std::filesystem::path& relativePath)
 	{
+		const auto appendCandidates = [&relativePath](
+			std::vector<std::filesystem::path>& candidates,
+			const std::filesystem::path& base) {
+				candidates.push_back(base / relativePath);
+				candidates.push_back(base / "blazeclaw" / relativePath);
+			};
+
+		std::vector<std::filesystem::path> candidates;
 		const auto cwd = std::filesystem::current_path();
-		std::vector<std::filesystem::path> candidates = {
-			cwd / relativePath,
-			cwd / "blazeclaw" / relativePath,
-		};
+		appendCandidates(candidates, cwd);
+
+		char* repoRootRaw = nullptr;
+		size_t repoRootLen = 0;
+		if (_dupenv_s(&repoRootRaw, &repoRootLen, "BLAZECLAW_REPO_ROOT") == 0 &&
+			repoRootRaw != nullptr &&
+			repoRootLen > 0) {
+			appendCandidates(candidates, std::filesystem::path(repoRootRaw));
+			free(repoRootRaw);
+		}
 
 		for (auto cursor = cwd; !cursor.empty(); cursor = cursor.parent_path()) {
-			candidates.push_back(cursor / relativePath);
-			candidates.push_back(cursor / "blazeclaw" / relativePath);
+			appendCandidates(candidates, cursor);
 			if (cursor == cursor.parent_path()) {
 				break;
 			}

@@ -6,6 +6,22 @@
 
 namespace {
 
+	std::filesystem::path GatewayChatPipelineSourcePath()
+	{
+		return std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayHost.Handlers.Runtime.ChatPipeline.cpp";
+	}
+
+	std::filesystem::path GatewayRuntimeHelpersPath()
+	{
+		return std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayHost.Handlers.RuntimeHelpers.inl";
+	}
+
 	std::string ReadTextFile(const std::filesystem::path& path)
 	{
 		std::ifstream in(path.string());
@@ -19,7 +35,7 @@ namespace {
 
 TEST_CASE(
 	"Batch 3 transcript contract: user and assistant transcript append APIs are present",
-	"[parity][batch3][transcript]")
+	"[gateway][parity][batch34][parity][batch3][transcript]")
 {
 	const auto headerPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /
@@ -31,20 +47,16 @@ TEST_CASE(
 	REQUIRE(header.find("AppendUserMessage") != std::string::npos);
 	REQUIRE(header.find("AppendAssistantMessage") != std::string::npos);
 
-	const auto runtimeHandlersPath = std::filesystem::path("BlazeClawMfc") /
-		"src" /
-		"gateway" /
-		"GatewayHost.Handlers.Runtime.cpp";
-	const std::string runtimeSource = ReadTextFile(runtimeHandlersPath);
-	REQUIRE(runtimeSource.find("AppendUserMessage(") != std::string::npos);
-	REQUIRE(runtimeSource.find("AppendAssistantMessage(") != std::string::npos);
-	REQUIRE(runtimeSource.find("runId + \":user\"") != std::string::npos);
-	REQUIRE(runtimeSource.find("runId + \":assistant\"") != std::string::npos);
+	const std::string chatPipelineSource = ReadTextFile(GatewayChatPipelineSourcePath());
+	REQUIRE(chatPipelineSource.find("AppendUserMessage(") != std::string::npos);
+	REQUIRE(chatPipelineSource.find("AppendAssistantMessage(") != std::string::npos);
+	REQUIRE(chatPipelineSource.find("runId + \":user\"") != std::string::npos);
+	REQUIRE(chatPipelineSource.find("runId + \":assistant\"") != std::string::npos);
 }
 
 TEST_CASE(
 	"Batch 3 event fanout contract: recipient registry exposes active runs for late join replay",
-	"[parity][batch3][fanout]")
+	"[gateway][parity][batch34][parity][batch3][fanout]")
 {
 	const auto registryHeaderPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /
@@ -53,19 +65,15 @@ TEST_CASE(
 	const std::string registryHeader = ReadTextFile(registryHeaderPath);
 	REQUIRE(registryHeader.find("ActiveRunsForSession") != std::string::npos);
 
-	const auto runtimeHandlersPath = std::filesystem::path("BlazeClawMfc") /
-		"src" /
-		"gateway" /
-		"GatewayHost.Handlers.Runtime.cpp";
-	const std::string runtimeSource = ReadTextFile(runtimeHandlersPath);
-	REQUIRE(runtimeSource.find("late_join_replay") != std::string::npos);
-	REQUIRE(runtimeSource.find("ActiveRunsForSession") != std::string::npos);
-	REQUIRE(runtimeSource.find("delta_replayed") != std::string::npos);
+	const std::string chatPipelineSource = ReadTextFile(GatewayChatPipelineSourcePath());
+	REQUIRE(chatPipelineSource.find("late_join_replay") != std::string::npos);
+	REQUIRE(chatPipelineSource.find("ActiveRunsForSession") != std::string::npos);
+	REQUIRE(chatPipelineSource.find("delta_replayed") != std::string::npos);
 }
 
 TEST_CASE(
 	"Batch 3 error model contract: runtime retryability helpers are wired",
-	"[parity][batch3][error-model]")
+	"[gateway][parity][batch34][parity][batch3][error-model]")
 {
 	const auto guardHeaderPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /
@@ -75,21 +83,20 @@ TEST_CASE(
 	REQUIRE(guardHeader.find("IsRetryableErrorCode") != std::string::npos);
 	REQUIRE(guardHeader.find("SuggestedRetryAfterMs") != std::string::npos);
 
-	const auto runtimeHandlersPath = std::filesystem::path("BlazeClawMfc") /
-		"src" /
-		"gateway" /
-		"GatewayHost.Handlers.Runtime.cpp";
-	const std::string runtimeSource = ReadTextFile(runtimeHandlersPath);
-	REQUIRE(runtimeSource.find("BuildRuntimeErrorShape") != std::string::npos);
-	REQUIRE(runtimeSource.find("RuntimeTranscriptGuard::IsRetryableErrorCode") !=
+	const std::string runtimeHelpers = ReadTextFile(GatewayRuntimeHelpersPath());
+	REQUIRE(runtimeHelpers.find("BuildRuntimeErrorShape") != std::string::npos);
+	REQUIRE(runtimeHelpers.find("RuntimeTranscriptGuard::IsRetryableErrorCode") !=
 		std::string::npos);
-	REQUIRE(runtimeSource.find("RuntimeTranscriptGuard::SuggestedRetryAfterMs") !=
+	REQUIRE(runtimeHelpers.find("RuntimeTranscriptGuard::SuggestedRetryAfterMs") !=
 		std::string::npos);
+
+	const std::string chatPipelineSource = ReadTextFile(GatewayChatPipelineSourcePath());
+	REQUIRE(chatPipelineSource.find("BuildRuntimeErrorShape") != std::string::npos);
 }
 
 TEST_CASE(
 	"Batch 4 diagnostics and rollout contract: payload summary and stage rollout cohorts are present",
-	"[parity][batch4][diagnostics][rollout]")
+	"[gateway][parity][batch34][parity][batch4][diagnostics][rollout]")
 {
 	const auto diagnosticsHeaderPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /
@@ -105,12 +112,8 @@ TEST_CASE(
 	const std::string diagnosticsImpl = ReadTextFile(diagnosticsImplPath);
 	REQUIRE(diagnosticsImpl.find("payloadSummary") != std::string::npos);
 
-	const auto runtimeHandlersPath = std::filesystem::path("BlazeClawMfc") /
-		"src" /
-		"gateway" /
-		"GatewayHost.Handlers.Runtime.cpp";
-	const std::string runtimeSource = ReadTextFile(runtimeHandlersPath);
-	REQUIRE(runtimeSource.find("runtime_message_built") != std::string::npos);
+	const std::string chatPipelineSource = ReadTextFile(GatewayChatPipelineSourcePath());
+	REQUIRE(chatPipelineSource.find("runtime_message_built") != std::string::npos);
 
 	const auto routerImplPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /

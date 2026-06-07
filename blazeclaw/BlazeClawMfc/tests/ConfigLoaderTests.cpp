@@ -1,5 +1,7 @@
 #include "config/ConfigLoader.h"
 #include "config/ConfigModels.h"
+#include "config/ConfigLoaderSkillEntryNormalizationHelpers.h"
+#include "config/ConfigLoaderSpeechNormalizationHelpers.h"
 
 #include <catch2/catch_all.hpp>
 #include <algorithm>
@@ -404,6 +406,30 @@ TEST_CASE(
 	REQUIRE(it->second.config.at(L"retry-count") == L"2");
 
 	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader Priority 1 helper API: skill entry key normalization symbol contract",
+	"[config][priority1][helper][skill-entry]") {
+	REQUIRE(
+		blazeclaw::config::skill_entry_normalization::NormalizeSkillEntryConfigKey(
+			L"Timeout Ms") == L"timeoutms");
+	REQUIRE(
+		blazeclaw::config::skill_entry_normalization::NormalizeSkillEntryConfigKey(
+			L"$$$") == L"");
+	REQUIRE(
+		blazeclaw::config::skill_entry_normalization::NormalizeSkillEntryConfigKey(
+			L"retry-count") == L"retry-count");
+}
+
+TEST_CASE(
+	"ConfigLoader Priority 1 helper API: speech hotword parser symbol contract",
+	"[config][priority1][helper][speech][hotwords]") {
+	const auto parsed = blazeclaw::config::speech_normalization::ParseSpeechHotwordsValue(
+		L"[\" 火龙虾 \", \" 云深科技 \"]");
+	REQUIRE(parsed.size() == 2);
+	REQUIRE(parsed[0] == L"火龙虾");
+	REQUIRE(parsed[1] == L"云深科技");
 }
 
 TEST_CASE(

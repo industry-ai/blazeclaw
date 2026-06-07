@@ -135,62 +135,7 @@ namespace {
 
 	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
 	{
-		std::vector<std::string> objects;
-		const std::string trimmed = blazeclaw::gateway::json::Trim(arrayJson);
-		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
-		{
-			return objects;
-		}
-
-		bool inString = false;
-		int depth = 0;
-		std::size_t start = std::string::npos;
-		for (std::size_t i = 0; i < trimmed.size(); ++i)
-		{
-			const char ch = trimmed[i];
-			if (inString)
-			{
-				if (ch == '\\')
-				{
-					++i;
-					continue;
-				}
-
-				if (ch == '"')
-				{
-					inString = false;
-				}
-				continue;
-			}
-
-			if (ch == '"')
-			{
-				inString = true;
-				continue;
-			}
-
-			if (ch == '{')
-			{
-				if (depth == 0)
-				{
-					start = i;
-				}
-				++depth;
-				continue;
-			}
-
-			if (ch == '}')
-			{
-				--depth;
-				if (depth == 0 && start != std::string::npos)
-				{
-					objects.push_back(trimmed.substr(start, (i - start) + 1));
-					start = std::string::npos;
-				}
-			}
-		}
-
-		return objects;
+		return blazeclaw::app::view_helpers::SplitTopLevelJsonObjects(arrayJson);
 	}
 
 	void AppendStartupEventDiagnostic(

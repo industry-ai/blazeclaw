@@ -2164,7 +2164,37 @@ namespace blazeclaw::gateway {
 									",\"providerDeltaCount\":" +
 									std::to_string(assistantDeltas.size()) +
 									"}");
-								emitAssistantDeltaChunk(assistantText, assistantText.size());
+								for (const auto& providerDelta : assistantDeltas) {
+									if (providerDelta.empty()) {
+										continue;
+									}
+
+									const auto firstNonSpace = std::find_if_not(
+										providerDelta.begin(),
+										providerDelta.end(),
+										[](unsigned char ch) {
+											return std::isspace(ch) != 0;
+										});
+									if (firstNonSpace == providerDelta.end()) {
+										continue;
+									}
+
+									const std::string normalized(
+										firstNonSpace,
+										providerDelta.end());
+									if (normalized.rfind("tools.execute.", 0) == 0 ||
+										normalized.rfind("orchestration.", 0) == 0) {
+										emitAssistantDeltaChunk(
+											providerDelta,
+											streamCursor + providerDelta.size());
+									}
+								}
+
+								if (!assistantText.empty()) {
+									emitAssistantDeltaChunk(
+										assistantText,
+										assistantText.size());
+								}
 							}
 							else {
 								bool emittedIncrementalProviderDeltas = false;

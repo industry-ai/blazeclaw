@@ -80,7 +80,27 @@ namespace blazeclaw::core {
 		}
 
 		std::vector<std::wstring> SplitListCompat(const std::wstring& raw) {
-			return NormalizeStringListCompat(nlohmann::json(raw));
+			std::vector<std::wstring> values;
+			std::wstring token;
+			for (const wchar_t ch : raw) {
+				if (ch == L',' || ch == L';' || ch == L'|') {
+					const std::wstring trimmed = TrimCompat(token);
+					if (!trimmed.empty()) {
+						values.push_back(trimmed);
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(ch);
+			}
+
+			const std::wstring trimmed = TrimCompat(token);
+			if (!trimmed.empty()) {
+				values.push_back(trimmed);
+			}
+
+			return values;
 		}
 
 		std::optional<std::wstring> NormalizeSafeBrewFormulaCompat(

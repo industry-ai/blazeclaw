@@ -391,6 +391,7 @@
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
+    <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp" />
