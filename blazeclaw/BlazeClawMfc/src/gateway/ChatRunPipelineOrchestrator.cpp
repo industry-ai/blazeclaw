@@ -8,27 +8,27 @@ namespace blazeclaw::gateway {
 	ChatRunStageResult ChatRunPipelineOrchestrator::Run(
 		ChatRunStageContext& context) const {
 		auto result = m_transportStage.Execute(context);
-		if (!result.ok) {
+		if (!result.ok || context.shouldReturnEarly) {
 			return result;
 		}
 
 		result = m_controlStage.Execute(context);
-		if (!result.ok) {
+		if (!result.ok || context.shouldReturnEarly) {
 			return result;
 		}
 
 		result = m_decompositionStage.Execute(context);
-		if (!result.ok) {
+		if (!result.ok || context.shouldReturnEarly) {
 			return result;
 		}
 
 		result = m_runtimeStage.Execute(context);
-		if (!result.ok) {
+		if (!result.ok || context.shouldReturnEarly) {
 			return result;
 		}
 
 		result = m_recoveryStage.Execute(context);
-		if (!result.ok) {
+		if (!result.ok || context.shouldReturnEarly) {
 			return result;
 		}
 

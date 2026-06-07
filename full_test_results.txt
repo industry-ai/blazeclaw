@@ -1,0 +1,47 @@
+﻿Randomness seeded to: 2486178639
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BlazeClawMfc.Tests.exe is a Catch2 v3.12.0 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Skill tool registry loads nano-pdf manifest as enabled runtime entry
+-------------------------------------------------------------------------------
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp(467)
+...............................................................................
+
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp(501): FAILED:
+  REQUIRE( loaded == 1 )
+with expansion:
+  2 == 1
+
+status: step8_passed
+blazeclaw decoded text: 请讲一个笑话
+expected text: 请讲一个笑话
+blazeclaw token count: 2
+blazeclaw fbank frames: 176
+blazeclaw final flush: None
+blazeclaw final outcome: final_transcript
+step8 status: passed
+step8 decoded_tokens_present: pass
+step8 not_all_joiner_calls_blank: pass
+step8 final_outcome_transcript: pass
+step8 decoded_text_present: pass
+step8 gateway_has_segment: pass
+step8 native_transcript_without_fallback: pass
+repeat classification: ok
+No reference JSON was supplied; BlazeClaw baseline metrics were extracted only.
+-------------------------------------------------------------------------------
+Parity coverage: runtime dependencies health reports required tool registration
+                 diagnostics
+-------------------------------------------------------------------------------
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp(4551)
+...............................................................................
+
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp(4582): FAILED:
+  REQUIRE( depsResponse.payloadJson->find("nano_pdf.generate") != std::string::npos )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  !=
+  18446744073709551615 (0xffffffffffffffff)
+
