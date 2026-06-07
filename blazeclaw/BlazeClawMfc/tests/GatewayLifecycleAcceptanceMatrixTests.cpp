@@ -7,6 +7,8 @@
 #include "gateway/GatewayHost.h"
 #include "gateway/GatewayMethodSurfaceAudit.h"
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace {
@@ -70,6 +72,42 @@ namespace {
 		REQUIRE(blazeclaw::gateway::GatewayChannelHandlerSurfaceMethodNames().size() == 35);
 	}
 
+	void VerifyRouteSurfaceInvariantContracts() {
+		const auto auditSourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayMethodSurfaceAudit.cpp";
+		std::ifstream auditSource(auditSourcePath.string());
+		REQUIRE(auditSource.is_open());
+		const std::string auditText(
+			(std::istreambuf_iterator<char>(auditSource)),
+			std::istreambuf_iterator<char>());
+
+		REQUIRE(
+			auditText.find("generated_handler_catalog_subset_not_registered") !=
+			std::string::npos);
+		REQUIRE(
+			auditText.find("channel_handler_surface_not_registered") !=
+			std::string::npos);
+		REQUIRE(
+			auditText.find("plugin_rpc_surface_not_registered") !=
+			std::string::npos);
+
+		const auto hostSourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayHost.cpp";
+		std::ifstream hostSource(hostSourcePath.string());
+		REQUIRE(hostSource.is_open());
+		const std::string hostText(
+			(std::istreambuf_iterator<char>(hostSource)),
+			std::istreambuf_iterator<char>());
+
+		REQUIRE(
+			hostText.find("GatewayRuntimeMethodSurfaceInvariantsHold(") !=
+			std::string::npos);
+	}
+
 	void VerifyShutdownOwnedCleanupOrder() {
 		const auto& order =
 			blazeclaw::core::GatewayRuntimeBootstrapCoordinator::NormalStopGatewayOwnedCleanupExecutionOrder();
@@ -118,6 +156,9 @@ TEST_CASE(
 		{ "channel RPC surface audit",
 			"GatewayMethodSurfaceAudit channel list (35)",
 			&VerifyChannelSurfaceAuditBaseline },
+		{ "route-surface consistency invariants",
+			"GatewayMethodSurfaceAudit violation contracts + GatewayHost invariant gate",
+			&VerifyRouteSurfaceInvariantContracts },
 		{ "shutdown owned-cleanup LIFO contract",
 			"GatewayRuntimeBootstrapCoordinator::NormalStopGatewayOwnedCleanupExecutionOrder",
 			&VerifyShutdownOwnedCleanupOrder },
