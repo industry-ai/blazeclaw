@@ -213,6 +213,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\config\ConfigLoader.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\config\ConfigLoaderSpeechNormalizationHelpers.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\config\ConfigLoaderSkillEntryNormalizationHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\EmailScheduleExecutor.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\LobsterExecutor.cpp" />
