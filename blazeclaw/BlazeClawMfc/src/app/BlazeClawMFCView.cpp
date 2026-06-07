@@ -133,143 +133,6 @@ namespace {
 		return backoffMs;
 	}
 
-	std::string ToNarrow(const std::wstring& value)
-	{
-		if (value.empty())
-		{
-			return {};
-		}
-
-		const int sizeNeeded = WideCharToMultiByte(
-			CP_UTF8,
-			0,
-			value.c_str(),
-			static_cast<int>(value.size()),
-			nullptr,
-			0,
-			nullptr,
-			nullptr);
-		if (sizeNeeded <= 0)
-		{
-			std::string fallback;
-			fallback.reserve(value.size());
-			for (const wchar_t ch : value)
-			{
-				fallback.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-			return fallback;
-		}
-
-		std::string output(sizeNeeded, '\0');
-		const int written = WideCharToMultiByte(
-			CP_UTF8,
-			0,
-			value.c_str(),
-			static_cast<int>(value.size()),
-			output.data(),
-			sizeNeeded,
-			nullptr,
-			nullptr);
-		if (written <= 0)
-		{
-			return {};
-		}
-
-		return output;
-	}
-
-	std::string BuildSkillPathFromDeltaText(const std::string& text)
-	{
-		const std::string trimmed = blazeclaw::gateway::json::Trim(text);
-		if (trimmed.empty())
-		{
-			return {};
-		}
-
-		const bool isStart =
-			trimmed.rfind("tools.execute.start tool=", 0) == 0;
-		const bool isResult =
-			trimmed.rfind("tools.execute.result tool=", 0) == 0;
-		if (!isStart && !isResult)
-		{
-			return {};
-		}
-
-		const std::string toolToken = " tool=";
-		const std::size_t toolPos = trimmed.find(toolToken);
-		if (toolPos == std::string::npos)
-		{
-			return {};
-		}
-
-		const std::size_t toolStart = toolPos + toolToken.size();
-		std::size_t toolEnd = trimmed.find(' ', toolStart);
-		if (toolEnd == std::string::npos)
-		{
-			toolEnd = trimmed.size();
-		}
-
-		const std::string tool = trimmed.substr(toolStart, toolEnd - toolStart);
-		if (tool.empty())
-		{
-			return {};
-		}
-
-		std::string status = isStart ? "requested" : "ok";
-		const std::string statusToken = " status=";
-		const std::size_t statusPos = trimmed.find(statusToken);
-		if (statusPos != std::string::npos)
-		{
-			const std::size_t statusStart = statusPos + statusToken.size();
-			std::size_t statusEnd = trimmed.find(' ', statusStart);
-			if (statusEnd == std::string::npos)
-			{
-				statusEnd = trimmed.size();
-			}
-
-			const std::string parsed = trimmed.substr(
-				statusStart,
-				statusEnd - statusStart);
-			if (!parsed.empty())
-			{
-				status = parsed;
-			}
-		}
-
-		std::string line = "[SkillPath] " + tool + " [" + status + "]";
-		const std::string errorToken = " errorCode=";
-		const std::size_t errorPos = trimmed.find(errorToken);
-		if (errorPos != std::string::npos)
-		{
-			const std::string errorCode = trimmed.substr(
-				errorPos + errorToken.size());
-			if (!errorCode.empty())
-			{
-				line += " errorCode=" + errorCode;
-			}
-		}
-
-		const std::string msgToken = " errorMessage=";
-		const std::size_t msgPos = trimmed.find(msgToken);
-		if (msgPos != std::string::npos)
-		{
-			std::size_t msgStart = msgPos + msgToken.size();
-			std::size_t msgEnd = trimmed.find(' ', msgStart);
-			if (msgEnd == std::string::npos)
-			{
-				msgEnd = trimmed.size();
-			}
-
-			const std::string em = trimmed.substr(msgStart, msgEnd - msgStart);
-			if (!em.empty())
-			{
-				line += " errorMessage=" + em;
-			}
-		}
-
-		return line;
-	}
-
 	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
 	{
 		std::vector<std::string> objects;
@@ -2040,7 +1903,7 @@ namespace {
 		{
 			AppendChatProcedureStatusLine(
 				L"startup.chat.override",
-				ToNarrow(overrideFile.value().wstring()));
+				blazeclaw::app::view_helpers::ToNarrowUtf8(overrideFile.value().wstring()));
 			return BuildFileUrl(overrideFile.value());
 		}
 
@@ -2061,10 +1924,10 @@ namespace {
 			{
 				AppendChatProcedureStatusLine(
 					L"startup.chat.root",
-					ToNarrow(root.wstring()));
+					blazeclaw::app::view_helpers::ToNarrowUtf8(root.wstring()));
 				AppendChatProcedureStatusLine(
 					L"startup.chat.selected",
-					ToNarrow(found->selectedPath.wstring()));
+					blazeclaw::app::view_helpers::ToNarrowUtf8(found->selectedPath.wstring()));
 				AppendChatProcedureStatusLine(
 					L"startup.chat.selected.type",
 					found->selectedDist ? "dist" : "source");
@@ -2078,7 +1941,7 @@ namespace {
 						{
 							inspected << " | ";
 						}
-						inspected << ToNarrow(found->inspectedCandidates[i].wstring());
+						inspected << blazeclaw::app::view_helpers::ToNarrowUtf8(found->inspectedCandidates[i].wstring());
 					}
 					AppendChatProcedureStatusLine(
 						L"startup.chat.candidates",
@@ -2098,7 +1961,7 @@ namespace {
 				{
 					inspectedRoots << " | ";
 				}
-				inspectedRoots << ToNarrow(roots[i].wstring());
+				inspectedRoots << blazeclaw::app::view_helpers::ToNarrowUtf8(roots[i].wstring());
 			}
 			AppendChatProcedureStatusLine(
 				L"startup.chat.roots",
@@ -2189,14 +2052,14 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 	m_eventTransport.SetEmitLegacyChannels(emitLegacyChannels);
 
 	//const bool bridgePushEnabled = ParseEnvBool(
-	//	ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_ENABLED").value_or(L"false")),
+	//	blazeclaw::app::view_helpers::ToNarrowUtf8(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_ENABLED").value_or(L"false")),
 	//	false);
 	const bool bridgePushEnabled = true;
 	const bool bridgePushFallbackPollEnabled = ParseEnvBool(
-		ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_FALLBACK_POLL_ENABLED").value_or(L"true")),
+		blazeclaw::app::view_helpers::ToNarrowUtf8(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_FALLBACK_POLL_ENABLED").value_or(L"true")),
 		true);
 	const bool bridgePushRecoveryPollEnabled = ParseEnvBool(
-		ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED").value_or(L"true")),
+		blazeclaw::app::view_helpers::ToNarrowUtf8(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED").value_or(L"true")),
 		true);
 
 	CBridge::Dependencies bridgeDeps{};
@@ -2983,11 +2846,11 @@ void CBlazeClawMFCView::PostBridgeLifecycleEvent(
 		"{\"channel\":\"blazeclaw.gateway.lifecycle\",\"sessionId\":" +
 		JsonString(m_bridgeSessionId) +
 		",\"state\":" +
-		JsonString(state != nullptr ? ToNarrow(state) : std::string("unknown"));
+		JsonString(state != nullptr ? blazeclaw::app::view_helpers::ToNarrowUtf8(state) : std::string("unknown"));
 
 	if (reason != nullptr && *reason != L'\0')
 	{
-		payload += ",\"reason\":" + JsonString(ToNarrow(reason));
+		payload += ",\"reason\":" + JsonString(blazeclaw::app::view_helpers::ToNarrowUtf8(reason));
 	}
 
 	if (!provider.empty())
@@ -3039,11 +2902,11 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 {
 	const std::string stateValue =
 		(state != nullptr)
-		? ToNarrow(std::wstring(state))
+		? blazeclaw::app::view_helpers::ToNarrowUtf8(std::wstring(state))
 		: std::string("unknown");
 	const std::string reasonValue =
 		(reason != nullptr)
-		? ToNarrow(std::wstring(reason))
+		? blazeclaw::app::view_helpers::ToNarrowUtf8(std::wstring(reason))
 		: std::string();
 	const std::uint64_t sinceLastSuccessMs =
 		m_bridge.PollLastSuccessTickMs() != 0
@@ -3258,7 +3121,7 @@ void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRa
 			continue;
 		}
 
-		const std::string line = BuildSkillPathFromDeltaText(text);
+		const std::string line = blazeclaw::app::view_helpers::BuildSkillPathFromDeltaText(text);
 		if (line.empty() || emittedInBatch.find(line) != emittedInBatch.end())
 		{
 			continue;
@@ -3782,7 +3645,7 @@ blazeclaw::config_bridge::ConfigBridgeContext CBlazeClawMFCView::BuildConfigBrid
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
-	const std::string message = ToNarrow(webMessageJson);
+	const std::string message = blazeclaw::app::view_helpers::ToNarrowUtf8(webMessageJson);
 
 	// Early-exit filters for skill/email config
 	if (HandleSkillConfigBridgeMessage(message))
@@ -4004,7 +3867,7 @@ void CBlazeClawMFCView::LoadSkillConfigToBridge(
 		",\"ok\":true,\"payload\":" +
 		payload +
 		",\"sourceMeta\":{\"configPath\":" +
-		JsonString(ToNarrow(loadedPath.wstring())) +
+		JsonString(blazeclaw::app::view_helpers::ToNarrowUtf8(loadedPath.wstring())) +
 		",\"exists\":true,\"sourceOfTruth\":" +
 		JsonString("canonical") +
 		",\"migratedFromLegacy\":" +
@@ -4015,7 +3878,7 @@ void CBlazeClawMFCView::LoadSkillConfigToBridge(
 	AppendChatProcedureStatusLine(
 		L"skills.config.loaded",
 		"skill=" + skillKey +
-		" path=" + ToNarrow(loadedPath.wstring()) +
+		" path=" + blazeclaw::app::view_helpers::ToNarrowUtf8(loadedPath.wstring()) +
 		" source=" +
 		(loadedPath == doc->GetSkillConfigPath(skillKey) ? "canonical" : "legacy-migrated"));
 }
@@ -4185,7 +4048,7 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 		",\"id\":" +
 		JsonString(correlationId) +
 		",\"configPath\":" +
-		JsonString(ToNarrow(savedPath.wstring())) +
+		JsonString(blazeclaw::app::view_helpers::ToNarrowUtf8(savedPath.wstring())) +
 		",\"updatedChecks\":{},\"ok\":true}";
 	PostBridgeMessageJson(ToWide(response));
 
@@ -4212,7 +4075,7 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 	AppendChatProcedureStatusLine(
 		L"skills.config.persisted",
 		"skill=" + skillKey +
-		" path=" + ToNarrow(savedPath.wstring()) +
+		" path=" + blazeclaw::app::view_helpers::ToNarrowUtf8(savedPath.wstring()) +
 		" payload=" + TruncateForDiagnostics(
 			RedactSensitiveJsonPayload(payloadJson),
 			256));
@@ -4521,11 +4384,11 @@ void CBlazeClawMFCView::PersistEmailConfigFromPayload(
 
 	AppendChatProcedureStatusLine(
 		L"email.config.saved",
-		ToNarrow(doc->GetEmailSkillConfigPath().wstring()));
+		blazeclaw::app::view_helpers::ToNarrowUtf8(doc->GetEmailSkillConfigPath().wstring()));
 
 	const std::string json =
 		"{\"channel\":\"blazeclaw.email.config.saved\",\"ok\":true,\"configPath\":" +
-		JsonString(ToNarrow(doc->GetEmailSkillConfigPath().wstring())) +
+		JsonString(blazeclaw::app::view_helpers::ToNarrowUtf8(doc->GetEmailSkillConfigPath().wstring())) +
 		"}";
 	PostBridgeMessageJson(ToWide(json));
 }
@@ -4745,7 +4608,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 								const std::wstring startupUrl = ResolveInitialNavigationUrl();
 								AppendChatProcedureStatusLine(
 									L"startup.url",
-									ToNarrow(startupUrl));
+									blazeclaw::app::view_helpers::ToNarrowUtf8(startupUrl));
 								if (startupUrl.empty())
 								{
 									AppendChatProcedureStatusLine(

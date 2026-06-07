@@ -166,8 +166,8 @@ TEST_CASE("ConfigLoader parses skills entries env and config maps", "[config][sk
 	REQUIRE(it->second.apiKey == L"demo-secret");
 	REQUIRE(it->second.env.contains(L"API_BASE"));
 	REQUIRE(it->second.env.at(L"API_BASE") == L"https://api.example.test");
-	REQUIRE(it->second.config.contains(L"timeoutMs"));
-	REQUIRE(it->second.config.at(L"timeoutMs") == L"3000");
+	REQUIRE(it->second.config.contains(L"timeoutms"));
+	REQUIRE(it->second.config.at(L"timeoutms") == L"3000");
 	REQUIRE(it->second.config.contains(L"retries"));
 	REQUIRE(it->second.config.at(L"retries") == L"2");
 
@@ -350,6 +350,63 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"ConfigLoader Priority 1 contract: speech hotwords_enabled value extraction offset",
+	"[config][priority1][speech][hotwords]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_priority1_hotwords_enabled_" +
+			std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "priority1-hotwords-enabled.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.hotwords_enabled=false\n";
+		out << L"speech.hotwords=[\"demo\"]\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+	REQUIRE_FALSE(config.speechRecognition.hotwordsEnabled);
+	REQUIRE(config.speechRecognition.hotwords.size() == 1);
+	REQUIRE(config.speechRecognition.hotwords[0] == L"demo");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader Priority 1 contract: skills entry config keys normalize to lowercase",
+	"[config][priority1][skills][entries][normalize]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_priority1_skills_keys_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "priority1-skills-keys.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"skills.entries.demo.config.timeoutMs=3000\n";
+		out << L"skills.entries.demo.config.Retry-Count=2\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	const auto it = config.skills.entries.find(L"demo");
+	REQUIRE(it != config.skills.entries.end());
+	REQUIRE(it->second.config.contains(L"timeoutms"));
+	REQUIRE(it->second.config.at(L"timeoutms") == L"3000");
+	REQUIRE(it->second.config.contains(L"retry-count"));
+	REQUIRE(it->second.config.at(L"retry-count") == L"2");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
 	"ConfigLoader applies deterministic precedence for repeated models.alias mappings",
 	"[config][models][alias][mapping]") {
 	blazeclaw::config::ConfigLoader loader;
@@ -477,9 +534,9 @@ TEST_CASE(
 	blazeclaw::config::AppConfig config;
 	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
 
-	REQUIRE(config.speechRecognition.hotwords.size() == 1);
-	const auto& firstHotword = config.speechRecognition.hotwords[0];
-	REQUIRE_FALSE(firstHotword.empty());
+	REQUIRE(config.speechRecognition.hotwords.size() == 2);
+	REQUIRE(config.speechRecognition.hotwords[0] == L"火龙虾");
+	REQUIRE(config.speechRecognition.hotwords[1] == L"云深科技");
 
 	std::filesystem::remove_all(root);
 }

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "ConfigLoader.h"
 #include "ConfigLoaderSpeechNormalizationHelpers.h"
+#include "ConfigLoaderSkillEntryNormalizationHelpers.h"
 
 #include <algorithm>
 #include <chrono>
@@ -302,24 +303,7 @@ namespace blazeclaw::config {
 		}
 
 		std::wstring NormalizeSkillEntryConfigKey(const std::wstring& raw) {
-			std::wstring normalized;
-			normalized.reserve(raw.size());
-			for (const wchar_t ch : raw) {
-				if (std::iswspace(ch) != 0) {
-					continue;
-				}
-
-				const wchar_t lowered = static_cast<wchar_t>(std::towlower(ch));
-				if ((lowered >= L'a' && lowered <= L'z') ||
-					(lowered >= L'0' && lowered <= L'9') ||
-					lowered == L'.' ||
-					lowered == L'_' ||
-					lowered == L'-') {
-					normalized.push_back(lowered);
-				}
-			}
-
-			return normalized;
+			return skill_entry_normalization::NormalizeSkillEntryConfigKey(raw);
 		}
 
 		std::wstring NormalizeSkillsEntryResolutionMode(const std::wstring& raw) {
@@ -1117,7 +1101,7 @@ namespace blazeclaw::config {
 			}
 
 			if (trimmedLine.rfind(L"speech.hotwords_enabled=", 0) == 0) {
-				outConfig.speechRecognition.hotwordsEnabled = ParseBool(trimmedLine.substr(23), true);
+				outConfig.speechRecognition.hotwordsEnabled = ParseBool(trimmedLine.substr(24), true);
 				continue;
 			}
 
