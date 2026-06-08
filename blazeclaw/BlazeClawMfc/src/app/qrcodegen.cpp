@@ -5,6 +5,7 @@
  * https://www.nayuki.io/page/qr-code-generator-library
  */
 
+#include "pch.h"
 #include "qrcodegen.hpp"
 
 #include <algorithm>
@@ -256,7 +257,7 @@ QrCode QrCode::encodeSegments(const vector<QrSegment>& segs, Ecc ecl,
 
 	size_t dataCapacityBits = static_cast<size_t>(getNumDataCodewords(version, ecl)) * 8;
 	assert(bb.size() <= dataCapacityBits);
-	bb.appendBits(0, std::min(4, static_cast<int>(dataCapacityBits - bb.size())));
+	bb.appendBits(0, (std::min)(4, static_cast<int>(dataCapacityBits - bb.size())));
 	bb.appendBits(0, (8 - static_cast<int>(bb.size() % 8)) % 8);
 	assert(bb.size() % 8 == 0);
 
@@ -385,7 +386,7 @@ void QrCode::drawVersion() {
 void QrCode::drawFinderPattern(int x, int y) {
 	for (int dy = -4; dy <= 4; dy++) {
 		for (int dx = -4; dx <= 4; dx++) {
-			int dist = std::max(std::abs(dx), std::abs(dy));
+			int dist = (std::max)(std::abs(dx), std::abs(dy));
 			int xx = x + dx, yy = y + dy;
 			if (0 <= xx && xx < size && 0 <= yy && yy < size)
 				setFunctionModule(xx, yy, dist != 2 && dist != 4);
@@ -396,7 +397,7 @@ void QrCode::drawFinderPattern(int x, int y) {
 void QrCode::drawAlignmentPattern(int x, int y) {
 	for (int dy = -2; dy <= 2; dy++) {
 		for (int dx = -2; dx <= 2; dx++)
-			setFunctionModule(x + dx, y + dy, std::max(std::abs(dx), std::abs(dy)) != 1);
+			setFunctionModule(x + dx, y + dy, (std::max)(std::abs(dx), std::abs(dy)) != 1);
 	}
 }
 

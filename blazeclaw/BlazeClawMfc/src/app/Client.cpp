@@ -39,18 +39,20 @@ static std::string base64url_decode(const std::string& input) {
     static const std::string base64_chars = 
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string decoded;
-    std::vector<int> vec(4);
-    
+    // Use size_t to match std::string::find return type and avoid narrowing warnings (C4267).
+    std::vector<size_t> vec(4);
+
     for (size_t i = 0; i < encoded.size(); i += 4) {
         for (size_t j = 0; j < 4; ++j) {
             vec[j] = base64_chars.find(encoded[i + j]);
         }
-        decoded += (vec[0] << 2) | (vec[1] >> 4);
-        if (vec[2] != 64) {
-            decoded += (vec[1] << 4) | (vec[2] >> 2);
+        // Found values are indexes into base64_chars. Use explicit casts when appending to string.
+        decoded += static_cast<char>((vec[0] << 2) | (vec[1] >> 4));
+        if (vec[2] != std::string::npos) {
+            decoded += static_cast<char>((vec[1] << 4) | (vec[2] >> 2));
         }
-        if (vec[3] != 64) {
-            decoded += (vec[2] << 6) | vec[3];
+        if (vec[3] != std::string::npos) {
+            decoded += static_cast<char>((vec[2] << 6) | vec[3]);
         }
     }
     

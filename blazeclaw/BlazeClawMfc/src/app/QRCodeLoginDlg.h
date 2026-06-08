@@ -8,7 +8,7 @@
 
 // 前向声明
 class QRCodeLoginService;
-class BindResult;
+struct BindResult;
 enum class QRCodeStatus;
 
 class CQRCodeLoginDlg : public CDialogEx

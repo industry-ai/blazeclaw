@@ -77,6 +77,7 @@ private:
 
 	CMultiDocTemplate* m_pChatDocTemplate = nullptr;
 	CSharedTabsDocTemplate* m_pWebViewMarkdownSharedDocTemplate = nullptr;
+	CSharedTabsDocTemplate* m_pAIChatViewTemplate = nullptr;
 };
 
 extern CBlazeClawMFCApp theApp;

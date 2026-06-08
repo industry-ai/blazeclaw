@@ -253,7 +253,11 @@ void CConnection_c::initOpenSSL() {
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
     ssl_ctx_ = SSL_CTX_new(TLS_client_method());
+#else
+    ssl_ctx_ = SSL_CTX_new(SSLv23_client_method());
+#endif
     if (!ssl_ctx_) {
         LOG_ERROR("conn={} SSL_CTX_new failed", conn_id_);
         return;

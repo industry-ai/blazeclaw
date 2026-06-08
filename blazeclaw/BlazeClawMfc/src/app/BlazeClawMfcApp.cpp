@@ -14,6 +14,7 @@
 #include "SharedTabsDocTemplate.h"
 #include "SharedDocWebViewChildFrame.h"
 #include "SharedDocMarkdownChildFrame.h"
+#include "AIChatView.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
@@ -974,7 +975,17 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CSharedDocWebViewChildFrame),
 		RUNTIME_CLASS(CSharedDocMarkdownChildFrame));
+		//RUNTIME_CLASS(CAIChatView));
 	AddDocTemplate(m_pWebViewMarkdownSharedDocTemplate);
+
+	// New template: Two MDI tabs (WebView + Markdown) sharing the same document
+	m_pAIChatViewTemplate = new CSharedTabsDocTemplate(
+		IDR_BlazeClawMFCTYPE,
+		RUNTIME_CLASS(CBlazeClawMFCDoc),
+		RUNTIME_CLASS(CSharedDocWebViewChildFrame),
+		//RUNTIME_CLASS(CSharedDocMarkdownChildFrame));
+		RUNTIME_CLASS(CAIChatView));
+	AddDocTemplate(m_pAIChatViewTemplate);
 
 	//auto* frame = new CMainFrame();
 	//m_pMainWnd = frame;
@@ -1001,7 +1012,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 				return FALSE;
 		}
 	}
-	catch (const std::exception& ex) {
+	catch (const std::exception& /*ex*/) {
 		// If auto login fails with exception, show login dialog
 		CLoginDlg loginDlg;
 		INT_PTR nResult;
