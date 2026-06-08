@@ -146,10 +146,60 @@ END
 
 #endif    // Chinese (Simplified, China) resources
 /////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_LOGIN_DIALOG DIALOGEX 0, 0, 284, 200
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "登录"
+FONT 10, "Microsoft YaHei", 0, 0, 0x1
+BEGIN
+    LTEXT           "欢迎回来",IDC_STATIC,10,13,220,30
+    LTEXT           "请输入您的手机号获取验证码以进入系统",IDC_STATIC,10,40,220,20
+    LTEXT           "手机号码",IDC_STATIC,10,55,60,14
+    EDITTEXT        IDC_PHONE_EDIT,10,66,260,15,ES_AUTOHSCROLL
+    LTEXT           "验证码",IDC_STATIC,10,91,60,14
+    EDITTEXT        IDC_CODE_EDIT,10,103,170,17,ES_AUTOHSCROLL
+    PUSHBUTTON      "获取验证码",IDC_GET_CODE_BUTTON,190,103,80,17
+    DEFPUSHBUTTON   "立即登录",IDC_LOGIN_BUTTON,11,129,260,16
+    PUSHBUTTON      "扫码登录",IDC_QRCODE_LOGIN_BUTTON,11,153,260,16
+END
 
 
 /////////////////////////////////////////////////////////////////////////////
-// English (United States) resources
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_LOGIN_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        TOPMARGIN, 7
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_LOGIN_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // 中文(简体，中国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// 英语(美国) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
