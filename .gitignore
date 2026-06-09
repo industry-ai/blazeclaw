@@ -36,3 +36,6 @@ model.onnx.data
 /blazeclaw/skills-openclaw-original/pdf-generator/scripts/Battery_Report.pdf
 /blazeclaw/BlazeClawMfc/diagnostics/sherpa-no-output-freeze/web-1779881176320-587
 /blazeclaw/BlazeClawMfc/debug-log.txt
+
+*/sms_login_test.log
+/blazeclaw/BlazeClawMfc/sms_login_test.log
