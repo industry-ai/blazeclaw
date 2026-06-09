@@ -326,12 +326,13 @@
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
 #define ID_EXTENSION_MODELSET           32786
-#define IDC_PHONE_EDIT					32787
-#define IDC_CODE_EDIT					32788
-#define IDC_GET_CODE_BUTTON				32789
-#define IDC_LOGIN_BUTTON				32790
-#define IDC_BTN_REGIST				    32791
-#define IDC_QRCODE_LOGIN_BUTTON		    32792
+#define IDC_PHONE_EDIT                  32787
+#define IDC_CODE_EDIT                   32788
+#define IDC_GET_CODE_BUTTON             32789
+#define IDC_LOGIN_BUTTON                32790
+#define IDC_BTN_REGIST                  32791
+#define IDC_QRCODE_LOGIN_BUTTON         32792
+#define ID_WINDOW_NEWAICHATVIEW         32793
 #define ID_EXTENSION_DEEPSEEK           40101
 #define ID_WINDOW_NEW_WEBVIEW           40102
 #define ID_WINDOW_NEW_WEBVIEW_CHAT      40103
@@ -368,7 +369,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        321
-#define _APS_NEXT_COMMAND_VALUE         32793
+#define _APS_NEXT_COMMAND_VALUE         32794
 #define _APS_NEXT_CONTROL_VALUE         1190
 #define _APS_NEXT_SYMED_VALUE           321
 #endif

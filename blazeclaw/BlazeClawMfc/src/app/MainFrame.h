@@ -93,6 +93,7 @@ protected:
 	afx_msg void OnWindowNew();
 	afx_msg void OnWindowNewWebViewChat();
 	afx_msg void OnWindowNewWebViewMarkdown();
+	afx_msg void OnWindowNewAIChatView();
 	afx_msg void OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI);
 
 public:
@@ -118,6 +119,7 @@ private:
 private:
 	void OpenWebViewPlusChatTab();
 	void OpenWebViewMarkdownTab();
+	void OpenAIChatViewTab();
 
 	// extension commands
 	afx_msg void OnExtensionDeepseek();
@@ -171,4 +173,5 @@ private:
 	CMenu m_parityMenu;
 public:
 	void CreateTwoTabbedGroups();
+	afx_msg void OnEditChat();
 };

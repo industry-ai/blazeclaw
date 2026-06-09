@@ -58,6 +58,7 @@ public:
 
 	CMultiDocTemplate* GetChatDocTemplate() const noexcept { return m_pChatDocTemplate; }
 	CSharedTabsDocTemplate* GetWebViewMarkdownSharedDocTemplate() const noexcept { return m_pWebViewMarkdownSharedDocTemplate; }
+	CSharedTabsDocTemplate* GetAIChatViewTemplate() const noexcept { return m_pAIChatViewTemplate; }
 	CRuntimeClass* GetWebViewMarkdownLeftViewClass() const;
 	CRuntimeClass* GetWebViewMarkdownRightViewClass() const;
 

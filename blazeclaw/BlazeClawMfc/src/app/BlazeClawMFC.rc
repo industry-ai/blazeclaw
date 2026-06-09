@@ -1,4 +1,4 @@
-﻿// Microsoft Visual C++ generated resource script.
+// Microsoft Visual C++ generated resource script.
 //
 #pragma code_page(65001)
 
@@ -38,10 +38,14 @@ END
 2 TEXTINCLUDE 
 BEGIN
     "#ifndef APSTUDIO_INVOKED\r\n"
-    "#include "targetver.h"\r\n"
+    "// Resource View stable fallback: remove local targetver.h dependency\r\n"
+    "#include <SDKDDKVer.h>\r\n"
     "#endif\r\n"
-    "#include "afxres.h"\r\n"
-    "#include "verrsrc.h"\r\n"
+    "// Resource View stable fallback: avoid afxres.h/verrsrc.h path dependency\r\n"
+    "#include <windows.h>\r\n"
+    "#ifndef IDC_STATIC\r\n"
+    "#define IDC_STATIC (-1)\r\n"
+    "#endif\r\n"
     "\0"
 END
 
@@ -53,12 +57,7 @@ BEGIN
     "\r\n"
     "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
     "LANGUAGE 9, 1\r\n"
-    "#include "res\\BlazeClawMFC.rc2"  // non-Microsoft Visual C++ edited resources\r\n"
-    "#include "afxres.rc"      // Standard components\r\n"
-    "#include "afxprint.rc"    // printing/print preview resources\r\n"
-    "#if !defined(_AFXDLL)\r\n"
-    "#include "afxribbon.rc"        // MFC ribbon and control bar resources\r\n"
-    "#endif\r\n"
+    "// Resource View stable fallback: avoid include path dependency in TEXTINCLUDE 3\r\n"
     "#endif\r\n"
     "\0"
 END
@@ -109,6 +108,22 @@ BEGIN
     EDITTEXT        IDC_EDIT_SPEECH_MODEL_PATH,486,271,283,14,ES_AUTOHSCROLL
 END
 
+IDD_LOGIN_DIALOG DIALOGEX 0, 0, 284, 200
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "登录"
+FONT 10, "Microsoft YaHei", 0, 0, 0x1
+BEGIN
+    LTEXT           "欢迎回来",IDC_STATIC,10,13,220,30
+    LTEXT           "请输入您的手机号获取验证以进入系统",IDC_STATIC,10,40,220,20
+    LTEXT           "手机号",IDC_STATIC,10,55,60,14
+    EDITTEXT        IDC_PHONE_EDIT,10,66,260,15,ES_AUTOHSCROLL
+    LTEXT           "验证",IDC_STATIC,10,91,60,14
+    EDITTEXT        IDC_CODE_EDIT,10,103,170,17,ES_AUTOHSCROLL
+    PUSHBUTTON      "获取验证",IDC_GET_CODE_BUTTON,190,103,80,17
+    DEFPUSHBUTTON   "立即登录",IDC_LOGIN_BUTTON,11,129,260,16
+    PUSHBUTTON      "扫登录",IDC_QRCODE_LOGIN_BUTTON,11,153,260,16
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -144,62 +159,17 @@ BEGIN
     0
 END
 
-#endif    // Chinese (Simplified, China) resources
-/////////////////////////////////////////////////////////////////////////////
-//
-// Dialog
-//
-
-IDD_LOGIN_DIALOG DIALOGEX 0, 0, 284, 200
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "登录"
-FONT 10, "Microsoft YaHei", 0, 0, 0x1
-BEGIN
-    LTEXT           "欢迎回来",IDC_STATIC,10,13,220,30
-    LTEXT           "请输入您的手机号获取验证以进入系统",IDC_STATIC,10,40,220,20
-    LTEXT           "手机号",IDC_STATIC,10,55,60,14
-    EDITTEXT        IDC_PHONE_EDIT,10,66,260,15,ES_AUTOHSCROLL
-    LTEXT           "验证",IDC_STATIC,10,91,60,14
-    EDITTEXT        IDC_CODE_EDIT,10,103,170,17,ES_AUTOHSCROLL
-    PUSHBUTTON      "获取验证",IDC_GET_CODE_BUTTON,190,103,80,17
-    DEFPUSHBUTTON   "立即登录",IDC_LOGIN_BUTTON,11,129,260,16
-    PUSHBUTTON      "扫登录",IDC_QRCODE_LOGIN_BUTTON,11,153,260,16
-END
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// DESIGNINFO
-//
-
-#ifdef APSTUDIO_INVOKED
-GUIDELINES DESIGNINFO
-BEGIN
-    IDD_LOGIN_DIALOG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        TOPMARGIN, 7
-    END
-END
-#endif    // APSTUDIO_INVOKED
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// AFX_DIALOG_LAYOUT
-//
-
 IDD_LOGIN_DIALOG AFX_DIALOG_LAYOUT
 BEGIN
     0
 END
 
-
+#endif    // Chinese (Simplified, China) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// 英语(美国) resources
+// English (United States) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
@@ -838,6 +808,7 @@ BEGIN
         MENUITEM "&New Window",                 ID_WINDOW_NEW
         MENUITEM "New WebView+Chat Tab",        ID_WINDOW_NEW_WEBVIEW_CHAT
         MENUITEM "New WebView+Markdown Tab",    ID_WINDOW_NEW_WEBVIEW_MARKDOWN
+        MENUITEM "New AIChatView",              ID_WINDOW_NEWAICHATVIEW
     END
     POPUP "&Help"
     BEGIN
@@ -1100,6 +1071,10 @@ END
 STRINGTABLE
 BEGIN
     ID_VIEW_CAPTION_BAR     "Show or hide the caption bar\nToggle Caption Bar"
+    IDS_CAPTION_BUTTON      "Options..."
+    IDS_CAPTION_BUTTON_TIP  "Click here to see more options"
+    IDS_CAPTION_TEXT        "This is a caption bar where a message can be presented to the user."
+    IDS_CAPTION_IMAGE_TIP   "Important"
 END
 
 STRINGTABLE
@@ -1136,6 +1111,10 @@ BEGIN
     IDS_FILE_VIEW           "File View"
     IDS_CLASS_VIEW          "Skill View"
     IDS_OUTPUT_WND          "Output"
+END
+
+STRINGTABLE
+BEGIN
     IDS_PROPERTIES_WND      "Properties"
 END
 
@@ -1167,10 +1146,6 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_CAPTION_BUTTON      "Options..."
-    IDS_CAPTION_BUTTON_TIP  "Click here to see more options"
-    IDS_CAPTION_TEXT        "This is a caption bar where a message can be presented to the user."
-    IDS_CAPTION_IMAGE_TIP   "Important"
     IDS_CAPTION_IMAGE_TEXT  "Here is an informational message for the user."
 END
 
@@ -1195,12 +1170,7 @@ END
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE 9, 1
-#include "res\BlazeClawMFC.rc2"  // non-Microsoft Visual C++ edited resources
-#include "afxres.rc"      // Standard components
-#include "afxprint.rc"    // printing/print preview resources
-#if !defined(_AFXDLL)
-#include "afxribbon.rc"        // MFC ribbon and control bar resources
-#endif
+// Resource View stable fallback: avoid include path dependency in TEXTINCLUDE 3
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

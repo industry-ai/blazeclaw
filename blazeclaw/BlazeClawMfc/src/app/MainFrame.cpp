@@ -123,6 +123,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnUpdateWindowNewWebViewOnly)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_CHAT, &CMainFrame::OnWindowNewWebViewChat)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_MARKDOWN, &CMainFrame::OnWindowNewWebViewMarkdown)
+	ON_COMMAND(ID_WINDOW_NEWAICHATVIEW, &CMainFrame::OnWindowNewAIChatView)
 	ON_WM_SETTINGCHANGE()
 
 	ON_MESSAGE(kMsgCreateMdiGroup, &CMainFrame::OnCreateMdiGroup)
@@ -147,6 +148,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(kIdUiParitySkillsScanStatus, &CMainFrame::OnUiParitySkillsScanStatus)
 	ON_COMMAND(kIdUiParityOperatorDiagnosticsReport, &CMainFrame::OnUiParityOperatorDiagnosticsReport)
 	ON_COMMAND(kIdUiParityOperatorPromotionReadiness, &CMainFrame::OnUiParityOperatorPromotionReadiness)
+	ON_COMMAND(ID_EDIT_CHAT, &CMainFrame::OnEditChat)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() noexcept
@@ -1315,6 +1317,11 @@ void CMainFrame::OnWindowNewWebViewMarkdown()
 	OpenWebViewMarkdownTab();
 }
 
+void CMainFrame::OnWindowNewAIChatView()
+{
+	OpenAIChatViewTab();
+}
+
 void CMainFrame::OpenWebViewPlusChatTab()
 {
 	// Clear any pending URL from previous SkillView interactions
@@ -1500,4 +1507,32 @@ void CMainFrame::OpenWebViewMarkdownTab()
 void CMainFrame::OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI)
 {
 	pCmdUI->Enable(TRUE);
+}
+
+void CMainFrame::OpenAIChatViewTab()
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetAIChatViewTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenAIChatViewTab] app=%p tpl=%p\n"), app, tpl);
+	if (!tpl)
+		return;
+	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
+	TRACE(_T("[CMainFrame::OpenAIChatViewTab] pDoc=%p\n"), pDoc);
+	if (!pDoc)
+		return;
+	AddChatStatusLine(_T("[Tab] New AI Chat View tab created."));
+}
+
+void CMainFrame::OnEditChat()
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetAIChatViewTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenAIChatViewTab] app=%p tpl=%p\n"), app, tpl);
+	if (!tpl)
+		return;
+	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
+	TRACE(_T("[CMainFrame::OpenAIChatViewTab] pDoc=%p\n"), pDoc);
+	if (!pDoc)
+		return;
+	AddChatStatusLine(_T("[Tab] New AI Chat View tab created."));
 }

@@ -84,6 +84,9 @@
     <PostBuildEvent>
       <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)src\app;$(VC_IncludePath);$(WindowsSdkDir)Include;$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -111,6 +114,9 @@
     <PostBuildEvent>
       <Command>if exist "$(LlamaCppBinDir)\llama.dll" copy /Y "$(LlamaCppBinDir)\llama.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml.dll" copy /Y "$(LlamaCppBinDir)\ggml.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cpu.dll" copy /Y "$(LlamaCppBinDir)\ggml-cpu.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-base.dll" copy /Y "$(LlamaCppBinDir)\ggml-base.dll" "$(OutDir)" &amp; if exist "$(LlamaCppBinDir)\ggml-cuda.dll" copy /Y "$(LlamaCppBinDir)\ggml-cuda.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)src\app;$(MSBuildThisFileDirectory)../../build/native/include/;$(VC_IncludePath);$(WindowsSdkDir)Include;$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
@@ -716,6 +722,7 @@
     <Image Include="src\app\res\BlazeClaw.MFCDoc.ico" />
     <Image Include="src\app\res\buttons.bmp" />
     <Image Include="src\app\res\classview.bmp" />
+    <Image Include="src\app\res\classview_hc.bmp" />
     <Image Include="src\app\res\class_view.ico" />
     <Image Include="src\app\res\class_view_hc.ico" />
     <Image Include="src\app\res\explorer.bmp" />

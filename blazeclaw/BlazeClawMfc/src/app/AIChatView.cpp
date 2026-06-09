@@ -12,7 +12,7 @@
 #ifdef HAVE_WEBVIEW2_HEADER
 using namespace Microsoft::WRL;
 
-constexpr UINT WM_WEBVIEW2_WEBMESSAGE_RECEIVED = WM_USER + 100;
+constexpr UINT WM_WEBVIEW2_WEBMESSAGE_RECEIVED = WM_USER + 200;
 constexpr LPCWSTR WEBVIEW_HOST_NAME = L"app.localhost";
 constexpr LPCWSTR WEBVIEW_INDEX_FILE = L"index.html";
 
