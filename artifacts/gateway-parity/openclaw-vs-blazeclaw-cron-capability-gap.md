@@ -1,8 +1,8 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-05-22 (Phase DG §7.8 Step 1-5 execution + validation/docs sync)
+Last refreshed: 2026-06-05 (Phase DH `/cron` non-blocking refactor + docs sync)
 
-Authoritative detail: `blazeclaw/docs/cron-parity-gap-and-port-plan.md` (§7.7)
+Authoritative detail: `blazeclaw/docs/job/cron-parity-gap-and-port-plan.md` (§7.7) and `blazeclaw/docs/job/cron-deferred-parity-gap-closure-plan.md` (R1–R4)
 
 ## Summary
 
@@ -10,6 +10,10 @@ BlazeClaw cron parity is **closed and sustained** on the service/gateway/tool
 surface: all Section 2 core rows remain **High**, §7.6 and §7.7 baselines remain
 pass-linked, and Phase DF replayed ordered gates green (`[cron]` 1664 assertions /
 254 test cases).
+
+Phase DH update (2026-06-05): WebView `/cron` slash execution refactored to a
+non-blocking pending/settled pipeline with sequence-token stale suppression while
+preserving 7.7 parser/planner/help/error contracts.
 
 Phase DG update: §7.8 Step 1-5 governance execution is completed with no reopen
 trigger conditions met; closure remains in pass-lock mode.
@@ -35,7 +39,7 @@ trigger conditions met; closure remains in pass-lock mode.
 | --- | --- |
 | P0–P9 + P10 tool depth | **Complete** |
 | §7.6 depth (P11+) | **Complete** |
-| §7.7 `/cron` cli parity (Step 1-9) | **Complete** (Phase DE baseline, sustained in Phase DG) |
+| §7.7 `/cron` cli parity (Step 1-9) | **Complete** (Phase DE baseline, sustained in Phase DG; non-blocking dispatch Phase DH) |
 | §7.8 post-closure re-open governance | **Active policy** |
 
 ## Remaining gaps (Phase DG)
@@ -43,7 +47,7 @@ trigger conditions met; closure remains in pass-lock mode.
 | Theme | OpenClaw | BlazeClaw gap |
 | --- | --- | --- |
 | Isolated runtime submodule graph | Full `isolated-agent/*` orchestration breadth | Adapter-backed runtime outcomes/metadata are landed; deep module graph remains product-scoped deferred |
-| Native CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parity is closed; native MFC CLI/dashboard remains deferred unless product scope changes |
+| Native CLI/UI | `cron-cli`, native UI | WebView-first `/cron` parity is closed and non-blocking (Phase DH); native MFC dashboard remains deferred unless product scope changes |
 
 ## Validation (2026-05-22, Phase DG)
 

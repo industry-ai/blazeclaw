@@ -1911,6 +1911,7 @@
                 }
                 return {
                     handled: true,
+                    pending: result.kind === "pending",
                 };
             }
 
