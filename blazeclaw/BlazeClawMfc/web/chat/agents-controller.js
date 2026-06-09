@@ -6064,12 +6064,18 @@
 
         async function loadAgentCron(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
-            if (!resolvedAgentId || !request || !state.connected) {
+            if (!request || !state.connected) {
                 return;
             }
 
             function shouldIgnoreResponse() {
-                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "cron";
+                if (state.agentsPanel !== "cron") {
+                    return true;
+                }
+                if (resolvedAgentId) {
+                    return hasSelectedAgentMismatch(resolvedAgentId);
+                }
+                return false;
             }
 
             state.agentCronLoading = true;
@@ -6599,6 +6605,11 @@
 
         async function loadPanelDataForCurrentAgent() {
             const selectedAgentId = String(state.agentsSelectedId || "").trim();
+            if (state.agentsPanel === "cron") {
+                await loadAgentCron(selectedAgentId);
+                return;
+            }
+
             if (!selectedAgentId) {
                 return;
             }
@@ -6634,11 +6645,6 @@
 
             if (state.agentsPanel === "channels") {
                 await loadAgentChannels(selectedAgentId);
-                return;
-            }
-
-            if (state.agentsPanel === "cron") {
-                await loadAgentCron(selectedAgentId);
                 return;
             }
 
@@ -7714,6 +7720,118 @@
             assertRegression(Boolean(state.agentSkillsResult),
                 "current tab response should remain after cross-tab request overlap");
             summary.push("cross-tab stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "cron";
+            state.agentsSelectedId = null;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const statusCall = harness.takeNextCall("cron.status");
+            statusCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 321,
+                },
+            });
+            const jobsCall = harness.takeNextCall("cron.list");
+            jobsCall.deferred.resolve({
+                payload: {
+                    jobs: [
+                        {
+                            id: "cron-global-a",
+                            name: "Global Cron A",
+                            enabled: true,
+                            schedule: {
+                                kind: "every",
+                                everyMs: 60000,
+                            },
+                            payload: {
+                                kind: "agentTurn",
+                                message: "Ping",
+                            },
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const runsCall = harness.takeNextCall("cron.runs");
+            runsCall.deferred.resolve({
+                payload: {
+                    entries: [
+                        {
+                            id: "run-global-a",
+                            jobId: "cron-global-a",
+                            status: "ok",
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const modelsCall = harness.takeNextCall("models.list");
+            modelsCall.deferred.resolve({
+                payload: {
+                    models: [
+                        {
+                            id: "openai:gpt-4.1-mini",
+                        },
+                    ],
+                },
+            });
+            await panelLoad;
+
+            assertRegression(Boolean(state.agentCronStatusResult) &&
+                state.agentCronStatusResult.enabled === true,
+            "cron panel should load status even when no agent is selected");
+            assertRegression(Array.isArray(state.agentCronJobs) && state.agentCronJobs.length === 1,
+                "cron panel should load jobs even when no agent is selected");
+            assertRegression(Array.isArray(state.agentCronRuns) && state.agentCronRuns.length === 1,
+                "cron panel should load runs even when no agent is selected");
+            summary.push("cron global panel hydration without selected agent");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "cron";
+            state.agentsSelectedId = "main";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const statusCall = harness.takeNextCall("cron.status");
+            controller.setSelectedAgentId("reviewer");
+            statusCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 99,
+                    nextWakeAtMs: 999,
+                },
+            });
+            await panelLoad;
+
+            assertRegression(state.agentCronStatusResult === null,
+                "cron panel should ignore stale status response after agent switch");
+            assertRegression(state.agentCronLoading === false,
+                "cron panel should always reset loading flag after stale suppression");
+            summary.push("cron stale-response suppression on selected-agent switch");
         }
 
         {
