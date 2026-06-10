@@ -389,7 +389,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// improves the usability of the taskbar because the document name is visible with the thumbnail.
 	ModifyStyle(0, FWS_PREFIXTITLE);
 
-	m_menuBar.CreateMenu();
+/*	m_menuBar.CreateMenu();
 	m_parityMenu.CreatePopupMenu();
 	m_parityMenu.AppendMenu(
 		MF_STRING,
@@ -474,7 +474,34 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		reinterpret_cast<UINT_PTR>(m_parityMenu.GetSafeHmenu()),
 		_T("Parity"));
 	SetMenu(&m_menuBar);
+*/
 
+/*	if (!m_menuBar.LoadMenu(IDR_MAINFRAME))
+	{
+		TRACE0("Failed to load menu resource IDR_MAINFRAME\n");
+	}
+	else
+	{
+		// Install as the window menu so normal menu routing & accelerators work
+		SetMenu(&m_menuBar);
+
+		//// Optional: expose the same menu from the Ribbon application button
+		//// (attach HMENU to the app button and set it on the ribbon)
+		//if (m_MainButton.GetSafeHwnd() == nullptr)
+		//{
+		//	// ensure the ribbon has an application button slot
+		//	m_wndRibbonBar.SetApplicationButton(&m_MainButton, IDR_MAINFRAME);
+		//}
+		
+		// Expose the same menu from the Ribbon application button.
+		// CMFCRibbonApplicationButton is not a CWnd, so do not call GetSafeHwnd() on it.
+		m_wndRibbonBar.SetApplicationButton(&m_MainButton, IDR_MAINFRAME);
+
+		// If SetApplicationButton above is not present in your MFC version, you can
+		// still attach the HMENU directly to the CMFCRibbonApplicationButton:
+		m_MainButton.SetMenu(m_menuBar.GetSafeHmenu());
+	}
+*/
 	SetWindowText(_T("BlazeClaw - Service Console"));
 	return 0;
 }
@@ -1075,13 +1102,17 @@ void CMainFrame::OnViewDashboardWindow()
 {
 	// Show or activate the pane, depending on current state.  The
 	// pane can only be closed via the [x] button on the pane frame.
-	m_wndDashboard.ShowPane(TRUE, FALSE, TRUE);
-	m_wndDashboard.SetFocus();
+	//m_wndDashboard.ShowPane(TRUE, FALSE, TRUE);
+	//m_wndDashboard.SetFocus();
+	//m_wndDashboard.ShowWindow(m_wndDashboard.IsVisible() ? SW_HIDE : SW_SHOW);
+	m_wndDashboard.ShowPane(!m_wndDashboard.IsVisible(), FALSE, TRUE);
+	RecalcLayout(FALSE);
 }
 
 void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
 {
-	pCmdUI->Enable(TRUE);
+	//pCmdUI->Enable(TRUE);
+	pCmdUI->SetCheck(m_wndDashboard.IsVisible());
 }
 
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)

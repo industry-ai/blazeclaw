@@ -974,7 +974,6 @@ IDR_RIBBON              RT_RIBBON_XML           "res\\ribbon.mfcribbon-ms"
 STRINGTABLE
 BEGIN
     IDP_OLE_INIT_FAILED     "OLE initialization failed.  Make sure that the OLE libraries are the correct version."
-    IDS_DASHBOARD_WND       "Dashboards"
     IDP_SOCKETS_INIT_FAILED "Windows sockets initialization failed."
 END
 
@@ -983,6 +982,7 @@ BEGIN
     IDR_MAINFRAME           "BlazeClaw.MFC"
     IDR_BlazeClawMFCTYPE    "\nBlazeClawMFC\nBlazeClaw.MFC\n\n\nBlazeClawMFC.Document\nBlazeClaw.MFC.Document"
     ID_WINDOW_MANAGER       "&Windows..."
+    IDS_DASHBOARD_WND       "Dashboards"
 END
 
 STRINGTABLE
@@ -1161,6 +1161,11 @@ END
 STRINGTABLE
 BEGIN
     ID_EXTENSION_DEEPSEEK   "Use deepseek as default model\ndeepseek"
+END
+
+STRINGTABLE
+BEGIN
+    ID_VIEW_DASHBOARDWND    "Show or hide dashboard\nToggle dashboard"
 END
 
 #endif    // English (United States) resources
