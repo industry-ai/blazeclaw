@@ -10,14 +10,10 @@
 // Generated from the TEXTINCLUDE 2 resource.
 //
 #ifndef APSTUDIO_INVOKED
-// Resource View stable fallback: remove local targetver.h dependency
-#include <SDKDDKVer.h>
+#include "targetver.h"
 #endif
-// Resource View stable fallback: avoid afxres.h/verrsrc.h path dependency
-#include <windows.h>
-#ifndef IDC_STATIC
-#define IDC_STATIC (-1)
-#endif
+#include "afxres.h"
+#include "verrsrc.h"
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
