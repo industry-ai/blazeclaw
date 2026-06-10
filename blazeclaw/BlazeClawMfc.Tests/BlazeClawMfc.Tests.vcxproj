@@ -136,7 +136,10 @@
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronNormalize.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronStoreService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronHygiene.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronCliGatewayShim.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronTimerService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronTimerServiceTestHooks.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\cron\CronRuntimeOutcomeAdapter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\cron\CronOpsService.cpp" />
     <ClCompile Include="NativeAudioChatStubs.cpp" />
     <ClCompile Include="NativeMainFrameStub.cpp" />

@@ -1,14 +1,15 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap (Post-Closure Snapshot)
 
-Last refreshed: 2026-06-05 (Phase DH `/cron` non-blocking refactor)
+Last refreshed: 2026-06-09 (Phase DI gap-closing procedure execution)
 
 ## Closure verdict
 
 Cron parity is **closed** for product-scoped BlazeClaw surfaces. Section 2 core
 rows and Section 3 capability baselines remain **High** / **Pass**-linked.
 
-WebView `/cron` slash execution (§7.7) remains pass-linked and is now **non-blocking**
-(Phase DH): pending/settled envelope pipeline with sequence-token stale suppression.
+Phase DI update (2026-06-09): landed isolated-runtime adapter shim, transport-dispatch
+test hooks, native CLI gateway verb shim, and targeted parity tests while keeping
+MFC native dashboard UI explicitly deferred.
 
 ## Sustained pass-locks (do not re-open without §7.8 trigger)
 
@@ -31,8 +32,8 @@ WebView `/cron` slash execution (§7.7) remains pass-linked and is now **non-blo
 
 ## Product-scoped deferrals (non-blocking)
 
-- Native MFC dashboard UI (WebView `/cron` slash path is active and non-blocking as of Phase DH).
-- Full OpenClaw `isolated-agent/*` submodule graph beyond production adapter metadata.
+- Native MFC dashboard UI (WebView `/cron` + `CronCliGatewayShim` verb mapping are active; full native dashboard remains deferred).
+- Full OpenClaw `isolated-agent/*` submodule graph beyond adapter-backed production metadata (Phase DI closed adapter/test depth; module graph still deferred).
 - Exotic `cron-tool.ts` synthetic-job recovery shapes unless regressions appear.
 
 ## Re-open policy (§7.8)
@@ -43,4 +44,4 @@ Re-open only when:
 2. OpenClaw baseline behavior changes and product requires parity uplift, or
 3. Product explicitly promotes a deferred surface.
 
-Authoritative plan: `blazeclaw/docs/job/cron-deferred-parity-gap-closure-plan.md` (R1–R4 complete) and `blazeclaw/docs/cron-parity-gap-and-port-plan.md` §7.8.
+Authoritative plan: `blazeclaw/docs/job/cron-parity-gap-and-port-plan.md` (Phase DI + §7.8) and `blazeclaw/docs/job/cron-gap-closure-plan.md`.

@@ -332,6 +332,9 @@ namespace blazeclaw::cron {
 			if (runEntry.contains("runtimeHandled")) {
 				payload["runtimeHandled"] = runEntry["runtimeHandled"];
 			}
+			if (runEntry.contains("runtimeModule")) {
+				payload["runtimeModule"] = runEntry["runtimeModule"];
+			}
 			if (runEntry.contains("simulationFallbackUsed")) {
 				payload["simulationFallbackUsed"] =
 					runEntry["simulationFallbackUsed"];
@@ -1618,6 +1621,10 @@ namespace blazeclaw::cron {
 				terminal["runtimeHandled"] =
 					finishedRun->contains("runtimeHandled")
 					? (*finishedRun)["runtimeHandled"]
+					: CronJson(nullptr);
+				terminal["runtimeModule"] =
+					finishedRun->contains("runtimeModule")
+					? (*finishedRun)["runtimeModule"]
 					: CronJson(nullptr);
 				terminal["simulationFallbackUsed"] =
 					finishedRun->contains("simulationFallbackUsed")

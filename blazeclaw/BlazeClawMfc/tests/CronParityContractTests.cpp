@@ -7,7 +7,10 @@
 #include "../src/cron/CronOpsServiceTestHooks.h"
 #include "../src/cron/CronStoreService.h"
 #include "../src/cron/CronHygiene.h"
+#include "../src/cron/CronRuntimeOutcomeAdapter.h"
+#include "../src/cron/CronCliGatewayShim.h"
 #include "../src/cron/CronTimerService.h"
+#include "../src/cron/CronTimerServiceTestHooks.h"
 #include "../src/gateway/GatewayHost.h"
 #include "../src/gateway/GatewayProtocolSchemaValidator.h"
 #include "../src/gateway/GatewayTestHooks.h"
@@ -41,6 +44,9 @@ namespace {
 	using blazeclaw::cron::CronStoreService;
 	using blazeclaw::cron::ClearCronJobActive;
 	using blazeclaw::cron::CronTimerService;
+	using blazeclaw::cron::CronTimerRunOutcome;
+	using blazeclaw::cron::ApplyRuntimeExecutionResult;
+	using blazeclaw::cron::MapCronCliCommandToGatewayRoute;
 	using blazeclaw::cron::MarkCronJobActive;
 	using blazeclaw::cron::ResetCronActiveJobsForTests;
 	using blazeclaw::cron::SweepCronRunSessions;
@@ -8939,6 +8945,243 @@ TEST_CASE(
 	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(request, issue));
 	REQUIRE(issue.code == "schema_invalid_value");
 	REQUIRE(issue.message.find("schedule timestamp") != std::string::npos);
+}
+
+TEST_CASE("Cron runtime outcome adapter projects isolated transport metadata", "[cron][runtime-outcome][isolated-runtime]") {
+	CronTimerRunOutcome outcome;
+	ApplyRuntimeExecutionResult(outcome, CronJson{
+		{ "status", "ok" },
+		{ "summary", "isolated-runtime-metadata" },
+		{ "runtimeModule", "isolated-agent" },
+		{ "deliveryHttpStatus", 200 },
+		{ "failureDestinationHttpStatus", 502 },
+		{ "sessionKey", "agent:main:default" }
+	});
+
+	REQUIRE(outcome.status == "ok");
+	REQUIRE(outcome.runtimeModule == "isolated-agent");
+	REQUIRE(outcome.deliveryHttpStatus == 200);
+	REQUIRE(outcome.deliveryStatus == "delivered");
+	REQUIRE(outcome.failureDestinationHttpStatus == 502);
+	REQUIRE(outcome.failureDestinationStatus == "not-delivered");
+	REQUIRE(outcome.runtimeProjectedTransport);
+}
+
+TEST_CASE("Cron cli gateway shim maps slash verbs to gateway routes", "[cron][native-cli-shim]") {
+	const auto statusRoute = MapCronCliCommandToGatewayRoute("status");
+	REQUIRE(statusRoute.has_value());
+	REQUIRE(statusRoute->gatewayMethod == "cron.status");
+	REQUIRE_FALSE(statusRoute->mutating);
+
+	const auto wakeRoute = MapCronCliCommandToGatewayRoute("wake");
+	REQUIRE(wakeRoute.has_value());
+	REQUIRE(wakeRoute->gatewayMethod == "wake");
+	REQUIRE(wakeRoute->mutating);
+
+	REQUIRE_FALSE(MapCronCliCommandToGatewayRoute("bogus").has_value());
+}
+
+TEST_CASE("Cron ops isolated runtime happy path carries delivery metadata in task ledger", "[cron][ops][isolated-runtime]") {
+	CronOpsService ops;
+	std::vector<CronJson> completedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson& job, const std::int64_t)
+		-> std::optional<CronJson> {
+			if (job.value("name", std::string()) != "ops isolated metadata happy path") {
+				return std::nullopt;
+			}
+
+			return CronJson{
+				{ "status", "ok" },
+				{ "summary", "ops-isolated-metadata-happy" },
+				{ "runtimeModule", "isolated-agent" },
+				{ "deliveryHttpStatus", 200 },
+				{ "failureDestinationHttpStatus", 503 },
+				{ "sessionKey", "ops-isolated-session" }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.completeTaskRunByRunId = [&completedPayloads](const CronJson& payload) {
+		completedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops isolated metadata happy path" },
+		{ "sessionTarget", "isolated" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "hello" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(completedPayloads.empty());
+	REQUIRE(completedPayloads.back().value("taskLedgerStatus", std::string()) == "ok");
+	REQUIRE(completedPayloads.back().value("runtimeModule", std::string()) == "isolated-agent");
+	REQUIRE(completedPayloads.back().value("deliveryHttpStatus", static_cast<std::int64_t>(0)) == 200);
+	REQUIRE(completedPayloads.back().value("failureDestinationHttpStatus", static_cast<std::int64_t>(0)) == 503);
+	REQUIRE(completedPayloads.back().value("sessionKey", std::string()) == "ops-isolated-session");
+}
+
+TEST_CASE("Cron ops isolated runtime aborted path maps terminal hook semantics", "[cron][ops][isolated-runtime]") {
+	CronOpsService ops;
+	std::vector<CronJson> failedPayloads;
+	blazeclaw::cron::CronRuntimeExecutionAdapters adapters;
+	adapters.isolatedSession =
+		[](const CronJson&, const std::int64_t)
+		-> std::optional<CronJson> {
+			return CronJson{
+				{ "handled", true },
+				{ "status", "error" },
+				{ "summary", "runtime-aborted-isolated" },
+				{ "error", "runtime aborted" },
+				{ "errorCategory", "aborted" },
+				{ "aborted", true },
+				{ "runtimeModule", "isolated-agent" }
+			};
+		};
+	ops.SetRuntimeExecutionAdapters(std::move(adapters));
+
+	CronOpsService::TaskLedgerHooks hooks;
+	hooks.failTaskRunByRunId = [&failedPayloads](const CronJson& payload) {
+		failedPayloads.push_back(payload);
+	};
+	ops.SetTaskLedgerHooks(std::move(hooks));
+
+	CronJson added = ops.Add({
+		{ "name", "ops isolated aborted path" },
+		{ "sessionTarget", "isolated" },
+		{ "schedule", { { "kind", "at" }, { "atMs", 1 } } },
+		{ "payload", { { "kind", "agentTurn" }, { "message", "abort" } } },
+		{ "delivery", { { "mode", "none" } } },
+		{ "deleteAfterRun", true }
+	});
+	REQUIRE(added.contains("id"));
+
+	CronJson wake = ops.Wake({ { "mode", "now" }, { "text", "run" } });
+	REQUIRE(wake.value("ok", false));
+
+	REQUIRE_FALSE(failedPayloads.empty());
+	REQUIRE(failedPayloads.back().value("taskLedgerStatus", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("disposition", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("errorCategory", std::string()) == "aborted");
+	REQUIRE(failedPayloads.back().value("runtimeModule", std::string()) == "isolated-agent");
+	REQUIRE(failedPayloads.back().value("aborted", false));
+}
+
+TEST_CASE("Cron timer transport dispatch stub classifies HTTP status taxonomy", "[cron][timer][transport-dispatch]") {
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	struct TransportCase {
+		std::int64_t statusCode = 0;
+		std::string expectedCategory;
+		bool expectedRetryable = false;
+	};
+
+	const std::vector<TransportCase> cases = {
+		{ 429, "rate_limit", true },
+		{ 503, "network", true },
+		{ 400, "delivery_http_error", false },
+	};
+
+	for (const TransportCase& transportCase : cases) {
+		blazeclaw::cron::test_hooks::SetWebhookTransportDispatchStub(
+			[transportCase](const std::string&, const std::int64_t)
+			-> blazeclaw::cron::test_hooks::WebhookTransportDispatchResult {
+				blazeclaw::cron::test_hooks::WebhookTransportDispatchResult result;
+				result.attempted = true;
+				result.httpStatus = transportCase.statusCode;
+				return result;
+			});
+
+		CronTimerService timer;
+		CronJson jobs = CronJson::array({
+			{
+				{ "id", "job-transport-dispatch-" + std::to_string(transportCase.statusCode) },
+				{ "name", "transport dispatch taxonomy" },
+				{ "enabled", true },
+				{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+				{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+				{ "delivery",
+					{
+						{ "mode", "webhook" },
+						{ "to", "https://example.test/hook" },
+						{ "transportDispatch", true }
+					} },
+				{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+			}
+		});
+		CronJson runs = CronJson::array();
+
+		timer.PumpDueRuns(jobs, runs, nowMs, false);
+		REQUIRE(runs.size() == 1);
+		REQUIRE(runs[0].value("status", std::string()) == "error");
+		REQUIRE(runs[0].value("errorCategory", std::string()) == transportCase.expectedCategory);
+		REQUIRE(runs[0].value("retryable", false) == transportCase.expectedRetryable);
+		REQUIRE(runs[0].value("deliveryHttpStatus", static_cast<std::int64_t>(0)) == transportCase.statusCode);
+
+		blazeclaw::cron::test_hooks::ClearWebhookTransportDispatchStub();
+	}
+}
+
+TEST_CASE("Cron timer failure-alert transport dispatch records alert HTTP status", "[cron][timer][transport-dispatch]") {
+	CronTimerService timer;
+	const std::int64_t nowMs = 1'700'000'000'000;
+
+	blazeclaw::cron::test_hooks::SetWebhookTransportDispatchStub(
+		[](const std::string& url, const std::int64_t)
+		-> blazeclaw::cron::test_hooks::WebhookTransportDispatchResult {
+			blazeclaw::cron::test_hooks::WebhookTransportDispatchResult result;
+			result.attempted = true;
+			if (url.find("alert") != std::string::npos) {
+				result.httpStatus = 503;
+			}
+			else {
+				result.httpStatus = 400;
+			}
+			return result;
+		});
+
+	CronJson jobs = CronJson::array({
+		{
+			{ "id", "job-failure-alert-transport-dispatch" },
+			{ "name", "failure alert transport dispatch" },
+			{ "enabled", true },
+			{ "schedule", { { "kind", "every" }, { "everyMs", 60'000 } } },
+			{ "payload", { { "kind", "systemEvent" }, { "text", "notify" } } },
+			{ "delivery",
+				{
+					{ "mode", "webhook" },
+					{ "to", "https://example.test/delivery" },
+					{ "transportDispatch", true }
+				} },
+			{ "failureAlert",
+				{
+					{ "after", 1 },
+					{ "cooldownMs", 0 },
+					{ "mode", "webhook" },
+					{ "to", "https://example.test/alert" },
+					{ "transportDispatch", true }
+				} },
+			{ "state", { { "nextRunAtMs", nowMs - 1 } } }
+		}
+	});
+	CronJson runs = CronJson::array();
+
+	timer.PumpDueRuns(jobs, runs, nowMs, false);
+	REQUIRE(runs.size() == 1);
+	REQUIRE(runs[0].value("failureAlertAttempted", false));
+	REQUIRE(runs[0].value("failureAlertHttpStatus", static_cast<std::int64_t>(0)) == 503);
+	REQUIRE(runs[0].value("failureAlertStatus", std::string()) == "not-delivered");
+
+	blazeclaw::cron::test_hooks::ClearWebhookTransportDispatchStub();
 }
 
 }

@@ -463,12 +463,15 @@
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\cron\CronHygiene.cpp" />
+    <ClCompile Include="src\cron\CronCliGatewayShim.cpp" />
     <ClCompile Include="src\cron\CronJsonCompat.cpp" />
     <ClCompile Include="src\cron\CronModels.cpp" />
     <ClCompile Include="src\cron\CronNormalize.cpp" />
     <ClCompile Include="src\cron\CronOpsService.cpp" />
+    <ClCompile Include="src\cron\CronRuntimeOutcomeAdapter.cpp" />
     <ClCompile Include="src\cron\CronStoreService.cpp" />
     <ClCompile Include="src\cron\CronTimerService.cpp" />
+    <ClCompile Include="src\cron\CronTimerServiceTestHooks.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />

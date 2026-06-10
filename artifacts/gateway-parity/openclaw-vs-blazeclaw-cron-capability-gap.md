@@ -1,8 +1,8 @@
 # OpenClaw vs BlazeClaw Cron Capability Gap
 
-Last refreshed: 2026-06-05 (Phase DH `/cron` non-blocking refactor + docs sync)
+Last refreshed: 2026-06-09 (Phase DI gap-closing procedure + dashboard hydration fix + docs sync)
 
-Authoritative detail: `blazeclaw/docs/job/cron-parity-gap-and-port-plan.md` (§7.7) and `blazeclaw/docs/job/cron-deferred-parity-gap-closure-plan.md` (R1–R4)
+Authoritative detail: `blazeclaw/docs/job/cron-parity-gap-and-port-plan.md` (Phase DI + §7.7) and `blazeclaw/docs/job/cron-gap-closure-plan.md`
 
 ## Summary
 
@@ -11,9 +11,18 @@ surface: all Section 2 core rows remain **High**, §7.6 and §7.7 baselines rema
 pass-linked, and Phase DF replayed ordered gates green (`[cron]` 1664 assertions /
 254 test cases).
 
+Phase DI update (2026-06-09): isolated-runtime outcome adapter shim, injectable
+transport-dispatch test hooks, native CLI gateway verb shim, and targeted parity
+tests landed; MFC native dashboard UI remains product-deferred.
+
 Phase DH update (2026-06-05): WebView `/cron` slash execution refactored to a
 non-blocking pending/settled pipeline with sequence-token stale suppression while
 preserving 7.7 parser/planner/help/error contracts.
+
+Follow-up tranche (2026-06-09): WebView cron dashboard content fix applied —
+controller hydration gate was moved to allow global cron hydration when no
+agent is selected. Regression coverage and validation evidence recorded in
+`blazeclaw/docs/job/cron-dashboard-content-fix-plan.md` and `blazeclaw/docs/cron.md`.
 
 Phase DG update: §7.8 Step 1-5 governance execution is completed with no reopen
 trigger conditions met; closure remains in pass-lock mode.

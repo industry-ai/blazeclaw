@@ -160,6 +160,35 @@ namespace blazeclaw::gateway {
 				response["runtimeModule"] = runtimeModule;
 			}
 
+			if (result.deliveryHttpStatus.has_value()) {
+				response["deliveryHttpStatus"] = result.deliveryHttpStatus.value();
+				response["deliveryStatus"] = result.deliveryHttpStatus.value() >= 200 &&
+					result.deliveryHttpStatus.value() < 300
+					? "delivered"
+					: "not-delivered";
+				response["deliveryAttempted"] = true;
+			}
+			if (result.failureDestinationHttpStatus.has_value()) {
+				response["failureDestinationHttpStatus"] = result.failureDestinationHttpStatus.value();
+				response["failureDestinationStatus"] =
+					result.failureDestinationHttpStatus.value() >= 200 &&
+					result.failureDestinationHttpStatus.value() < 300
+					? "delivered"
+					: "not-delivered";
+				response["failureDestinationAttempted"] = true;
+			}
+			if (result.failureAlertAttempted.has_value()) {
+				response["failureAlertAttempted"] = result.failureAlertAttempted.value();
+			}
+			if (result.failureAlertHttpStatus.has_value()) {
+				response["failureAlertHttpStatus"] = result.failureAlertHttpStatus.value();
+				response["failureAlertStatus"] =
+					result.failureAlertHttpStatus.value() >= 200 &&
+					result.failureAlertHttpStatus.value() < 300
+					? "delivered"
+					: "not-delivered";
+			}
+
 			return response;
 		}
 
@@ -242,6 +271,7 @@ namespace blazeclaw::gateway {
 			};
 
 		cron::CronRuntimeExecutionAdapters adapters;
+		// Phase DI Step 3 target: cron/isolated-runtime adapter-backed execution parity.
 		adapters.mainSession = std::move(mainSessionAdapter);
 		adapters.isolatedSession = std::move(isolatedSessionAdapter);
 		adapters.preferRuntimeExecution = true;
