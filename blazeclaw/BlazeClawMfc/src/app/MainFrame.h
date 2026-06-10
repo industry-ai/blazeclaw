@@ -5,6 +5,7 @@
 #include "SkillView.h"
 #include "OutputWnd.h"
 #include "PropertiesWnd.h"
+#include "DashboardWnd.h"
 #include "CalendarBar.h"
 #include "Resource.h"
 
@@ -64,6 +65,7 @@ protected:  // control bar embedded members
 	CSkillView        m_wndSkillView;
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
+	CDashboardWnd     m_wndDashboard;
 	COutlookBar       m_wndNavigationBar;
 	CMFCShellTreeCtrl m_wndTree;
 	CCalendarBar      m_wndCalendar;
@@ -83,6 +85,8 @@ protected:
 	afx_msg void OnUpdateViewOutputWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewPropertiesWindow();
 	afx_msg void OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardWindow();
+	afx_msg void OnUpdateViewDashboardWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewCaptionBar();
 	afx_msg void OnUpdateViewCaptionBar(CCmdUI* pCmdUI);
 	afx_msg void OnOptions();

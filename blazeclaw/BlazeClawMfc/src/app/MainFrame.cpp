@@ -116,6 +116,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_OUTPUTWND, &CMainFrame::OnUpdateViewOutputWindow)
 	ON_COMMAND(ID_VIEW_PROPERTIESWND, &CMainFrame::OnViewPropertiesWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARDWND, &CMainFrame::OnViewDashboardWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARDWND, &CMainFrame::OnUpdateViewDashboardWindow)
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
 	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
@@ -374,6 +376,8 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndOutput);
 	m_wndProperties.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndProperties);
+	m_wndDashboard.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard);
 
 	// set the visual manager and style based on persisted value
 	OnApplicationLook(theApp.m_nAppLook);
@@ -769,6 +773,15 @@ BOOL CMainFrame::CreateDockingWindows()
 		return FALSE; // failed to create
 	}
 
+	CString strDashboardWnd;
+	bNameValid = strDashboardWnd.LoadString(IDS_DASHBOARD_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard.Create(strDashboardWnd, this, CRect(0, 0, 200, 200), TRUE, ID_VIEW_DASHBOARDWND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard window\n");
+		return FALSE; // failed to create
+	}
+
 	SetDockingWindowIcons(theApp.m_bHiColorIcons);
 	return TRUE;
 }
@@ -786,6 +799,9 @@ void CMainFrame::SetDockingWindowIcons(BOOL bHiColorIcons)
 
 	HICON hPropertiesBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_PROPERTIES_WND_HC : IDI_PROPERTIES_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
 	m_wndProperties.SetIcon(hPropertiesBarIcon, FALSE);
+
+	HICON hDashboardBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_WND_HC : IDI_DASHBOARD_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard.SetIcon(hDashboardBarIcon, FALSE);
 
 	UpdateMDITabbedBarsIcons();
 }
@@ -1055,6 +1071,18 @@ void CMainFrame::OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI)
 	pCmdUI->Enable(TRUE);
 }
 
+void CMainFrame::OnViewDashboardWindow()
+{
+	// Show or activate the pane, depending on current state.  The
+	// pane can only be closed via the [x] button on the pane frame.
+	m_wndDashboard.ShowPane(TRUE, FALSE, TRUE);
+	m_wndDashboard.SetFocus();
+}
+
+void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
+{
+	pCmdUI->Enable(TRUE);
+}
 
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {

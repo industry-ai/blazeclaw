@@ -721,6 +721,8 @@
     <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="res\dashboard_wnd.ico" />
+    <Image Include="res\dashboard_wnd_hc.ico" />
     <Image Include="src\app\res\BlazeClaw.MFC.ico" />
     <Image Include="src\app\res\BlazeClaw.MFCDoc.ico" />
     <Image Include="src\app\res\buttons.bmp" />
@@ -728,6 +730,8 @@
     <Image Include="src\app\res\classview_hc.bmp" />
     <Image Include="src\app\res\class_view.ico" />
     <Image Include="src\app\res\class_view_hc.ico" />
+    <Image Include="src\app\res\dashboard_wnd.ico" />
+    <Image Include="src\app\res\dashboard_wnd_hc.ico" />
     <Image Include="src\app\res\explorer.bmp" />
     <Image Include="src\app\res\explorer_hc.bmp" />
     <Image Include="src\app\res\filelarge.bmp" />
@@ -736,6 +740,8 @@
     <Image Include="src\app\res\fileview_hc.bmp" />
     <Image Include="src\app\res\file_view.ico" />
     <Image Include="src\app\res\file_view_hc.ico" />
+    <Image Include="src\app\res\icon2.ico" />
+    <Image Include="src\app\res\icon3.ico" />
     <Image Include="src\app\res\info.bmp" />
     <Image Include="src\app\res\main.bmp" />
     <Image Include="src\app\res\menuimages.bmp" />

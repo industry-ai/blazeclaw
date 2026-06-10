@@ -10,10 +10,14 @@
 // Generated from the TEXTINCLUDE 2 resource.
 //
 #ifndef APSTUDIO_INVOKED
-#include "targetver.h"
+// Resource View stable fallback: remove local targetver.h dependency
+#include <SDKDDKVer.h>
 #endif
-#include "afxres.h"
-#include "verrsrc.h"
+// Resource View stable fallback: avoid afxres.h/verrsrc.h path dependency
+#include <windows.h>
+#ifndef IDC_STATIC
+#define IDC_STATIC (-1)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
@@ -583,6 +587,10 @@ IDI_PROPERTIES_WND      ICON                    "res\\properties_wnd.ico"
 
 IDI_PROPERTIES_WND_HC   ICON                    "res\\properties_wnd_hc.ico"
 
+IDI_DASHBOARD_WND       ICON                    "res\\dashboard_wnd.ico"
+
+IDI_DASHBOARD_WND_HC    ICON                    "res\\dashboard_wnd_hc.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -748,6 +756,10 @@ BEGIN
                 MENUITEM "&Silver Style",               ID_VIEW_APPLOOK_OFF_2007_SILVER
                 MENUITEM "&Aqua Style",                 ID_VIEW_APPLOOK_OFF_2007_AQUA
             END
+        END
+        POPUP "&Tools"
+        BEGIN
+            MENUITEM "&Dashboard",                  32795
         END
     END
     POPUP "&Help"
@@ -966,6 +978,7 @@ IDR_RIBBON              RT_RIBBON_XML           "res\\ribbon.mfcribbon-ms"
 STRINGTABLE
 BEGIN
     IDP_OLE_INIT_FAILED     "OLE initialization failed.  Make sure that the OLE libraries are the correct version."
+    IDS_DASHBOARD_WND       "Dashboards"
     IDP_SOCKETS_INIT_FAILED "Windows sockets initialization failed."
 END
 
