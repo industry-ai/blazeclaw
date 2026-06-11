@@ -644,918 +644,734 @@
             );
         }
 
-        function normalizeBooleanFlag(value, fallback) {
-            if (typeof value === "boolean") {
+        const controllerUtils = window.BlazeClawControllerUtils || {};
+        const normalizeBooleanFlag = typeof controllerUtils.normalizeBooleanFlag === "function"
+            ? controllerUtils.normalizeBooleanFlag
+            : function (value, fallback) {
+                if (typeof value === "boolean") {
+                    return value;
+                }
+                if (typeof fallback === "boolean") {
+                    return fallback;
+                }
+                return false;
+            };
+        const asRecord = typeof controllerUtils.asRecord === "function"
+            ? controllerUtils.asRecord
+            : function (value) {
+                if (!value || typeof value !== "object" || Array.isArray(value)) {
+                    return null;
+                }
                 return value;
-            }
-            if (typeof fallback === "boolean") {
-                return fallback;
-            }
-            return false;
-        }
-
-        function asRecord(value) {
-            if (!value || typeof value !== "object" || Array.isArray(value)) {
-                return null;
-            }
-            return value;
-        }
-
-        function normalizeTrimmedString(value) {
-            if (typeof value !== "string") {
-                return undefined;
-            }
-            const trimmed = value.trim();
-            return trimmed.length > 0 ? trimmed : undefined;
-        }
-
-        function normalizeFiniteInt(value, fallback) {
-            const parsed = Number(value);
-            if (!Number.isFinite(parsed)) {
-                return Number.isFinite(Number(fallback)) ? Math.max(0, Math.floor(Number(fallback))) : 0;
-            }
-            return Math.max(0, Math.floor(parsed));
-        }
-
-        function normalizeFiniteScore(value, fallback) {
-            const parsed = Number(value);
-            if (!Number.isFinite(parsed)) {
-                return Number.isFinite(Number(fallback)) ? Math.max(0, Math.min(1, Number(fallback))) : 0;
-            }
-            return Math.max(0, Math.min(1, parsed));
-        }
-
-        function normalizeStorageMode(value) {
-            const normalized = normalizeTrimmedString(value);
-            if (!normalized) {
-                return "inline";
-            }
-            const lowered = normalized.toLowerCase();
-            if (lowered === "inline" || lowered === "separate" || lowered === "both") {
-                return lowered;
-            }
-            return "inline";
-        }
-
-        function normalizeDreamingEntry(raw) {
-            const record = asRecord(raw);
-            const key = normalizeTrimmedString(record && record.key);
-            const path = normalizeTrimmedString(record && record.path);
-            const snippet = normalizeTrimmedString(record && record.snippet);
-            if (!key || !path || !snippet) {
-                return null;
-            }
-
-            const promotedAt = normalizeTrimmedString(record && record.promotedAt);
-            const lastRecalledAt = normalizeTrimmedString(record && record.lastRecalledAt);
-            const normalized = {
-                key,
-                path,
-                startLine: Math.max(1, normalizeFiniteInt(record && record.startLine, 1)),
-                endLine: Math.max(1, normalizeFiniteInt(record && record.endLine, 1)),
-                snippet,
-                recallCount: normalizeFiniteInt(record && record.recallCount, 0),
-                dailyCount: normalizeFiniteInt(record && record.dailyCount, 0),
-                groundedCount: normalizeFiniteInt(record && record.groundedCount, 0),
-                totalSignalCount: normalizeFiniteInt(record && record.totalSignalCount, 0),
-                lightHits: normalizeFiniteInt(record && record.lightHits, 0),
-                remHits: normalizeFiniteInt(record && record.remHits, 0),
-                phaseHitCount: normalizeFiniteInt(record && record.phaseHitCount, 0),
             };
-            if (promotedAt) {
-                normalized.promotedAt = promotedAt;
-            }
-            if (lastRecalledAt) {
-                normalized.lastRecalledAt = lastRecalledAt;
-            }
-            return normalized;
-        }
-
-        function normalizeDreamingEntries(raw) {
-            if (!Array.isArray(raw)) {
-                return [];
-            }
-            return raw.map(normalizeDreamingEntry).filter(function (entry) {
-                return Boolean(entry);
-            });
-        }
-
-        const DREAM_PHRASES = [
-            "Consolidating memories...",
-            "Tidying the knowledge graph...",
-            "Replaying conversations...",
-            "Weaving short-term signals...",
-            "Defragmenting the mind palace...",
-            "Filing loose thoughts...",
-            "Connecting distant dots...",
-            "Composting stale context...",
-            "Promoting durable insights...",
-            "Forgetting noisy traces...",
-        ];
-        const DREAM_SWAP_MS = 6000;
-        const DIARY_START_RE = /<!--\s*openclaw:dreaming:diary:start\s*-->/;
-        const DIARY_END_RE = /<!--\s*openclaw:dreaming:diary:end\s*-->/;
-
-        function normalizeTimestampMs(value) {
-            const parsed = Number(value);
-            return Number.isFinite(parsed)
-                ? Math.floor(parsed)
-                : Number.NEGATIVE_INFINITY;
-        }
-
-        function parseDiaryEntries(raw) {
-            const text = typeof raw === "string" ? raw : "";
-            if (!text.trim()) {
-                return [];
-            }
-
-            let content = text;
-            const startMatch = DIARY_START_RE.exec(text);
-            const endMatch = DIARY_END_RE.exec(text);
-            if (startMatch && endMatch && endMatch.index > startMatch.index) {
-                content = text.slice(startMatch.index + startMatch[0].length, endMatch.index);
-            }
-
-            return content
-                .split(/\n---\n/)
-                .map(function (block) {
-                    const lines = String(block || "")
-                        .trim()
-                        .split("\n");
-                    let date = "";
-                    const bodyLines = [];
-                    lines.forEach(function (line) {
-                        const trimmed = String(line || "").trim();
-                        if (!trimmed) {
-                            return;
-                        }
-                        if (!date &&
-                            trimmed.startsWith("*") &&
-                            trimmed.endsWith("*") &&
-                            trimmed.length > 2) {
-                            date = trimmed.slice(1, -1);
-                            return;
-                        }
-                        if (trimmed.startsWith("#") || trimmed.startsWith("<!--")) {
-                            return;
-                        }
-                        bodyLines.push(trimmed);
-                    });
-
-                    return bodyLines.length > 0
-                        ? {
-                            date,
-                            body: bodyLines.join("\n"),
-                        }
-                        : null;
-                })
-                .filter(function (entry) {
-                    return Boolean(entry);
-                });
-        }
-
-        function parseDiaryTimestamp(date) {
-            const parsed = Date.parse(String(date || ""));
-            return Number.isFinite(parsed) ? parsed : null;
-        }
-
-        function formatDiaryChipLabel(date) {
-            const parsed = parseDiaryTimestamp(date);
-            if (parsed === null) {
-                return String(date || "");
-            }
-            const value = new Date(parsed);
-            return String(value.getMonth() + 1) + "/" + String(value.getDate());
-        }
-
-        function buildDreamDiaryNavigation(entries) {
-            return entries.slice().reverse().map(function (entry, page) {
-                return {
-                    date: entry.date,
-                    body: entry.body,
-                    page,
-                };
-            });
-        }
-
-        function flattenDreamDiaryBody(body) {
-            return String(body || "")
-                .split("\n")
-                .map(function (line) {
-                    return String(line || "").trim();
-                })
-                .filter(function (line) {
-                    return line.length > 0 &&
-                        line !== "What Happened" &&
-                        line !== "Reflections" &&
-                        line !== "Candidates" &&
-                        line !== "Possible Lasting Updates";
-                })
-                .map(function (line) {
-                    return line.replace(/\s*\[memory\/[^[\]]+\]/g, "");
-                })
-                .map(function (line) {
-                    return line
-                        .replace(/^(?:\d+\.\s+|-\s+(?:\[[^\]]+\]\s+)?(?:[a-z_]+:\s+)?)/i, "")
-                        .replace(/^(?:likely_durable|likely_situational|unclear):\s+/i, "")
-                        .trim();
-                })
-                .filter(function (line) {
-                    return line.length > 0;
-                });
-        }
-
-        function formatCompactDateTime(value) {
-            const parsed = Date.parse(String(value || ""));
-            if (!Number.isFinite(parsed)) {
-                return String(value || "");
-            }
-            return new Date(parsed).toLocaleString([], {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-            });
-        }
-
-        function compareWaitingEntryByRecency(a, b) {
-            const aMs = normalizeTimestampMs(a && a.lastRecalledAt);
-            const bMs = normalizeTimestampMs(b && b.lastRecalledAt);
-            if (bMs !== aMs) {
-                return bMs - aMs;
-            }
-            const aSignals = normalizeFiniteInt(a && a.totalSignalCount, 0);
-            const bSignals = normalizeFiniteInt(b && b.totalSignalCount, 0);
-            if (bSignals !== aSignals) {
-                return bSignals - aSignals;
-            }
-            return String(a && a.path || "").localeCompare(String(b && b.path || ""));
-        }
-
-        function compareWaitingEntryBySignals(a, b) {
-            const aSignals = normalizeFiniteInt(a && a.totalSignalCount, 0);
-            const bSignals = normalizeFiniteInt(b && b.totalSignalCount, 0);
-            if (bSignals !== aSignals) {
-                return bSignals - aSignals;
-            }
-            const aPhaseHits = normalizeFiniteInt(a && a.phaseHitCount, 0);
-            const bPhaseHits = normalizeFiniteInt(b && b.phaseHitCount, 0);
-            if (bPhaseHits !== aPhaseHits) {
-                return bPhaseHits - aPhaseHits;
-            }
-            return compareWaitingEntryByRecency(a, b);
-        }
-
-        function sortWaitingEntries(entries, sortMode) {
-            const source = Array.isArray(entries) ? entries.slice() : [];
-            return source.sort(sortMode === "signals"
-                ? compareWaitingEntryBySignals
-                : compareWaitingEntryByRecency);
-        }
-
-        function describeWaitingEntryOrigin(entry) {
-            const grounded = normalizeFiniteInt(entry && entry.groundedCount, 0) > 0;
-            const hasLiveSupport = normalizeFiniteInt(entry && entry.recallCount, 0) > 0 ||
-                normalizeFiniteInt(entry && entry.dailyCount, 0) > 0;
-            if (grounded && hasLiveSupport) {
-                return "Mixed";
-            }
-            if (grounded) {
-                return "Daily log";
-            }
-            return "Live";
-        }
-
-        function formatRange(path, startLine, endLine) {
-            const safePath = String(path || "").trim() || "(unknown)";
-            const start = Math.max(1, normalizeFiniteInt(startLine, 1));
-            const end = Math.max(1, normalizeFiniteInt(endLine, start));
-            return start === end
-                ? safePath + ":" + String(start)
-                : safePath + ":" + String(start) + "-" + String(end);
-        }
-
-        function currentDreamPhrase() {
-            const now = Date.now();
-            if (now - Number(state.dreamingPhraseLastSwapMs || 0) > DREAM_SWAP_MS) {
-                state.dreamingPhraseLastSwapMs = now;
-                state.dreamingPhraseIndex =
-                    (normalizeFiniteInt(state.dreamingPhraseIndex, 0) + 1) % DREAM_PHRASES.length;
-            }
-            const index = normalizeFiniteInt(state.dreamingPhraseIndex, 0) % DREAM_PHRASES.length;
-            return DREAM_PHRASES[index] || DREAM_PHRASES[0];
-        }
-
-        function getDreamingUiModel() {
-            const dreamingStatus = state.dreamingStatus && typeof state.dreamingStatus === "object"
-                ? state.dreamingStatus
-                : null;
-            const dreamDiaryContent = typeof state.dreamDiaryContent === "string"
-                ? state.dreamDiaryContent
-                : "";
-            const parsedEntries = parseDiaryEntries(dreamDiaryContent);
-            const navigation = buildDreamDiaryNavigation(parsedEntries);
-            const entryCount = navigation.length;
-            const page = entryCount > 0
-                ? Math.max(0, Math.min(normalizeFiniteInt(state.dreamDiaryPage, 0), entryCount - 1))
-                : 0;
-            state.dreamDiaryParsedEntries = parsedEntries;
-            state.dreamDiaryNavigation = navigation;
-            state.dreamDiaryPage = page;
-
-            const waitingSort = state.dreamingAdvancedWaitingSort === "signals"
-                ? "signals"
-                : "recent";
-            const shortTermEntries = dreamingStatus && Array.isArray(dreamingStatus.shortTermEntries)
-                ? dreamingStatus.shortTermEntries
-                : [];
-            const promotedEntries = dreamingStatus && Array.isArray(dreamingStatus.promotedEntries)
-                ? dreamingStatus.promotedEntries
-                : [];
-            const groundedEntries = shortTermEntries.filter(function (entry) {
-                return normalizeFiniteInt(entry && entry.groundedCount, 0) > 0;
-            });
-
-            return {
-                subTab: state.dreamingUiSubTab === "diary" || state.dreamingUiSubTab === "advanced"
-                    ? state.dreamingUiSubTab
-                    : "scene",
-                waitingSort,
-                phrase: currentDreamPhrase(),
-                entryCount,
-                diaryPage: page,
-                diaryEntry: navigation[page] || null,
-                shortTermEntries,
-                groundedEntries,
-                waitingEntries: sortWaitingEntries(shortTermEntries, waitingSort),
-                promotedEntries,
-                status: dreamingStatus,
-                diaryPath: state.dreamDiaryPath,
-                diaryContent: dreamDiaryContent,
-                diaryChipLabel: formatDiaryChipLabel,
-                flattenDiaryBody,
-                describeWaitingEntryOrigin,
-                formatRange,
-                formatCompactDateTime,
-            };
-        }
-
-        function setDreamingSubTab(tab) {
-            const normalized = String(tab || "").trim();
-            if (normalized !== "scene" && normalized !== "diary" && normalized !== "advanced") {
-                return;
-            }
-            state.dreamingUiSubTab = normalized;
-            onStateUpdated();
-        }
-
-        function setDreamingAdvancedWaitingSort(sort) {
-            const normalized = String(sort || "").trim();
-            if (normalized !== "recent" && normalized !== "signals") {
-                return;
-            }
-            state.dreamingAdvancedWaitingSort = normalized;
-            onStateUpdated();
-        }
-
-        function setDreamDiaryPage(page) {
-            const nav = Array.isArray(state.dreamDiaryNavigation)
-                ? state.dreamDiaryNavigation
-                : [];
-            const maxPage = Math.max(0, nav.length - 1);
-            state.dreamDiaryPage = Math.max(0, Math.min(normalizeFiniteInt(page, 0), maxPage));
-            onStateUpdated();
-        }
-
-        function normalizeDreamingStatus(raw) {
-            const record = asRecord(raw);
-            if (!record) {
-                return null;
-            }
-
-            const phasesRecord = asRecord(record.phases);
-            const lightRecord = asRecord(phasesRecord && phasesRecord.light);
-            const deepRecord = asRecord(phasesRecord && phasesRecord.deep);
-            const remRecord = asRecord(phasesRecord && phasesRecord.rem);
-            const normalized = {
-                enabled: normalizeBooleanFlag(record.enabled, false),
-                verboseLogging: normalizeBooleanFlag(record.verboseLogging, false),
-                storageMode: normalizeStorageMode(record.storageMode),
-                separateReports: normalizeBooleanFlag(record.separateReports, false),
-                shortTermCount: normalizeFiniteInt(record.shortTermCount, 0),
-                recallSignalCount: normalizeFiniteInt(record.recallSignalCount, 0),
-                dailySignalCount: normalizeFiniteInt(record.dailySignalCount, 0),
-                groundedSignalCount: normalizeFiniteInt(record.groundedSignalCount, 0),
-                totalSignalCount: normalizeFiniteInt(record.totalSignalCount, 0),
-                phaseSignalCount: normalizeFiniteInt(record.phaseSignalCount, 0),
-                lightPhaseHitCount: normalizeFiniteInt(record.lightPhaseHitCount, 0),
-                remPhaseHitCount: normalizeFiniteInt(record.remPhaseHitCount, 0),
-                promotedTotal: normalizeFiniteInt(record.promotedTotal, 0),
-                promotedToday: normalizeFiniteInt(record.promotedToday, 0),
-                shortTermEntries: normalizeDreamingEntries(record.shortTermEntries),
-                signalEntries: normalizeDreamingEntries(record.signalEntries),
-                promotedEntries: normalizeDreamingEntries(record.promotedEntries),
-            };
-
-            const timezone = normalizeTrimmedString(record.timezone);
-            const storePath = normalizeTrimmedString(record.storePath);
-            const phaseSignalPath = normalizeTrimmedString(record.phaseSignalPath);
-            const storeError = normalizeTrimmedString(record.storeError);
-            const phaseSignalError = normalizeTrimmedString(record.phaseSignalError);
-            if (timezone) {
-                normalized.timezone = timezone;
-            }
-            if (storePath) {
-                normalized.storePath = storePath;
-            }
-            if (phaseSignalPath) {
-                normalized.phaseSignalPath = phaseSignalPath;
-            }
-            if (storeError) {
-                normalized.storeError = storeError;
-            }
-            if (phaseSignalError) {
-                normalized.phaseSignalError = phaseSignalError;
-            }
-
-            if (lightRecord && deepRecord && remRecord) {
-                const phases = {
-                    light: {
-                        enabled: normalizeBooleanFlag(lightRecord.enabled, false),
-                        cron: normalizeTrimmedString(lightRecord.cron) || "",
-                        managedCronPresent: normalizeBooleanFlag(lightRecord.managedCronPresent, false),
-                        lookbackDays: normalizeFiniteInt(lightRecord.lookbackDays, 0),
-                        limit: normalizeFiniteInt(lightRecord.limit, 0),
-                    },
-                    deep: {
-                        enabled: normalizeBooleanFlag(deepRecord.enabled, false),
-                        cron: normalizeTrimmedString(deepRecord.cron) || "",
-                        managedCronPresent: normalizeBooleanFlag(deepRecord.managedCronPresent, false),
-                        limit: normalizeFiniteInt(deepRecord.limit, 0),
-                        minScore: normalizeFiniteScore(deepRecord.minScore, 0),
-                        minRecallCount: normalizeFiniteInt(deepRecord.minRecallCount, 0),
-                        minUniqueQueries: normalizeFiniteInt(deepRecord.minUniqueQueries, 0),
-                        recencyHalfLifeDays: normalizeFiniteInt(deepRecord.recencyHalfLifeDays, 0),
-                    },
-                    rem: {
-                        enabled: normalizeBooleanFlag(remRecord.enabled, false),
-                        cron: normalizeTrimmedString(remRecord.cron) || "",
-                        managedCronPresent: normalizeBooleanFlag(remRecord.managedCronPresent, false),
-                        lookbackDays: normalizeFiniteInt(remRecord.lookbackDays, 0),
-                        limit: normalizeFiniteInt(remRecord.limit, 0),
-                        minPatternStrength: normalizeFiniteScore(remRecord.minPatternStrength, 0),
-                    },
-                };
-                if (Number.isFinite(Number(lightRecord.nextRunAtMs))) {
-                    phases.light.nextRunAtMs = Math.floor(Number(lightRecord.nextRunAtMs));
-                }
-                if (Number.isFinite(Number(deepRecord.nextRunAtMs))) {
-                    phases.deep.nextRunAtMs = Math.floor(Number(deepRecord.nextRunAtMs));
-                }
-                if (Number.isFinite(Number(remRecord.nextRunAtMs))) {
-                    phases.rem.nextRunAtMs = Math.floor(Number(remRecord.nextRunAtMs));
-                }
-                if (Number.isFinite(Number(deepRecord.maxAgeDays))) {
-                    phases.deep.maxAgeDays = normalizeFiniteInt(deepRecord.maxAgeDays, 0);
-                }
-                normalized.phases = phases;
-            }
-
-            return normalized;
-        }
-
-        function resolveDreamingPluginId(configValue) {
-            const plugins = asRecord(configValue && configValue.plugins);
-            const slots = asRecord(plugins && plugins.slots);
-            const configuredSlot = normalizeTrimmedString(slots && slots.memory);
-            if (configuredSlot && configuredSlot.toLowerCase() !== "none") {
-                return configuredSlot;
-            }
-            return "memory-core";
-        }
-
-        function resolveConfiguredDreaming(configValue) {
-            const pluginId = resolveDreamingPluginId(configValue);
-            const plugins = asRecord(configValue && configValue.plugins);
-            const entries = asRecord(plugins && plugins.entries);
-            const pluginEntry = asRecord(entries && entries[pluginId]);
-            const config = asRecord(pluginEntry && pluginEntry.config);
-            const dreaming = asRecord(config && config.dreaming);
-            return {
-                pluginId,
-                enabled: normalizeBooleanFlag(dreaming && dreaming.enabled, false),
-            };
-        }
-
-        function lookupIncludesDreamingProperty(value) {
-            const lookup = asRecord(value);
-            const children = Array.isArray(lookup && lookup.children) ? lookup.children : [];
-            for (let index = 0; index < children.length; index += 1) {
-                const child = asRecord(children[index]);
-                if (normalizeTrimmedString(child && child.key) === "dreaming") {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function lookupDisallowsUnknownProperties(value) {
-            const lookup = asRecord(value);
-            const schema = asRecord(lookup && lookup.schema);
-            return schema && schema.additionalProperties === false;
-        }
-
-        function normalizeNodeListPayload(payload) {
-            const source = payload && typeof payload === "object"
-                ? payload
-                : {};
-            const nodes = Array.isArray(source.nodes)
-                ? source.nodes.filter(function (entry) {
-                    return entry && typeof entry === "object";
-                })
-                : [];
-            return nodes;
-        }
-
-        function normalizePresenceEntries(payload) {
-            if (!Array.isArray(payload)) {
-                return [];
-            }
-            return payload.filter(function (entry) {
-                return entry && typeof entry === "object";
-            });
-        }
-
-        function loadPresenceStatusMessage(entries, payloadWasArray) {
-            if (!payloadWasArray) {
-                return "No presence payload.";
-            }
-            return entries.length === 0 ? "No instances yet." : null;
-        }
-
-        const LEGACY_USAGE_DATE_PARAMS_MODE_RE = /unexpected property ['"]mode['"]/i;
-        const LEGACY_USAGE_DATE_PARAMS_OFFSET_RE = /unexpected property ['"]utcoffset['"]/i;
-        const LEGACY_USAGE_DATE_PARAMS_INVALID_RE = /invalid sessions\.usage params/i;
-
-        function buildUsageDateBounds() {
-            const now = new Date();
-            const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-            const start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
-            function toIsoDate(value) {
-                const year = value.getUTCFullYear();
-                const month = String(value.getUTCMonth() + 1).padStart(2, "0");
-                const day = String(value.getUTCDate()).padStart(2, "0");
-                return year + "-" + month + "-" + day;
-            }
-            return {
-                startDate: toIsoDate(start),
-                endDate: toIsoDate(end),
-            };
-        }
-
-        function formatUtcOffset(timezoneOffsetMinutes) {
-            const offsetFromUtcMinutes = -timezoneOffsetMinutes;
-            const sign = offsetFromUtcMinutes >= 0 ? "+" : "-";
-            const absMinutes = Math.abs(offsetFromUtcMinutes);
-            const hours = Math.floor(absMinutes / 60);
-            const minutes = absMinutes % 60;
-            return minutes === 0
-                ? "UTC" + sign + String(hours)
-                : "UTC" + sign + String(hours) + ":" + String(minutes).padStart(2, "0");
-        }
-
-        function buildUsageDateInterpretationParams(timeZone) {
-            if (timeZone === "utc") {
-                return {
-                    mode: "utc",
-                };
-            }
-            return {
-                mode: "specific",
-                utcOffset: formatUtcOffset(new Date().getTimezoneOffset()),
-            };
-        }
-
-        function isLegacyDateInterpretationUnsupportedError(err) {
-            const message = String((err && err.message) || err || "");
-            return LEGACY_USAGE_DATE_PARAMS_INVALID_RE.test(message) &&
-                (LEGACY_USAGE_DATE_PARAMS_MODE_RE.test(message) || LEGACY_USAGE_DATE_PARAMS_OFFSET_RE.test(message));
-        }
-
-        function shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, sessionKey) {
-            if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                return true;
-            }
-            const selectedPanel = String(state.agentsPanel || "");
-            if (selectedPanel !== "usage") {
-                return true;
-            }
-            const selectedSessions = Array.isArray(state.usageSelectedSessions)
-                ? state.usageSelectedSessions
-                : [];
-            if (selectedSessions.length === 0) {
-                return true;
-            }
-            return selectedSessions.indexOf(sessionKey) < 0;
-        }
-
-        async function runOptionalUsageDetailRequest(loadingKey, run, shouldIgnoreResponse) {
-            if (!request || !state.connected || state[loadingKey]) {
-                return;
-            }
-
-            state[loadingKey] = true;
-            onStateUpdated();
-
-            try {
-                await run();
-            } catch (_) {
-                // Silently fail optional usage detail endpoints.
-            } finally {
-                state[loadingKey] = false;
-                onStateUpdated();
-            }
-        }
-
-        function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
-            const resolvedId = String(channelId || entry && entry.id || "").trim();
-            if (!resolvedId) {
-                return null;
-            }
-
-            const resolvedLabel = String(entry && entry.label || labelFallback || resolvedId).trim() || resolvedId;
-            const accountCount = Number(entry && entry.accounts);
-            return {
-                id: resolvedId,
-                label: resolvedLabel,
-                connected: normalizeBooleanFlag(entry && entry.connected, false),
-                accounts: Number.isFinite(accountCount) ? accountCount : 0,
-            };
-        }
-
-        function normalizeChannelAccountEntry(entry) {
-            const resolvedAccountId = String(entry && entry.accountId || "").trim();
-            if (!resolvedAccountId) {
-                return null;
-            }
-
-            return {
-                accountId: resolvedAccountId,
-                name: String(entry && (entry.name || entry.label) || "").trim() || resolvedAccountId,
-                enabled: normalizeBooleanFlag(entry && entry.enabled, normalizeBooleanFlag(entry && entry.active, false)),
-                configured: normalizeBooleanFlag(entry && entry.configured, true),
-                linked: normalizeBooleanFlag(entry && entry.linked, normalizeBooleanFlag(entry && entry.active, false)),
-                running: normalizeBooleanFlag(entry && entry.running, normalizeBooleanFlag(entry && entry.connected, false)),
-                connected: normalizeBooleanFlag(entry && entry.connected, false),
-                lastError: entry && typeof entry.lastError === "string"
-                    ? entry.lastError
-                    : null,
-                lastProbeAt: entry && typeof entry.lastProbeAt === "number"
-                    ? entry.lastProbeAt
-                    : null,
-            };
-        }
-
-        function normalizeChannelsSnapshot(payload) {
-            if (!payload || typeof payload !== "object") {
-                return null;
-            }
-
-            const source = payload;
-            const rawLabels = source.channelLabels && typeof source.channelLabels === "object"
-                ? source.channelLabels
-                : {};
-            const rawAccountsMap = source.channelAccounts && typeof source.channelAccounts === "object"
-                ? source.channelAccounts
-                : {};
-            const rawDefaultAccountMap = source.channelDefaultAccountId && typeof source.channelDefaultAccountId === "object"
-                ? source.channelDefaultAccountId
-                : {};
-            const normalized = {
-                ts: typeof source.ts === "number" ? source.ts : Date.now(),
-                channelOrder: [],
-                channelLabels: {},
-                channels: {},
-                channelAccounts: {},
-                channelDefaultAccountId: {},
-            };
-
-            function assignChannel(channelId, entry) {
-                const normalizedEntry = normalizeChannelStatusEntry(entry, channelId, rawLabels[channelId]);
-                if (!normalizedEntry) {
-                    return;
-                }
-
-                const resolvedChannelId = normalizedEntry.id;
-                normalized.channelOrder.push(resolvedChannelId);
-                normalized.channelLabels[resolvedChannelId] = normalizedEntry.label;
-                normalized.channels[resolvedChannelId] = normalizedEntry;
-
-                const rawAccounts = Array.isArray(rawAccountsMap[resolvedChannelId])
-                    ? rawAccountsMap[resolvedChannelId]
-                    : [];
-                const normalizedAccounts = rawAccounts
-                    .map(normalizeChannelAccountEntry)
-                    .filter(function (account) {
-                        return Boolean(account);
-                    });
-                normalized.channelAccounts[resolvedChannelId] = normalizedAccounts;
-
-                const explicitDefaultAccountId = String(rawDefaultAccountMap[resolvedChannelId] || "").trim();
-                if (explicitDefaultAccountId) {
-                    normalized.channelDefaultAccountId[resolvedChannelId] = explicitDefaultAccountId;
-                } else if (normalizedAccounts.length > 0) {
-                    normalized.channelDefaultAccountId[resolvedChannelId] = normalizedAccounts[0].accountId;
-                }
-            }
-
-            if (Array.isArray(source.channels)) {
-                source.channels.forEach(function (entry) {
-                    const resolvedId = String(entry && entry.id || "").trim();
-                    assignChannel(resolvedId, entry);
-                });
-                return normalized;
-            }
-
-            const rawChannelMap = source.channels && typeof source.channels === "object"
-                ? source.channels
-                : {};
-            const rawOrder = Array.isArray(source.channelOrder)
-                ? source.channelOrder
-                : Object.keys(rawChannelMap);
-            rawOrder.forEach(function (channelId) {
-                const resolvedId = String(channelId || "").trim();
-                if (!resolvedId) {
-                    return;
-                }
-                assignChannel(resolvedId, rawChannelMap[resolvedId]);
-            });
-
-            return normalized;
-        }
-
-        function buildAgentChannelsResult(snapshot, routes, agentId) {
-            const normalizedSnapshot = snapshot || null;
-            const resolvedAgentId = String(agentId || "").trim();
-            const normalizedRoutes = Array.isArray(routes)
-                ? routes.map(function (entry) {
-                    return {
-                        channel: String(entry && entry.channel || "").trim(),
-                        accountId: String(entry && entry.accountId || "").trim(),
-                        agentId: String(entry && entry.agentId || "").trim(),
-                        sessionId: String(entry && entry.sessionId || "").trim(),
-                    };
-                }).filter(function (entry) {
-                    return entry.channel.length > 0 &&
-                        entry.accountId.length > 0 &&
-                        (!resolvedAgentId || !entry.agentId || entry.agentId === resolvedAgentId);
-                })
-                : [];
-            const channelOrder = normalizedSnapshot && Array.isArray(normalizedSnapshot.channelOrder)
-                ? normalizedSnapshot.channelOrder
-                : [];
-            const channels = channelOrder.map(function (channelId) {
-                const statusEntry = normalizedSnapshot.channels && normalizedSnapshot.channels[channelId]
-                    ? normalizedSnapshot.channels[channelId]
-                    : {
-                        id: channelId,
-                        label: String(normalizedSnapshot.channelLabels && normalizedSnapshot.channelLabels[channelId] || channelId),
-                        connected: false,
-                        accounts: 0,
-                    };
-                const accountEntries = normalizedSnapshot.channelAccounts && Array.isArray(normalizedSnapshot.channelAccounts[channelId])
-                    ? normalizedSnapshot.channelAccounts[channelId]
-                    : [];
-                const defaultAccountId = normalizedSnapshot.channelDefaultAccountId &&
-                    typeof normalizedSnapshot.channelDefaultAccountId[channelId] === "string"
-                    ? normalizedSnapshot.channelDefaultAccountId[channelId]
-                    : (accountEntries[0] && accountEntries[0].accountId) || "";
-                return {
-                    id: channelId,
-                    label: String(statusEntry.label || channelId),
-                    connected: Boolean(statusEntry.connected),
-                    accountCount: accountEntries.length,
-                    accounts: accountEntries,
-                    defaultAccountId: defaultAccountId,
-                };
-            });
-
-            return {
-                snapshot: normalizedSnapshot,
-                channels: channels,
-                routes: normalizedRoutes,
-                selectedAgentId: resolvedAgentId || null,
-                capability: state.agentChannelsCapability,
-            };
-        }
-
-        function resolvePreferredServerChatModelValue(model, modelProvider, catalog) {
-            const normalizedCatalog = Array.isArray(catalog) ? catalog : [];
-            const modelText = String(model || "").trim();
-            const providerText = String(modelProvider || "").trim();
-
-            if (modelText && providerText) {
-                return providerText + ":" + modelText;
-            }
-            if (modelText) {
-                return modelText;
-            }
-            return normalizedCatalog.length > 0
-                ? String(normalizedCatalog[0].id || "")
-                : "";
-        }
-
-        function normalizeChatModelOverrideValue(overrideValue, catalog) {
-            if (typeof overrideValue === "string") {
-                return overrideValue.trim();
-            }
-
-            if (overrideValue && typeof overrideValue === "object") {
-                const candidate = overrideValue;
-                if (typeof candidate.model === "string" && candidate.model.trim()) {
-                    if (typeof candidate.modelProvider === "string" && candidate.modelProvider.trim()) {
-                        return candidate.modelProvider.trim() + ":" + candidate.model.trim();
+        const normalizeTrimmedString =
+            typeof controllerUtils.normalizeTrimmedString === "function"
+                ? controllerUtils.normalizeTrimmedString
+                : function (value) {
+                    if (typeof value !== "string") {
+                        return undefined;
                     }
-                    return candidate.model.trim();
+                    const trimmed = value.trim();
+                    return trimmed.length > 0 ? trimmed : undefined;
+                };
+        const normalizeFiniteInt = typeof controllerUtils.normalizeFiniteInt === "function"
+            ? controllerUtils.normalizeFiniteInt
+            : function (value, fallback) {
+                const parsed = Number(value);
+                if (!Number.isFinite(parsed)) {
+                    return Number.isFinite(Number(fallback))
+                        ? Math.max(0, Math.floor(Number(fallback)))
+                        : 0;
                 }
+                return Math.max(0, Math.floor(parsed));
+            };
+        const normalizeFiniteScore =
+            typeof controllerUtils.normalizeFiniteScore === "function"
+                ? controllerUtils.normalizeFiniteScore
+                : function (value, fallback) {
+                    const parsed = Number(value);
+                    if (!Number.isFinite(parsed)) {
+                        return Number.isFinite(Number(fallback))
+                            ? Math.max(0, Math.min(1, Number(fallback)))
+                            : 0;
+                    }
+                    return Math.max(0, Math.min(1, parsed));
+                };
+        const normalizeStorageMode =
+            typeof controllerUtils.normalizeStorageMode === "function"
+                ? controllerUtils.normalizeStorageMode
+                : function (value) {
+                    const normalized = normalizeTrimmedString(value);
+                    if (!normalized) {
+                        return "inline";
+                    }
+                    const lowered = normalized.toLowerCase();
+                    if (lowered === "inline" || lowered === "separate" || lowered === "both") {
+                        return lowered;
+                    }
+                    return "inline";
+                };
+
+        const dreamingController = window.BlazeClawDreamingController || {};
+        const normalizeDreamingStatus =
+            typeof dreamingController.normalizeDreamingStatus === "function"
+                ? dreamingController.normalizeDreamingStatus
+                : function () {
+                    return null;
+                };
+        const resolveDreamingPluginId =
+            typeof dreamingController.resolveDreamingPluginId === "function"
+                ? dreamingController.resolveDreamingPluginId
+                : function () {
+                    return "memory-core";
+                };
+        const resolveConfiguredDreaming =
+            typeof dreamingController.resolveConfiguredDreaming === "function"
+                ? dreamingController.resolveConfiguredDreaming
+                : function () {
+                    return {
+                        pluginId: resolveDreamingPluginId(null),
+                        enabled: false,
+                    };
+                };
+        const lookupIncludesDreamingProperty =
+            typeof dreamingController.lookupIncludesDreamingProperty === "function"
+                ? dreamingController.lookupIncludesDreamingProperty
+                : function () {
+                    return false;
+                };
+        const lookupDisallowsUnknownProperties =
+            typeof dreamingController.lookupDisallowsUnknownProperties === "function"
+                ? dreamingController.lookupDisallowsUnknownProperties
+                : function () {
+                    return false;
+                };
+        const getDreamingUiModel = typeof dreamingController.getDreamingUiModel === "function"
+            ? function () {
+                return dreamingController.getDreamingUiModel(state);
             }
-
-            return resolvePreferredServerChatModelValue("", "", catalog);
-        }
-
-        function resolveAgentIdFromSessionKey(sessionKey) {
-            const key = String(sessionKey || "").trim();
-            if (!key) {
-                return "main";
+            : function () {
+                return {
+                    subTab: "scene",
+                    waitingSort: "recent",
+                    phrase: "",
+                    entryCount: 0,
+                    diaryPage: 0,
+                    diaryEntry: null,
+                    shortTermEntries: [],
+                    groundedEntries: [],
+                    waitingEntries: [],
+                    promotedEntries: [],
+                    status: null,
+                    diaryPath: state.dreamDiaryPath,
+                    diaryContent: state.dreamDiaryContent,
+                    diaryChipLabel: function (value) {
+                        return String(value || "");
+                    },
+                    flattenDiaryBody: function () {
+                        return [];
+                    },
+                    describeWaitingEntryOrigin: function () {
+                        return "Live";
+                    },
+                    formatRange: function (path, startLine, endLine) {
+                        const safePath = String(path || "").trim() || "(unknown)";
+                        return safePath + ":" + String(startLine || 1) + "-" + String(endLine || 1);
+                    },
+                    formatCompactDateTime: function (value) {
+                        return String(value || "");
+                    },
+                };
+            };
+        const setDreamingSubTab = typeof dreamingController.setDreamingSubTab === "function"
+            ? function (tab) {
+                dreamingController.setDreamingSubTab(state, tab, onStateUpdated);
             }
-
-            const normalized = key.toLowerCase();
-            const parts = normalized.split(":").filter(function (part) {
-                return part.length > 0;
-            });
-
-            if (parts.length >= 3 && parts[0] === "agent") {
-                const parsedAgentId = String(parts[1] || "").trim();
-                return parsedAgentId || "main";
+            : function () {
+            };
+        const setDreamingAdvancedWaitingSort =
+            typeof dreamingController.setDreamingAdvancedWaitingSort === "function"
+                ? function (sort) {
+                    dreamingController.setDreamingAdvancedWaitingSort(
+                        state,
+                        sort,
+                        onStateUpdated
+                    );
+                }
+                : function () {
+                };
+        const setDreamDiaryPage = typeof dreamingController.setDreamDiaryPage === "function"
+            ? function (page) {
+                dreamingController.setDreamDiaryPage(state, page, onStateUpdated);
             }
+            : function () {
+            };
 
-            return "main";
-        }
-
-        function resolveEffectiveToolsModelKey(sessionKey) {
-            const resolvedSessionKey = String(sessionKey || "").trim();
-            if (!resolvedSessionKey) {
-                return "";
-            }
-
-            const catalog = Array.isArray(state.chatModelCatalog)
-                ? state.chatModelCatalog
-                : [];
-            const cachedOverride = state.chatModelOverrides
-                ? state.chatModelOverrides[resolvedSessionKey]
-                : undefined;
-            const defaults = state.sessionsResult && state.sessionsResult.defaults
-                ? state.sessionsResult.defaults
+        const channelsControllerModule = window.BlazeClawChannelsController || {};
+        const channelsRuntime =
+            typeof channelsControllerModule.createChannelsController === "function"
+                ? channelsControllerModule.createChannelsController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    hasSelectedAgentMismatch,
+                    resolveToolsErrorMessage,
+                    isMissingOperatorReadScopeError,
+                })
                 : null;
-            const defaultModel = resolvePreferredServerChatModelValue(
-                defaults ? defaults.model : "",
-                defaults ? defaults.modelProvider : "",
-                catalog);
 
-            if (cachedOverride === null) {
-                return defaultModel;
-            }
+        const usageControllerModule = window.BlazeClawUsageController || {};
+        const usageRuntime =
+            typeof usageControllerModule.createUsageController === "function"
+                ? usageControllerModule.createUsageController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    resolveToolsErrorMessage,
+                })
+                : null;
 
-            if (cachedOverride) {
-                return normalizeChatModelOverrideValue(cachedOverride, catalog);
-            }
+        const cronControllerModule = window.BlazeClawCronController || {};
+        const cronRuntime =
+            typeof cronControllerModule.createCronController === "function"
+                ? cronControllerModule.createCronController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    hasSelectedAgentMismatch,
+                    resolveToolsErrorMessage,
+                    normalizeCronPaginationMeta,
+                    normalizeCronJob,
+                    normalizeCronFormState,
+                    validateCronForm,
+                    hasCronFormErrors,
+                    buildCronSchedule,
+                    buildCronPayloadWithToolParity,
+                    buildCronDelivery,
+                    buildCronFailureAlert,
+                    applyCronToolParityToMutationPayload,
+                    recoverCronFlatJobShape,
+                    buildCronJobIdentityParams,
+                    resetCronFormToDefaults,
+                    jobToForm,
+                    buildCloneName,
+                    normalizeLowercaseStringOrEmpty,
+                })
+                : null;
 
-            const sessions = state.sessionsResult && Array.isArray(state.sessionsResult.sessions)
-                ? state.sessionsResult.sessions
-                : [];
-            const activeRow = sessions.find(function (row) {
-                return row && row.key === resolvedSessionKey;
-            });
+        const filesControllerModule = window.BlazeClawFilesController || {};
+        const filesRuntime =
+            typeof filesControllerModule.createFilesController === "function"
+                ? filesControllerModule.createFilesController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    hasSelectedAgentMismatch,
+                    resolveToolsErrorMessage,
+                })
+                : null;
 
-            if (activeRow && activeRow.model) {
-                return resolvePreferredServerChatModelValue(activeRow.model, activeRow.modelProvider, catalog);
-            }
+        const skillsControllerModule = window.BlazeClawSkillsController || {};
+        const skillsRuntime =
+            typeof skillsControllerModule.createSkillsController === "function"
+                ? skillsControllerModule.createSkillsController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    hasSelectedAgentMismatch,
+                    resolveToolsErrorMessage,
+                })
+                : null;
 
-            return defaultModel;
-        }
+        const toolsControllerModule = window.BlazeClawToolsController || {};
+        const toolsRuntime =
+            typeof toolsControllerModule.createToolsController === "function"
+                ? toolsControllerModule.createToolsController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    hasSelectedAgentMismatch,
+                    resolveToolsErrorMessage,
+                })
+                : null;
 
-        function buildToolsEffectiveRequestKey(params) {
-            const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
-            const resolvedSessionKey = String(params && params.sessionKey || "").trim();
-            const modelKey = resolveEffectiveToolsModelKey(resolvedSessionKey);
-            return resolvedAgentId + ":" + resolvedSessionKey + ":model=" + (modelKey || "(default)");
-        }
+        const nodesControllerModule = window.BlazeClawNodesController || {};
+        const nodesRuntime =
+            typeof nodesControllerModule.createNodesController === "function"
+                ? nodesControllerModule.createNodesController({
+                    state,
+                    request,
+                    onStateUpdated,
+                })
+                : null;
 
-        function buildAgentFileContentRequestKey(params) {
-            const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
-            const resolvedPath = String(params && params.path || "").trim();
-            return resolvedAgentId + ":path=" + resolvedPath;
-        }
+        const instancesControllerModule = window.BlazeClawInstancesController || {};
+        const instancesRuntime =
+            typeof instancesControllerModule.createInstancesController === "function"
+                ? instancesControllerModule.createInstancesController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    resolveToolsErrorMessage,
+                })
+                : null;
+
+        const observabilityControllerModule = window.BlazeClawObservabilityController || {};
+        const observabilityRuntime =
+            typeof observabilityControllerModule.createObservabilityController === "function"
+                ? observabilityControllerModule.createObservabilityController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    resolveToolsErrorMessage,
+                })
+                : null;
+
+        const devicesControllerModule = window.BlazeClawDevicesController || {};
+        const devicesRuntime =
+            typeof devicesControllerModule.createDevicesController === "function"
+                ? devicesControllerModule.createDevicesController({
+                    state,
+                    request,
+                    onStateUpdated,
+                    resolveToolsErrorMessage,
+                })
+                : null;
+
+        const normalizeNodeListPayload =
+            nodesRuntime && typeof nodesRuntime.normalizeNodeListPayload === "function"
+                ? nodesRuntime.normalizeNodeListPayload
+                : function (payload) {
+                    const source = payload && typeof payload === "object" ? payload : {};
+                    return Array.isArray(source.nodes) ? source.nodes : [];
+                };
+
+        const normalizePresenceEntries =
+            instancesRuntime && typeof instancesRuntime.normalizePresenceEntries === "function"
+                ? instancesRuntime.normalizePresenceEntries
+                : function (payload) {
+                    return Array.isArray(payload) ? payload : [];
+                };
+
+        const loadPresenceStatusMessage =
+            instancesRuntime && typeof instancesRuntime.loadPresenceStatusMessage === "function"
+                ? instancesRuntime.loadPresenceStatusMessage
+                : function (entries, payloadWasArray) {
+                    return !payloadWasArray ? "No presence payload." :
+                        (Array.isArray(entries) && entries.length === 0 ? "No instances yet." : null);
+                };
+
+        const buildUsageDateBounds =
+            usageRuntime && typeof usageRuntime.buildUsageDateBounds === "function"
+                ? usageRuntime.buildUsageDateBounds
+                : function () {
+                    const now = new Date();
+                    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+                    const start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
+                    function toIsoDate(value) {
+                        const year = value.getUTCFullYear();
+                        const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+                        const day = String(value.getUTCDate()).padStart(2, "0");
+                        return year + "-" + month + "-" + day;
+                    }
+                    return {
+                        startDate: toIsoDate(start),
+                        endDate: toIsoDate(end),
+                    };
+                };
+
+        const formatUtcOffset =
+            usageRuntime && typeof usageRuntime.formatUtcOffset === "function"
+                ? usageRuntime.formatUtcOffset
+                : function (timezoneOffsetMinutes) {
+                    const offsetFromUtcMinutes = -timezoneOffsetMinutes;
+                    const sign = offsetFromUtcMinutes >= 0 ? "+" : "-";
+                    const absMinutes = Math.abs(offsetFromUtcMinutes);
+                    const hours = Math.floor(absMinutes / 60);
+                    const minutes = absMinutes % 60;
+                    return minutes === 0
+                        ? "UTC" + sign + String(hours)
+                        : "UTC" + sign + String(hours) + ":" + String(minutes).padStart(2, "0");
+                };
+
+        const buildUsageDateInterpretationParams =
+            usageRuntime && typeof usageRuntime.buildUsageDateInterpretationParams === "function"
+                ? usageRuntime.buildUsageDateInterpretationParams
+                : function (timeZone) {
+                    if (timeZone === "utc") {
+                        return {
+                            mode: "utc",
+                        };
+                    }
+                    return {
+                        mode: "specific",
+                        utcOffset: formatUtcOffset(new Date().getTimezoneOffset()),
+                    };
+                };
+
+        const isLegacyDateInterpretationUnsupportedError =
+            usageRuntime && typeof usageRuntime.isLegacyDateInterpretationUnsupportedError === "function"
+                ? usageRuntime.isLegacyDateInterpretationUnsupportedError
+                : function (err) {
+                    const legacyMode = /unexpected property ['"]mode['"]/i;
+                    const legacyOffset = /unexpected property ['"]utcoffset['"]/i;
+                    const legacyInvalid = /invalid sessions\.usage params/i;
+                    const message = String((err && err.message) || err || "");
+                    return legacyInvalid.test(message) &&
+                        (legacyMode.test(message) || legacyOffset.test(message));
+                };
+
+        const shouldIgnoreUsageDetailResponse =
+            usageRuntime && typeof usageRuntime.shouldIgnoreUsageDetailResponse === "function"
+                ? usageRuntime.shouldIgnoreUsageDetailResponse
+                : function (shouldIgnoreResponse, sessionKey) {
+                    if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                        return true;
+                    }
+                    const selectedPanel = String(state.agentsPanel || "");
+                    if (selectedPanel !== "usage") {
+                        return true;
+                    }
+                    const selectedSessions = Array.isArray(state.usageSelectedSessions)
+                        ? state.usageSelectedSessions
+                        : [];
+                    if (selectedSessions.length === 0) {
+                        return true;
+                    }
+                    return selectedSessions.indexOf(sessionKey) < 0;
+                };
+
+        const runOptionalUsageDetailRequest =
+            usageRuntime && typeof usageRuntime.runOptionalUsageDetailRequest === "function"
+                ? usageRuntime.runOptionalUsageDetailRequest
+                : async function (loadingKey, run) {
+                    if (!request || !state.connected || state[loadingKey]) {
+                        return;
+                    }
+
+                    state[loadingKey] = true;
+                    onStateUpdated();
+
+                    try {
+                        await run();
+                    } catch (_) {
+                        // Silently fail optional usage detail endpoints.
+                    } finally {
+                        state[loadingKey] = false;
+                        onStateUpdated();
+                    }
+                };
+
+        const normalizeChannelStatusEntry =
+            channelsRuntime && typeof channelsRuntime.normalizeChannelStatusEntry === "function"
+                ? channelsRuntime.normalizeChannelStatusEntry
+                : function (entry, channelId, labelFallback) {
+                    const resolvedId = String(channelId || entry && entry.id || "").trim();
+                    if (!resolvedId) {
+                        return null;
+                    }
+
+                    const resolvedLabel = String(entry && entry.label || labelFallback || resolvedId).trim() || resolvedId;
+                    const accountCount = Number(entry && entry.accounts);
+                    return {
+                        id: resolvedId,
+                        label: resolvedLabel,
+                        connected: normalizeBooleanFlag(entry && entry.connected, false),
+                        accounts: Number.isFinite(accountCount) ? accountCount : 0,
+                    };
+                };
+
+        const normalizeChannelAccountEntry =
+            channelsRuntime && typeof channelsRuntime.normalizeChannelAccountEntry === "function"
+                ? channelsRuntime.normalizeChannelAccountEntry
+                : function (entry) {
+                    const resolvedAccountId = String(entry && entry.accountId || "").trim();
+                    if (!resolvedAccountId) {
+                        return null;
+                    }
+
+                    return {
+                        accountId: resolvedAccountId,
+                        name: String(entry && (entry.name || entry.label) || "").trim() || resolvedAccountId,
+                        enabled: normalizeBooleanFlag(entry && entry.enabled, normalizeBooleanFlag(entry && entry.active, false)),
+                        configured: normalizeBooleanFlag(entry && entry.configured, true),
+                        linked: normalizeBooleanFlag(entry && entry.linked, normalizeBooleanFlag(entry && entry.active, false)),
+                        running: normalizeBooleanFlag(entry && entry.running, normalizeBooleanFlag(entry && entry.connected, false)),
+                        connected: normalizeBooleanFlag(entry && entry.connected, false),
+                        lastError: entry && typeof entry.lastError === "string"
+                            ? entry.lastError
+                            : null,
+                        lastProbeAt: entry && typeof entry.lastProbeAt === "number"
+                            ? entry.lastProbeAt
+                            : null,
+                    };
+                };
+
+        const normalizeChannelsSnapshot =
+            channelsRuntime && typeof channelsRuntime.normalizeChannelsSnapshot === "function"
+                ? channelsRuntime.normalizeChannelsSnapshot
+                : function (payload) {
+                    if (!payload || typeof payload !== "object") {
+                        return null;
+                    }
+
+                    const source = payload;
+                    const rawLabels = source.channelLabels && typeof source.channelLabels === "object"
+                        ? source.channelLabels
+                        : {};
+                    const rawAccountsMap = source.channelAccounts && typeof source.channelAccounts === "object"
+                        ? source.channelAccounts
+                        : {};
+                    const rawDefaultAccountMap = source.channelDefaultAccountId && typeof source.channelDefaultAccountId === "object"
+                        ? source.channelDefaultAccountId
+                        : {};
+                    const normalized = {
+                        ts: typeof source.ts === "number" ? source.ts : Date.now(),
+                        channelOrder: [],
+                        channelLabels: {},
+                        channels: {},
+                        channelAccounts: {},
+                        channelDefaultAccountId: {},
+                    };
+
+                    function assignChannel(channelId, entry) {
+                        const normalizedEntry = normalizeChannelStatusEntry(entry, channelId, rawLabels[channelId]);
+                        if (!normalizedEntry) {
+                            return;
+                        }
+
+                        const resolvedChannelId = normalizedEntry.id;
+                        normalized.channelOrder.push(resolvedChannelId);
+                        normalized.channelLabels[resolvedChannelId] = normalizedEntry.label;
+                        normalized.channels[resolvedChannelId] = normalizedEntry;
+
+                        const rawAccounts = Array.isArray(rawAccountsMap[resolvedChannelId])
+                            ? rawAccountsMap[resolvedChannelId]
+                            : [];
+                        const normalizedAccounts = rawAccounts
+                            .map(normalizeChannelAccountEntry)
+                            .filter(function (account) {
+                                return Boolean(account);
+                            });
+                        normalized.channelAccounts[resolvedChannelId] = normalizedAccounts;
+
+                        const explicitDefaultAccountId = String(rawDefaultAccountMap[resolvedChannelId] || "").trim();
+                        if (explicitDefaultAccountId) {
+                            normalized.channelDefaultAccountId[resolvedChannelId] = explicitDefaultAccountId;
+                        } else if (normalizedAccounts.length > 0) {
+                            normalized.channelDefaultAccountId[resolvedChannelId] = normalizedAccounts[0].accountId;
+                        }
+                    }
+
+                    if (Array.isArray(source.channels)) {
+                        source.channels.forEach(function (entry) {
+                            const resolvedId = String(entry && entry.id || "").trim();
+                            assignChannel(resolvedId, entry);
+                        });
+                        return normalized;
+                    }
+
+                    const rawChannelMap = source.channels && typeof source.channels === "object"
+                        ? source.channels
+                        : {};
+                    const rawOrder = Array.isArray(source.channelOrder)
+                        ? source.channelOrder
+                        : Object.keys(rawChannelMap);
+                    rawOrder.forEach(function (channelId) {
+                        const resolvedId = String(channelId || "").trim();
+                        if (!resolvedId) {
+                            return;
+                        }
+                        assignChannel(resolvedId, rawChannelMap[resolvedId]);
+                    });
+
+                    return normalized;
+                };
+
+        const buildAgentChannelsResult =
+            channelsRuntime && typeof channelsRuntime.buildAgentChannelsResult === "function"
+                ? channelsRuntime.buildAgentChannelsResult
+                : function (snapshot, routes, agentId) {
+                    const normalizedSnapshot = snapshot || null;
+                    const resolvedAgentId = String(agentId || "").trim();
+                    const normalizedRoutes = Array.isArray(routes)
+                        ? routes.map(function (entry) {
+                            return {
+                                channel: String(entry && entry.channel || "").trim(),
+                                accountId: String(entry && entry.accountId || "").trim(),
+                                agentId: String(entry && entry.agentId || "").trim(),
+                                sessionId: String(entry && entry.sessionId || "").trim(),
+                            };
+                        }).filter(function (entry) {
+                            return entry.channel.length > 0 &&
+                                entry.accountId.length > 0 &&
+                                (!resolvedAgentId || !entry.agentId || entry.agentId === resolvedAgentId);
+                        })
+                        : [];
+                    const channelOrder = normalizedSnapshot && Array.isArray(normalizedSnapshot.channelOrder)
+                        ? normalizedSnapshot.channelOrder
+                        : [];
+                    const channels = channelOrder.map(function (channelId) {
+                        const statusEntry = normalizedSnapshot.channels && normalizedSnapshot.channels[channelId]
+                            ? normalizedSnapshot.channels[channelId]
+                            : {
+                                id: channelId,
+                                label: String(normalizedSnapshot.channelLabels && normalizedSnapshot.channelLabels[channelId] || channelId),
+                                connected: false,
+                                accounts: 0,
+                            };
+                        const accountEntries = normalizedSnapshot.channelAccounts && Array.isArray(normalizedSnapshot.channelAccounts[channelId])
+                            ? normalizedSnapshot.channelAccounts[channelId]
+                            : [];
+                        const defaultAccountId = normalizedSnapshot.channelDefaultAccountId &&
+                            typeof normalizedSnapshot.channelDefaultAccountId[channelId] === "string"
+                            ? normalizedSnapshot.channelDefaultAccountId[channelId]
+                            : (accountEntries[0] && accountEntries[0].accountId) || "";
+                        return {
+                            id: channelId,
+                            label: String(statusEntry.label || channelId),
+                            connected: Boolean(statusEntry.connected),
+                            accountCount: accountEntries.length,
+                            accounts: accountEntries,
+                            defaultAccountId: defaultAccountId,
+                        };
+                    });
+
+                    return {
+                        snapshot: normalizedSnapshot,
+                        channels: channels,
+                        routes: normalizedRoutes,
+                        selectedAgentId: resolvedAgentId || null,
+                        capability: state.agentChannelsCapability,
+                    };
+                };
+
+        const resolvePreferredServerChatModelValue =
+            toolsRuntime && typeof toolsRuntime.resolvePreferredServerChatModelValue === "function"
+                ? toolsRuntime.resolvePreferredServerChatModelValue
+                : function (model, modelProvider, catalog) {
+                    const normalizedCatalog = Array.isArray(catalog) ? catalog : [];
+                    const modelText = String(model || "").trim();
+                    const providerText = String(modelProvider || "").trim();
+
+                    if (modelText && providerText) {
+                        return providerText + ":" + modelText;
+                    }
+                    if (modelText) {
+                        return modelText;
+                    }
+                    return normalizedCatalog.length > 0
+                        ? String(normalizedCatalog[0].id || "")
+                        : "";
+                };
+
+        const normalizeChatModelOverrideValue =
+            toolsRuntime && typeof toolsRuntime.normalizeChatModelOverrideValue === "function"
+                ? toolsRuntime.normalizeChatModelOverrideValue
+                : function (overrideValue, catalog) {
+                    if (typeof overrideValue === "string") {
+                        return overrideValue.trim();
+                    }
+
+                    if (overrideValue && typeof overrideValue === "object") {
+                        const candidate = overrideValue;
+                        if (typeof candidate.model === "string" && candidate.model.trim()) {
+                            if (typeof candidate.modelProvider === "string" && candidate.modelProvider.trim()) {
+                                return candidate.modelProvider.trim() + ":" + candidate.model.trim();
+                            }
+                            return candidate.model.trim();
+                        }
+                    }
+
+                    return resolvePreferredServerChatModelValue("", "", catalog);
+                };
+
+        const resolveAgentIdFromSessionKey =
+            toolsRuntime && typeof toolsRuntime.resolveAgentIdFromSessionKey === "function"
+                ? toolsRuntime.resolveAgentIdFromSessionKey
+                : function (sessionKey) {
+                    const key = String(sessionKey || "").trim();
+                    if (!key) {
+                        return "main";
+                    }
+
+                    const normalized = key.toLowerCase();
+                    const parts = normalized.split(":").filter(function (part) {
+                        return part.length > 0;
+                    });
+
+                    if (parts.length >= 3 && parts[0] === "agent") {
+                        const parsedAgentId = String(parts[1] || "").trim();
+                        return parsedAgentId || "main";
+                    }
+
+                    return "main";
+                };
+
+        const resolveEffectiveToolsModelKey =
+            toolsRuntime && typeof toolsRuntime.resolveEffectiveToolsModelKey === "function"
+                ? toolsRuntime.resolveEffectiveToolsModelKey
+                : function (sessionKey) {
+                    const resolvedSessionKey = String(sessionKey || "").trim();
+                    if (!resolvedSessionKey) {
+                        return "";
+                    }
+
+                    const catalog = Array.isArray(state.chatModelCatalog)
+                        ? state.chatModelCatalog
+                        : [];
+                    const cachedOverride = state.chatModelOverrides
+                        ? state.chatModelOverrides[resolvedSessionKey]
+                        : undefined;
+                    const defaults = state.sessionsResult && state.sessionsResult.defaults
+                        ? state.sessionsResult.defaults
+                        : null;
+                    const defaultModel = resolvePreferredServerChatModelValue(
+                        defaults ? defaults.model : "",
+                        defaults ? defaults.modelProvider : "",
+                        catalog
+                    );
+
+                    if (cachedOverride === null) {
+                        return defaultModel;
+                    }
+
+                    if (cachedOverride) {
+                        return normalizeChatModelOverrideValue(cachedOverride, catalog);
+                    }
+
+                    const sessions = state.sessionsResult && Array.isArray(state.sessionsResult.sessions)
+                        ? state.sessionsResult.sessions
+                        : [];
+                    const activeRow = sessions.find(function (row) {
+                        return row && row.key === resolvedSessionKey;
+                    });
+
+                    if (activeRow && activeRow.model) {
+                        return resolvePreferredServerChatModelValue(activeRow.model, activeRow.modelProvider, catalog);
+                    }
+
+                    return defaultModel;
+                };
+
+        const buildToolsEffectiveRequestKey =
+            toolsRuntime && typeof toolsRuntime.buildToolsEffectiveRequestKey === "function"
+                ? toolsRuntime.buildToolsEffectiveRequestKey
+                : function (params) {
+                    const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
+                    const resolvedSessionKey = String(params && params.sessionKey || "").trim();
+                    const modelKey = resolveEffectiveToolsModelKey(resolvedSessionKey);
+                    return resolvedAgentId + ":" + resolvedSessionKey + ":model=" + (modelKey || "(default)");
+                };
+
+        const buildAgentFileContentRequestKey =
+            filesRuntime && typeof filesRuntime.buildAgentFileContentRequestKey === "function"
+                ? filesRuntime.buildAgentFileContentRequestKey
+                : function (params) {
+                    const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
+                    const resolvedPath = String(params && params.path || "").trim();
+                    return resolvedAgentId + ":path=" + resolvedPath;
+                };
 
         async function loadAgents() {
             if (!request || !state.connected || state.agentsLoading) {
@@ -1609,258 +1425,166 @@
             }
         }
 
-        async function loadToolsCatalog(agentId) {
-            const resolvedAgentId = String(agentId || "").trim();
-            if (!request ||
-                !state.connected ||
-                !resolvedAgentId ||
-                (state.toolsCatalogLoading && state.toolsCatalogLoadingAgentId === resolvedAgentId)) {
-                return;
-            }
+        const loadToolsCatalog =
+            toolsRuntime && typeof toolsRuntime.loadToolsCatalog === "function"
+                ? toolsRuntime.loadToolsCatalog
+                : async function (agentId) {
+                    const resolvedAgentId = String(agentId || "").trim();
+                    if (!request ||
+                        !state.connected ||
+                        !resolvedAgentId ||
+                        (state.toolsCatalogLoading && state.toolsCatalogLoadingAgentId === resolvedAgentId)) {
+                        return;
+                    }
 
-            function shouldIgnoreResponse() {
-                return state.toolsCatalogLoadingAgentId !== resolvedAgentId ||
-                    hasSelectedAgentMismatch(resolvedAgentId);
-            }
+                    function shouldIgnoreResponse() {
+                        return state.toolsCatalogLoadingAgentId !== resolvedAgentId ||
+                            hasSelectedAgentMismatch(resolvedAgentId);
+                    }
 
-            state.toolsCatalogLoading = true;
-            state.toolsCatalogLoadingAgentId = resolvedAgentId;
-            state.toolsCatalogError = null;
-            state.toolsCatalogResult = null;
-            onStateUpdated();
+                    state.toolsCatalogLoading = true;
+                    state.toolsCatalogLoadingAgentId = resolvedAgentId;
+                    state.toolsCatalogError = null;
+                    state.toolsCatalogResult = null;
+                    onStateUpdated();
 
-            try {
-                const res = await request("tools.catalog", {
-                    agentId: resolvedAgentId,
-                    includePlugins: true,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                    try {
+                        const res = await request("tools.catalog", {
+                            agentId: resolvedAgentId,
+                            includePlugins: true,
+                        });
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-                state.toolsCatalogResult = res && res.payload ? res.payload : null;
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                        state.toolsCatalogResult = res && res.payload ? res.payload : null;
+                    } catch (err) {
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-                state.toolsCatalogError = resolveToolsErrorMessage(err, "tools catalog");
-            } finally {
-                if (state.toolsCatalogLoadingAgentId === resolvedAgentId) {
-                    state.toolsCatalogLoadingAgentId = null;
-                    state.toolsCatalogLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
+                        state.toolsCatalogError = resolveToolsErrorMessage(err, "tools catalog");
+                    } finally {
+                        if (state.toolsCatalogLoadingAgentId === resolvedAgentId) {
+                            state.toolsCatalogLoadingAgentId = null;
+                            state.toolsCatalogLoading = false;
+                        }
+                        onStateUpdated();
+                    }
+                };
 
-        async function loadToolsEffective(params) {
-            const resolvedAgentId = String(params && params.agentId || "").trim();
-            const resolvedSessionKey = String(params && params.sessionKey || "").trim();
-            const requestKey = buildToolsEffectiveRequestKey({
-                agentId: resolvedAgentId,
-                sessionKey: resolvedSessionKey,
-            });
+        const loadToolsEffective =
+            toolsRuntime && typeof toolsRuntime.loadToolsEffective === "function"
+                ? toolsRuntime.loadToolsEffective
+                : async function (params) {
+                    const resolvedAgentId = String(params && params.agentId || "").trim();
+                    const resolvedSessionKey = String(params && params.sessionKey || "").trim();
+                    const requestKey = buildToolsEffectiveRequestKey({
+                        agentId: resolvedAgentId,
+                        sessionKey: resolvedSessionKey,
+                    });
 
-            if (!request ||
-                !state.connected ||
-                !resolvedAgentId ||
-                !resolvedSessionKey ||
-                (state.toolsEffectiveLoading && state.toolsEffectiveLoadingKey === requestKey)) {
-                return;
-            }
+                    if (!request ||
+                        !state.connected ||
+                        !resolvedAgentId ||
+                        !resolvedSessionKey ||
+                        (state.toolsEffectiveLoading && state.toolsEffectiveLoadingKey === requestKey)) {
+                        return;
+                    }
 
-            function shouldIgnoreResponse() {
-                return state.toolsEffectiveLoadingKey !== requestKey ||
-                    hasSelectedAgentMismatch(resolvedAgentId);
-            }
+                    function shouldIgnoreResponse() {
+                        return state.toolsEffectiveLoadingKey !== requestKey ||
+                            hasSelectedAgentMismatch(resolvedAgentId);
+                    }
 
-            state.toolsEffectiveLoading = true;
-            state.toolsEffectiveLoadingKey = requestKey;
-            state.toolsEffectiveResultKey = null;
-            state.toolsEffectiveError = null;
-            state.toolsEffectiveResult = null;
-            onStateUpdated();
+                    state.toolsEffectiveLoading = true;
+                    state.toolsEffectiveLoadingKey = requestKey;
+                    state.toolsEffectiveResultKey = null;
+                    state.toolsEffectiveError = null;
+                    state.toolsEffectiveResult = null;
+                    onStateUpdated();
 
-            try {
-                const res = await request("tools.effective", {
-                    agentId: resolvedAgentId,
-                    sessionKey: resolvedSessionKey,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                    try {
+                        const res = await request("tools.effective", {
+                            agentId: resolvedAgentId,
+                            sessionKey: resolvedSessionKey,
+                        });
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-                state.toolsEffectiveResultKey = requestKey;
-                state.toolsEffectiveResult = res && res.payload ? res.payload : null;
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                        state.toolsEffectiveResultKey = requestKey;
+                        state.toolsEffectiveResult = res && res.payload ? res.payload : null;
+                    } catch (err) {
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-                state.toolsEffectiveError = resolveToolsErrorMessage(err, "effective tools");
-            } finally {
-                if (state.toolsEffectiveLoadingKey === requestKey) {
-                    state.toolsEffectiveLoadingKey = null;
+                        state.toolsEffectiveError = resolveToolsErrorMessage(err, "effective tools");
+                    } finally {
+                        if (state.toolsEffectiveLoadingKey === requestKey) {
+                            state.toolsEffectiveLoadingKey = null;
+                            state.toolsEffectiveLoading = false;
+                        }
+                        onStateUpdated();
+                    }
+                };
+
+        const resetToolsEffectiveState =
+            toolsRuntime && typeof toolsRuntime.resetToolsEffectiveState === "function"
+                ? toolsRuntime.resetToolsEffectiveState
+                : function () {
+                    state.toolsEffectiveResult = null;
+                    state.toolsEffectiveResultKey = null;
+                    state.toolsEffectiveError = null;
                     state.toolsEffectiveLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
+                    state.toolsEffectiveLoadingKey = null;
+                    onStateUpdated();
+                };
 
-        function resetToolsEffectiveState() {
-            state.toolsEffectiveResult = null;
-            state.toolsEffectiveResultKey = null;
-            state.toolsEffectiveError = null;
-            state.toolsEffectiveLoading = false;
-            state.toolsEffectiveLoadingKey = null;
-            onStateUpdated();
-        }
+        const refreshVisibleToolsEffectiveForCurrentSession =
+            toolsRuntime && typeof toolsRuntime.refreshVisibleToolsEffectiveForCurrentSession === "function"
+                ? toolsRuntime.refreshVisibleToolsEffectiveForCurrentSession
+                : function () {
+                    const resolvedSessionKey = String(state.sessionKey || "").trim();
+                    if (!resolvedSessionKey || state.agentsPanel !== "tools" || !state.agentsSelectedId) {
+                        return undefined;
+                    }
 
-        function refreshVisibleToolsEffectiveForCurrentSession() {
-            const resolvedSessionKey = String(state.sessionKey || "").trim();
-            if (!resolvedSessionKey || state.agentsPanel !== "tools" || !state.agentsSelectedId) {
-                return undefined;
-            }
+                    const sessionAgentId = resolveAgentIdFromSessionKey(resolvedSessionKey);
+                    if (state.agentsSelectedId !== sessionAgentId) {
+                        return undefined;
+                    }
 
-            const sessionAgentId = resolveAgentIdFromSessionKey(resolvedSessionKey);
-            if (state.agentsSelectedId !== sessionAgentId) {
-                return undefined;
-            }
+                    return loadToolsEffective({
+                        agentId: sessionAgentId,
+                        sessionKey: resolvedSessionKey,
+                    });
+                };
 
-            return loadToolsEffective({
-                agentId: sessionAgentId,
-                sessionKey: resolvedSessionKey,
-            });
-        }
+        const loadAgentFiles =
+            filesRuntime && typeof filesRuntime.loadAgentFiles === "function"
+                ? filesRuntime.loadAgentFiles
+                : async function () {
+                };
 
-        async function loadAgentFiles(agentId) {
-            const resolvedAgentId = String(agentId || "").trim();
-            if (!request ||
-                !state.connected ||
-                !resolvedAgentId ||
-                (state.agentFilesLoading && state.agentFilesLoadingAgentId === resolvedAgentId)) {
-                return;
-            }
+        const loadAgentFileContent =
+            filesRuntime && typeof filesRuntime.loadAgentFileContent === "function"
+                ? filesRuntime.loadAgentFileContent
+                : async function () {
+                };
 
-            function shouldIgnoreResponse() {
-                return state.agentFilesLoadingAgentId !== resolvedAgentId ||
-                    hasSelectedAgentMismatch(resolvedAgentId) ||
-                    state.agentsPanel !== "files";
-            }
+        const updateAgentFileDraft =
+            filesRuntime && typeof filesRuntime.updateAgentFileDraft === "function"
+                ? filesRuntime.updateAgentFileDraft
+                : function () {
+                };
 
-            state.agentFilesLoading = true;
-            state.agentFilesLoadingAgentId = resolvedAgentId;
-            state.agentFilesError = null;
-            state.agentFilesResult = null;
-            onStateUpdated();
-
-            try {
-                const res = await request("gateway.agents.files.list", {
-                    agentId: resolvedAgentId,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentFilesResult = res && res.payload ? res.payload : null;
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentFilesError = resolveToolsErrorMessage(err, "agent files");
-            } finally {
-                if (state.agentFilesLoadingAgentId === resolvedAgentId) {
-                    state.agentFilesLoadingAgentId = null;
-                    state.agentFilesLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
-
-        async function loadAgentFileContent(params) {
-            const resolvedAgentId = String(params && params.agentId || "").trim();
-            const resolvedPath = String(params && params.path || "").trim();
-            const requestKey = buildAgentFileContentRequestKey({
-                agentId: resolvedAgentId,
-                path: resolvedPath,
-            });
-
-            if (!request ||
-                !state.connected ||
-                !resolvedAgentId ||
-                !resolvedPath ||
-                (state.agentFileContentLoading && state.agentFileContentLoadingKey === requestKey)) {
-                return;
-            }
-
-            function shouldIgnoreResponse() {
-                return state.agentFileContentLoadingKey !== requestKey ||
-                    hasSelectedAgentMismatch(resolvedAgentId) ||
-                    state.agentsPanel !== "files";
-            }
-
-            state.agentFileContentLoading = true;
-            state.agentFileContentLoadingKey = requestKey;
-            state.agentFileContentError = null;
-            state.agentFileContentResult = null;
-            onStateUpdated();
-
-            try {
-                const res = await request("gateway.agents.files.get", {
-                    agentId: resolvedAgentId,
-                    path: resolvedPath,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentFileContentResult = res && res.payload ? res.payload : null;
-                const file = state.agentFileContentResult && state.agentFileContentResult.file &&
-                    typeof state.agentFileContentResult.file === "object"
-                    ? state.agentFileContentResult.file
-                    : null;
-                const resolvedFilePath = String(file && (file.path || file.name) || resolvedPath).trim();
-                const resolvedContent = String(file && file.content || "");
-                state.agentFileSelectedPath = resolvedFilePath || resolvedPath;
-                state.agentFileEditDraft = resolvedContent;
-                state.agentFileEditBaseContent = resolvedContent;
-                state.agentFileSaveError = null;
-                state.agentFileSaveStatus = null;
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentFileContentError = resolveToolsErrorMessage(err, "agent file content");
-            } finally {
-                if (state.agentFileContentLoadingKey === requestKey) {
-                    state.agentFileContentLoadingKey = null;
-                    state.agentFileContentLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
-
-        function updateAgentFileDraft(content) {
-            state.agentFileEditDraft = String(content || "");
-            state.agentFileSaveError = null;
-            state.agentFileSaveStatus = null;
-            onStateUpdated();
-        }
-
-        async function selectAgentFile(params) {
-            const resolvedAgentId = String(params && params.agentId || state.agentsSelectedId || "").trim();
-            const resolvedPath = String(params && params.path || "").trim();
-            if (!resolvedAgentId || !resolvedPath) {
-                return;
-            }
-            await loadAgentFileContent({
-                agentId: resolvedAgentId,
-                path: resolvedPath,
-            });
-        }
+        const selectAgentFile =
+            filesRuntime && typeof filesRuntime.selectAgentFile === "function"
+                ? filesRuntime.selectAgentFile
+                : async function () {
+                };
 
         async function saveAgentFileContent(params) {
             const resolvedAgentId = String(params && params.agentId || state.agentsSelectedId || "").trim();
@@ -1922,710 +1646,307 @@
             }
         }
 
-        function isMethodNotFoundError(err) {
-            if (!err) {
-                return false;
-            }
-
-            if (typeof err === "object") {
-                const candidate = err;
-                const code = String(candidate.code || candidate.detailCode || "").toLowerCase();
-                const message = String(candidate.message || "").toLowerCase();
-                return code.indexOf("method") >= 0 && code.indexOf("not") >= 0 ||
-                    message.indexOf("method_not_found") >= 0 ||
-                    message.indexOf("unknown method") >= 0;
-            }
-
-            const text = String(err).toLowerCase();
-            return text.indexOf("method_not_found") >= 0 || text.indexOf("unknown method") >= 0;
-        }
-
-        function normalizeAgentSkillsReportPayload(payload) {
-            const candidate = payload && typeof payload === "object" ? payload : {};
-            const skills = Array.isArray(candidate.skills)
-                ? candidate.skills
-                : [];
-
-            const workspaceDir = String(candidate.workspaceDir || "").trim();
-            const managedSkillsDir = String(candidate.managedSkillsDir || "").trim();
-
-            return {
-                workspaceDir,
-                managedSkillsDir,
-                skills,
-            };
-        }
-
-        async function loadAgentSkills(agentId) {
-            const resolvedAgentId = String(agentId || "").trim();
-            if (!request || !state.connected || !resolvedAgentId || state.agentSkillsLoading) {
-                return;
-            }
-
-            function shouldIgnoreResponse() {
-                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "skills";
-            }
-
-            state.agentSkillsLoading = true;
-            state.agentSkillsError = null;
-            onStateUpdated();
-
-            try {
-                let res = null;
-                try {
-                    res = await request("skills.status", {
-                        agentId: resolvedAgentId,
-                    });
-                } catch (primaryError) {
-                    if (!isMethodNotFoundError(primaryError)) {
-                        throw primaryError;
+        const isMethodNotFoundError =
+            skillsRuntime && typeof skillsRuntime.isMethodNotFoundError === "function"
+                ? skillsRuntime.isMethodNotFoundError
+                : function (err) {
+                    if (!err) {
+                        return false;
                     }
-
-                    res = await request("gateway.skills.status", {
-                        agentId: resolvedAgentId,
-                    });
-                }
-
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                const payload = res && res.payload ? res.payload : null;
-                const report = normalizeAgentSkillsReportPayload(payload);
-                const commandLikeEntries = Array.isArray(report.skills)
-                    ? report.skills.map(function (entry) {
-                        return {
-                            name: String(entry && entry.name || "").trim(),
-                            description: String(entry && entry.description || "").trim(),
-                            skill: String(entry && entry.skillKey || entry && entry.name || "").trim(),
-                        };
-                    }).filter(function (entry) {
-                        return entry.name.length > 0;
-                    })
-                    : [];
-
-                state.agentSkillsReport = report;
-                state.agentSkillsAgentId = resolvedAgentId;
-                state.agentSkillsResult = {
-                    commands: commandLikeEntries,
-                    count: report.skills.length,
-                    capability: "skills.status",
-                    agentScoped: true,
-                    report,
+                    const text = String((err && err.message) || err).toLowerCase();
+                    return text.indexOf("method_not_found") >= 0 || text.indexOf("unknown method") >= 0;
                 };
-                if (!state.skillsHubResults.length) {
-                    state.skillsHubResults = report.skills.slice(0, 20).map(function (entry) {
-                        const skillName = String(entry && (entry.skillKey || entry.name) || "").trim();
-                        return {
-                            skill: skillName,
-                            name: String(entry && entry.name || skillName).trim(),
-                            description: String(entry && entry.description || "").trim(),
-                        };
-                    }).filter(function (entry) {
-                        return entry.skill.length > 0;
-                    });
-                }
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
 
-                state.agentSkillsError = resolveToolsErrorMessage(err, "agent skills");
-            } finally {
-                state.agentSkillsLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        function normalizeSkillsSearchPayload(payload) {
-            const source = payload && typeof payload === "object" ? payload : {};
-            const entries = Array.isArray(source.skills)
-                ? source.skills
-                : [];
-            return entries.map(function (entry, index) {
-                const row = entry && typeof entry === "object" ? entry : {};
-                const skill = String(row.skill || row.skillKey || row.name || `skill-${index + 1}`).trim();
-                return {
-                    skill: skill || `skill-${index + 1}`,
-                    name: String(row.name || row.skill || row.skillKey || skill || "").trim(),
-                    description: String(row.description || row.summary || "").trim(),
+        const normalizeAgentSkillsReportPayload =
+            skillsRuntime && typeof skillsRuntime.normalizeAgentSkillsReportPayload === "function"
+                ? skillsRuntime.normalizeAgentSkillsReportPayload
+                : function (payload) {
+                    const candidate = payload && typeof payload === "object" ? payload : {};
+                    return {
+                        workspaceDir: String(candidate.workspaceDir || "").trim(),
+                        managedSkillsDir: String(candidate.managedSkillsDir || "").trim(),
+                        skills: Array.isArray(candidate.skills) ? candidate.skills : [],
+                    };
                 };
-            });
-        }
 
-        async function searchSkillsHub(options) {
-            const opts = options || {};
-            const query = String(opts.query != null ? opts.query : state.skillsHubQuery).trim();
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            if (!requestOverride || !state.connected || state.skillsHubLoading) {
-                return state.skillsHubResults;
-            }
+        const loadAgentSkills =
+            skillsRuntime && typeof skillsRuntime.loadAgentSkills === "function"
+                ? skillsRuntime.loadAgentSkills
+                : async function () {
+                };
 
-            state.skillsHubLoading = true;
-            state.skillsHubError = null;
-            onStateUpdated();
-            try {
-                const res = await requestOverride("skills.search", {
-                    query,
-                });
-                const payload = res && res.payload ? res.payload : res;
-                state.skillsHubResults = normalizeSkillsSearchPayload(payload);
-                state.skillsHubQuery = query;
-                return state.skillsHubResults;
-            } catch (err) {
-                state.skillsHubError = resolveToolsErrorMessage(err, "skills search");
-                state.lastError = state.skillsHubError;
-                return state.skillsHubResults;
-            } finally {
-                state.skillsHubLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        async function loadSkillDetail(skill, options) {
-            const skillName = String(skill || "").trim();
-            const opts = options || {};
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            if (!skillName || !requestOverride || !state.connected || state.skillsDetailLoading) {
-                return state.skillsDetailResult;
-            }
-
-            state.skillsDetailLoading = true;
-            state.skillsDetailError = null;
-            onStateUpdated();
-            try {
-                let response;
-                try {
-                    response = await requestOverride("skills.detail", {
-                        skill: skillName,
+        const normalizeSkillsSearchPayload =
+            skillsRuntime && typeof skillsRuntime.normalizeSkillsSearchPayload === "function"
+                ? skillsRuntime.normalizeSkillsSearchPayload
+                : function (payload) {
+                    const source = payload && typeof payload === "object" ? payload : {};
+                    const entries = Array.isArray(source.skills) ? source.skills : [];
+                    return entries.map(function (entry, index) {
+                        const row = entry && typeof entry === "object" ? entry : {};
+                        const skill = String(row.skill || row.skillKey || row.name || "skill-" + String(index + 1)).trim();
+                        return {
+                            skill: skill || "skill-" + String(index + 1),
+                            name: String(row.name || row.skill || row.skillKey || skill || "").trim(),
+                            description: String(row.description || row.summary || "").trim(),
+                        };
                     });
-                } catch (detailErr) {
-                    if (!isMethodNotFoundError(detailErr)) {
-                        throw detailErr;
-                    }
-                    response = await requestOverride("gateway.skills.info", {
-                        skill: skillName,
-                    });
-                }
-                const payload = response && response.payload ? response.payload : response;
-                state.skillsDetailResult = payload && typeof payload === "object"
-                    ? payload
-                    : null;
-                return state.skillsDetailResult;
-            } catch (err) {
-                state.skillsDetailError = resolveToolsErrorMessage(err, "skill detail");
-                state.lastError = state.skillsDetailError;
-                return state.skillsDetailResult;
-            } finally {
-                state.skillsDetailLoading = false;
-                onStateUpdated();
-            }
-        }
+                };
 
-        async function installSkill(skill, options) {
-            const skillName = String(skill || "").trim();
-            const opts = options || {};
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            if (!skillName || !requestOverride || !state.connected || state.skillsInstallBusy) {
-                return null;
-            }
+        const searchSkillsHub =
+            skillsRuntime && typeof skillsRuntime.searchSkillsHub === "function"
+                ? skillsRuntime.searchSkillsHub
+                : async function () {
+                    return state.skillsHubResults;
+                };
 
-            state.skillsInstallBusy = true;
-            state.skillsInstallStatus = null;
-            state.skillsHubError = null;
-            onStateUpdated();
-            try {
-                let response;
-                try {
-                    response = await requestOverride("gateway.skills.install.execute", {
-                        skill: skillName,
-                    });
-                } catch (execErr) {
-                    if (!isMethodNotFoundError(execErr)) {
-                        throw execErr;
-                    }
-                    response = await requestOverride("skills.install", {
-                        skill: skillName,
-                    });
-                }
-                const payload = response && response.payload ? response.payload : response;
-                state.skillsInstallStatus = JSON.stringify(payload || {}, null, 2);
-                return payload;
-            } catch (err) {
-                state.skillsInstallStatus = null;
-                state.skillsHubError = resolveToolsErrorMessage(err, "skills install");
-                state.lastError = state.skillsHubError;
-                return null;
-            } finally {
-                state.skillsInstallBusy = false;
-                onStateUpdated();
-            }
-        }
+        const loadSkillDetail =
+            skillsRuntime && typeof skillsRuntime.loadSkillDetail === "function"
+                ? skillsRuntime.loadSkillDetail
+                : async function () {
+                    return state.skillsDetailResult;
+                };
 
-        async function updateSkillConfig(options) {
-            const opts = options || {};
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            const rawPayload = String(opts.payload != null ? opts.payload : state.skillsEditPayload || "").trim();
-            if (!requestOverride || !state.connected || state.skillsEditBusy) {
-                return null;
-            }
+        const installSkill =
+            skillsRuntime && typeof skillsRuntime.installSkill === "function"
+                ? skillsRuntime.installSkill
+                : async function () {
+                    return null;
+                };
 
-            let parsedPayload = {};
-            try {
-                parsedPayload = rawPayload ? JSON.parse(rawPayload) : {};
-                if (!parsedPayload || typeof parsedPayload !== "object" || Array.isArray(parsedPayload)) {
-                    throw new Error("payload must be JSON object");
-                }
-            } catch (parseErr) {
-                state.skillsEditError = `Invalid JSON payload: ${String(parseErr.message || parseErr)}`;
-                state.skillsEditStatus = null;
-                onStateUpdated();
-                return null;
-            }
+        const updateSkillConfig =
+            skillsRuntime && typeof skillsRuntime.updateSkillConfig === "function"
+                ? skillsRuntime.updateSkillConfig
+                : async function () {
+                    return null;
+                };
 
-            state.skillsEditBusy = true;
-            state.skillsEditError = null;
-            state.skillsEditStatus = null;
-            onStateUpdated();
-            try {
-                const response = await requestOverride("skills.update", parsedPayload);
-                const payload = response && response.payload ? response.payload : response;
-                state.skillsEditStatus = JSON.stringify(payload || {}, null, 2);
-                return payload;
-            } catch (err) {
-                state.skillsEditError = resolveToolsErrorMessage(err, "skills update");
-                state.lastError = state.skillsEditError;
-                return null;
-            } finally {
-                state.skillsEditBusy = false;
-                onStateUpdated();
-            }
-        }
-
-        async function loadNodes(options) {
-            const opts = options || {};
-            const quiet = Boolean(opts.quiet);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.nodesLoading) {
-                return state.nodes;
-            }
-
-            state.nodesLoading = true;
-            if (!quiet) {
-                state.nodesError = null;
-                state.lastError = null;
-            }
-            onStateUpdated();
-
-            try {
-                const res = await request("node.list", {});
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+        const loadNodes =
+            nodesRuntime && typeof nodesRuntime.loadNodes === "function"
+                ? nodesRuntime.loadNodes
+                : async function () {
                     return state.nodes;
-                }
+                };
 
-                const payload = res && res.payload
-                    ? res.payload
-                    : res;
-                state.nodes = normalizeNodeListPayload(payload);
-                return state.nodes;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.nodes;
-                }
-
-                if (!quiet) {
-                    const message = String(err);
-                    state.nodesError = message;
-                    state.lastError = message;
-                }
-                return state.nodes;
-            } finally {
-                state.nodesLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        async function loadPresence(options) {
-            const opts = options || {};
-            const quiet = Boolean(opts.quiet);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.presenceLoading) {
-                return state.presenceEntries;
-            }
-
-            state.presenceLoading = true;
-            if (!quiet) {
-                state.presenceError = null;
-                state.presenceStatus = null;
-                state.lastError = null;
-            }
-            onStateUpdated();
-
-            try {
-                const res = await request("system-presence", {});
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+        const loadPresence =
+            instancesRuntime && typeof instancesRuntime.loadPresence === "function"
+                ? instancesRuntime.loadPresence
+                : async function () {
                     return state.presenceEntries;
-                }
+                };
 
-                const payload = res && Object.prototype.hasOwnProperty.call(res, "payload")
-                    ? res.payload
-                    : res;
-                const entries = normalizePresenceEntries(payload);
-                const payloadWasArray = Array.isArray(payload);
-                state.presenceEntries = entries;
-                state.presenceStatus = loadPresenceStatusMessage(entries, payloadWasArray);
-                if (!quiet) {
-                    state.presenceError = null;
-                }
-                return entries;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.presenceEntries;
-                }
+        const loadUsage =
+            usageRuntime && typeof usageRuntime.loadUsage === "function"
+                ? usageRuntime.loadUsage
+                : async function (options) {
+                    const opts = options || {};
+                    const quiet = Boolean(opts.quiet);
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!request || !state.connected || state.usageLoading) {
+                        return state.usageResult;
+                    }
 
-                if (!quiet) {
-                    state.presenceEntries = [];
-                    state.presenceStatus = null;
-                    state.presenceError = resolveToolsErrorMessage(err, "instance presence");
-                    state.lastError = state.presenceError;
-                }
-                return state.presenceEntries;
-            } finally {
-                state.presenceLoading = false;
-                onStateUpdated();
-            }
-        }
+                    state.usageLoading = true;
+                    if (!quiet) {
+                        state.usageError = null;
+                        state.lastError = null;
+                    }
+                    onStateUpdated();
 
-        async function loadUsage(options) {
-            const opts = options || {};
-            const quiet = Boolean(opts.quiet);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.usageLoading) {
-                return state.usageResult;
-            }
+                    try {
+                        if (!state.usageStartDate || !state.usageEndDate) {
+                            const bounds = buildUsageDateBounds();
+                            state.usageStartDate = bounds.startDate;
+                            state.usageEndDate = bounds.endDate;
+                        }
 
-            state.usageLoading = true;
-            if (!quiet) {
-                state.usageError = null;
-                state.lastError = null;
-            }
-            onStateUpdated();
+                        const startDate = state.usageStartDate;
+                        const endDate = state.usageEndDate;
+                        async function runUsageRequests(includeDateInterpretation) {
+                            const dateInterpretation = includeDateInterpretation
+                                ? buildUsageDateInterpretationParams(state.usageTimeZone)
+                                : undefined;
+                            return Promise.all([
+                                request("sessions.usage", {
+                                    startDate,
+                                    endDate,
+                                    limit: 1000,
+                                    includeContextWeight: true,
+                                    ...(dateInterpretation || {}),
+                                }),
+                                request("usage.cost", {
+                                    startDate,
+                                    endDate,
+                                    ...(dateInterpretation || {}),
+                                }),
+                            ]);
+                        }
 
-            try {
-                if (!state.usageStartDate || !state.usageEndDate) {
-                    const bounds = buildUsageDateBounds();
-                    state.usageStartDate = bounds.startDate;
-                    state.usageEndDate = bounds.endDate;
-                }
+                        const includeDateInterpretation = true;
+                        let sessionsRes = null;
+                        let costRes = null;
+                        try {
+                            const first = await runUsageRequests(includeDateInterpretation);
+                            sessionsRes = first[0];
+                            costRes = first[1];
+                        } catch (firstErr) {
+                            if (includeDateInterpretation && isLegacyDateInterpretationUnsupportedError(firstErr)) {
+                                const fallback = await runUsageRequests(false);
+                                sessionsRes = fallback[0];
+                                costRes = fallback[1];
+                            } else {
+                                throw firstErr;
+                            }
+                        }
 
-                const startDate = state.usageStartDate;
-                const endDate = state.usageEndDate;
-                async function runUsageRequests(includeDateInterpretation) {
-                    const dateInterpretation = includeDateInterpretation
-                        ? buildUsageDateInterpretationParams(state.usageTimeZone)
-                        : undefined;
-                    return Promise.all([
-                        request("sessions.usage", {
-                            startDate,
-                            endDate,
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return state.usageResult;
+                        }
+
+                        state.usageResult = sessionsRes && sessionsRes.payload
+                            ? sessionsRes.payload
+                            : sessionsRes;
+                        state.usageCostSummary = costRes && costRes.payload
+                            ? costRes.payload
+                            : costRes;
+                        if (!quiet) {
+                            state.usageError = null;
+                        }
+                        return state.usageResult;
+                    } catch (err) {
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return state.usageResult;
+                        }
+
+                        if (!quiet) {
+                            state.usageResult = null;
+                            state.usageCostSummary = null;
+                            state.usageError = resolveToolsErrorMessage(err, "usage");
+                            state.lastError = state.usageError;
+                        }
+                        return state.usageResult;
+                    } finally {
+                        state.usageLoading = false;
+                        onStateUpdated();
+                    }
+                };
+
+        const loadUsageTimeSeries =
+            usageRuntime && typeof usageRuntime.loadUsageTimeSeries === "function"
+                ? usageRuntime.loadUsageTimeSeries
+                : async function (sessionKey, options) {
+                    const key = String(sessionKey || "").trim();
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!key) {
+                        return;
+                    }
+
+                    await runOptionalUsageDetailRequest("usageTimeSeriesLoading", async function () {
+                        state.usageTimeSeries = null;
+                        onStateUpdated();
+                        const res = await request("sessions.usage.timeseries", {
+                            key,
+                        });
+                        if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
+                            return;
+                        }
+
+                        const payload = res && res.payload ? res.payload : res;
+                        state.usageTimeSeries = payload && typeof payload === "object"
+                            ? payload
+                            : null;
+                    }, shouldIgnoreResponse);
+                };
+
+        const loadUsageSessionLogs =
+            usageRuntime && typeof usageRuntime.loadUsageSessionLogs === "function"
+                ? usageRuntime.loadUsageSessionLogs
+                : async function (sessionKey, options) {
+                    const key = String(sessionKey || "").trim();
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!key) {
+                        return;
+                    }
+
+                    await runOptionalUsageDetailRequest("usageSessionLogsLoading", async function () {
+                        state.usageSessionLogs = null;
+                        onStateUpdated();
+                        const res = await request("sessions.usage.logs", {
+                            key,
                             limit: 1000,
-                            includeContextWeight: true,
-                            ...(dateInterpretation || {}),
-                        }),
-                        request("usage.cost", {
-                            startDate,
-                            endDate,
-                            ...(dateInterpretation || {}),
-                        }),
-                    ]);
-                }
+                        });
+                        if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
+                            return;
+                        }
 
-                const includeDateInterpretation = true;
-                let sessionsRes = null;
-                let costRes = null;
-                try {
-                    const first = await runUsageRequests(includeDateInterpretation);
-                    sessionsRes = first[0];
-                    costRes = first[1];
-                } catch (firstErr) {
-                    if (includeDateInterpretation && isLegacyDateInterpretationUnsupportedError(firstErr)) {
-                        const fallback = await runUsageRequests(false);
-                        sessionsRes = fallback[0];
-                        costRes = fallback[1];
-                    } else {
-                        throw firstErr;
+                        const payload = res && res.payload ? res.payload : res;
+                        const logs = payload && payload.logs;
+                        state.usageSessionLogs = Array.isArray(logs)
+                            ? logs
+                            : null;
+                    }, shouldIgnoreResponse);
+                };
+
+        const parseObservabilityMethodParams =
+            observabilityRuntime && typeof observabilityRuntime.parseObservabilityMethodParams === "function"
+                ? observabilityRuntime.parseObservabilityMethodParams
+                : function () {
+                    return {};
+                };
+
+        const normalizeObservabilityLogs =
+            observabilityRuntime && typeof observabilityRuntime.normalizeObservabilityLogs === "function"
+                ? observabilityRuntime.normalizeObservabilityLogs
+                : function (entries) {
+                    return Array.isArray(entries) ? entries : [];
+                };
+
+        const loadObservability =
+            observabilityRuntime && typeof observabilityRuntime.loadObservability === "function"
+                ? observabilityRuntime.loadObservability
+                : async function () {
+                    return state.observabilityHealth;
+                };
+
+        const updateObservabilityField =
+            observabilityRuntime && typeof observabilityRuntime.updateObservabilityField === "function"
+                ? observabilityRuntime.updateObservabilityField
+                : function (field, value) {
+                    const key = String(field || "").trim();
+                    if (!key) {
+                        return;
                     }
-                }
 
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.usageResult;
-                }
+                    if (key === "method") {
+                        state.observabilityMethod = String(value || "");
+                    } else if (key === "params") {
+                        state.observabilityMethodParams = String(value || "");
+                    } else if (key === "logLevel") {
+                        state.observabilityLogLevel = String(value || "all").trim().toLowerCase() || "all";
+                    } else if (key === "logLimit") {
+                        const nextLimit = Number(value);
+                        if (Number.isFinite(nextLimit) && nextLimit > 0) {
+                            state.observabilityLogLimit = Math.max(1, Math.min(200, Math.floor(nextLimit)));
+                        }
+                    } else if (key === "paused") {
+                        state.observabilityPaused = Boolean(value);
+                    }
+                    onStateUpdated();
+                };
 
-                state.usageResult = sessionsRes && sessionsRes.payload
-                    ? sessionsRes.payload
-                    : sessionsRes;
-                state.usageCostSummary = costRes && costRes.payload
-                    ? costRes.payload
-                    : costRes;
-                if (!quiet) {
-                    state.usageError = null;
-                }
-                return state.usageResult;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.usageResult;
-                }
-
-                if (!quiet) {
-                    state.usageResult = null;
-                    state.usageCostSummary = null;
-                    state.usageError = resolveToolsErrorMessage(err, "usage");
-                    state.lastError = state.usageError;
-                }
-                return state.usageResult;
-            } finally {
-                state.usageLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        async function loadUsageTimeSeries(sessionKey, options) {
-            const key = String(sessionKey || "").trim();
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!key) {
-                return;
-            }
-
-            await runOptionalUsageDetailRequest("usageTimeSeriesLoading", async function () {
-                state.usageTimeSeries = null;
-                onStateUpdated();
-                const res = await request("sessions.usage.timeseries", {
-                    key,
-                });
-                if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
-                    return;
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                state.usageTimeSeries = payload && typeof payload === "object"
-                    ? payload
-                    : null;
-            }, shouldIgnoreResponse);
-        }
-
-        async function loadUsageSessionLogs(sessionKey, options) {
-            const key = String(sessionKey || "").trim();
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!key) {
-                return;
-            }
-
-            await runOptionalUsageDetailRequest("usageSessionLogsLoading", async function () {
-                state.usageSessionLogs = null;
-                onStateUpdated();
-                const res = await request("sessions.usage.logs", {
-                    key,
-                    limit: 1000,
-                });
-                if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
-                    return;
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                const logs = payload && payload.logs;
-                state.usageSessionLogs = Array.isArray(logs)
-                    ? logs
-                    : null;
-            }, shouldIgnoreResponse);
-        }
-
-        function parseObservabilityMethodParams(raw) {
-            const text = String(raw || "").trim();
-            if (!text) {
-                return {};
-            }
-            const parsed = JSON.parse(text);
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-                throw new Error("method params must be a JSON object");
-            }
-            return parsed;
-        }
-
-        function normalizeObservabilityLogs(entries, level) {
-            const list = Array.isArray(entries) ? entries : [];
-            const targetLevel = String(level || "all").trim().toLowerCase();
-            return list.filter((entry) => {
-                if (!entry || typeof entry !== "object") {
-                    return false;
-                }
-                if (targetLevel === "all") {
-                    return true;
-                }
-                const entryLevel = String(entry.level || "").trim().toLowerCase();
-                return entryLevel === targetLevel;
-            });
-        }
-
-        async function loadObservability(options) {
-            const opts = options || {};
-            const quiet = Boolean(opts.quiet);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.observabilityLoading || !state.observabilityEnabled) {
-                return state.observabilityHealth;
-            }
-
-            state.observabilityLoading = true;
-            if (!quiet) {
-                state.observabilityError = null;
-                state.lastError = null;
-            }
-            onStateUpdated();
-
-            try {
-                const logLimit = Math.max(1, Math.min(200, Number(state.observabilityLogLimit) || 50));
-                const calls = await Promise.all([
-                    request("gateway.health", {}),
-                    request("gateway.health.details", {}),
-                    request("gateway.transport.status", {}),
-                    request("last-heartbeat", {}),
-                    request("models.list", {}),
-                    state.observabilityPaused
-                        ? Promise.resolve({ payload: { entries: state.observabilityLogs || [] } })
-                        : request("gateway.logs.tail", { limit: logLimit }),
-                ]);
-
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.observabilityHealth;
-                }
-
-                const healthPayload = calls[0] && calls[0].payload ? calls[0].payload : calls[0];
-                const detailsPayload = calls[1] && calls[1].payload ? calls[1].payload : calls[1];
-                const transportPayload = calls[2] && calls[2].payload ? calls[2].payload : calls[2];
-                const heartbeatPayload = calls[3] && calls[3].payload ? calls[3].payload : calls[3];
-                const modelsPayload = calls[4] && calls[4].payload ? calls[4].payload : calls[4];
-                const logsPayload = calls[5] && calls[5].payload ? calls[5].payload : calls[5];
-                const models = Array.isArray(modelsPayload && modelsPayload.models)
-                    ? modelsPayload.models
-                    : [];
-                const entries = Array.isArray(logsPayload && logsPayload.entries)
-                    ? logsPayload.entries
-                    : [];
-
-                state.observabilityHealth = healthPayload && typeof healthPayload === "object"
-                    ? healthPayload
-                    : null;
-                state.observabilityHealthDetails = detailsPayload && typeof detailsPayload === "object"
-                    ? detailsPayload
-                    : null;
-                state.observabilityTransportStatus = transportPayload && typeof transportPayload === "object"
-                    ? transportPayload
-                    : null;
-                state.observabilityHeartbeat = heartbeatPayload && typeof heartbeatPayload === "object"
-                    ? heartbeatPayload
-                    : null;
-                state.observabilityModels = models;
-                state.observabilityLogs = normalizeObservabilityLogs(entries, state.observabilityLogLevel);
-                state.observabilityLastUpdatedMs = Date.now();
-                if (!quiet) {
-                    state.observabilityError = null;
-                }
-                return state.observabilityHealth;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.observabilityHealth;
-                }
-
-                if (!quiet) {
-                    state.observabilityError = resolveToolsErrorMessage(err, "observability");
-                    state.lastError = state.observabilityError;
-                }
-                return state.observabilityHealth;
-            } finally {
-                state.observabilityLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        function updateObservabilityField(field, value) {
-            const key = String(field || "").trim();
-            if (!key) {
-                return;
-            }
-
-            if (key === "method") {
-                state.observabilityMethod = String(value || "");
-            } else if (key === "params") {
-                state.observabilityMethodParams = String(value || "");
-            } else if (key === "logLevel") {
-                state.observabilityLogLevel = String(value || "all").trim().toLowerCase() || "all";
-            } else if (key === "logLimit") {
-                const nextLimit = Number(value);
-                if (Number.isFinite(nextLimit) && nextLimit > 0) {
-                    state.observabilityLogLimit = Math.max(1, Math.min(200, Math.floor(nextLimit)));
-                }
-            } else if (key === "paused") {
-                state.observabilityPaused = Boolean(value);
-            }
-            onStateUpdated();
-        }
-
-        async function invokeObservabilityMethod(options) {
-            const opts = options || {};
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            if (!requestOverride || state.observabilityMethodBusy || !state.observabilityEnabled) {
-                return null;
-            }
-
-            const method = String(state.observabilityMethod || "").trim();
-            if (!method) {
-                state.observabilityMethodError = "method is required";
-                state.observabilityMethodResult = null;
-                onStateUpdated();
-                return null;
-            }
-
-            state.observabilityMethodBusy = true;
-            state.observabilityMethodError = null;
-            onStateUpdated();
-            try {
-                const params = parseObservabilityMethodParams(state.observabilityMethodParams);
-                const response = await requestOverride(method, params);
-                state.observabilityMethodResult = JSON.stringify(response, null, 2);
-                state.observabilityMethodError = null;
-                return response;
-            } catch (err) {
-                state.observabilityMethodResult = null;
-                state.observabilityMethodError = resolveToolsErrorMessage(err, "debug method invoke");
-                return null;
-            } finally {
-                state.observabilityMethodBusy = false;
-                onStateUpdated();
-            }
-        }
+        const invokeObservabilityMethod =
+            observabilityRuntime && typeof observabilityRuntime.invokeObservabilityMethod === "function"
+                ? observabilityRuntime.invokeObservabilityMethod
+                : async function () {
+                    return null;
+                };
 
         function buildObservabilityLogsExportText() {
             const rows = Array.isArray(state.observabilityLogs) ? state.observabilityLogs : [];
@@ -2638,366 +1959,295 @@
             }).join("\n");
         }
 
-        function exportObservabilityLogs() {
-            state.observabilityExportText = buildObservabilityLogsExportText();
-            onStateUpdated();
-            return state.observabilityExportText;
-        }
-
-        function normalizeDevicePairs(payload) {
-            const source = payload && typeof payload === "object" ? payload : {};
-            const pairs = Array.isArray(source.pairs) ? source.pairs : [];
-            return pairs.map((entry, index) => {
-                const row = entry && typeof entry === "object" ? entry : {};
-                const deviceId = String(
-                    row.deviceId ||
-                    row.id ||
-                    row.requestId ||
-                    `device-${index + 1}`
-                ).trim();
-                return {
-                    deviceId: deviceId || `device-${index + 1}`,
-                    label: String(row.label || row.name || row.deviceName || deviceId || "").trim(),
-                    status: String(row.status || (row.connected ? "connected" : "pending")).trim() || "pending",
-                    updatedAtMs: Number(row.updatedAtMs || row.ts || 0) || 0,
+        const exportObservabilityLogs =
+            observabilityRuntime && typeof observabilityRuntime.exportObservabilityLogs === "function"
+                ? observabilityRuntime.exportObservabilityLogs
+                : function () {
+                    state.observabilityExportText = null;
+                    onStateUpdated();
+                    return state.observabilityExportText;
                 };
-            });
-        }
 
-        async function loadDevicePairs(options) {
-            const opts = options || {};
-            const quiet = Boolean(opts.quiet);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.devicePairsLoading) {
-                return state.devicePairs;
-            }
+        const normalizeDevicePairs =
+            devicesRuntime && typeof devicesRuntime.normalizeDevicePairs === "function"
+                ? devicesRuntime.normalizeDevicePairs
+                : function () {
+                    return [];
+                };
 
-            state.devicePairsLoading = true;
-            if (!quiet) {
-                state.devicePairsError = null;
-            }
-            onStateUpdated();
-            try {
-                const res = await request("device.pair.list", {});
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+        const loadDevicePairs =
+            devicesRuntime && typeof devicesRuntime.loadDevicePairs === "function"
+                ? devicesRuntime.loadDevicePairs
+                : async function () {
                     return state.devicePairs;
-                }
-                const payload = res && res.payload ? res.payload : res;
-                const pairs = normalizeDevicePairs(payload);
-                state.devicePairs = pairs;
-                if (!state.devicePairSelection && pairs.length > 0) {
-                    state.devicePairSelection = String(pairs[0].deviceId || "");
-                }
-                if (!quiet) {
-                    state.devicePairsError = null;
-                }
-                return pairs;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return state.devicePairs;
-                }
-                if (!quiet) {
-                    state.devicePairsError = resolveToolsErrorMessage(err, "device pair list");
-                    state.lastError = state.devicePairsError;
-                }
-                return state.devicePairs;
-            } finally {
-                state.devicePairsLoading = false;
-                onStateUpdated();
-            }
-        }
+                };
 
-        function selectDevicePair(deviceId) {
-            state.devicePairSelection = String(deviceId || "").trim();
-            onStateUpdated();
-        }
+        const selectDevicePair =
+            devicesRuntime && typeof devicesRuntime.selectDevicePair === "function"
+                ? devicesRuntime.selectDevicePair
+                : function (deviceId) {
+                    state.devicePairSelection = String(deviceId || "").trim();
+                    onStateUpdated();
+                };
 
-        async function resolveDevicePair(action, deviceId, options) {
-            const methodByAction = {
-                approve: "device.pair.approve",
-                reject: "device.pair.reject",
-                remove: "device.pair.remove",
-            };
-            const method = methodByAction[String(action || "").trim()] || "";
-            const targetDeviceId = String(deviceId || state.devicePairSelection || "").trim();
-            const opts = options || {};
-            const requestOverride = typeof opts.requestOverride === "function"
-                ? opts.requestOverride
-                : request;
-            if (!method || !requestOverride || !targetDeviceId || state.devicePairsBusy) {
-                return null;
-            }
+        const resolveDevicePair =
+            devicesRuntime && typeof devicesRuntime.resolveDevicePair === "function"
+                ? devicesRuntime.resolveDevicePair
+                : async function () {
+                    return null;
+                };
 
-            state.devicePairsBusy = true;
-            state.devicePairActionStatus = null;
-            state.devicePairsError = null;
-            onStateUpdated();
-            try {
-                const response = await requestOverride(method, {
-                    deviceId: targetDeviceId,
-                });
-                const payload = response && response.payload ? response.payload : response;
-                state.devicePairActionStatus = `${method} ok for ${targetDeviceId}`;
-                if (action === "remove") {
-                    state.devicePairs = (state.devicePairs || []).filter((entry) => String(entry && entry.deviceId || "") !== targetDeviceId);
-                } else {
-                    state.devicePairs = (state.devicePairs || []).map((entry) => {
-                        if (String(entry && entry.deviceId || "") !== targetDeviceId) {
-                            return entry;
+        const loadChannels =
+            channelsRuntime && typeof channelsRuntime.loadChannels === "function"
+                ? channelsRuntime.loadChannels
+                : async function (options) {
+                    const opts = options || {};
+                    const probe = Boolean(opts.probe);
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!request || !state.connected || state.channelsLoading) {
+                        return state.channelsSnapshot || null;
+                    }
+
+                    state.channelsLoading = true;
+                    state.channelsError = null;
+                    onStateUpdated();
+
+                    try {
+                        const res = await request("channels.status", {
+                            probe: probe,
+                            timeoutMs: 8000,
+                        });
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return null;
                         }
-                        const nextStatus = action === "approve" ? "approved" : "rejected";
-                        return Object.assign({}, entry, { status: nextStatus, updatedAtMs: Date.now() });
-                    });
-                }
-                return payload;
-            } catch (err) {
-                state.devicePairsError = resolveToolsErrorMessage(err, `device pair ${action}`);
-                state.lastError = state.devicePairsError;
-                return null;
-            } finally {
-                state.devicePairsBusy = false;
-                onStateUpdated();
-            }
-        }
 
-        async function loadChannels(options) {
-            const opts = options || {};
-            const probe = Boolean(opts.probe);
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.channelsLoading) {
-                return state.channelsSnapshot || null;
-            }
+                        const payload = res && res.payload ? res.payload : res;
+                        const snapshot = normalizeChannelsSnapshot(payload);
+                        state.channelsSnapshot = snapshot;
+                        state.channelsLastSuccess = Date.now();
+                        return snapshot;
+                    } catch (err) {
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return null;
+                        }
 
-            state.channelsLoading = true;
-            state.channelsError = null;
-            onStateUpdated();
+                        if (isMissingOperatorReadScopeError(err)) {
+                            state.channelsSnapshot = null;
+                        }
+                        state.channelsError = resolveToolsErrorMessage(err, "channel status");
+                        return null;
+                    } finally {
+                        state.channelsLoading = false;
+                        onStateUpdated();
+                    }
+                };
 
-            try {
-                const res = await request("channels.status", {
-                    probe: probe,
-                    timeoutMs: 8000,
-                });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return null;
-                }
+        const loadAgentChannels =
+            channelsRuntime && typeof channelsRuntime.loadAgentChannels === "function"
+                ? channelsRuntime.loadAgentChannels
+                : async function (agentId) {
+                    const resolvedAgentId = String(agentId || "").trim();
+                    if (!request || !state.connected || !resolvedAgentId || state.agentChannelsLoading) {
+                        return;
+                    }
 
-                const payload = res && res.payload ? res.payload : res;
-                const snapshot = normalizeChannelsSnapshot(payload);
-                state.channelsSnapshot = snapshot;
-                state.channelsLastSuccess = Date.now();
-                return snapshot;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return null;
-                }
+                    function shouldIgnoreResponse() {
+                        return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "channels";
+                    }
 
-                if (isMissingOperatorReadScopeError(err)) {
-                    state.channelsSnapshot = null;
-                }
-                state.channelsError = resolveToolsErrorMessage(err, "channel status");
-                return null;
-            } finally {
-                state.channelsLoading = false;
-                onStateUpdated();
-            }
-        }
+                    state.agentChannelsLoading = true;
+                    state.agentChannelsError = null;
+                    onStateUpdated();
 
-        async function loadAgentChannels(agentId) {
-            const resolvedAgentId = String(agentId || "").trim();
-            if (!request || !state.connected || !resolvedAgentId || state.agentChannelsLoading) {
-                return;
-            }
+                    try {
+                        const snapshot = await loadChannels({
+                            probe: true,
+                            shouldIgnoreResponse: shouldIgnoreResponse,
+                        });
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-            function shouldIgnoreResponse() {
-                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "channels";
-            }
+                        if (!snapshot && state.channelsError) {
+                            state.agentChannelsError = state.channelsError;
+                            state.agentChannelsResult = null;
+                            return;
+                        }
 
-            state.agentChannelsLoading = true;
-            state.agentChannelsError = null;
-            onStateUpdated();
+                        const routesRes = await request("gateway.channels.routes", {});
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-            try {
-                const snapshot = await loadChannels({
-                    probe: true,
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                        const routePayload = routesRes && routesRes.payload ? routesRes.payload : null;
+                        const routes = routePayload && Array.isArray(routePayload.routes)
+                            ? routePayload.routes
+                            : [];
+                        const effectiveSnapshot = snapshot || state.channelsSnapshot;
+                        state.agentChannelsResult = buildAgentChannelsResult(
+                            effectiveSnapshot,
+                            routes,
+                            resolvedAgentId
+                        );
+                        state.agentChannelsError = null;
+                    } catch (err) {
+                        if (shouldIgnoreResponse()) {
+                            return;
+                        }
 
-                if (!snapshot && state.channelsError) {
-                    state.agentChannelsError = state.channelsError;
-                    state.agentChannelsResult = null;
-                    return;
-                }
+                        state.agentChannelsError = resolveToolsErrorMessage(err, "channel status");
+                    } finally {
+                        state.agentChannelsLoading = false;
+                        onStateUpdated();
+                    }
+                };
 
-                const routesRes = await request("gateway.channels.routes", {});
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+        const startWhatsAppLogin =
+            channelsRuntime && typeof channelsRuntime.startWhatsAppLogin === "function"
+                ? channelsRuntime.startWhatsAppLogin
+                : async function (options) {
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    const force = Boolean(opts.force);
+                    if (!request || !state.connected || state.whatsappBusy) {
+                        return false;
+                    }
 
-                const routePayload = routesRes && routesRes.payload ? routesRes.payload : null;
-                const routes = routePayload && Array.isArray(routePayload.routes)
-                    ? routePayload.routes
-                    : [];
-                const effectiveSnapshot = snapshot || state.channelsSnapshot;
-                state.agentChannelsResult = buildAgentChannelsResult(
-                    effectiveSnapshot,
-                    routes,
-                    resolvedAgentId
-                );
-                state.agentChannelsError = null;
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
+                    state.whatsappBusy = true;
+                    onStateUpdated();
 
-                state.agentChannelsError = resolveToolsErrorMessage(err, "channel status");
-            } finally {
-                state.agentChannelsLoading = false;
-                onStateUpdated();
-            }
-        }
+                    try {
+                        const res = await request("web.login.start", {
+                            force: force,
+                            timeoutMs: 30000,
+                        });
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-        async function startWhatsAppLogin(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            const force = Boolean(opts.force);
-            if (!request || !state.connected || state.whatsappBusy) {
-                return false;
-            }
+                        const payload = res && res.payload ? res.payload : res;
+                        state.whatsappLoginMessage = payload && typeof payload.message === "string"
+                            ? payload.message
+                            : null;
+                        state.whatsappLoginQrDataUrl = payload && typeof payload.qrDataUrl === "string"
+                            ? payload.qrDataUrl
+                            : null;
+                        state.whatsappLoginConnected = null;
+                        return true;
+                    } catch (err) {
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-            state.whatsappBusy = true;
-            onStateUpdated();
+                        state.whatsappLoginMessage = String(err);
+                        state.whatsappLoginQrDataUrl = null;
+                        state.whatsappLoginConnected = null;
+                        return false;
+                    } finally {
+                        state.whatsappBusy = false;
+                        onStateUpdated();
+                    }
+                };
 
-            try {
-                const res = await request("web.login.start", {
-                    force: force,
-                    timeoutMs: 30000,
-                });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
+        const waitWhatsAppLogin =
+            channelsRuntime && typeof channelsRuntime.waitWhatsAppLogin === "function"
+                ? channelsRuntime.waitWhatsAppLogin
+                : async function (options) {
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!request || !state.connected || state.whatsappBusy) {
+                        return false;
+                    }
 
-                const payload = res && res.payload ? res.payload : res;
-                state.whatsappLoginMessage = payload && typeof payload.message === "string"
-                    ? payload.message
-                    : null;
-                state.whatsappLoginQrDataUrl = payload && typeof payload.qrDataUrl === "string"
-                    ? payload.qrDataUrl
-                    : null;
-                state.whatsappLoginConnected = null;
-                return true;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
+                    state.whatsappBusy = true;
+                    onStateUpdated();
 
-                state.whatsappLoginMessage = String(err);
-                state.whatsappLoginQrDataUrl = null;
-                state.whatsappLoginConnected = null;
-                return false;
-            } finally {
-                state.whatsappBusy = false;
-                onStateUpdated();
-            }
-        }
+                    try {
+                        const res = await request("web.login.wait", {
+                            timeoutMs: 120000,
+                        });
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-        async function waitWhatsAppLogin(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.whatsappBusy) {
-                return false;
-            }
+                        const payload = res && res.payload ? res.payload : res;
+                        state.whatsappLoginMessage = payload && typeof payload.message === "string"
+                            ? payload.message
+                            : null;
+                        state.whatsappLoginConnected = payload && typeof payload.connected === "boolean"
+                            ? payload.connected
+                            : null;
+                        if (state.whatsappLoginConnected) {
+                            state.whatsappLoginQrDataUrl = null;
+                            await loadChannels({
+                                probe: true,
+                                shouldIgnoreResponse: shouldIgnoreResponse,
+                            });
+                        }
+                        return Boolean(state.whatsappLoginConnected);
+                    } catch (err) {
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-            state.whatsappBusy = true;
-            onStateUpdated();
+                        state.whatsappLoginMessage = String(err);
+                        state.whatsappLoginConnected = null;
+                        return false;
+                    } finally {
+                        state.whatsappBusy = false;
+                        onStateUpdated();
+                    }
+                };
 
-            try {
-                const res = await request("web.login.wait", {
-                    timeoutMs: 120000,
-                });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
+        const logoutWhatsApp =
+            channelsRuntime && typeof channelsRuntime.logoutWhatsApp === "function"
+                ? channelsRuntime.logoutWhatsApp
+                : async function (options) {
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!request || !state.connected || state.whatsappBusy) {
+                        return false;
+                    }
 
-                const payload = res && res.payload ? res.payload : res;
-                state.whatsappLoginMessage = payload && typeof payload.message === "string"
-                    ? payload.message
-                    : null;
-                state.whatsappLoginConnected = payload && typeof payload.connected === "boolean"
-                    ? payload.connected
-                    : null;
-                if (state.whatsappLoginConnected) {
-                    state.whatsappLoginQrDataUrl = null;
-                    await loadChannels({
-                        probe: true,
-                        shouldIgnoreResponse: shouldIgnoreResponse,
-                    });
-                }
-                return Boolean(state.whatsappLoginConnected);
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
+                    state.whatsappBusy = true;
+                    onStateUpdated();
 
-                state.whatsappLoginMessage = String(err);
-                state.whatsappLoginConnected = null;
-                return false;
-            } finally {
-                state.whatsappBusy = false;
-                onStateUpdated();
-            }
-        }
+                    try {
+                        await request("channels.logout", {
+                            channel: "whatsapp",
+                        });
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-        async function logoutWhatsApp(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.whatsappBusy) {
-                return false;
-            }
+                        state.whatsappLoginMessage = "Logged out.";
+                        state.whatsappLoginQrDataUrl = null;
+                        state.whatsappLoginConnected = null;
+                        await loadChannels({
+                            probe: true,
+                            shouldIgnoreResponse: shouldIgnoreResponse,
+                        });
+                        return true;
+                    } catch (err) {
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return false;
+                        }
 
-            state.whatsappBusy = true;
-            onStateUpdated();
-
-            try {
-                await request("channels.logout", {
-                    channel: "whatsapp",
-                });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
-
-                state.whatsappLoginMessage = "Logged out.";
-                state.whatsappLoginQrDataUrl = null;
-                state.whatsappLoginConnected = null;
-                await loadChannels({
-                    probe: true,
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                return true;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return false;
-                }
-
-                state.whatsappLoginMessage = String(err);
-                return false;
-            } finally {
-                state.whatsappBusy = false;
-                onStateUpdated();
-            }
-        }
+                        state.whatsappLoginMessage = String(err);
+                        return false;
+                    } finally {
+                        state.whatsappBusy = false;
+                        onStateUpdated();
+                    }
+                };
 
         function normalizeCronPaginationMeta(payload, entriesLength, fallbackLimit, fallbackOffset) {
             const safePayload = payload && typeof payload === "object"
@@ -5601,545 +4851,142 @@
             return normalizeCronFormState(next);
         }
 
-        async function loadCronModelSuggestions(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected) {
-                state.agentCronModelSuggestions = [];
-                return [];
-            }
-
-            try {
-                const res = await request("models.list", {});
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return [];
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                const models = payload && Array.isArray(payload.models)
-                    ? payload.models
-                    : [];
-                const unique = new Set();
-                models.forEach(function (entry) {
-                    const id = String(entry && entry.id || "").trim();
-                    if (id) {
-                        unique.add(id);
+        const loadCronModelSuggestions =
+            cronRuntime && typeof cronRuntime.loadCronModelSuggestions === "function"
+                ? cronRuntime.loadCronModelSuggestions
+                : async function (options) {
+                    const opts = options || {};
+                    const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                        ? opts.shouldIgnoreResponse
+                        : null;
+                    if (!request || !state.connected) {
+                        state.agentCronModelSuggestions = [];
+                        return [];
                     }
-                });
-                state.agentCronModelSuggestions = Array.from(unique).sort(function (left, right) {
-                    return left.localeCompare(right);
-                });
-                return state.agentCronModelSuggestions;
-            } catch (_) {
-                state.agentCronModelSuggestions = [];
-                return [];
-            }
-        }
-
-        async function withCronBusy(run) {
-            if (!request || !state.connected || state.agentCronBusy) {
-                return false;
-            }
-
-            state.agentCronBusy = true;
-            state.agentCronError = null;
-            onStateUpdated();
-
-            try {
-                await run();
-                return true;
-            } catch (err) {
-                state.agentCronError = resolveToolsErrorMessage(err, "cron mutation");
-                return false;
-            } finally {
-                state.agentCronBusy = false;
-                onStateUpdated();
-            }
-        }
-
-        async function addOrUpdateCronJob() {
-            return withCronBusy(async function () {
-                const normalizedForm = normalizeCronFormState(state.agentCronForm);
-                state.agentCronForm = normalizedForm;
-                const fieldErrors = validateCronForm(normalizedForm);
-                state.agentCronFieldErrors = fieldErrors;
-                if (hasCronFormErrors(fieldErrors)) {
-                    return;
-                }
-
-                const payload = {
-                    name: String(normalizedForm.name || "").trim(),
-                    enabled: normalizedForm.enabled !== false,
-                    schedule: buildCronSchedule(normalizedForm),
-                    payload: await buildCronPayloadWithToolParity(normalizedForm),
-                    delivery: buildCronDelivery(normalizedForm),
+                    try {
+                        const res = await request("models.list", {});
+                        if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                            return [];
+                        }
+                        const payload = res && res.payload ? res.payload : res;
+                        const models = payload && Array.isArray(payload.models) ? payload.models : [];
+                        const unique = new Set();
+                        models.forEach(function (entry) {
+                            const id = String(entry && entry.id || "").trim();
+                            if (id) {
+                                unique.add(id);
+                            }
+                        });
+                        state.agentCronModelSuggestions = Array.from(unique).sort(function (left, right) {
+                            return left.localeCompare(right);
+                        });
+                        return state.agentCronModelSuggestions;
+                    } catch (_) {
+                        state.agentCronModelSuggestions = [];
+                        return [];
+                    }
                 };
 
-                const failureAlert = buildCronFailureAlert(normalizedForm);
-                if (failureAlert !== undefined) {
-                    payload.failureAlert = failureAlert;
-                }
-
-                const normalizedPayload = applyCronToolParityToMutationPayload(payload);
-
-                if (state.agentCronEditingJobId) {
-                    await request("cron.update", Object.assign(
-                        buildCronJobIdentityParams(state.agentCronEditingJobId),
-                        {
-                            patch: recoverCronFlatJobShape(normalizedPayload) || normalizedPayload,
-                        }));
-                    state.agentCronEditingJobId = null;
-                } else {
-                    await request("cron.add", recoverCronFlatJobShape(normalizedPayload) || normalizedPayload);
-                    resetCronFormToDefaults();
-                }
-
-                await loadCronJobsPage({ append: false });
-                await loadCronStatus({});
-                await loadCronRuns({ append: false });
-            });
-        }
-
-        async function triggerCronWake(mode) {
-            const resolvedMode = mode === "next-heartbeat"
-                ? "next-heartbeat"
-                : "now";
-
-            return withCronBusy(async function () {
-                await request("wake", {
-                    mode: resolvedMode,
-                });
-                await loadCronStatus({});
-                await loadCronRuns({ append: false });
-            });
-        }
-
-        async function removeCronJob(jobId) {
-            const resolvedJobId = String(jobId || "").trim();
-            if (!resolvedJobId) {
-                return false;
-            }
-
-            return withCronBusy(async function () {
-                await request("cron.remove", buildCronJobIdentityParams(resolvedJobId));
-
-                if (state.agentCronEditingJobId === resolvedJobId) {
-                    resetCronFormToDefaults();
-                }
-                if (state.agentCronSelectedJobId === resolvedJobId) {
-                    state.agentCronSelectedJobId = null;
-                }
-
-                await loadCronJobsPage({ append: false });
-                await loadCronStatus({});
-                await loadCronRuns({ append: false });
-            });
-        }
-
-        async function runCronJobNow(jobId, mode) {
-            const resolvedJobId = String(jobId || "").trim();
-            if (!resolvedJobId) {
-                return false;
-            }
-
-            const resolvedMode = mode === "due" ? "due" : "force";
-            return withCronBusy(async function () {
-                await request("cron.run", Object.assign(
-                    buildCronJobIdentityParams(resolvedJobId),
-                    { mode: resolvedMode }));
-                await loadCronRuns({ append: false });
-            });
-        }
-
-        function startCronEdit(jobId) {
-            const resolvedJobId = String(jobId || "").trim();
-            const jobs = Array.isArray(state.agentCronJobs) ? state.agentCronJobs : [];
-            const job = jobs.find(function (entry) {
-                return String(entry && entry.id || "").trim() === resolvedJobId;
-            });
-            if (!job) {
-                return false;
-            }
-
-            state.agentCronEditingJobId = resolvedJobId;
-            state.agentCronSelectedJobId = resolvedJobId;
-            state.agentCronForm = jobToForm(job, state.agentCronForm);
-            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
-            onStateUpdated();
-            return true;
-        }
-
-        function startCronClone(jobId) {
-            const resolvedJobId = String(jobId || "").trim();
-            const jobs = Array.isArray(state.agentCronJobs) ? state.agentCronJobs : [];
-            const job = jobs.find(function (entry) {
-                return String(entry && entry.id || "").trim() === resolvedJobId;
-            });
-            if (!job) {
-                return false;
-            }
-
-            const existingNames = new Set(
-                jobs.map(function (entry) {
-                    return normalizeLowercaseStringOrEmpty(entry && entry.name || "");
-                })
-            );
-            const cloned = jobToForm(job, state.agentCronForm);
-            cloned.name = buildCloneName(job.name, existingNames);
-            state.agentCronEditingJobId = null;
-            state.agentCronSelectedJobId = resolvedJobId;
-            state.agentCronForm = cloned;
-            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
-            onStateUpdated();
-            return true;
-        }
-
-        function cancelCronEdit() {
-            resetCronFormToDefaults();
-            onStateUpdated();
-        }
-
-        function updateCronFormField(field, value) {
-            const allowedFields = {
-                name: true,
-                enabled: true,
-                scheduleKind: true,
-                scheduleAt: true,
-                everyAmount: true,
-                everyUnit: true,
-                cronExpr: true,
-                payloadKind: true,
-                payloadText: true,
-                payloadModel: true,
-                payloadThinking: true,
-                timeoutSeconds: true,
-                contextMessages: true,
-                deliveryMode: true,
-                deliveryTo: true,
-                failureAlertMode: true,
-                failureAlertAfter: true,
-                failureAlertCooldownSeconds: true,
-            };
-            const key = String(field || "").trim();
-            if (!allowedFields[key]) {
-                return;
-            }
-
-            const nextForm = Object.assign({}, state.agentCronForm);
-            nextForm[key] = value;
-            state.agentCronForm = normalizeCronFormState(nextForm);
-            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
-            onStateUpdated();
-        }
-
-        async function loadCronStatus(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            if (!request || !state.connected || state.agentCronStatusLoading) {
-                return state.agentCronStatusResult;
-            }
-
-            state.agentCronStatusLoading = true;
-            state.agentCronStatusError = null;
-            onStateUpdated();
-
-            try {
-                const res = await request("cron.status", {});
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return null;
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                const normalizedStatus = payload && typeof payload === "object"
-                    ? {
-                        enabled: Boolean(payload.enabled),
-                        jobs: Number.isFinite(Number(payload.jobs))
-                            ? Math.max(0, Math.floor(Number(payload.jobs)))
-                            : 0,
-                        nextWakeAtMs: Number.isFinite(Number(payload.nextWakeAtMs))
-                            ? Math.floor(Number(payload.nextWakeAtMs))
-                            : null,
+        const withCronBusy =
+            cronRuntime && typeof cronRuntime.withCronBusy === "function"
+                ? cronRuntime.withCronBusy
+                : async function (run) {
+                    if (!request || !state.connected || state.agentCronBusy) {
+                        return false;
                     }
-                    : {
-                        enabled: false,
-                        jobs: 0,
-                        nextWakeAtMs: null,
-                    };
-                state.agentCronStatusResult = normalizedStatus;
-                return normalizedStatus;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return null;
-                }
-
-                state.agentCronStatusError = resolveToolsErrorMessage(err, "cron status");
-                return null;
-            } finally {
-                state.agentCronStatusLoading = false;
-                onStateUpdated();
-            }
-        }
-
-        async function loadCronJobsPage(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            const append = Boolean(opts.append);
-            if (!request || !state.connected) {
-                return;
-            }
-            if (!append && state.agentCronJobsLoading) {
-                return;
-            }
-            if (append && state.agentCronJobsLoadingMore) {
-                return;
-            }
-            if (append && !state.agentCronJobsHasMore) {
-                return;
-            }
-
-            const offset = append
-                ? Math.max(0, Number(state.agentCronJobsNextOffset || state.agentCronJobs.length || 0))
-                : 0;
-            if (append) {
-                state.agentCronJobsLoadingMore = true;
-            } else {
-                state.agentCronJobsLoading = true;
-            }
-            state.agentCronJobsError = null;
-            onStateUpdated();
-
-            try {
-                const res = await request("cron.list", {
-                    includeDisabled: state.agentCronJobsEnabledFilter === "all",
-                    enabled: state.agentCronJobsEnabledFilter,
-                    limit: state.agentCronJobsLimit,
-                    offset: offset,
-                    query: String(state.agentCronJobsQuery || "").trim() || undefined,
-                    sortBy: state.agentCronJobsSortBy,
-                    sortDir: state.agentCronJobsSortDir,
-                });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return;
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                const jobs = payload && Array.isArray(payload.jobs)
-                    ? payload.jobs.map(normalizeCronJob).filter(function (job) {
-                        return job && String(job.id || "").trim().length > 0;
-                    })
-                    : [];
-                state.agentCronJobs = append
-                    ? state.agentCronJobs.concat(jobs)
-                    : jobs;
-
-                const meta = normalizeCronPaginationMeta(
-                    payload,
-                    jobs.length,
-                    state.agentCronJobsLimit,
-                    offset
-                );
-                state.agentCronJobsTotal = Math.max(meta.total, state.agentCronJobs.length);
-                state.agentCronJobsHasMore = meta.hasMore;
-                state.agentCronJobsNextOffset = meta.nextOffset;
-                if (state.agentCronEditingJobId && !state.agentCronJobs.some(function (job) {
-                    return String(job.id || "").trim() === String(state.agentCronEditingJobId || "").trim();
-                })) {
-                    resetCronFormToDefaults();
-                }
-                if (state.agentCronSelectedJobId && !state.agentCronJobs.some(function (job) {
-                    return String(job.id || "").trim() === String(state.agentCronSelectedJobId || "").trim();
-                })) {
-                    state.agentCronSelectedJobId = null;
-                }
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentCronJobsError = resolveToolsErrorMessage(err, "cron jobs");
-            } finally {
-                if (append) {
-                    state.agentCronJobsLoadingMore = false;
-                } else {
-                    state.agentCronJobsLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
-
-        async function loadCronRuns(options) {
-            const opts = options || {};
-            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
-                ? opts.shouldIgnoreResponse
-                : null;
-            const append = Boolean(opts.append);
-            if (!request || !state.connected) {
-                return;
-            }
-            if (!append && state.agentCronRunsLoading) {
-                return;
-            }
-            if (append && state.agentCronRunsLoadingMore) {
-                return;
-            }
-            if (append && !state.agentCronRunsHasMore) {
-                return;
-            }
-
-            const offset = append
-                ? Math.max(0, Number(state.agentCronRunsNextOffset || state.agentCronRuns.length || 0))
-                : 0;
-            if (append) {
-                state.agentCronRunsLoadingMore = true;
-            } else {
-                state.agentCronRunsLoading = true;
-            }
-            state.agentCronRunsError = null;
-            onStateUpdated();
-
-            try {
-                const requestedScope = state.agentCronRunsScope === "job"
-                    ? "job"
-                    : "all";
-                const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
-                const scope = requestedScope === "job" && selectedJobId
-                    ? "job"
-                    : "all";
-                const runsParams = Object.assign(
-                    {
-                        scope: scope,
-                        limit: state.agentCronRunsLimit,
-                        offset: offset,
-                        status: state.agentCronRunsStatusFilter,
-                        query: String(state.agentCronRunsQuery || "").trim() || undefined,
-                        sortDir: state.agentCronRunsSortDir,
-                    },
-                    scope === "job" && selectedJobId
-                        ? buildCronJobIdentityParams(selectedJobId)
-                        : {});
-                const res = await request("cron.runs", runsParams);
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return;
-                }
-
-                const payload = res && res.payload ? res.payload : res;
-                const entries = payload && Array.isArray(payload.entries)
-                    ? payload.entries
-                    : [];
-                const scopeIsJob = scope === "job" && selectedJobId;
-                state.agentCronRuns = append && (!scopeIsJob || selectedJobId)
-                    ? state.agentCronRuns.concat(entries)
-                    : entries;
-
-                const meta = normalizeCronPaginationMeta(
-                    payload,
-                    entries.length,
-                    state.agentCronRunsLimit,
-                    offset
-                );
-                state.agentCronRunsTotal = Math.max(meta.total, state.agentCronRuns.length);
-                state.agentCronRunsHasMore = meta.hasMore;
-                state.agentCronRunsNextOffset = meta.nextOffset;
-            } catch (err) {
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentCronRunsError = resolveToolsErrorMessage(err, "cron runs");
-            } finally {
-                if (append) {
-                    state.agentCronRunsLoadingMore = false;
-                } else {
-                    state.agentCronRunsLoading = false;
-                }
-                onStateUpdated();
-            }
-        }
-
-        async function loadAgentCron(agentId) {
-            const resolvedAgentId = String(agentId || "").trim();
-            if (!request || !state.connected) {
-                return;
-            }
-
-            function shouldIgnoreResponse() {
-                if (state.agentsPanel !== "cron") {
-                    return true;
-                }
-                if (resolvedAgentId) {
-                    return hasSelectedAgentMismatch(resolvedAgentId);
-                }
-                return false;
-            }
-
-            state.agentCronLoading = true;
-            state.agentCronError = null;
-            onStateUpdated();
-
-            try {
-                const cronStatus = await loadCronStatus({
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                await loadCronJobsPage({
-                    append: false,
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                if (!state.agentCronSelectedJobId && Array.isArray(state.agentCronJobs) && state.agentCronJobs.length > 0) {
-                    const firstJob = state.agentCronJobs[0] || {};
-                    state.agentCronSelectedJobId = String(firstJob.id || "").trim() || null;
-                }
-
-                await loadCronRuns({
-                    append: false,
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                await loadCronModelSuggestions({
-                    shouldIgnoreResponse: shouldIgnoreResponse,
-                });
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
-
-                state.agentCronResult = {
-                    status: cronStatus,
-                    jobs: state.agentCronJobs,
-                    jobsTotal: state.agentCronJobsTotal,
-                    jobsHasMore: state.agentCronJobsHasMore,
-                    runs: state.agentCronRuns,
-                    runsTotal: state.agentCronRunsTotal,
-                    runsHasMore: state.agentCronRunsHasMore,
-                    modelSuggestions: state.agentCronModelSuggestions,
-                    capability: state.agentCronCapability,
+                    state.agentCronBusy = true;
+                    state.agentCronError = null;
+                    onStateUpdated();
+                    try {
+                        await run();
+                        return true;
+                    } catch (err) {
+                        state.agentCronError = resolveToolsErrorMessage(err, "cron mutation");
+                        return false;
+                    } finally {
+                        state.agentCronBusy = false;
+                        onStateUpdated();
+                    }
                 };
-            } catch (err) {
-                if (shouldIgnoreResponse()) {
-                    return;
-                }
 
-                state.agentCronError = resolveToolsErrorMessage(err, "cron surface");
-            } finally {
-                state.agentCronLoading = false;
-                onStateUpdated();
-            }
-        }
+        const addOrUpdateCronJob =
+            cronRuntime && typeof cronRuntime.addOrUpdateCronJob === "function"
+                ? cronRuntime.addOrUpdateCronJob
+                : async function () {
+                    return false;
+                };
+
+        const triggerCronWake =
+            cronRuntime && typeof cronRuntime.triggerCronWake === "function"
+                ? cronRuntime.triggerCronWake
+                : async function () {
+                    return false;
+                };
+
+        const removeCronJob =
+            cronRuntime && typeof cronRuntime.removeCronJob === "function"
+                ? cronRuntime.removeCronJob
+                : async function () {
+                    return false;
+                };
+
+        const runCronJobNow =
+            cronRuntime && typeof cronRuntime.runCronJobNow === "function"
+                ? cronRuntime.runCronJobNow
+                : async function () {
+                    return false;
+                };
+
+        const startCronEdit =
+            cronRuntime && typeof cronRuntime.startCronEdit === "function"
+                ? cronRuntime.startCronEdit
+                : function () {
+                    return false;
+                };
+
+        const startCronClone =
+            cronRuntime && typeof cronRuntime.startCronClone === "function"
+                ? cronRuntime.startCronClone
+                : function () {
+                    return false;
+                };
+
+        const cancelCronEdit =
+            cronRuntime && typeof cronRuntime.cancelCronEdit === "function"
+                ? cronRuntime.cancelCronEdit
+                : function () {
+                };
+
+        const updateCronFormField =
+            cronRuntime && typeof cronRuntime.updateCronFormField === "function"
+                ? cronRuntime.updateCronFormField
+                : function () {
+                };
+
+        const loadCronStatus =
+            cronRuntime && typeof cronRuntime.loadCronStatus === "function"
+                ? cronRuntime.loadCronStatus
+                : async function () {
+                    return state.agentCronStatusResult;
+                };
+
+        const loadCronJobsPage =
+            cronRuntime && typeof cronRuntime.loadCronJobsPage === "function"
+                ? cronRuntime.loadCronJobsPage
+                : async function () {
+                };
+
+        const loadCronRuns =
+            cronRuntime && typeof cronRuntime.loadCronRuns === "function"
+                ? cronRuntime.loadCronRuns
+                : async function () {
+                };
+
+        const loadAgentCron =
+            cronRuntime && typeof cronRuntime.loadAgentCron === "function"
+                ? cronRuntime.loadAgentCron
+                : async function () {
+                };
 
         async function refreshFromConfigSnapshot() {
             if (!request || !state.connected) {
@@ -6797,54 +5644,29 @@
             }
         }
 
-        function updateCronJobsFilter(patch) {
-            const next = patch || {};
-            if (typeof next.query === "string") {
-                state.agentCronJobsQuery = next.query;
-            }
-            if (next.enabledFilter === "all" || next.enabledFilter === "enabled" || next.enabledFilter === "disabled") {
-                state.agentCronJobsEnabledFilter = next.enabledFilter;
-            }
-            if (next.sortBy === "nextRunAtMs" || next.sortBy === "updatedAtMs" || next.sortBy === "name") {
-                state.agentCronJobsSortBy = next.sortBy;
-            }
-            if (next.sortDir === "asc" || next.sortDir === "desc") {
-                state.agentCronJobsSortDir = next.sortDir;
-            }
-            state.agentCronJobsNextOffset = null;
-            state.agentCronJobsHasMore = false;
-            onStateUpdated();
-        }
+        const updateCronJobsFilter =
+            cronRuntime && typeof cronRuntime.updateCronJobsFilter === "function"
+                ? cronRuntime.updateCronJobsFilter
+                : function () {
+                };
 
-        function updateCronRunsFilter(patch) {
-            const next = patch || {};
-            if (next.scope === "all" || next.scope === "job") {
-                state.agentCronRunsScope = next.scope;
-            }
-            if (next.statusFilter === "all" || next.statusFilter === "ok" || next.statusFilter === "error" || next.statusFilter === "skipped") {
-                state.agentCronRunsStatusFilter = next.statusFilter;
-            }
-            if (typeof next.query === "string") {
-                state.agentCronRunsQuery = next.query;
-            }
-            if (next.sortDir === "asc" || next.sortDir === "desc") {
-                state.agentCronRunsSortDir = next.sortDir;
-            }
-            if (Object.prototype.hasOwnProperty.call(next, "selectedJobId")) {
-                state.agentCronSelectedJobId = next.selectedJobId ? String(next.selectedJobId).trim() : null;
-            }
-            state.agentCronRunsNextOffset = null;
-            state.agentCronRunsHasMore = false;
-            onStateUpdated();
-        }
+        const updateCronRunsFilter =
+            cronRuntime && typeof cronRuntime.updateCronRunsFilter === "function"
+                ? cronRuntime.updateCronRunsFilter
+                : function () {
+                };
 
-        async function loadMoreCronJobs() {
-            await loadCronJobsPage({ append: true });
-        }
+        const loadMoreCronJobs =
+            cronRuntime && typeof cronRuntime.loadMoreCronJobs === "function"
+                ? cronRuntime.loadMoreCronJobs
+                : async function () {
+                };
 
-        async function loadMoreCronRuns() {
-            await loadCronRuns({ append: true });
-        }
+        const loadMoreCronRuns =
+            cronRuntime && typeof cronRuntime.loadMoreCronRuns === "function"
+                ? cronRuntime.loadMoreCronRuns
+                : async function () {
+                };
 
         return {
             loadAgents,

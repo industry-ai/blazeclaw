@@ -678,10 +678,19 @@
     <None Include="VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md" />
     <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat-controller.js" />
+    <None Include="web\chat\cron-controller.js" />
+    <None Include="web\chat\devices-controller.js" />
+    <None Include="web\chat\files-controller.js" />
     <None Include="web\chat\index.css" />
     <None Include="web\chat\index.html" />
     <None Include="web\chat\dist\index.html" />
     <None Include="packages.config" />
+    <None Include="web\chat\instances-controller.js" />
+    <None Include="web\chat\nodes-controller.js" />
+    <None Include="web\chat\observability-controller.js" />
+    <None Include="web\chat\skills-controller.js" />
+    <None Include="web\chat\tools-controller.js" />
+    <None Include="web\chat\usage-controller.js" />
   </ItemGroup>
   <ItemGroup>
     <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
