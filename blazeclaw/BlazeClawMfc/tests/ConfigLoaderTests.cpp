@@ -866,3 +866,23 @@ TEST_CASE("Chat UI resolver prefers dist in dist preference mode", "[chat-ui][re
 
 	std::filesystem::remove_all(root);
 }
+
+TEST_CASE("Chat UI resolver finds dashboard.html from repo root in dev preference", "[chat-ui][resolver][dashboard]")
+{
+	namespace resolver = blazeclaw::app::chatui;
+
+	const auto root = MakeChatUiResolverTempRoot("dashboard_repo_root");
+	const auto sourceDashboard =
+		root / "blazeclaw" / "BlazeClawMfc" / "web" / "chat" / "dashboard.html";
+	const auto distDashboard =
+		root / "blazeclaw" / "BlazeClawMfc" / "web" / "chat" / "dist" / "dashboard.html";
+	EnsureChatUiResolverFile(sourceDashboard);
+	EnsureChatUiResolverFile(distDashboard);
+
+	const auto found = resolver::FindDashboardUiIndex(root, resolver::StartupPreference::PreferSource);
+	REQUIRE(found.has_value());
+	REQUIRE(found->selectedPath == sourceDashboard);
+	REQUIRE(found->selectedDist == false);
+
+	std::filesystem::remove_all(root);
+}

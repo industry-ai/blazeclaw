@@ -130,7 +130,9 @@
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatUiStartupResolver.h" />
     <ClInclude Include="src\app\ChatView.h" />
+    <ClInclude Include="src\app\DashboardBridgeHost.h" />
     <ClInclude Include="src\app\DashboardWnd.h" />
+    <ClInclude Include="src\app\WebViewBridgeSupport.h" />
     <ClInclude Include="src\app\VoiceRecorder.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\CMgrMessage.h" />
@@ -358,7 +360,9 @@
     <ClCompile Include="src\app\AIChatView.cpp" />
     <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\BlazeClawMarkdownView.cpp" />
+    <ClCompile Include="src\app\DashboardBridgeHost.cpp" />
     <ClCompile Include="src\app\DashboardWnd.cpp" />
+    <ClCompile Include="src\app\WebViewBridgeSupport.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />

@@ -134,4 +134,80 @@ inline std::optional<StartupSelection> FindChatUiIndex(
 	return std::nullopt;
 }
 
+inline std::optional<StartupSelection> FindDashboardUiIndex(
+	const std::filesystem::path& start,
+	const StartupPreference preference)
+{
+	std::filesystem::path cursor = start;
+	StartupSelection trace;
+
+	while (!cursor.empty()) {
+		trace.inspectedRoots.push_back(cursor);
+
+		const auto projectSource =
+			cursor /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"dashboard.html";
+		const auto projectDist =
+			cursor /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"dist" /
+			L"dashboard.html";
+		const auto repoSource =
+			cursor /
+			L"blazeclaw" /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"dashboard.html";
+		const auto repoDist =
+			cursor /
+			L"blazeclaw" /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"dist" /
+			L"dashboard.html";
+
+		std::vector<std::pair<std::filesystem::path, bool>> orderedCandidates;
+		if (preference == StartupPreference::PreferSource) {
+			orderedCandidates.push_back({ projectSource, false });
+			orderedCandidates.push_back({ repoSource, false });
+			orderedCandidates.push_back({ projectDist, true });
+			orderedCandidates.push_back({ repoDist, true });
+		} else {
+			orderedCandidates.push_back({ projectDist, true });
+			orderedCandidates.push_back({ repoDist, true });
+			orderedCandidates.push_back({ projectSource, false });
+			orderedCandidates.push_back({ repoSource, false });
+		}
+
+		for (const auto& candidate : orderedCandidates) {
+			trace.inspectedCandidates.push_back(candidate.first);
+			if (std::filesystem::exists(candidate.first)) {
+				trace.selectedPath = candidate.first;
+				trace.selectedDist = candidate.second;
+				return trace;
+			}
+		}
+
+		if (!cursor.has_parent_path()) {
+			break;
+		}
+
+		auto parent = cursor.parent_path();
+		if (parent == cursor) {
+			break;
+		}
+
+		cursor = parent;
+	}
+
+	return std::nullopt;
+}
+
 } // namespace blazeclaw::app::chatui

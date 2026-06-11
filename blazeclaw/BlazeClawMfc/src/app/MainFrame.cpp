@@ -803,7 +803,7 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardWnd;
 	bNameValid = strDashboardWnd.LoadString(IDS_DASHBOARD_WND);
 	ASSERT(bNameValid);
-	if (!m_wndDashboard.Create(strDashboardWnd, this, CRect(0, 0, 200, 200), TRUE, ID_VIEW_DASHBOARDWND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	if (!m_wndDashboard.Create(strDashboardWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARDWND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard window\n");
 		return FALSE; // failed to create
@@ -1100,12 +1100,17 @@ void CMainFrame::OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI)
 
 void CMainFrame::OnViewDashboardWindow()
 {
-	// Show or activate the pane, depending on current state.  The
-	// pane can only be closed via the [x] button on the pane frame.
-	//m_wndDashboard.ShowPane(TRUE, FALSE, TRUE);
-	//m_wndDashboard.SetFocus();
-	//m_wndDashboard.ShowWindow(m_wndDashboard.IsVisible() ? SW_HIDE : SW_SHOW);
-	m_wndDashboard.ShowPane(!m_wndDashboard.IsVisible(), FALSE, TRUE);
+	const BOOL show = !m_wndDashboard.IsVisible();
+	m_wndDashboard.ShowPane(show, FALSE, TRUE);
+	if (show)
+	{
+		m_wndDashboard.SetFocus();
+		m_wndDashboard.OnPaneVisibilityChanged(TRUE);
+	}
+	else
+	{
+		m_wndDashboard.OnPaneVisibilityChanged(FALSE);
+	}
 	RecalcLayout(FALSE);
 }
 

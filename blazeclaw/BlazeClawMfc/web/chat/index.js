@@ -3213,6 +3213,10 @@
     }
 
     function resolveAgentsEnabled() {
+        if (isDashboardHost()) {
+            return true;
+        }
+
         const search = new URLSearchParams(window.location.search || "");
         const queryToggle = search.get("agents");
         if (queryToggle === "0") {
@@ -3235,8 +3239,35 @@
         } catch (_) {
         }
 
-        return true;
+        // Native dashboard pane owns agents control-plane; chat WebView keeps it opt-in.
+        return false;
     }
+
+    function isDashboardHost() {
+        if (window.__BLAZECLAW_DASHBOARD_HOST__ === true) {
+            return true;
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        if (search.get("host") === "dashboard") {
+            return true;
+        }
+
+        return /dashboard\.html(?:$|[?#])/i.test(String(window.location.pathname || ""));
+    }
+
+    function applyDashboardHostLayout() {
+        if (!isDashboardHost()) {
+            return;
+        }
+
+        document.body.classList.add("blazeclaw-dashboard-host");
+        if (state.agentsControlPlaneEl) {
+            state.agentsControlPlaneEl.hidden = false;
+        }
+    }
+
+    applyDashboardHostLayout();
 
     function resolveObservabilityEnabled() {
         const search = new URLSearchParams(window.location.search || "");

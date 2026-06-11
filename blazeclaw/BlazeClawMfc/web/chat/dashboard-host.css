@@ -1,0 +1,29 @@
+.blazeclaw-dashboard-host .dashboard-composer,
+.blazeclaw-dashboard-host .dashboard-composer-controls,
+.blazeclaw-dashboard-host .dashboard-session-controls,
+.blazeclaw-dashboard-host .messages,
+.blazeclaw-dashboard-host .approval-queue,
+.blazeclaw-dashboard-host .detached-notices,
+.blazeclaw-dashboard-host .speech-live-preview {
+    display: none !important;
+}
+
+.blazeclaw-dashboard-host .agents-control-plane {
+    display: block !important;
+}
+
+.blazeclaw-dashboard-host .dashboard-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.blazeclaw-dashboard-host .agents-control-plane {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.blazeclaw-dashboard-host .agents-surface {
+    min-height: 12rem;
+}

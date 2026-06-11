@@ -37,6 +37,7 @@
 #include "config_bridge/SkillConfigHandler.h"
 #include "config_bridge/EmailConfigHandler.h"
 #include "BlazeClawMFCViewTextHelpers.h"
+#include "WebViewBridgeSupport.h"
 
 #include <functional>
 
@@ -2628,135 +2629,7 @@ void CBlazeClawMFCView::EmitOpenClawChatEvents(
 void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 {
 #ifdef HAVE_WEBVIEW2_HEADER
-	if (!m_webView)
-	{
-		return;
-	}
-
-	const wchar_t* shimScript = LR"JS(
-(function() {
-  if (window.__blazeclawBridgeInjected) return;
-  window.__blazeclawBridgeInjected = true;
-
-  if (!window.chrome || !window.chrome.webview) return;
-
-  window.chrome.webview.postMessage({
-	channel: 'openclaw.ws.shim.ready',
-	phase: 'boot',
-	href: String(window.location && window.location.href ? window.location.href : '')
-  });
-
-  const listeners = { open: [], message: [], close: [], error: [] };
-  let activeSocket = null;
-  let syntheticUrl = 'ws://127.0.0.1:18789';
-  let connectTimer = null;
-
-  function emit(type, evt) {
-	const arr = listeners[type] || [];
-	for (const fn of arr) {
-	  try { fn(evt); } catch (_) {}
-	}
-  }
-
-  function scheduleOpen() {
-	if (connectTimer) clearTimeout(connectTimer);
-	connectTimer = setTimeout(() => {
-     if (!activeSocket) return;
-	  activeSocket.readyState = WebViewGatewaySocket.OPEN;
-     window.chrome.webview.postMessage({
-		channel: 'openclaw.ws.shim.ready',
-		url: syntheticUrl,
-		readyState: activeSocket.readyState
-	  });
-	  emit('open', { type: 'open' });
-	  window.chrome.webview.postMessage({
-		channel: 'openclaw.ws.req',
-		frame: {
-		  type: 'req',
-		  id: 'bridge-connect-challenge',
-		  method: 'connect.challenge',
-		  params: {}
-		}
-	  });
-	}, 0);
-  }
-
-  class WebViewGatewaySocket {
-	constructor(url) {
-      activeSocket = this;
-	  syntheticUrl = typeof url === 'string' && url.length ? url : syntheticUrl;
-	  this.url = syntheticUrl;
-    this.readyState = WebViewGatewaySocket.CONNECTING;
-	  this.binaryType = 'arraybuffer';
-	  scheduleOpen();
-	}
-
-	addEventListener(type, handler) {
-	  if (!listeners[type]) return;
-	  listeners[type].push(handler);
-	}
-
-	removeEventListener(type, handler) {
-	  if (!listeners[type]) return;
-	  const index = listeners[type].indexOf(handler);
-	  if (index >= 0) listeners[type].splice(index, 1);
-	}
-
-	send(raw) {
-   if (this.readyState !== WebViewGatewaySocket.OPEN) return;
-	  let frame = null;
-	  try { frame = JSON.parse(String(raw || '')); } catch (_) {}
-	  if (!frame || frame.type !== 'req') return;
-	  window.chrome.webview.postMessage({
-		channel: 'openclaw.ws.req',
-		frame
-	  });
-	}
-
-	close(code, reason) {
-     this.readyState = WebViewGatewaySocket.CLOSED;
-	  if (activeSocket === this) {
-		activeSocket = null;
-	  }
-	  emit('close', {
-		type: 'close',
-		code: typeof code === 'number' ? code : 1000,
-		reason: typeof reason === 'string' ? reason : 'closed'
-	  });
-	}
-  }
-
-  WebViewGatewaySocket.CONNECTING = 0;
-  WebViewGatewaySocket.OPEN = 1;
-  WebViewGatewaySocket.CLOSING = 2;
-  WebViewGatewaySocket.CLOSED = 3;
-
-  window.chrome.webview.addEventListener('message', (event) => {
-	const msg = event && event.data;
-	if (!msg || typeof msg !== 'object') return;
-	if (msg.channel === 'openclaw.ws.frame' && msg.frame) {
-	  emit('message', { data: JSON.stringify(msg.frame) });
-	  return;
-	}
-	if (msg.channel === 'openclaw.ws.close') {
-     if (activeSocket) {
-		activeSocket.readyState = WebViewGatewaySocket.CLOSED;
-		activeSocket = null;
-	  }
-	  emit('close', {
-		type: 'close',
-		code: typeof msg.code === 'number' ? msg.code : 1006,
-		reason: typeof msg.reason === 'string' ? msg.reason : 'closed'
-	  });
-	}
-  });
-
-  window.WebSocket = WebViewGatewaySocket;
-  window.__OPENCLAW_CONTROL_UI_BASE_PATH__ = '/';
-})();
-)JS";
-
-	m_webView->AddScriptToExecuteOnDocumentCreated(shimScript, nullptr);
+	blazeclaw::app::webview_bridge::InjectOpenClawBridgeShim(m_webView.Get());
 #endif
 }
 

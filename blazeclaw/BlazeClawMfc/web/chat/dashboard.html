@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BlazeClaw Dashboard</title>
+    <link rel="stylesheet" href="./index.css" />
+    <link rel="stylesheet" href="./dashboard-host.css" />
+</head>
+<body class="blazeclaw-dashboard-host">
+    <div class="app dashboard-app">
+        <div class="header dashboard-header">
+            <div class="header-title">
+                <div>BlazeClaw Dashboard</div>
+                <div id="assistantIdentity" class="assistant-identity" hidden>A Assistant</div>
+                <div id="speechStatus" class="speech-status" hidden>speech: off</div>
+            </div>
+            <div id="status" class="status">initializing dashboard...</div>
+        </div>
+        <div id="agentsControlPlane" class="agents-control-plane">
+            <div id="agentsTabs" class="agents-tabs"></div>
+            <div id="agentsSurface" class="agents-surface"></div>
+        </div>
+        <div id="approvalQueue" class="approval-queue" hidden></div>
+        <div id="messages" class="messages" hidden></div>
+        <div id="detachedNotices" class="detached-notices" hidden></div>
+        <div id="speechLivePreview" class="speech-live-preview" hidden>
+            <span class="speech-live-preview-label"></span>
+            <span class="speech-live-preview-text"></span>
+        </div>
+        <div class="composer dashboard-composer" hidden>
+            <div id="slashMenu" class="slash-menu"></div>
+            <textarea id="input" placeholder="Type a message..." hidden></textarea>
+            <button id="sendBtn" hidden>Send</button>
+            <button id="sendErrBtn" hidden>Send Error</button>
+            <button id="attachBtn" hidden>Attach</button>
+            <button id="speechTranscribeBtn" hidden>Transcribe</button>
+            <button id="abortBtn" hidden disabled>Abort</button>
+        </div>
+        <div class="composer-controls dashboard-composer-controls" hidden>
+            <select id="sessionSelect" title="Session"></select>
+            <select id="modelSelect" title="Model"></select>
+            <select id="thinkingSelect" title="Thinking Level"></select>
+        </div>
+        <div class="session-controls dashboard-session-controls" hidden>
+            <button id="sessionSubscribeBtn">Subscribe</button>
+            <button id="sessionUnsubscribeBtn">Unsubscribe</button>
+            <button id="sessionCompactionRefreshBtn">Compactions</button>
+            <select id="sessionCompactionSelect" title="Session compactions"></select>
+            <div style="display:flex;gap:8px;">
+                <button id="sessionCompactionBranchBtn">Branch</button>
+                <button id="sessionCompactionRestoreBtn">Restore</button>
+            </div>
+            <div id="sessionControlStatus" class="session-control-status"></div>
+        </div>
+        <input id="attachInput" type="file" accept="image/*" multiple hidden />
+    </div>
+
+    <script>window.__BLAZECLAW_DASHBOARD_HOST__ = true;</script>
+    <script src="./scope-errors.js"></script>
+    <script src="./channels-state-contract.js"></script>
+    <script src="./config-form-coerce.js"></script>
+    <script src="./config-form-utils.js"></script>
+    <script src="./agents-controller.js"></script>
+    <script src="./chat-controller.js"></script>
+    <script src="./chat-events.js"></script>
+    <script src="./chat-composer.js"></script>
+    <script src="./index.js"></script>
+</body>
+</html>
