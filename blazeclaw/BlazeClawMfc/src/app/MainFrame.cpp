@@ -118,6 +118,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
 	ON_COMMAND(ID_VIEW_DASHBOARDWND, &CMainFrame::OnViewDashboardWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARDWND, &CMainFrame::OnUpdateViewDashboardWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_CRON_WND, &CMainFrame::OnViewDashboardCronWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_CRON_WND, &CMainFrame::OnUpdateViewDashboardCronWindow)
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
 	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
@@ -378,6 +380,8 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndProperties);
 	m_wndDashboard.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard);
+	m_wndDashboard_cron.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_cron);
 
 	// set the visual manager and style based on persisted value
 	OnApplicationLook(theApp.m_nAppLook);
@@ -809,6 +813,15 @@ BOOL CMainFrame::CreateDockingWindows()
 		return FALSE; // failed to create
 	}
 
+	CString strDashboardCronWnd;
+	bNameValid = strDashboardCronWnd.LoadString(IDS_DASHBOARD_CRON_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_cron.Create(strDashboardCronWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_CRON_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Cron Dashboard window\n");
+		return FALSE; // failed to create
+	}
+
 	SetDockingWindowIcons(theApp.m_bHiColorIcons);
 	return TRUE;
 }
@@ -829,6 +842,9 @@ void CMainFrame::SetDockingWindowIcons(BOOL bHiColorIcons)
 
 	HICON hDashboardBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_WND_HC : IDI_DASHBOARD_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
 	m_wndDashboard.SetIcon(hDashboardBarIcon, FALSE);
+
+	HICON hDashboardCronBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_CRON_WND_HC : IDI_DASHBOARD_CRON_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_cron.SetIcon(hDashboardCronBarIcon, FALSE);
 
 	UpdateMDITabbedBarsIcons();
 }
@@ -1118,6 +1134,28 @@ void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
 {
 	//pCmdUI->Enable(TRUE);
 	pCmdUI->SetCheck(m_wndDashboard.IsVisible());
+}
+
+void CMainFrame::OnViewDashboardCronWindow()
+{
+	const BOOL show = !m_wndDashboard_cron.IsVisible();
+	m_wndDashboard_cron.ShowPane(show, FALSE, TRUE);
+	if (show)
+	{
+		m_wndDashboard_cron.SetFocus();
+		m_wndDashboard_cron.OnPaneVisibilityChanged(TRUE);
+	}
+	else
+	{
+		m_wndDashboard_cron.OnPaneVisibilityChanged(FALSE);
+	}
+	RecalcLayout(FALSE);
+}
+
+void CMainFrame::OnUpdateViewDashboardCronWindow(CCmdUI* pCmdUI)
+{
+	//pCmdUI->Enable(TRUE);
+	pCmdUI->SetCheck(m_wndDashboard_cron.IsVisible());
 }
 
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)

@@ -745,6 +745,9 @@
     <Image Include="src\app\res\classview_hc.bmp" />
     <Image Include="src\app\res\class_view.ico" />
     <Image Include="src\app\res\class_view_hc.ico" />
+    <Image Include="src\app\res\dashboar.ico" />
+    <Image Include="src\app\res\dashboard_cron_wnd.ico" />
+    <Image Include="src\app\res\dashboard_cron_wnd_hc.ico" />
     <Image Include="src\app\res\dashboard_wnd.ico" />
     <Image Include="src\app\res\dashboard_wnd_hc.ico" />
     <Image Include="src\app\res\explorer.bmp" />
@@ -755,6 +758,7 @@
     <Image Include="src\app\res\fileview_hc.bmp" />
     <Image Include="src\app\res\file_view.ico" />
     <Image Include="src\app\res\file_view_hc.ico" />
+    <Image Include="src\app\res\ico00001.ico" />
     <Image Include="src\app\res\icon2.ico" />
     <Image Include="src\app\res\icon3.ico" />
     <Image Include="src\app\res\info.bmp" />

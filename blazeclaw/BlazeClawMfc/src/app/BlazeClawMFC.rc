@@ -587,6 +587,10 @@ IDI_DASHBOARD_WND       ICON                    "res\\dashboard_wnd.ico"
 
 IDI_DASHBOARD_WND_HC    ICON                    "res\\dashboard_wnd_hc.ico"
 
+IDI_DASHBOARD_CRON_WND_HC ICON                    "res\\dashboard_cron_wnd_hc.ico"
+
+IDI_DASHBOARD_CRON_WND  ICON                    "res\\dashboard_cron_wnd.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -975,6 +979,7 @@ STRINGTABLE
 BEGIN
     IDP_OLE_INIT_FAILED     "OLE initialization failed.  Make sure that the OLE libraries are the correct version."
     IDP_SOCKETS_INIT_FAILED "Windows sockets initialization failed."
+    IDS_DASHBOARD_CRON_WND  "Cron dashboard"
 END
 
 STRINGTABLE
@@ -1166,6 +1171,8 @@ END
 STRINGTABLE
 BEGIN
     ID_VIEW_DASHBOARDWND    "Show or hide dashboard\nToggle dashboard"
+    ID_VIEW_DASHBOARD_CRON_WND 
+                            "Show or hide Cron dashboard\nToggle Cron dashboard"
 END
 
 #endif    // English (United States) resources

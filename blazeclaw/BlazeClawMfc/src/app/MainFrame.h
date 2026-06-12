@@ -66,6 +66,7 @@ protected:  // control bar embedded members
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
 	CDashboardWnd     m_wndDashboard;
+	CDashboardWnd     m_wndDashboard_cron;
 	COutlookBar       m_wndNavigationBar;
 	CMFCShellTreeCtrl m_wndTree;
 	CCalendarBar      m_wndCalendar;
@@ -87,6 +88,8 @@ protected:
 	afx_msg void OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewDashboardWindow();
 	afx_msg void OnUpdateViewDashboardWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardCronWindow();
+	afx_msg void OnUpdateViewDashboardCronWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewCaptionBar();
 	afx_msg void OnUpdateViewCaptionBar(CCmdUI* pCmdUI);
 	afx_msg void OnOptions();
