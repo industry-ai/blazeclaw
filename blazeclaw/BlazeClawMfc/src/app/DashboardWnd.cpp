@@ -9,6 +9,8 @@
 #include "ChatUiStartupResolver.h"
 #include "WebViewBridgeSupport.h"
 
+#include "FloatPaneTracker.h"
+
 #include <Shlwapi.h>
 #include <filesystem>
 #include <optional>
@@ -211,6 +213,7 @@ BEGIN_MESSAGE_MAP(CDashboardWnd, CDockablePane)
 	ON_WM_ERASEBKGND()
 	ON_WM_TIMER()
 	ON_MESSAGE(blazeclaw::app::dashboard_bridge::kDashboardBridgePollCompletedMessage, &CDashboardWnd::OnDashboardBridgePollCompleted)
+	ON_WM_WINDOWPOSCHANGED()
 END_MESSAGE_MAP()
 
 CDashboardWnd::CDashboardWnd() noexcept
@@ -563,3 +566,211 @@ void CDashboardWnd::SetupWebViewEvents()
 		&m_webMessageToken);
 #endif
 }
+
+void CDashboardWnd::OnWindowPosChanged(WINDOWPOS* lpwndpos)
+{
+	CDockablePane::OnWindowPosChanged(lpwndpos);
+
+	if ((lpwndpos->flags & SWP_SHOWWINDOW) != 0)
+	{
+		OnPaneVisibilityChanged(TRUE);
+	}
+	else if ((lpwndpos->flags & SWP_HIDEWINDOW) != 0)
+	{
+		OnPaneVisibilityChanged(FALSE);
+	}
+
+	if (IsFloating())
+	{
+		// Sometimes works, but not during drag
+	}
+
+	if (!(lpwndpos->flags & SWP_NOMOVE) && (GetFocus() == this))
+	{
+		// Position changed
+		int x = lpwndpos->x;
+		int y = lpwndpos->y;
+
+		if (x >= 0 && y >= 0) {
+			CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+			if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
+				pMain->PostMessage(
+					kMsgSyncDashboardPanePosition,
+					reinterpret_cast<WPARAM>(GetSafeHwnd()),
+					MAKELPARAM(x, y)
+				);
+			}
+		}
+	}
+
+	if (!(lpwndpos->flags & SWP_NOSIZE) && (GetFocus() == this))
+	{
+		// Size changed
+		int cx = lpwndpos->cx;
+		int cy = lpwndpos->cy;
+
+		if (cx > 0 && cy > 0) {
+			CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+			if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
+				pMain->PostMessage(
+					kMsgSyncDashboardPaneSize,
+					reinterpret_cast<WPARAM>(GetSafeHwnd()),
+					MAKELPARAM(cx, cy)
+				);
+			}
+		}
+	}
+}
+
+void CDashboardWnd::OnAfterFloat()
+{
+	CDockablePane::OnAfterFloat();
+	// OnPaneVisibilityChanged(IsWindowVisible());
+
+/*	CWnd* pContainer = GetParent();
+	if (pContainer &&
+		!pContainer->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
+	{
+		// Avoid subclassing if a permanent CWnd wrapper already exists
+		CWnd* pPermanent = CWnd::FromHandlePermanent(pContainer->m_hWnd);
+		if (pPermanent == nullptr) {
+			CFloatPaneTracker* pTracker = new CFloatPaneTracker;
+			pTracker->SubclassWindow(pContainer->m_hWnd);
+		}
+		else {
+			ATLTRACE("OnAfterFloat: permanent CWnd wrapper present, skipping SubclassWindow. wrapperClass=%s\n",
+				pPermanent->GetRuntimeClass() ? pPermanent->GetRuntimeClass()->m_lpszClassName : "<unknown>");
+		}
+	}
+*/
+
+	auto pMiniFrame = GetParentMiniFrame();
+	if (pMiniFrame == nullptr)
+		return;
+
+	if (pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
+	{
+		// GetWindow returns a CWnd*. Safely downcast to CPaneFrameWnd* to avoid
+		// implicit base->derived conversion error.
+		CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
+		pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
+	}
+
+	if (pMiniFrame &&
+		!pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)) &&
+		CWnd::FromHandlePermanent(pMiniFrame->m_hWnd) == nullptr)
+	{
+		CFloatPaneTracker* pTracker = new CFloatPaneTracker;
+		pTracker->SubclassWindow(pMiniFrame->m_hWnd);
+	}
+
+	OnPaneFloat();
+
+/*
+	// Pane is now floating
+	auto pMiniFrame = GetParentMiniFrame();
+	if (pMiniFrame == nullptr)
+		return;
+
+	try {
+		// Prevent double-subclassing if already a CFloatPaneTracker (e.g. floated, then docked, then floated again)
+		// Additionally avoid calling SubclassWindow if a permanent CWnd wrapper already exists for the HWND
+		// because MFC will assert in that case. Use FromHandlePermanent to detect a wrapper.
+		CWnd* pPermanent = CWnd::FromHandlePermanent(pMiniFrame->m_hWnd);
+		if (pPermanent != nullptr) {
+			// There is already a permanent CWnd wrapper. If it's a CFloatPaneTracker, nothing to do.
+			if (pPermanent->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker))) {
+				// already subclassed by a tracker - no action
+			} else {
+				// Some other permanent wrapper exists; do not attempt SubclassWindow to avoid assertion
+				ATLTRACE("OnAfterFloat: permanent CWnd wrapper present, skipping SubclassWindow. wrapperClass=%s\n",
+					pPermanent->GetRuntimeClass() ? pPermanent->GetRuntimeClass()->m_lpszClassName : "<unknown>");
+			}
+		} else {
+			// No permanent wrapper - safe to create tracker and subclass
+			CFloatPaneTracker* pTracker = new CFloatPaneTracker();
+			pTracker->SubclassWindow(pMiniFrame->m_hWnd);
+
+			//CRect rc;
+			//pMiniFrame->GetWindowRect(&rc);
+
+			//// Adjust size/position as needed
+			////int x = rc.left;
+			////int y = rc.top;
+			////CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+			////if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
+			////	pMain->PostMessage(
+			////		kMsgSyncDashboardPanePosition,
+			////		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+			////		MAKELPARAM(x, y)
+			////	);
+			////}
+
+			//// Update UI state — call existing handler to refresh visibility/controls
+			//OnPaneVisibilityChanged(IsWindowVisible());
+		}
+	} catch (const std::exception& ex) {
+			ATLTRACE("OnAfterFloat exception: %s\n", ex.what());
+	} catch (...) {
+			ATLTRACE("OnAfterFloat unknown exception\n");
+	}*/
+}
+
+void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD dockMethod)
+{
+	// Call base with the proper signature
+	CDockablePane::OnAfterDock(pBar, lpRect, dockMethod);
+
+	//CWnd* pContainer = GetParent();
+	//if (pContainer &&
+	//	pContainer->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
+	//{
+	//	pContainer->UnsubclassWindow();
+	//}
+
+	auto pMiniFrame = GetParentMiniFrame();
+	if (pMiniFrame &&
+		pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
+	{
+		CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
+		pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
+
+		if (pMiniFrame &&
+			pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
+		{
+			// Found a tracker - unsubclass to restore original window procedure
+			pMiniFrame->UnsubclassWindow();
+		}
+	}
+
+	// Pane is now docked — refresh visibility/controls
+	OnPaneVisibilityChanged(IsWindowVisible());
+
+	OnPaneDock();
+}
+
+void CDashboardWnd::OnPaneFloat()
+{
+	CMainFrame* pMain	= DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
+		pMain->PostMessage(
+			kMsgSyncDashboardAfterFloat,
+			reinterpret_cast<WPARAM>(GetSafeHwnd()),
+			MAKELPARAM(-1, -1)
+		);
+	}
+}
+
+void CDashboardWnd::OnPaneDock()
+{
+	CMainFrame* pMain	= DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
+		pMain->PostMessage(
+			kMsgSyncDashboardAfterDock,
+			reinterpret_cast<WPARAM>(GetSafeHwnd()),
+			MAKELPARAM(-1, -1)
+		);
+	}
+}
+
+

@@ -41,12 +41,18 @@ public:
 	void OnPaneVisibilityChanged(BOOL visible);
 
 protected:
+	virtual void	OnAfterFloat();
+	virtual void	OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD dockMethod);
+	virtual void	OnPaneFloat();
+	virtual void	OnPaneDock();
+
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnDestroy();
 	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg LRESULT OnDashboardBridgePollCompleted(WPARAM wParam, LPARAM lParam);
+	afx_msg void OnWindowPosChanged(WINDOWPOS* lpwndpos);
 	DECLARE_MESSAGE_MAP()
 
 private:

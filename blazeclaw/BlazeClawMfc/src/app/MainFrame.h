@@ -20,6 +20,10 @@ class CChatView;
 
 constexpr UINT kMsgCreateMdiGroup = WM_USER + 0x100;  // custom message for deferred tab split
 constexpr UINT kMsgAppendToolStatusLine = WM_USER + 0x101;  // append line to Output.Tool from non-UI threads
+constexpr UINT kMsgSyncDashboardPaneSize = WM_USER + 0x102;
+constexpr UINT kMsgSyncDashboardPanePosition = WM_USER + 0x103;
+constexpr UINT kMsgSyncDashboardAfterFloat = WM_USER + 0x104;
+constexpr UINT kMsgSyncDashboardAfterDock = WM_USER + 0x105;
 
 class CMainFrame final : public CMDIFrameWndEx
 {
@@ -103,6 +107,21 @@ protected:
 	afx_msg void OnWindowNewAIChatView();
 	afx_msg void OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI);
 
+	afx_msg LRESULT OnSyncDashboardPaneSize(WPARAM, LPARAM);
+	afx_msg LRESULT OnSyncDashboardPanePosition(WPARAM, LPARAM);
+	afx_msg LRESULT OnSyncDashboardAfterFloat(WPARAM, LPARAM);
+	afx_msg LRESULT OnSyncDashboardAfterDock(WPARAM, LPARAM);
+
+	void	SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy);
+	void	SyncDashboardPanePosition(HWND sourceHwnd, int x, int y);
+	void	SyncDashboardAfterFloat(HWND sourceHwnd);
+	void	SyncDashboardAfterDock(HWND sourceHwnd);
+
+	volatile bool	m_isSyncingDashboardPaneSize = false;
+	volatile bool	m_isSyncingDashboardPanePosition = false;
+	volatile bool	m_isDashboardFloat = false;
+	volatile bool   m_isSwitchFloatDock = false;
+
 public:
 	// Called by app to open a tab without showing dialog
 	void OpenDefaultTab() { OpenWebViewPlusChatTab(); }
@@ -181,4 +200,6 @@ private:
 public:
 	void CreateTwoTabbedGroups();
 	afx_msg void OnEditChat();
+	afx_msg void OnEditDashboard();
+	afx_msg void OnUpdateEditDashboard(CCmdUI* pCmdUI);
 };

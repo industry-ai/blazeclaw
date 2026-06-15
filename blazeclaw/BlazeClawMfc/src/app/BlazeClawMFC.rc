@@ -1173,6 +1173,7 @@ BEGIN
     ID_VIEW_DASHBOARDWND    "Show or hide dashboard\nToggle dashboard"
     ID_VIEW_DASHBOARD_CRON_WND 
                             "Show or hide Cron dashboard\nToggle Cron dashboard"
+    ID_EDIT_DASHBOARD       "Switch floating/docking of dashboard\ntoggle floating/docking"
 END
 
 #endif    // English (United States) resources

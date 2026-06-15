@@ -126,8 +126,8 @@
 #define IDD_NEWTAB_DIALOG               320
 #define IDI_DASHBOARD_WND               321
 #define IDI_DASHBOARD_WND_HC            324
-#define IDI_DASHBOARD_CRON_WND_HC		325
-#define IDI_DASHBOARD_CRON_WND			326
+#define IDI_DASHBOARD_CRON_WND_HC       325
+#define IDI_DASHBOARD_CRON_WND          326
 #define IDC_STATIC_TITLE                1000
 #define IDC_STATIC_DESCRIPTION          1001
 #define IDC_GROUP_GATEWAY               1002
@@ -342,6 +342,7 @@
 #define ID_VIEW_TOOLS                   32794
 #define ID_VIEW_DASHBOARDWND            32795
 #define ID_VIEW_DASHBOARD_CRON_WND      32796
+#define ID_EDIT_DASHBOARD               32797
 #define ID_EXTENSION_DEEPSEEK           40101
 #define ID_WINDOW_NEW_WEBVIEW           40102
 #define ID_WINDOW_NEW_WEBVIEW_CHAT      40103
@@ -378,7 +379,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        327
-#define _APS_NEXT_COMMAND_VALUE         32797
+#define _APS_NEXT_COMMAND_VALUE         32798
 #define _APS_NEXT_CONTROL_VALUE         1190
 #define _APS_NEXT_SYMED_VALUE           321
 #endif
