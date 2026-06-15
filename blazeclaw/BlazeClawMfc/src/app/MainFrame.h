@@ -8,6 +8,7 @@
 #include "DashboardWnd.h"
 #include "CalendarBar.h"
 #include "Resource.h"
+#include <vector>
 
 class COutlookBar : public CMFCOutlookBar
 {
@@ -35,6 +36,7 @@ public:
 
 	// Attributes
 public:
+	bool IsDashboardFloatDockSyncInProgress() const;
 
 	// Operations
 public:
@@ -122,6 +124,8 @@ protected:
 	volatile bool	m_isDashboardFloat = false;
 	volatile bool   m_isSwitchFloatDock = false;
 
+	volatile bool	m_isSyncingDashboardFloatDock = false;
+
 public:
 	// Called by app to open a tab without showing dialog
 	void OpenDefaultTab() { OpenWebViewPlusChatTab(); }
@@ -141,6 +145,9 @@ private:
 	// Returns the CWnd* of the frame (cast to CChildFrame in implementation).
 	// Defined in MainFrame.cpp where CChildFrame is fully defined.
 	CWnd* FindChildFrameWithSkill(const std::string& skillKey) const;
+
+	std::vector<CDashboardWnd*> CollectDashboardPanes();
+	void SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat);
 
 private:
 	void OpenWebViewPlusChatTab();

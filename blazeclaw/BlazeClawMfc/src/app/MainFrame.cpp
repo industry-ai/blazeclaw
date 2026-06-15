@@ -20,6 +20,7 @@
 #include "BlazeClawMarkdownView.h"
 #include "SharedTabsDocTemplate.h"
 #include "ChildFrm.h"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -1649,6 +1650,11 @@ void CMainFrame::OnEditChat()
 
 LRESULT CMainFrame::OnSyncDashboardPanePosition(WPARAM wParam, LPARAM lParam)
 {
+	if (m_isSyncingDashboardPanePosition) {
+		// Prevent recursive updates
+		return 0;
+	}
+
 	const HWND sourceHwnd = reinterpret_cast<HWND>(wParam);
 	const int x = static_cast<int>(static_cast<short>(LOWORD(lParam)));
 	const int y = static_cast<int>(static_cast<short>(HIWORD(lParam)));
@@ -1657,13 +1663,16 @@ LRESULT CMainFrame::OnSyncDashboardPanePosition(WPARAM wParam, LPARAM lParam)
 
 	// This handler is called by dashboard panes when they are shown/hidden or when their visibility changes.
 	// We can use this to trigger a layout recalculation to ensure the panes are positioned correctly.
-	RecalcLayout(FALSE);
+	
+	// Avoid forced RecalcLayout here to prevent feedback loops.
+	//RecalcLayout(FALSE);
+
 	return 0;
 }
 
 void CMainFrame::SyncDashboardPanePosition(HWND sourceHwnd, int x, int y)
 {
-	CRect rc;
+	//CRect rc;
 
 	if (m_isSyncingDashboardPanePosition) {
 		// Prevent recursive updates
@@ -1672,31 +1681,54 @@ void CMainFrame::SyncDashboardPanePosition(HWND sourceHwnd, int x, int y)
 
 	m_isSyncingDashboardPanePosition = true;
 
-	if ( m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard.GetWindowRect(&rc);
+	//if ( m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
+	//	m_wndDashboard.GetWindowRect(&rc);
 
-		m_wndDashboard.SetWindowPos(nullptr, x, y, rc.Width(), rc.Height(), SWP_NOZORDER);
-		m_wndDashboard.Invalidate();
-		m_wndDashboard.UpdateWindow();
-	}
+	//	m_wndDashboard.SetWindowPos(nullptr, x, y, rc.Width(), rc.Height(), SWP_NOZORDER);
+	//	m_wndDashboard.Invalidate();
+	//	m_wndDashboard.UpdateWindow();
+	//}
 
-	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard_cron.GetWindowRect(&rc);
+	//if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
+	//	m_wndDashboard_cron.GetWindowRect(&rc);
 
-		m_wndDashboard_cron.SetWindowPos(nullptr, x, y, rc.Width(), rc.Height(), SWP_NOZORDER);
-		m_wndDashboard_cron.Invalidate();
-		m_wndDashboard_cron.UpdateWindow();
-	}
+	//	m_wndDashboard_cron.SetWindowPos(nullptr, x, y, rc.Width(), rc.Height(), SWP_NOZORDER);
+	//	m_wndDashboard_cron.Invalidate();
+	//	m_wndDashboard_cron.UpdateWindow();
+	//}
+
+	const UINT kFlags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
+	auto applyPosition = [&](CDashboardWnd& pane)
+		{
+			const HWND targetHwnd = pane.GetSafeHwnd();
+			if (targetHwnd == nullptr || targetHwnd == sourceHwnd || !::IsWindow(targetHwnd))
+			{
+				return;
+			}
+
+			CRect rc{};
+			pane.GetWindowRect(&rc);
+			if (rc.left == x && rc.top == y)
+			{
+				// No-op guard: do not trigger redundant move notifications.
+				return;
+			}
+
+			pane.SetWindowPos(nullptr, x, y, 0, 0, kFlags);
+		};
+
+	applyPosition(m_wndDashboard);
+	applyPosition(m_wndDashboard_cron);
 
 	m_isSyncingDashboardPanePosition = false;
 }
 
 LRESULT CMainFrame::OnSyncDashboardPaneSize(WPARAM wParam, LPARAM lParam)
 {
-	//if (m_isSyncingDashboardPaneSize) {
-	//	// Prevent recursive updates
-	//	return 0;
-	//}
+	if (m_isSyncingDashboardPaneSize) {
+		// Prevent recursive updates
+		return 0;
+	}
 
 	const HWND sourceHwnd = reinterpret_cast<HWND>(wParam);
 	const int cx = static_cast<int>(static_cast<short>(LOWORD(lParam)));
@@ -1706,7 +1738,9 @@ LRESULT CMainFrame::OnSyncDashboardPaneSize(WPARAM wParam, LPARAM lParam)
 
 	// This handler is called by dashboard panes when they are resized.
 	// We can use this to trigger a layout recalculation to ensure the panes are sized correctly.
-	RecalcLayout(TRUE);
+	
+	// Do not force RecalcLayout here; it can trigger repeated size churn.
+	//RecalcLayout(TRUE);
 
 	//m_isSyncingDashboardPaneSize = false;
 
@@ -1715,7 +1749,7 @@ LRESULT CMainFrame::OnSyncDashboardPaneSize(WPARAM wParam, LPARAM lParam)
 
 void CMainFrame::SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy)
 {
-	CRect rc;
+	//CRect rc;
 
 	if (m_isSyncingDashboardPaneSize) {
 		// Prevent recursive updates
@@ -1729,79 +1763,127 @@ void CMainFrame::SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy)
 
 	m_isSyncingDashboardPaneSize = true;
 
-	if ( m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard.GetWindowRect(&rc);
+	//if ( m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
+	//	m_wndDashboard.GetWindowRect(&rc);
 
-		m_wndDashboard.SetWindowPos(nullptr, rc.left, rc.top, cx, cy, SWP_NOZORDER);
-		m_wndDashboard.Invalidate();
-		m_wndDashboard.UpdateWindow();
-	}
+	//	m_wndDashboard.SetWindowPos(nullptr, rc.left, rc.top, cx, cy, SWP_NOZORDER);
+	//	m_wndDashboard.Invalidate();
+	//	m_wndDashboard.UpdateWindow();
+	//}
 
-	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard_cron.GetWindowRect(&rc);
+	//if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
+	//	m_wndDashboard_cron.GetWindowRect(&rc);
 
-		m_wndDashboard_cron.SetWindowPos(nullptr, rc.left, rc.top, cx, cy, SWP_NOZORDER);
-		m_wndDashboard_cron.Invalidate();
-		m_wndDashboard_cron.UpdateWindow();
-	}
+	//	m_wndDashboard_cron.SetWindowPos(nullptr, rc.left, rc.top, cx, cy, SWP_NOZORDER);
+	//	m_wndDashboard_cron.Invalidate();
+	//	m_wndDashboard_cron.UpdateWindow();
+	//}
+
+	const UINT kFlags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
+	auto applySize = [&](CDashboardWnd& pane)
+		{
+			const HWND targetHwnd = pane.GetSafeHwnd();
+			if (targetHwnd == nullptr || targetHwnd == sourceHwnd || !::IsWindow(targetHwnd))
+			{
+				return;
+			}
+
+			CRect rc{};
+			pane.GetWindowRect(&rc);
+			if (rc.Width() == cx && rc.Height() == cy)
+			{
+				// Critical: skip no-op resize to prevent feedback loops.
+				return;
+			}
+
+			pane.SetWindowPos(nullptr, 0, 0, cx, cy, kFlags);
+		};
+
+	applySize(m_wndDashboard);
+	applySize(m_wndDashboard_cron);
 
 	m_isSyncingDashboardPaneSize = false;
 }
 
 LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 {
+	if (m_isSyncingDashboardFloatDock)
+	{
+		return 0;
+	}
+
 	const HWND sourceHwnd = reinterpret_cast<HWND>(wParam);
 
-	if ( m_isDashboardFloat && m_isSwitchFloatDock )
-		SyncDashboardAfterFloat(sourceHwnd);
+	m_isDashboardFloat = true;
+	SyncDashboardAfterFloat(sourceHwnd);
 
 	return 0;
 }
 
 LRESULT CMainFrame::OnSyncDashboardAfterDock(WPARAM wParam, LPARAM)
 {
+	if (m_isSyncingDashboardFloatDock)
+	{
+		return 0;
+	}
+
 	const HWND sourceHwnd = reinterpret_cast<HWND>(wParam);
 
-	if ( !m_isDashboardFloat && m_isSwitchFloatDock )
-		SyncDashboardAfterDock(sourceHwnd);
+	m_isDashboardFloat = false;
+	SyncDashboardAfterDock(sourceHwnd);
 
 	return 0;
 }
 
+//void CMainFrame::SyncDashboardAfterFloat(HWND sourceHwnd)
+//{
+//	// This handler is called by dashboard panes after they are floated.
+//	// We can use this to trigger any necessary adjustments after a pane has been floated.
+//	// For example, we might want to ensure that the floated pane is fully visible on the screen,
+//	// or we might want to adjust the layout of the remaining docked panes.
+//	// In this example, we'll just trigger a layout recalculation to ensure everything is positioned correctly.
+//	if (m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
+//		m_wndDashboard.FloatPane(CRect(100, 100, 500, 500));
+//	}
+//
+//	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
+//		m_wndDashboard_cron.FloatPane(CRect(150, 150, 550, 550));
+//	}
+//
+//	RecalcLayout(FALSE);
+//}
+//
+//void CMainFrame::SyncDashboardAfterDock(HWND sourceHwnd)
+//{
+//	// This handler is called by dashboard panes after they are docked.
+//	// Similar to the float handler, we can use this to trigger adjustments after a pane has been docked.
+//	// For example, we might want to ensure that the newly docked pane is integrated smoothly into the existing layout,
+//	// or we might want to adjust the sizes of adjacent panes to accommodate the new docked pane.
+//	// In this example, we'll just trigger a layout recalculation to ensure everything is positioned correctly.
+//	if (m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
+//		DockPane(&m_wndDashboard);
+//	}
+//
+//	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
+//		DockPane(&m_wndDashboard_cron);
+//	}
+//
+//	RecalcLayout(FALSE);
+//}
+
+bool CMainFrame::IsDashboardFloatDockSyncInProgress() const
+{
+	return m_isSyncingDashboardFloatDock;
+}
+
 void CMainFrame::SyncDashboardAfterFloat(HWND sourceHwnd)
 {
-	// This handler is called by dashboard panes after they are floated.
-	// We can use this to trigger any necessary adjustments after a pane has been floated.
-	// For example, we might want to ensure that the floated pane is fully visible on the screen,
-	// or we might want to adjust the layout of the remaining docked panes.
-	// In this example, we'll just trigger a layout recalculation to ensure everything is positioned correctly.
-	if (m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard.FloatPane(CRect(100, 100, 500, 500));
-	}
-
-	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
-		m_wndDashboard_cron.FloatPane(CRect(150, 150, 550, 550));
-	}
-
-	RecalcLayout(FALSE);
+	SyncAllDashboardsFloatState(sourceHwnd, true);
 }
 
 void CMainFrame::SyncDashboardAfterDock(HWND sourceHwnd)
 {
-	// This handler is called by dashboard panes after they are docked.
-	// Similar to the float handler, we can use this to trigger adjustments after a pane has been docked.
-	// For example, we might want to ensure that the newly docked pane is integrated smoothly into the existing layout,
-	// or we might want to adjust the sizes of adjacent panes to accommodate the new docked pane.
-	// In this example, we'll just trigger a layout recalculation to ensure everything is positioned correctly.
-	if (m_wndDashboard.GetSafeHwnd() != sourceHwnd) {
-		DockPane(&m_wndDashboard);
-	}
-
-	if (m_wndDashboard_cron.GetSafeHwnd() != sourceHwnd) {
-		DockPane(&m_wndDashboard_cron);
-	}
-
-	RecalcLayout(FALSE);
+	SyncAllDashboardsFloatState(sourceHwnd, false);
 }
 
 void CMainFrame::OnEditDashboard()
@@ -1825,4 +1907,69 @@ void CMainFrame::OnUpdateEditDashboard(CCmdUI* pCmdUI)
 		pCmdUI->SetText(_T("Dock"));
 	else
 		pCmdUI->SetText(_T("Float"));
+}
+
+std::vector<CDashboardWnd*> CMainFrame::CollectDashboardPanes()
+{
+	std::vector<CDashboardWnd*> panes;
+	panes.reserve(2);
+
+	panes.push_back(&m_wndDashboard);
+	panes.push_back(&m_wndDashboard_cron);
+
+	return panes;
+}
+
+void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
+{
+	if (m_isSyncingDashboardFloatDock)
+	{
+		return;
+	}
+
+	m_isSyncingDashboardFloatDock = true;
+
+	CRect sourceFloatRect(100, 100, 500, 500);
+	if (sourceHwnd != nullptr && ::IsWindow(sourceHwnd))
+	{
+		::GetWindowRect(sourceHwnd, &sourceFloatRect);
+	}
+
+	const auto panes = CollectDashboardPanes();
+	for (CDashboardWnd* pane : panes)
+	{
+		if (pane == nullptr)
+		{
+			continue;
+		}
+
+		const HWND targetHwnd = pane->GetSafeHwnd();
+		if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
+		{
+			continue;
+		}
+
+		if (targetHwnd == sourceHwnd)
+		{
+			continue;
+		}
+
+		if (shouldFloat)
+		{
+			if (!pane->IsFloating())
+			{
+				pane->FloatPane(sourceFloatRect);
+			}
+		}
+		else
+		{
+			if (pane->IsFloating())
+			{
+				DockPane(pane);
+			}
+		}
+	}
+
+	RecalcLayout(FALSE);
+	m_isSyncingDashboardFloatDock = false;
 }

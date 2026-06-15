@@ -751,26 +751,39 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 
 void CDashboardWnd::OnPaneFloat()
 {
-	CMainFrame* pMain	= DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
-		pMain->PostMessage(
-			kMsgSyncDashboardAfterFloat,
-			reinterpret_cast<WPARAM>(GetSafeHwnd()),
-			MAKELPARAM(-1, -1)
-		);
+	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))
+	{
+		return;
 	}
+
+	if (pMain->IsDashboardFloatDockSyncInProgress())
+	{
+		return;
+	}
+
+	pMain->PostMessage(
+		kMsgSyncDashboardAfterFloat,
+		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+		MAKELPARAM(-1, -1));
 }
 
 void CDashboardWnd::OnPaneDock()
 {
-	CMainFrame* pMain	= DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
-		pMain->PostMessage(
-			kMsgSyncDashboardAfterDock,
-			reinterpret_cast<WPARAM>(GetSafeHwnd()),
-			MAKELPARAM(-1, -1)
-		);
+	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))
+	{
+		return;
 	}
-}
 
+	if (pMain->IsDashboardFloatDockSyncInProgress())
+	{
+		return;
+	}
+
+	pMain->PostMessage(
+		kMsgSyncDashboardAfterDock,
+		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+		MAKELPARAM(-1, -1));
+}
 
