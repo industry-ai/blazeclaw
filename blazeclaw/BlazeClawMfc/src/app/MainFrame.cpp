@@ -85,6 +85,28 @@ namespace {
 		return CString(CA2W(line.c_str(), CP_UTF8));
 	}
 
+	class ScopedDashboardFloatDockSyncGuard
+	{
+	public:
+		explicit ScopedDashboardFloatDockSyncGuard(std::atomic<int>& counter) noexcept
+			: counterRef(counter)
+		{
+			counterRef.fetch_add(1, std::memory_order_acq_rel);
+		}
+
+		~ScopedDashboardFloatDockSyncGuard()
+		{
+			counterRef.fetch_sub(1, std::memory_order_acq_rel);
+		}
+
+		// non-copyable
+		ScopedDashboardFloatDockSyncGuard(const ScopedDashboardFloatDockSyncGuard&) = delete;
+		ScopedDashboardFloatDockSyncGuard& operator=(const ScopedDashboardFloatDockSyncGuard&) = delete;
+
+	private:
+		std::atomic<int>& counterRef;
+	};
+
 } // namespace
 // ApiKey dialog declared in its own files
 
@@ -1807,7 +1829,8 @@ void CMainFrame::SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy)
 
 LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 {
-	if (m_isSyncingDashboardFloatDock)
+	//if (m_isSyncingDashboardFloatDock)
+	if (IsDashboardFloatDockSyncInProgress())
 	{
 		return 0;
 	}
@@ -1822,7 +1845,8 @@ LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 
 LRESULT CMainFrame::OnSyncDashboardAfterDock(WPARAM wParam, LPARAM)
 {
-	if (m_isSyncingDashboardFloatDock)
+	//if (m_isSyncingDashboardFloatDock)
+	if (IsDashboardFloatDockSyncInProgress())
 	{
 		return 0;
 	}
@@ -1873,7 +1897,9 @@ LRESULT CMainFrame::OnSyncDashboardAfterDock(WPARAM wParam, LPARAM)
 
 bool CMainFrame::IsDashboardFloatDockSyncInProgress() const
 {
-	return m_isSyncingDashboardFloatDock;
+//	return m_isSyncingDashboardFloatDock;
+
+	return m_dashboardFloatDockSyncCount.load(std::memory_order_acquire) > 0;
 }
 
 void CMainFrame::SyncDashboardAfterFloat(HWND sourceHwnd)
@@ -1922,12 +1948,16 @@ std::vector<CDashboardWnd*> CMainFrame::CollectDashboardPanes()
 
 void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 {
-	if (m_isSyncingDashboardFloatDock)
+	//if (m_isSyncingDashboardFloatDock)
+	// If another sync is in progress, bail out
+	if (IsDashboardFloatDockSyncInProgress())
 	{
 		return;
 	}
 
-	m_isSyncingDashboardFloatDock = true;
+	//m_isSyncingDashboardFloatDock = true;
+	// Scoped guard increments counter and will decrement on leave (including exceptions)
+	ScopedDashboardFloatDockSyncGuard guard(m_dashboardFloatDockSyncCount);
 
 	CRect sourceFloatRect(100, 100, 500, 500);
 	if (sourceHwnd != nullptr && ::IsWindow(sourceHwnd))
@@ -1958,7 +1988,8 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 		{
 			if (!pane->IsFloating())
 			{
-				pane->FloatPane(sourceFloatRect);
+				//pane->FloatPane(sourceFloatRect);
+				pane->FloatToRect(sourceFloatRect);
 			}
 		}
 		else
@@ -1971,5 +2002,5 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 	}
 
 	RecalcLayout(FALSE);
-	m_isSyncingDashboardFloatDock = false;
+	//m_isSyncingDashboardFloatDock = false;
 }

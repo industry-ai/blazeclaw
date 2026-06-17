@@ -627,93 +627,38 @@ void CDashboardWnd::OnAfterFloat()
 	CDockablePane::OnAfterFloat();
 	// OnPaneVisibilityChanged(IsWindowVisible());
 
-/*	CWnd* pContainer = GetParent();
-	if (pContainer &&
-		!pContainer->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
-	{
-		// Avoid subclassing if a permanent CWnd wrapper already exists
-		CWnd* pPermanent = CWnd::FromHandlePermanent(pContainer->m_hWnd);
-		if (pPermanent == nullptr) {
-			CFloatPaneTracker* pTracker = new CFloatPaneTracker;
-			pTracker->SubclassWindow(pContainer->m_hWnd);
-		}
-		else {
-			ATLTRACE("OnAfterFloat: permanent CWnd wrapper present, skipping SubclassWindow. wrapperClass=%s\n",
-				pPermanent->GetRuntimeClass() ? pPermanent->GetRuntimeClass()->m_lpszClassName : "<unknown>");
-		}
-	}
-*/
+	// At this point, the pane has already CMultiPaneFrameWnd is already subclassed by MFC
+	// to implement floating behavior, so we intercept it earlier in FloatPane to replace 
+	// the subclass with our CFloatPaneTracker which forwards messages to the original procedure.
+	// Thus we should comment out the following code which attempts to subclass after the fact, 
+	// as it can cause issues with MFC's internal state machine for floating panes.
+	//auto pMiniFrame = GetParentMiniFrame();
+	//if (pMiniFrame == nullptr)
+	//	return;
 
-	auto pMiniFrame = GetParentMiniFrame();
-	if (pMiniFrame == nullptr)
-		return;
+	//if (pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
+	//{
+	//	// GetWindow returns a CWnd*. Safely downcast to CPaneFrameWnd* to avoid
+	//	// implicit base->derived conversion error.
+	//	CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
+	//	pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
+	//}
 
-	if (pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
-	{
-		// GetWindow returns a CWnd*. Safely downcast to CPaneFrameWnd* to avoid
-		// implicit base->derived conversion error.
-		CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
-		pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
-	}
-
-	if (pMiniFrame &&
-		!pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)) &&
-		CWnd::FromHandlePermanent(pMiniFrame->m_hWnd) == nullptr)
-	{
-		CFloatPaneTracker* pTracker = new CFloatPaneTracker;
-		pTracker->SubclassWindow(pMiniFrame->m_hWnd);
-	}
+	//if (pMiniFrame &&
+	//	!pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)) &&
+	//	CWnd::FromHandlePermanent(pMiniFrame->m_hWnd) == nullptr)
+	//{
+	//	CFloatPaneTracker* pTracker = new CFloatPaneTracker;
+	//	pTracker->SubclassWindow(pMiniFrame->m_hWnd);
+	//}
 
 	OnPaneFloat();
+}
 
-/*
-	// Pane is now floating
-	auto pMiniFrame = GetParentMiniFrame();
-	if (pMiniFrame == nullptr)
-		return;
-
-	try {
-		// Prevent double-subclassing if already a CFloatPaneTracker (e.g. floated, then docked, then floated again)
-		// Additionally avoid calling SubclassWindow if a permanent CWnd wrapper already exists for the HWND
-		// because MFC will assert in that case. Use FromHandlePermanent to detect a wrapper.
-		CWnd* pPermanent = CWnd::FromHandlePermanent(pMiniFrame->m_hWnd);
-		if (pPermanent != nullptr) {
-			// There is already a permanent CWnd wrapper. If it's a CFloatPaneTracker, nothing to do.
-			if (pPermanent->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker))) {
-				// already subclassed by a tracker - no action
-			} else {
-				// Some other permanent wrapper exists; do not attempt SubclassWindow to avoid assertion
-				ATLTRACE("OnAfterFloat: permanent CWnd wrapper present, skipping SubclassWindow. wrapperClass=%s\n",
-					pPermanent->GetRuntimeClass() ? pPermanent->GetRuntimeClass()->m_lpszClassName : "<unknown>");
-			}
-		} else {
-			// No permanent wrapper - safe to create tracker and subclass
-			CFloatPaneTracker* pTracker = new CFloatPaneTracker();
-			pTracker->SubclassWindow(pMiniFrame->m_hWnd);
-
-			//CRect rc;
-			//pMiniFrame->GetWindowRect(&rc);
-
-			//// Adjust size/position as needed
-			////int x = rc.left;
-			////int y = rc.top;
-			////CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-			////if (pMain != nullptr && ::IsWindow(pMain->GetSafeHwnd())) {
-			////	pMain->PostMessage(
-			////		kMsgSyncDashboardPanePosition,
-			////		reinterpret_cast<WPARAM>(GetSafeHwnd()),
-			////		MAKELPARAM(x, y)
-			////	);
-			////}
-
-			//// Update UI state — call existing handler to refresh visibility/controls
-			//OnPaneVisibilityChanged(IsWindowVisible());
-		}
-	} catch (const std::exception& ex) {
-			ATLTRACE("OnAfterFloat exception: %s\n", ex.what());
-	} catch (...) {
-			ATLTRACE("OnAfterFloat unknown exception\n");
-	}*/
+void CDashboardWnd::FloatToRect(const CRect & rect)
+{
+	// Protected FloatPane is available to this derived class.
+	FloatPane(rect);
 }
 
 void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD dockMethod)
@@ -721,12 +666,7 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 	// Call base with the proper signature
 	CDockablePane::OnAfterDock(pBar, lpRect, dockMethod);
 
-	//CWnd* pContainer = GetParent();
-	//if (pContainer &&
-	//	pContainer->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
-	//{
-	//	pContainer->UnsubclassWindow();
-	//}
+	return;
 
 	auto pMiniFrame = GetParentMiniFrame();
 	if (pMiniFrame &&
@@ -787,3 +727,30 @@ void CDashboardWnd::OnPaneDock()
 		MAKELPARAM(-1, -1));
 }
 
+BOOL CDashboardWnd::FloatPane(
+	CRect rectFloat,
+	AFX_DOCK_METHOD dockMethod,
+	bool bShow)
+{
+	BOOL bResult = __super::FloatPane(rectFloat, dockMethod, bShow);
+	/*
+	__super is a Microsoft Visual C++ extension (only works with MSVC compiler, not GCC/Clang standard C++).
+It automatically refers to the immediate direct base class of the current class.
+Equivalent to writing the full base class name manually, but cleaner when you change inheritance later.
+	*/
+
+	CMultiPaneFrameWnd* pMulti =
+		DYNAMIC_DOWNCAST(CMultiPaneFrameWnd, GetParentMiniFrame());
+
+	if (pMulti &&
+		!pMulti->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
+	{
+		// Replace MFC's runtime class dynamically
+		pMulti->UnsubclassWindow();
+
+		CFloatPaneTracker* pTracker = new CFloatPaneTracker;
+		pTracker->SubclassWindow(pMulti->m_hWnd);
+	}
+
+	return bResult;
+}

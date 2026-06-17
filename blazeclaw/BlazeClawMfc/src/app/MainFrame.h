@@ -9,6 +9,7 @@
 #include "CalendarBar.h"
 #include "Resource.h"
 #include <vector>
+#include <atomic>
 
 class COutlookBar : public CMFCOutlookBar
 {
@@ -124,7 +125,9 @@ protected:
 	volatile bool	m_isDashboardFloat = false;
 	volatile bool   m_isSwitchFloatDock = false;
 
-	volatile bool	m_isSyncingDashboardFloatDock = false;
+	//volatile bool	m_isSyncingDashboardFloatDock = false;
+	// Re-entrancy counter for float/dock sync (scoped RAII guard will increment/decrement)
+	std::atomic<int>	m_dashboardFloatDockSyncCount{ 0 };
 
 public:
 	// Called by app to open a tab without showing dialog

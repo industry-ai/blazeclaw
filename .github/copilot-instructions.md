@@ -18,6 +18,7 @@
 - Target WebView-first UI flows: BlazeClaw currently uses a WebView at BlazeClawMfc/web/chat/index.html via the CBlazeClawMFCView bridge; design parity and UI plans assuming WebView-first implementation.
 - Treat CChatView as a potential future UI path; design parity plans to allow migration to CChatView later, but prioritize WebView parity and validation.
 - For BlazeClaw config UX, keep a dual mechanism: use `config.html` provided by the skill when present; otherwise, use the ported OpenClaw schema-based configuration mechanism.
+- Prefer using scoped RAII guards (Enter/Exit with atomic counter) instead of volatile bool sync flags for guarding re-entrant UI sync operations.
 
 ## Code Style
 - Use human-readable UTF-8 characters in source text.

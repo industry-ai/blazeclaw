@@ -35,6 +35,8 @@ public:
 class CDashboardWnd : public CDockablePane
 {
 public:
+	void FloatToRect(const CRect& rect);
+
 	CDashboardWnd() noexcept;
 	virtual ~CDashboardWnd();
 
@@ -45,6 +47,17 @@ protected:
 	virtual void	OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD dockMethod);
 	virtual void	OnPaneFloat();
 	virtual void	OnPaneDock();
+
+	virtual BOOL FloatPane(
+		CRect rectFloat,
+		AFX_DOCK_METHOD dockMethod = DM_UNKNOWN,
+		bool bShow = true
+	) override;
+	//virtual BOOL DockPane(
+	//	CDockablePane* pDockBar,
+	//	CRect rect = CRect(0, 0, 0, 0),
+	//	AFX_DOCK_METHOD dockMethod = DM_UNKNOWN
+	//) override;
 
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
