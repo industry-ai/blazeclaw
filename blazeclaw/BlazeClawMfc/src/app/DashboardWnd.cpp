@@ -14,6 +14,8 @@
 #include <Shlwapi.h>
 #include <filesystem>
 #include <optional>
+#include <afxext.h> // MFC extensions (splitter, docking)
+#include <afxcontrolbars.h> // MFC Feature Pack (docking panes, control bars)
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -627,32 +629,86 @@ void CDashboardWnd::OnAfterFloat()
 	CDockablePane::OnAfterFloat();
 	// OnPaneVisibilityChanged(IsWindowVisible());
 
+	if (m_bNewlyCreated)
+	{
+		m_bNewlyCreated = false;
+		return; // Skip synchronization on the initial float after creation, as it's not a user-initiated action.
+	}
+
 	// At this point, the pane has already CMultiPaneFrameWnd is already subclassed by MFC
-	// to implement floating behavior, so we intercept it earlier in FloatPane to replace 
-	// the subclass with our CFloatPaneTracker which forwards messages to the original procedure.
-	// Thus we should comment out the following code which attempts to subclass after the fact, 
-	// as it can cause issues with MFC's internal state machine for floating panes.
+	// to implement floating behavior, but if we intercept it earlier in FloatPane to replace 
+	// the subclass with our CFloatPaneTracker which forwards messages to the original procedure,
+	// `CWnd::UnsubclassWindow()` detaches the HWND from the `CWnd` object (`Detach()`).
+	// After that, the original `CMultiPaneFrameWnd` object (pMulti) is still used by MFC internals, 
+	// but its `m_hWnd` is no longer valid. Later (during idle/UI updates), MFC calls `CWnd::SendMessage`, 
+	// which asserts at afxwin2.inl:32: ASSERT(::IsWindow(m_hWnd)); This leads to an assertion failure 
+	// because the window handle has been detached from the original `CMultiPaneFrameWnd` object, and 
+	// the `CFloatPaneTracker` subclass is not properly forwarding messages to the original window procedure 
+	// as intended.
+	// 
+	// So the following code snippet will not use `UnsubclassWindow()` and instead it directly subclasses 
+	// the `pMiniFrame->GetWindow(GW_CHILD)`
 	//auto pMiniFrame = GetParentMiniFrame();
 	//if (pMiniFrame == nullptr)
 	//	return;
+	auto pMultiFrame	= GetParentMiniFrame();	// This is the CMultiPaneFrameWnd created by MFC when floating, which hosts the actual mini frame (CPaneFrameWnd) as its child.
 
-	//if (pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
-	//{
-	//	// GetWindow returns a CWnd*. Safely downcast to CPaneFrameWnd* to avoid
-	//	// implicit base->derived conversion error.
-	//	CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
-	//	pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
-	//}
+	if (pMultiFrame == nullptr)	return;
 
-	//if (pMiniFrame &&
-	//	!pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)) &&
-	//	CWnd::FromHandlePermanent(pMiniFrame->m_hWnd) == nullptr)
+	if (!pMultiFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
+	{
+		return;
+	}
+
+	// GetWindow returns a CWnd*. Safely downcast to CPaneFrameWnd* to avoid 
+	// implicit base->derived conversion error.
+	CWnd* pChild = pMultiFrame->GetWindow(GW_CHILD);
+
+	if (pChild == nullptr)
+	{
+		return;
+	}
+
+	if (!pChild->IsKindOf(RUNTIME_CLASS(CDashboardWnd)))
+	{
+		return;
+	}
+
+	if (pChild != this)	return;	// pChild is the first pane that floated, other panes will be synchronized into pMultiFrame
+
+	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))	return;
+
+	if (pMain->IsDashboardFloatDockSyncInProgress())	return;
+
+	pMain->PostMessage(
+		kMsgSyncDashboardAfterFloat,
+		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+		MAKELPARAM(-1, -1));
+
+	return;
+
+	////CMFCMultiPaneSplitterWnd
+	//auto pMultiSplitter = DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild);
+
+	//if (pMultiSplitter && 
+	//	!pMultiSplitter->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)) && 
+	//	CWnd::FromHandlePermanent(pMultiSplitter->m_hWnd) == nullptr)
 	//{
 	//	CFloatPaneTracker* pTracker = new CFloatPaneTracker;
-	//	pTracker->SubclassWindow(pMiniFrame->m_hWnd);
+	//	pTracker->SubclassWindow(pMultiSplitter->m_hWnd);
 	//}
 
-	OnPaneFloat();
+	// Pane is now floating — refresh visibility/controls
+	OnPaneVisibilityChanged(IsWindowVisible());
+
+	if (pChild != this) {
+		// this one is original source floating pane, send message to other panes to float together
+		//OnPaneFloat();	// Post a message to trigger synchronization of floating state across panes
+
+		return;
+	}
+
 }
 
 void CDashboardWnd::FloatToRect(const CRect & rect)
@@ -666,65 +722,34 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 	// Call base with the proper signature
 	CDockablePane::OnAfterDock(pBar, lpRect, dockMethod);
 
-	return;
-
-	auto pMiniFrame = GetParentMiniFrame();
-	if (pMiniFrame &&
-		pMiniFrame->IsKindOf(RUNTIME_CLASS(CMultiPaneFrameWnd)))
+	if (m_bNewlyCreated)
 	{
-		CWnd* pChild = pMiniFrame ? pMiniFrame->GetWindow(GW_CHILD) : nullptr;
-		pMiniFrame = pChild ? DYNAMIC_DOWNCAST(CPaneFrameWnd, pChild) : nullptr;
-
-		if (pMiniFrame &&
-			pMiniFrame->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
-		{
-			// Found a tracker - unsubclass to restore original window procedure
-			pMiniFrame->UnsubclassWindow();
-		}
+		m_bNewlyCreated = false;
+		return; // Skip synchronization on the initial dock after creation, as it's not a user-initiated action.
 	}
 
 	// Pane is now docked — refresh visibility/controls
 	OnPaneVisibilityChanged(IsWindowVisible());
 
-	OnPaneDock();
-}
-
-void CDashboardWnd::OnPaneFloat()
-{
 	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))
+	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))	return;
+
+	if (pMain->IsDashboardFloatDockSyncInProgress())	return;
+
+	if (lpRect != nullptr)
 	{
-		return;
+		m_rcStored = *lpRect;
 	}
-
-	if (pMain->IsDashboardFloatDockSyncInProgress())
+	else
 	{
-		return;
-	}
-
-	pMain->PostMessage(
-		kMsgSyncDashboardAfterFloat,
-		reinterpret_cast<WPARAM>(GetSafeHwnd()),
-		MAKELPARAM(-1, -1));
-}
-
-void CDashboardWnd::OnPaneDock()
-{
-	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))
-	{
-		return;
-	}
-
-	if (pMain->IsDashboardFloatDockSyncInProgress())
-	{
-		return;
+		GetWindowRect(&m_rcStored);
 	}
 
 	pMain->PostMessage(
 		kMsgSyncDashboardAfterDock,
 		reinterpret_cast<WPARAM>(GetSafeHwnd()),
-		MAKELPARAM(-1, -1));
+		reinterpret_cast<LPARAM>(&m_rcStored));
+		//MAKELPARAM(-1, -1));
 }
 
 BOOL CDashboardWnd::FloatPane(
@@ -739,18 +764,18 @@ It automatically refers to the immediate direct base class of the current class.
 Equivalent to writing the full base class name manually, but cleaner when you change inheritance later.
 	*/
 
-	CMultiPaneFrameWnd* pMulti =
-		DYNAMIC_DOWNCAST(CMultiPaneFrameWnd, GetParentMiniFrame());
+	//CMultiPaneFrameWnd* pMulti =
+	//	DYNAMIC_DOWNCAST(CMultiPaneFrameWnd, GetParentMiniFrame());
 
-	if (pMulti &&
-		!pMulti->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
-	{
-		// Replace MFC's runtime class dynamically
-		pMulti->UnsubclassWindow();
+	//if (pMulti &&
+	//	!pMulti->IsKindOf(RUNTIME_CLASS(CFloatPaneTracker)))
+	//{
+	//	// Replace MFC's runtime class dynamically
+	//	pMulti->UnsubclassWindow();
 
-		CFloatPaneTracker* pTracker = new CFloatPaneTracker;
-		pTracker->SubclassWindow(pMulti->m_hWnd);
-	}
+	//	CFloatPaneTracker* pTracker = new CFloatPaneTracker;
+	//	pTracker->SubclassWindow(pMulti->m_hWnd);
+	//}
 
 	return bResult;
 }

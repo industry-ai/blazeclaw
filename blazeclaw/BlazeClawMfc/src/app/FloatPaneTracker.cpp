@@ -5,8 +5,8 @@
 IMPLEMENT_DYNAMIC(CFloatPaneTracker, CMiniFrameWnd)
 
 BEGIN_MESSAGE_MAP(CFloatPaneTracker, CMiniFrameWnd)
-    ON_WM_WINDOWPOSCHANGED()
-	ON_WM_WINDOWPOSCHANGING()
+//    ON_WM_WINDOWPOSCHANGED()
+//	ON_WM_WINDOWPOSCHANGING()
 END_MESSAGE_MAP()
 
 void CFloatPaneTracker::OnWindowPosChanged(WINDOWPOS* lpwndpos)

@@ -414,6 +414,21 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	m_wndDashboard_cron.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_cron);
 
+	CDockingManager* pDockMgr = GetDockingManager();
+	// Allow docking on all edges
+	pDockMgr->EnableDocking(CBRS_ALIGN_ANY);
+	// Enable auto hide for left/right
+	pDockMgr->EnableAutoHidePanes(CBRS_ALIGN_LEFT | CBRS_ALIGN_RIGHT);
+
+	//// Create custom dock pane
+	//m_wndTreePane.Create(_T("Tree View"), this, CRect(0, 0, 200, 400), TRUE, ID_VIEW_TREE);
+	//// Dock to left side
+	pDockMgr->DockPane(&m_wndDashboard, CBRS_ALIGN_LEFT);
+	pDockMgr->DockPane(&m_wndDashboard_cron, CBRS_ALIGN_LEFT);
+
+	//// Restore saved layout
+	//pDockMgr->LoadState(_T("AppLayout"));
+
 	// set the visual manager and style based on persisted value
 	OnApplicationLook(theApp.m_nAppLook);
 
@@ -1147,6 +1162,11 @@ void CMainFrame::OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI)
 
 void CMainFrame::OnViewDashboardWindow()
 {
+	if (m_wndDashboard.GetSafeHwnd() == nullptr) {
+		TRACE0("Dashboard window is not properly initialized.\n");
+		return;
+	}
+
 	const BOOL show = !m_wndDashboard.IsVisible();
 	m_wndDashboard.ShowPane(show, FALSE, TRUE);
 	if (show)
@@ -1164,7 +1184,12 @@ void CMainFrame::OnViewDashboardWindow()
 void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
 {
 	//pCmdUI->Enable(TRUE);
-	pCmdUI->SetCheck(m_wndDashboard.IsVisible());
+	// Guard against MFC assertions when the target window/command state isn't valid
+	if (pCmdUI != nullptr) {
+		// Consider the dashboard visible only if its HWND is valid and the window is visible
+		const bool dashboardVisible = (m_wndDashboard.GetSafeHwnd() != nullptr) && ::IsWindowVisible(m_wndDashboard.GetSafeHwnd());
+		pCmdUI->SetCheck(dashboardVisible);
+	}
 }
 
 void CMainFrame::OnViewDashboardCronWindow()
@@ -1838,7 +1863,89 @@ LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 	const HWND sourceHwnd = reinterpret_cast<HWND>(wParam);
 
 	m_isDashboardFloat = true;
-	SyncDashboardAfterFloat(sourceHwnd);
+	//SyncDashboardAfterFloat(sourceHwnd);
+
+	const auto panes = CollectDashboardPanes();
+
+	CDashboardWnd* pSourcePane = nullptr;
+
+	if (sourceHwnd != nullptr)
+	{
+		CWnd* pWnd	= CWnd::FromHandlePermanent(sourceHwnd);
+		pSourcePane	= dynamic_cast<CDashboardWnd*>(pWnd);
+	}
+	else
+	{
+		for (CDashboardWnd* pane : panes)
+		{
+			if (pane != nullptr && pane->IsVisible())
+			{
+				pSourcePane = pane;
+				break;
+			}
+		}
+	}
+
+	if (pSourcePane == nullptr || !::IsWindow(pSourcePane->GetSafeHwnd()))
+	{
+		return 0;
+	}
+
+	ScopedDashboardFloatDockSyncGuard guard(m_dashboardFloatDockSyncCount);
+
+	CMultiPaneFrameWnd* pFrame =
+		dynamic_cast<CMultiPaneFrameWnd*>(pSourcePane->GetParentMiniFrame());
+
+	if (pFrame == nullptr)	return	0;
+
+	for (CDashboardWnd* pane : panes)
+	{
+		if (pane == nullptr || pane == pSourcePane)
+		{
+			continue;
+		}
+
+		if (!::IsWindow(pane->GetSafeHwnd()))
+		{
+			continue;
+		}
+
+		// Already in the same floating frame
+		if (pane->GetParentMiniFrame() == pFrame)
+		{
+			continue;
+		}
+
+		CPaneDivider*	pDivider	= pane->GetDefaultPaneDivider();
+		CPaneContainer*	pContainer	= nullptr;
+
+		if (pDivider != nullptr)
+		{
+			BOOL bIsLeft;
+			pContainer = pDivider->FindPaneContainer(pane, bIsLeft);
+
+			//pDivider->RemovePane(pane);
+
+			if (pContainer != nullptr)
+			{
+				pContainer->RemovePane(pane);
+			}
+		}
+
+		// Important: detach from current docking container/context first.
+		pane->UndockPane();
+
+		// Now add to the source floating frame.
+		pFrame->AddPane(pane);
+		pane->ShowPane(TRUE, FALSE, TRUE);
+	}
+
+	pFrame->OnPaneRecalcLayout();
+	pFrame->AdjustLayout();
+	pFrame->RedrawWindow(
+		nullptr,
+		nullptr,
+		RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
 	return 0;
 }
@@ -1955,17 +2062,42 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 		return;
 	}
 
+	const auto panes = CollectDashboardPanes();
+
+	CDashboardWnd* pSourcePane = nullptr;
+	if (sourceHwnd == nullptr)
+	{	// If no source provided, determine the source based on which pane is currently active/visible
+		for (CDashboardWnd* pane : panes)
+		{
+			if (pane != nullptr && pane->IsVisible())
+			{
+				pSourcePane = pane;
+				break;
+			}
+		}
+	}
+	else {
+		pSourcePane = CWnd::FromHandlePermanent(sourceHwnd) != nullptr ? dynamic_cast<CDashboardWnd*>(CWnd::FromHandlePermanent(sourceHwnd)) : nullptr;
+	}
+
 	//m_isSyncingDashboardFloatDock = true;
 	// Scoped guard increments counter and will decrement on leave (including exceptions)
 	ScopedDashboardFloatDockSyncGuard guard(m_dashboardFloatDockSyncCount);
 
+	CMultiPaneFrameWnd* pFrame	= nullptr;
 	CRect sourceFloatRect(100, 100, 500, 500);
-	if (sourceHwnd != nullptr && ::IsWindow(sourceHwnd))
+	//if (sourceHwnd != nullptr && ::IsWindow(sourceHwnd))
+	//{
+	//	::GetWindowRect(sourceHwnd, &sourceFloatRect);
+	//}
+	if (pSourcePane != nullptr && ::IsWindow(pSourcePane->GetSafeHwnd()))
 	{
-		::GetWindowRect(sourceHwnd, &sourceFloatRect);
+		pSourcePane->GetWindowRect(&sourceFloatRect);
+		pFrame = dynamic_cast<CMultiPaneFrameWnd*>(pSourcePane->GetParentMiniFrame());
 	}
 
-	const auto panes = CollectDashboardPanes();
+	//CDashboardWnd* pSourcePane = CWnd::FromHandlePermanent(sourceHwnd) != nullptr ? dynamic_cast<CDashboardWnd*>(CWnd::FromHandlePermanent(sourceHwnd)) : nullptr;
+
 	for (CDashboardWnd* pane : panes)
 	{
 		if (pane == nullptr)
@@ -1973,13 +2105,13 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 			continue;
 		}
 
-		const HWND targetHwnd = pane->GetSafeHwnd();
-		if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
-		{
-			continue;
-		}
+		//const HWND targetHwnd = pane->GetSafeHwnd();
+		//if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
+		//{
+		//	continue;
+		//}
 
-		if (targetHwnd == sourceHwnd)
+		if (pane == pSourcePane)
 		{
 			continue;
 		}
@@ -1988,8 +2120,15 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 		{
 			if (!pane->IsFloating())
 			{
-				//pane->FloatPane(sourceFloatRect);
-				pane->FloatToRect(sourceFloatRect);
+				if (pFrame != nullptr)
+				{
+					pFrame->AddPane(pane);
+				}
+				else
+				{
+					//pane->FloatPane(sourceFloatRect);
+					pane->FloatToRect(sourceFloatRect);
+				}
 			}
 		}
 		else

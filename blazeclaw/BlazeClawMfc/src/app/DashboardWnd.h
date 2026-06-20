@@ -42,11 +42,11 @@ public:
 
 	void OnPaneVisibilityChanged(BOOL visible);
 
+	RECT	m_rcStored;
+
 protected:
 	virtual void	OnAfterFloat();
 	virtual void	OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD dockMethod);
-	virtual void	OnPaneFloat();
-	virtual void	OnPaneDock();
 
 	virtual BOOL FloatPane(
 		CRect rectFloat,
@@ -80,6 +80,8 @@ private:
 
 	blazeclaw::app::dashboard_bridge::CDashboardBridgeHost m_bridgeHost;
 	bool m_webViewReady = false;
+
+	bool	m_bNewlyCreated = true;
 
 	bool InitWebView();
 	bool CreateWebViewController();
