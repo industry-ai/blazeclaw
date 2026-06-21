@@ -141,8 +141,32 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
 	ON_COMMAND(ID_VIEW_DASHBOARDWND, &CMainFrame::OnViewDashboardWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARDWND, &CMainFrame::OnUpdateViewDashboardWindow)
+
+	ON_COMMAND(ID_VIEW_DASHBOARD_OVERVIEW_WND, &CMainFrame::OnViewDashboardOverviewWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_OVERVIEW_WND, &CMainFrame::OnUpdateViewDashboardOverviewWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_TOOLS_WND, &CMainFrame::OnViewDashboardToolsWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_TOOLS_WND, &CMainFrame::OnUpdateViewDashboardToolsWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_FILES_WND, &CMainFrame::OnViewDashboardFilesWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_FILES_WND, &CMainFrame::OnUpdateViewDashboardFilesWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_SKILLS_WND, &CMainFrame::OnViewDashboardSkillsWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_SKILLS_WND, &CMainFrame::OnUpdateViewDashboardSkillsWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_CHANNELS_WND, &CMainFrame::OnViewDashboardChannelsWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_CHANNELS_WND, &CMainFrame::OnUpdateViewDashboardChannelsWindow)
+
 	ON_COMMAND(ID_VIEW_DASHBOARD_CRON_WND, &CMainFrame::OnViewDashboardCronWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_CRON_WND, &CMainFrame::OnUpdateViewDashboardCronWindow)
+
+	ON_COMMAND(ID_VIEW_DASHBOARD_DREAMING_WND, &CMainFrame::OnViewDashboardDreamingWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_DREAMING_WND, &CMainFrame::OnUpdateViewDashboardDreamingWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_NODES_WND, &CMainFrame::OnViewDashboardNodesWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_NODES_WND, &CMainFrame::OnUpdateViewDashboardNodesWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_INSTANCES_WND, &CMainFrame::OnViewDashboardInstancesWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_INSTANCES_WND, &CMainFrame::OnUpdateViewDashboardInstancesWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_USAGE_WND, &CMainFrame::OnViewDashboardUsageWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_USAGE_WND, &CMainFrame::OnUpdateViewDashboardUsageWindow)
+	ON_COMMAND(ID_VIEW_DASHBOARD_DEVICES_WND, &CMainFrame::OnViewDashboardDevicesWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_DEVICES_WND, &CMainFrame::OnUpdateViewDashboardDevicesWindow)
+
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
 	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
@@ -999,8 +1023,38 @@ void CMainFrame::SetDockingWindowIcons(BOOL bHiColorIcons)
 	HICON hDashboardBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_WND_HC : IDI_DASHBOARD_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
 	m_wndDashboard.SetIcon(hDashboardBarIcon, FALSE);
 
+	HICON hDashboardOverviewBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_OVERVIEW_WND_HC : IDI_DASHBOARD_OVERVIEW_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_overview.SetIcon(hDashboardOverviewBarIcon, FALSE);
+
+	HICON hDashboardToolsBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_TOOLS_WND_HC : IDI_DASHBOARD_TOOLS_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_tools.SetIcon(hDashboardToolsBarIcon, FALSE);
+
+	HICON hDashboardFilesBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_FILES_WND_HC : IDI_DASHBOARD_FILES_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_files.SetIcon(hDashboardFilesBarIcon, FALSE);
+
+	HICON hDashboardSkillsBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_SKILLS_WND_HC : IDI_DASHBOARD_SKILLS_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_skills.SetIcon(hDashboardSkillsBarIcon, FALSE);
+
+	HICON hDashboardChannelsBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_CHANNELS_WND_HC : IDI_DASHBOARD_CHANNELS_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_channels.SetIcon(hDashboardChannelsBarIcon, FALSE);
+
 	HICON hDashboardCronBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_CRON_WND_HC : IDI_DASHBOARD_CRON_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
 	m_wndDashboard_cron.SetIcon(hDashboardCronBarIcon, FALSE);
+
+	HICON hDashboardDreamingBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_DREAMING_WND_HC : IDI_DASHBOARD_DREAMING_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_dreaming.SetIcon(hDashboardDreamingBarIcon, FALSE);
+
+	HICON hDashboardNodesBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_NODES_WND_HC : IDI_DASHBOARD_NODES_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_nodes.SetIcon(hDashboardNodesBarIcon, FALSE);
+
+	HICON hDashboardInstancesBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_INSTANCES_WND_HC : IDI_DASHBOARD_INSTANCES_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_instances.SetIcon(hDashboardInstancesBarIcon, FALSE);
+
+	HICON hDashboardUsageBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_USAGE_WND_HC : IDI_DASHBOARD_USAGE_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_usage.SetIcon(hDashboardUsageBarIcon, FALSE);
+
+	HICON hDashboardDevicesBarIcon = (HICON) ::LoadImage(::AfxGetResourceHandle(), MAKEINTRESOURCE(bHiColorIcons ? IDI_DASHBOARD_DEVICES_WND_HC : IDI_DASHBOARD_DEVICES_WND), IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	m_wndDashboard_devices.SetIcon(hDashboardDevicesBarIcon, FALSE);
 
 	UpdateMDITabbedBarsIcons();
 }
@@ -1302,6 +1356,46 @@ void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
 	}
 }
 
+void CMainFrame::OnViewDashboardOverviewWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardOverviewWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardToolsWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardToolsWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardFilesWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardFilesWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardSkillsWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardSkillsWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardChannelsWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardChannelsWindow(CCmdUI* pCmdUI)
+{
+}
+
 void CMainFrame::OnViewDashboardCronWindow()
 {
 	const BOOL show = !m_wndDashboard_cron.IsVisible();
@@ -1324,6 +1418,45 @@ void CMainFrame::OnUpdateViewDashboardCronWindow(CCmdUI* pCmdUI)
 	pCmdUI->SetCheck(m_wndDashboard_cron.IsVisible());
 }
 
+void CMainFrame::OnViewDashboardDreamingWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardDreamingWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardNodesWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardNodesWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardInstancesWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardInstancesWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardUsageWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardUsageWindow(CCmdUI* pCmdUI)
+{
+}
+
+void CMainFrame::OnViewDashboardDevicesWindow()
+{
+}
+
+void CMainFrame::OnUpdateViewDashboardDevicesWindow(CCmdUI* pCmdUI)
+{
+}
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {
 	CMDIFrameWndEx::OnSettingChange(uFlags, lpszSection);

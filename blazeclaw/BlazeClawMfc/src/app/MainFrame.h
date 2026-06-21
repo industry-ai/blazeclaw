@@ -72,7 +72,9 @@ protected:  // control bar embedded members
 	CSkillView        m_wndSkillView;
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
+
 	CDashboardWnd     m_wndDashboard;
+
 	CDashboardWnd     m_wndDashboard_overview;
 	CDashboardWnd     m_wndDashboard_tools;
 	CDashboardWnd     m_wndDashboard_files;
@@ -84,6 +86,7 @@ protected:  // control bar embedded members
 	CDashboardWnd     m_wndDashboard_instances;
 	CDashboardWnd     m_wndDashboard_usage;
 	CDashboardWnd     m_wndDashboard_devices;
+
 	COutlookBar       m_wndNavigationBar;
 	CMFCShellTreeCtrl m_wndTree;
 	CCalendarBar      m_wndCalendar;
@@ -105,8 +108,32 @@ protected:
 	afx_msg void OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewDashboardWindow();
 	afx_msg void OnUpdateViewDashboardWindow(CCmdUI* pCmdUI);
+
+	afx_msg void OnViewDashboardOverviewWindow();
+	afx_msg void OnUpdateViewDashboardOverviewWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardToolsWindow();
+	afx_msg void OnUpdateViewDashboardToolsWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardFilesWindow();
+	afx_msg void OnUpdateViewDashboardFilesWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardSkillsWindow();
+	afx_msg void OnUpdateViewDashboardSkillsWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardChannelsWindow();
+	afx_msg void OnUpdateViewDashboardChannelsWindow(CCmdUI* pCmdUI);
+
 	afx_msg void OnViewDashboardCronWindow();
 	afx_msg void OnUpdateViewDashboardCronWindow(CCmdUI* pCmdUI);
+
+	afx_msg void OnViewDashboardDreamingWindow();
+	afx_msg void OnUpdateViewDashboardDreamingWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardNodesWindow();
+	afx_msg void OnUpdateViewDashboardNodesWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardInstancesWindow();
+	afx_msg void OnUpdateViewDashboardInstancesWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardUsageWindow();
+	afx_msg void OnUpdateViewDashboardUsageWindow(CCmdUI* pCmdUI);
+	afx_msg void OnViewDashboardDevicesWindow();
+	afx_msg void OnUpdateViewDashboardDevicesWindow(CCmdUI* pCmdUI);
+
 	afx_msg void OnViewCaptionBar();
 	afx_msg void OnUpdateViewCaptionBar(CCmdUI* pCmdUI);
 	afx_msg void OnOptions();
