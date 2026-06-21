@@ -73,7 +73,17 @@ protected:  // control bar embedded members
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
 	CDashboardWnd     m_wndDashboard;
+	CDashboardWnd     m_wndDashboard_overview;
+	CDashboardWnd     m_wndDashboard_tools;
+	CDashboardWnd     m_wndDashboard_files;
+	CDashboardWnd     m_wndDashboard_skills;
+	CDashboardWnd     m_wndDashboard_channels;
 	CDashboardWnd     m_wndDashboard_cron;
+	CDashboardWnd     m_wndDashboard_dreaming;
+	CDashboardWnd     m_wndDashboard_nodes;
+	CDashboardWnd     m_wndDashboard_instances;
+	CDashboardWnd     m_wndDashboard_usage;
+	CDashboardWnd     m_wndDashboard_devices;
 	COutlookBar       m_wndNavigationBar;
 	CMFCShellTreeCtrl m_wndTree;
 	CCalendarBar      m_wndCalendar;

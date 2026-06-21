@@ -587,9 +587,49 @@ IDI_DASHBOARD_WND       ICON                    "res\\dashboard_wnd.ico"
 
 IDI_DASHBOARD_WND_HC    ICON                    "res\\dashboard_wnd_hc.ico"
 
-IDI_DASHBOARD_CRON_WND_HC ICON                    "res\\dashboard_cron_wnd_hc.ico"
+IDI_DASHBOARD_CRON_WND_HC ICON                  "res\\dashboard_cron_wnd_hc.ico"
 
 IDI_DASHBOARD_CRON_WND  ICON                    "res\\dashboard_cron_wnd.ico"
+
+IDI_DASHBOARD_OVERVIEW_WND_HC   ICON            "res\\dashboard_overview_wnd_hc.ico"
+
+IDI_DASHBOARD_OVERVIEW_WND      ICON            "res\\dashboard_overview_wnd.ico"
+
+IDI_DASHBOARD_TOOLS_WND_HC      ICON            "res\\dashboard_tools_wnd_hc.ico"
+
+IDI_DASHBOARD_TOOLS_WND         ICON            "res\\dashboard_tools_wnd.ico"
+
+IDI_DASHBOARD_FILES_WND_HC      ICON            "res\\dashboard_files_wnd_hc.ico"
+
+IDI_DASHBOARD_FILES_WND         ICON            "res\\dashboard_files_wnd.ico"
+
+IDI_DASHBOARD_SKILLS_WND_HC     ICON            "res\\dashboard_skills_wnd_hc.ico"
+
+IDI_DASHBOARD_SKILLS_WND        ICON            "res\\dashboard_skills_wnd.ico"
+
+IDI_DASHBOARD_CHANNELS_WND_HC   ICON            "res\\dashboard_channels_wnd_hc.ico"
+
+IDI_DASHBOARD_CHANNELS_WND      ICON            "res\\dashboard_channels_wnd.ico"
+
+IDI_DASHBOARD_DREAMING_WND_HC   ICON            "res\\dashboard_dreaming_wnd_hc.ico"
+
+IDI_DASHBOARD_DREAMING_WND      ICON            "res\\dashboard_dreaming_wnd.ico"
+
+IDI_DASHBOARD_NODES_WND_HC      ICON            "res\\dashboard_nodes_wnd_hc.ico"
+
+IDI_DASHBOARD_NODES_WND         ICON            "res\\dashboard_nodes_wnd.ico"
+
+IDI_DASHBOARD_INSTANCES_WND_HC  ICON            "res\\dashboard_instances_wnd_hc.ico"
+
+IDI_DASHBOARD_INSTANCES_WND     ICON            "res\\dashboard_instances_wnd.ico"
+
+IDI_DASHBOARD_USAGE_WND_HC      ICON            "res\\dashboard_usage_wnd_hc.ico"
+
+IDI_DASHBOARD_USAGE_WND         ICON            "res\\dashboard_usage_wnd.ico"
+
+IDI_DASHBOARD_DEVICES_WND_HC    ICON            "res\\dashboard_devices_wnd_hc.ico"
+
+IDI_DASHBOARD_DEVICES_WND       ICON            "res\\dashboard_devices_wnd.ico"
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1174,6 +1214,24 @@ BEGIN
     ID_VIEW_DASHBOARD_CRON_WND 
                             "Show or hide Cron dashboard\nToggle Cron dashboard"
     ID_EDIT_DASHBOARD       "Switch floating/docking of dashboard\ntoggle floating/docking"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DASHBOARD_OVERVIEW_WND "Overview dashboard"
+    IDS_DASHBOARD_TOOLS_WND "Tools dashboard"
+    IDS_DASHBOARD_FILES_WND "Files dashboard"
+    IDS_DASHBOARD_SKILLS_WND "Skills dashboard"
+    IDS_DASHBOARD_CHANNELS_WND "Channels dashboard"
+    IDS_DASHBOARD_DREAMING_WND "Dreaming dashboard"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DASHBOARD_NODES_WND "Nodes dashboard"
+    IDS_DASHBOARD_INSTANCES_WND "Instances dashboard"
+    IDS_DASHBOARD_USAGE_WND "Usage dashboard"
+    IDS_DASHBOARD_DEVICES_WND "Devices dashboard"
 END
 
 #endif    // English (United States) resources

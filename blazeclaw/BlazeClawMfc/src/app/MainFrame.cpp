@@ -411,8 +411,28 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndProperties);
 	m_wndDashboard.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard);
+	m_wndDashboard_overview.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_overview);
+	m_wndDashboard_tools.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_tools);
+	m_wndDashboard_files.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_files);
+	m_wndDashboard_skills.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_skills);
+	m_wndDashboard_channels.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_channels);
 	m_wndDashboard_cron.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_cron);
+	m_wndDashboard_dreaming.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_dreaming);
+	m_wndDashboard_nodes.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_nodes);
+	m_wndDashboard_instances.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_instances);
+	m_wndDashboard_usage.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_usage);
+	m_wndDashboard_devices.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndDashboard_devices);
 
 	CDockingManager* pDockMgr = GetDockingManager();
 	// Allow docking on all edges
@@ -859,12 +879,102 @@ BOOL CMainFrame::CreateDockingWindows()
 		return FALSE; // failed to create
 	}
 
+	CString strDashboardOverviewWnd;
+	bNameValid = strDashboardOverviewWnd.LoadString(IDS_DASHBOARD_OVERVIEW_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_overview.Create(strDashboardOverviewWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_OVERVIEW_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Overview window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardToolsWnd;
+	bNameValid = strDashboardToolsWnd.LoadString(IDS_DASHBOARD_TOOLS_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_tools.Create(strDashboardToolsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_TOOLS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Tools window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardFilesWnd;
+	bNameValid = strDashboardFilesWnd.LoadString(IDS_DASHBOARD_FILES_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_files.Create(strDashboardFilesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_FILES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Files window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardSkillsWnd;
+	bNameValid = strDashboardSkillsWnd.LoadString(IDS_DASHBOARD_SKILLS_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_skills.Create(strDashboardSkillsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_SKILLS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Skills window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardChannelsWnd;
+	bNameValid = strDashboardChannelsWnd.LoadString(IDS_DASHBOARD_CHANNELS_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_channels.Create(strDashboardChannelsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_CHANNELS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Channels window\n");
+		return FALSE; // failed to create
+	}
+
 	CString strDashboardCronWnd;
 	bNameValid = strDashboardCronWnd.LoadString(IDS_DASHBOARD_CRON_WND);
 	ASSERT(bNameValid);
 	if (!m_wndDashboard_cron.Create(strDashboardCronWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_CRON_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Cron Dashboard window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardDreamingWnd;
+	bNameValid = strDashboardDreamingWnd.LoadString(IDS_DASHBOARD_DREAMING_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_dreaming.Create(strDashboardDreamingWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_DREAMING_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Dreaming window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardNodesWnd;
+	bNameValid = strDashboardNodesWnd.LoadString(IDS_DASHBOARD_NODES_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_nodes.Create(strDashboardNodesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_NODES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Nodes window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardInstancesWnd;
+	bNameValid = strDashboardInstancesWnd.LoadString(IDS_DASHBOARD_INSTANCES_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_instances.Create(strDashboardInstancesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_INSTANCES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Instances window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardUsageWnd;
+	bNameValid = strDashboardUsageWnd.LoadString(IDS_DASHBOARD_USAGE_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_usage.Create(strDashboardUsageWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_USAGE_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Usage window\n");
+		return FALSE; // failed to create
+	}
+
+	CString strDashboardDevicesWnd;
+	bNameValid = strDashboardDevicesWnd.LoadString(IDS_DASHBOARD_DEVICES_WND);
+	ASSERT(bNameValid);
+	if (!m_wndDashboard_devices.Create(strDashboardDevicesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_DEVICES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create Dashboard Devices window\n");
 		return FALSE; // failed to create
 	}
 
