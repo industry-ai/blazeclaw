@@ -629,10 +629,29 @@ void CDashboardWnd::OnAfterFloat()
 	CDockablePane::OnAfterFloat();
 	// OnPaneVisibilityChanged(IsWindowVisible());
 
+	const HWND paneHwnd = GetSafeHwnd();
+	if (paneHwnd == nullptr || !::IsWindow(paneHwnd))
+	{
+		return;
+	}
+
 	if (m_bNewlyCreated)
 	{
 		m_bNewlyCreated = false;
 		return; // Skip synchronization on the initial float after creation, as it's not a user-initiated action.
+	}
+
+	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
+	if (pMain == nullptr ||
+		!::IsWindow(pMain->GetSafeHwnd()) ||
+		!pMain->IsDashboardPaneSyncReady())
+	{
+		return;
+	}
+
+	if (pMain->IsDashboardFloatDockSyncInProgress())
+	{
+		return;
 	}
 
 	// At this point, the pane has already CMultiPaneFrameWnd is already subclassed by MFC
@@ -676,14 +695,9 @@ void CDashboardWnd::OnAfterFloat()
 
 	if (pChild != this)	return;	// pChild is the first pane that floated, other panes will be synchronized into pMultiFrame
 
-	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))	return;
-
-	if (pMain->IsDashboardFloatDockSyncInProgress())	return;
-
 	pMain->PostMessage(
 		kMsgSyncDashboardAfterFloat,
-		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+		reinterpret_cast<WPARAM>(paneHwnd),
 		MAKELPARAM(-1, -1));
 
 	return;
@@ -722,6 +736,12 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 	// Call base with the proper signature
 	CDockablePane::OnAfterDock(pBar, lpRect, dockMethod);
 
+	const HWND paneHwnd = GetSafeHwnd();
+	if (paneHwnd == nullptr || !::IsWindow(paneHwnd))
+	{
+		return;
+	}
+
 	if (m_bNewlyCreated)
 	{
 		m_bNewlyCreated = false;
@@ -732,9 +752,17 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 	OnPaneVisibilityChanged(IsWindowVisible());
 
 	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, AfxGetMainWnd());
-	if (pMain == nullptr || !::IsWindow(pMain->GetSafeHwnd()))	return;
+	if (pMain == nullptr ||
+		!::IsWindow(pMain->GetSafeHwnd()) ||
+		!pMain->IsDashboardPaneSyncReady())
+	{
+		return;
+	}
 
-	if (pMain->IsDashboardFloatDockSyncInProgress())	return;
+	if (pMain->IsDashboardFloatDockSyncInProgress())
+	{
+		return;
+	}
 
 	if (lpRect != nullptr)
 	{
@@ -747,7 +775,7 @@ void CDashboardWnd::OnAfterDock(CBasePane* pBar, LPCRECT lpRect, AFX_DOCK_METHOD
 
 	pMain->PostMessage(
 		kMsgSyncDashboardAfterDock,
-		reinterpret_cast<WPARAM>(GetSafeHwnd()),
+		reinterpret_cast<WPARAM>(paneHwnd),
 		reinterpret_cast<LPARAM>(&m_rcStored));
 		//MAKELPARAM(-1, -1));
 }

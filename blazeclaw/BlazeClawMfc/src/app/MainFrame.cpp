@@ -45,6 +45,8 @@ namespace {
 	constexpr UINT kIdUiParitySkillsScanStatus = 0x8116;
 	constexpr UINT kIdUiParityOperatorDiagnosticsReport = 0x8117;
 	constexpr UINT kIdUiParityOperatorPromotionReadiness = 0x8118;
+	constexpr LPCTSTR kDashboardProfileSection = _T("Dashboard");
+	constexpr LPCTSTR kDashboardLastPaneIdKey = _T("LastVisiblePaneId");
 
 	static std::wstring TrimMain(const std::wstring& value) {
 		const auto first = std::find_if_not(
@@ -350,6 +352,8 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	if (CMDIFrameWndEx::OnCreate(lpCreateStruct) == -1)
 		return -1;
 
+	m_dashboardPaneSyncReady.store(false, std::memory_order_release);
+
 	CMgrMessage::Instance().Initialize(m_hWnd);
 	CMgrMessage::Instance().RegisterMessage({
 		.messageId = kMsgAppendToolStatusLine,
@@ -435,6 +439,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndProperties);
 	m_wndDashboard.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard);
+
 	m_wndDashboard_overview.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_overview);
 	m_wndDashboard_tools.EnableDocking(CBRS_ALIGN_ANY);
@@ -445,8 +450,17 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndDashboard_skills);
 	m_wndDashboard_channels.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_channels);
+
+	m_wndDashboard_overview.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_tools.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_files.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_skills.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_channels.ShowPane(FALSE, FALSE, FALSE);
+
 	m_wndDashboard_cron.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_cron);
+	m_wndDashboard_cron.ShowPane(FALSE, FALSE, FALSE);
+
 	m_wndDashboard_dreaming.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_dreaming);
 	m_wndDashboard_nodes.EnableDocking(CBRS_ALIGN_ANY);
@@ -457,6 +471,14 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndDashboard_usage);
 	m_wndDashboard_devices.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_devices);
+
+	m_wndDashboard_dreaming.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_nodes.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_instances.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_usage.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_devices.ShowPane(FALSE, FALSE, FALSE);
+
+	RestoreLastDashboardPane();
 
 	CDockingManager* pDockMgr = GetDockingManager();
 	// Allow docking on all edges
@@ -597,6 +619,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	}
 */
 	SetWindowText(_T("BlazeClaw - Service Console"));
+	m_dashboardPaneSyncReady.store(true, std::memory_order_release);
 	return 0;
 }
 
@@ -1326,136 +1349,242 @@ void CMainFrame::OnUpdateViewPropertiesWindow(CCmdUI* pCmdUI)
 
 void CMainFrame::OnViewDashboardWindow()
 {
-	if (m_wndDashboard.GetSafeHwnd() == nullptr) {
-		TRACE0("Dashboard window is not properly initialized.\n");
-		return;
-	}
-
-	const BOOL show = !m_wndDashboard.IsVisible();
-	m_wndDashboard.ShowPane(show, FALSE, TRUE);
-	if (show)
-	{
-		m_wndDashboard.SetFocus();
-		m_wndDashboard.OnPaneVisibilityChanged(TRUE);
-	}
-	else
-	{
-		m_wndDashboard.OnPaneVisibilityChanged(FALSE);
-	}
-	RecalcLayout(FALSE);
+	ActivateDashboardPane(m_wndDashboard);
 }
 
 void CMainFrame::OnUpdateViewDashboardWindow(CCmdUI* pCmdUI)
 {
-	//pCmdUI->Enable(TRUE);
-	// Guard against MFC assertions when the target window/command state isn't valid
-	if (pCmdUI != nullptr) {
-		// Consider the dashboard visible only if its HWND is valid and the window is visible
-		const bool dashboardVisible = (m_wndDashboard.GetSafeHwnd() != nullptr) && ::IsWindowVisible(m_wndDashboard.GetSafeHwnd());
-		pCmdUI->SetCheck(dashboardVisible);
+	if (pCmdUI == nullptr)
+	{
+		return;
 	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool dashboardVisible =
+		m_wndDashboard.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(dashboardVisible);
 }
 
 void CMainFrame::OnViewDashboardOverviewWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_overview);
 }
 
 void CMainFrame::OnUpdateViewDashboardOverviewWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_overview.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_overview.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardToolsWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_tools);
 }
 
 void CMainFrame::OnUpdateViewDashboardToolsWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_tools.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_tools.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardFilesWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_files);
 }
 
 void CMainFrame::OnUpdateViewDashboardFilesWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_files.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_files.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardSkillsWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_skills);
 }
 
 void CMainFrame::OnUpdateViewDashboardSkillsWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_skills.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_skills.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardChannelsWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_channels);
 }
 
 void CMainFrame::OnUpdateViewDashboardChannelsWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_channels.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_channels.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardCronWindow()
 {
-	const BOOL show = !m_wndDashboard_cron.IsVisible();
-	m_wndDashboard_cron.ShowPane(show, FALSE, TRUE);
-	if (show)
-	{
-		m_wndDashboard_cron.SetFocus();
-		m_wndDashboard_cron.OnPaneVisibilityChanged(TRUE);
-	}
-	else
-	{
-		m_wndDashboard_cron.OnPaneVisibilityChanged(FALSE);
-	}
-	RecalcLayout(FALSE);
+	ActivateDashboardPane(m_wndDashboard_cron);
 }
 
 void CMainFrame::OnUpdateViewDashboardCronWindow(CCmdUI* pCmdUI)
 {
-	//pCmdUI->Enable(TRUE);
-	pCmdUI->SetCheck(m_wndDashboard_cron.IsVisible());
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_cron.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_cron.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardDreamingWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_dreaming);
 }
 
 void CMainFrame::OnUpdateViewDashboardDreamingWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_dreaming.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_dreaming.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardNodesWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_nodes);
 }
 
 void CMainFrame::OnUpdateViewDashboardNodesWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_nodes.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_nodes.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardInstancesWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_instances);
 }
 
 void CMainFrame::OnUpdateViewDashboardInstancesWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_instances.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_instances.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardUsageWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_usage);
 }
 
 void CMainFrame::OnUpdateViewDashboardUsageWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_usage.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_usage.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 
 void CMainFrame::OnViewDashboardDevicesWindow()
 {
+	ActivateDashboardPane(m_wndDashboard_devices);
 }
 
 void CMainFrame::OnUpdateViewDashboardDevicesWindow(CCmdUI* pCmdUI)
 {
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndDashboard_devices.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndDashboard_devices.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
 }
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {
@@ -2121,7 +2250,18 @@ LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 	{
 		for (CDashboardWnd* pane : panes)
 		{
-			if (pane != nullptr && pane->IsVisible())
+			if (pane == nullptr)
+			{
+				continue;
+			}
+
+			const HWND paneHwnd = pane->GetSafeHwnd();
+			if (paneHwnd == nullptr || !::IsWindow(paneHwnd))
+			{
+				continue;
+			}
+
+			if (::IsWindowVisible(paneHwnd) != FALSE)
 			{
 				pSourcePane = pane;
 				break;
@@ -2252,6 +2392,11 @@ bool CMainFrame::IsDashboardFloatDockSyncInProgress() const
 	return m_dashboardFloatDockSyncCount.load(std::memory_order_acquire) > 0;
 }
 
+bool CMainFrame::IsDashboardPaneSyncReady() const
+{
+	return m_dashboardPaneSyncReady.load(std::memory_order_acquire);
+}
+
 void CMainFrame::SyncDashboardAfterFloat(HWND sourceHwnd)
 {
 	SyncAllDashboardsFloatState(sourceHwnd, true);
@@ -2277,6 +2422,115 @@ void CMainFrame::OnEditDashboard()
 	m_isSwitchFloatDock = false;
 }
 
+void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)
+{
+	CDashboardWnd* effectiveTarget = &targetPane;
+	HWND targetHwnd = effectiveTarget->GetSafeHwnd();
+	if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
+	{
+		for (CDashboardWnd* pane : CollectDashboardPanes())
+		{
+			if (pane == nullptr)
+			{
+				continue;
+			}
+
+			const HWND candidateHwnd = pane->GetSafeHwnd();
+			if (candidateHwnd == nullptr || !::IsWindow(candidateHwnd))
+			{
+				continue;
+			}
+
+			effectiveTarget = pane;
+			targetHwnd = candidateHwnd;
+			break;
+		}
+
+		if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
+		{
+			TRACE0("Dashboard pane is not properly initialized.\n");
+			return;
+		}
+
+		TRACE0("Dashboard pane fallback activated due to invalid target pane.\n");
+	}
+
+	CDashboardWnd& target = *effectiveTarget;
+
+	CDashboardWnd* sourcePane = nullptr;
+	CRect sourceRect{};
+	bool sourceIsFloating = false;
+
+	const auto panes = CollectDashboardPanes();
+	for (CDashboardWnd* pane : panes)
+	{
+		if (pane == nullptr || pane == &target)
+		{
+			continue;
+		}
+
+		const HWND paneHwnd = pane->GetSafeHwnd();
+		if (paneHwnd == nullptr || !::IsWindow(paneHwnd))
+		{
+			continue;
+		}
+
+		if (::IsWindowVisible(paneHwnd) != FALSE)
+		{
+			if (sourcePane == nullptr)
+			{
+				sourcePane = pane;
+				sourceIsFloating = pane->IsFloating();
+				pane->GetWindowRect(&sourceRect);
+			}
+
+			pane->ShowPane(FALSE, FALSE, TRUE);
+			pane->OnPaneVisibilityChanged(FALSE);
+		}
+	}
+
+	if (sourcePane != nullptr && !sourceRect.IsRectEmpty())
+	{
+		if (sourceIsFloating)
+		{
+			if (target.IsFloating())
+			{
+				target.SetWindowPos(
+					nullptr,
+					sourceRect.left,
+					sourceRect.top,
+					sourceRect.Width(),
+					sourceRect.Height(),
+					SWP_NOZORDER | SWP_NOACTIVATE);
+			}
+			else
+			{
+				target.FloatToRect(sourceRect);
+			}
+		}
+		else
+		{
+			if (target.IsFloating())
+			{
+				DockPane(&target);
+			}
+
+			target.SetWindowPos(
+				nullptr,
+				sourceRect.left,
+				sourceRect.top,
+				sourceRect.Width(),
+				sourceRect.Height(),
+				SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+	}
+
+	target.ShowPane(TRUE, FALSE, TRUE);
+	target.SetFocus();
+	target.OnPaneVisibilityChanged(TRUE);
+	RecalcLayout(FALSE);
+}
+
 void CMainFrame::OnUpdateEditDashboard(CCmdUI* pCmdUI)
 {
 	if (m_isDashboardFloat)
@@ -2285,13 +2539,144 @@ void CMainFrame::OnUpdateEditDashboard(CCmdUI* pCmdUI)
 		pCmdUI->SetText(_T("Float"));
 }
 
+void CMainFrame::RestoreLastDashboardPane()
+{
+	CWinApp* app = AfxGetApp();
+	const UINT commandId =
+		app != nullptr
+		? static_cast<UINT>(app->GetProfileInt(
+			kDashboardProfileSection,
+			kDashboardLastPaneIdKey,
+			ID_VIEW_DASHBOARDWND))
+		: ID_VIEW_DASHBOARDWND;
+
+	CDashboardWnd* pane = GetDashboardPaneByCommandId(commandId);
+	if (pane == nullptr)
+	{
+		pane = &m_wndDashboard;
+	}
+
+	ActivateDashboardPane(*pane);
+}
+
+void CMainFrame::RememberLastDashboardPane(const CDashboardWnd& pane)
+{
+	CWinApp* app = AfxGetApp();
+	if (app == nullptr)
+	{
+		return;
+	}
+
+	app->WriteProfileInt(
+		kDashboardProfileSection,
+		kDashboardLastPaneIdKey,
+		static_cast<int>(GetDashboardPaneCommandId(pane)));
+}
+
+CDashboardWnd* CMainFrame::GetDashboardPaneByCommandId(UINT commandId)
+{
+	switch (commandId)
+	{
+	case ID_VIEW_DASHBOARDWND:
+		return &m_wndDashboard;
+	case ID_VIEW_DASHBOARD_OVERVIEW_WND:
+		return &m_wndDashboard_overview;
+	case ID_VIEW_DASHBOARD_TOOLS_WND:
+		return &m_wndDashboard_tools;
+	case ID_VIEW_DASHBOARD_FILES_WND:
+		return &m_wndDashboard_files;
+	case ID_VIEW_DASHBOARD_SKILLS_WND:
+		return &m_wndDashboard_skills;
+	case ID_VIEW_DASHBOARD_CHANNELS_WND:
+		return &m_wndDashboard_channels;
+	case ID_VIEW_DASHBOARD_CRON_WND:
+		return &m_wndDashboard_cron;
+	case ID_VIEW_DASHBOARD_DREAMING_WND:
+		return &m_wndDashboard_dreaming;
+	case ID_VIEW_DASHBOARD_NODES_WND:
+		return &m_wndDashboard_nodes;
+	case ID_VIEW_DASHBOARD_INSTANCES_WND:
+		return &m_wndDashboard_instances;
+	case ID_VIEW_DASHBOARD_USAGE_WND:
+		return &m_wndDashboard_usage;
+	case ID_VIEW_DASHBOARD_DEVICES_WND:
+		return &m_wndDashboard_devices;
+	default:
+		return nullptr;
+	}
+}
+
+UINT CMainFrame::GetDashboardPaneCommandId(const CDashboardWnd& pane) const
+{
+	if (&pane == &m_wndDashboard)
+	{
+		return ID_VIEW_DASHBOARDWND;
+	}
+	if (&pane == &m_wndDashboard_overview)
+	{
+		return ID_VIEW_DASHBOARD_OVERVIEW_WND;
+	}
+	if (&pane == &m_wndDashboard_tools)
+	{
+		return ID_VIEW_DASHBOARD_TOOLS_WND;
+	}
+	if (&pane == &m_wndDashboard_files)
+	{
+		return ID_VIEW_DASHBOARD_FILES_WND;
+	}
+	if (&pane == &m_wndDashboard_skills)
+	{
+		return ID_VIEW_DASHBOARD_SKILLS_WND;
+	}
+	if (&pane == &m_wndDashboard_channels)
+	{
+		return ID_VIEW_DASHBOARD_CHANNELS_WND;
+	}
+	if (&pane == &m_wndDashboard_cron)
+	{
+		return ID_VIEW_DASHBOARD_CRON_WND;
+	}
+	if (&pane == &m_wndDashboard_dreaming)
+	{
+		return ID_VIEW_DASHBOARD_DREAMING_WND;
+	}
+	if (&pane == &m_wndDashboard_nodes)
+	{
+		return ID_VIEW_DASHBOARD_NODES_WND;
+	}
+	if (&pane == &m_wndDashboard_instances)
+	{
+		return ID_VIEW_DASHBOARD_INSTANCES_WND;
+	}
+	if (&pane == &m_wndDashboard_usage)
+	{
+		return ID_VIEW_DASHBOARD_USAGE_WND;
+	}
+	if (&pane == &m_wndDashboard_devices)
+	{
+		return ID_VIEW_DASHBOARD_DEVICES_WND;
+	}
+
+	return ID_VIEW_DASHBOARDWND;
+}
+
 std::vector<CDashboardWnd*> CMainFrame::CollectDashboardPanes()
 {
 	std::vector<CDashboardWnd*> panes;
-	panes.reserve(2);
+	panes.reserve(12);
 
 	panes.push_back(&m_wndDashboard);
+	panes.push_back(&m_wndDashboard_overview);
+	panes.push_back(&m_wndDashboard_tools);
+	panes.push_back(&m_wndDashboard_files);
+	panes.push_back(&m_wndDashboard_skills);
+	panes.push_back(&m_wndDashboard_channels);
 	panes.push_back(&m_wndDashboard_cron);
+	panes.push_back(&m_wndDashboard_dreaming);
+	panes.push_back(&m_wndDashboard_nodes);
+	panes.push_back(&m_wndDashboard_instances);
+	panes.push_back(&m_wndDashboard_usage);
+	panes.push_back(&m_wndDashboard_devices);
 
 	return panes;
 }
@@ -2307,12 +2692,28 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 
 	const auto panes = CollectDashboardPanes();
 
+	auto isValidPaneWindow = [](const CDashboardWnd* pane) -> bool
+	{
+		if (pane == nullptr)
+		{
+			return false;
+		}
+
+		const HWND paneHwnd = pane->GetSafeHwnd();
+		return paneHwnd != nullptr && ::IsWindow(paneHwnd);
+	};
+
 	CDashboardWnd* pSourcePane = nullptr;
 	if (sourceHwnd == nullptr)
 	{	// If no source provided, determine the source based on which pane is currently active/visible
 		for (CDashboardWnd* pane : panes)
 		{
-			if (pane != nullptr && pane->IsVisible())
+			if (!isValidPaneWindow(pane))
+			{
+				continue;
+			}
+
+			if (::IsWindowVisible(pane->GetSafeHwnd()) != FALSE)
 			{
 				pSourcePane = pane;
 				break;
@@ -2321,6 +2722,10 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 	}
 	else {
 		pSourcePane = CWnd::FromHandlePermanent(sourceHwnd) != nullptr ? dynamic_cast<CDashboardWnd*>(CWnd::FromHandlePermanent(sourceHwnd)) : nullptr;
+		if (!isValidPaneWindow(pSourcePane))
+		{
+			pSourcePane = nullptr;
+		}
 	}
 
 	//m_isSyncingDashboardFloatDock = true;
@@ -2343,7 +2748,7 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 
 	for (CDashboardWnd* pane : panes)
 	{
-		if (pane == nullptr)
+		if (!isValidPaneWindow(pane))
 		{
 			continue;
 		}

@@ -38,6 +38,7 @@ public:
 	// Attributes
 public:
 	bool IsDashboardFloatDockSyncInProgress() const;
+	bool IsDashboardPaneSyncReady() const;
 
 	// Operations
 public:
@@ -165,6 +166,7 @@ protected:
 	//volatile bool	m_isSyncingDashboardFloatDock = false;
 	// Re-entrancy counter for float/dock sync (scoped RAII guard will increment/decrement)
 	std::atomic<int>	m_dashboardFloatDockSyncCount{ 0 };
+	std::atomic<bool>	m_dashboardPaneSyncReady{ false };
 
 public:
 	// Called by app to open a tab without showing dialog
@@ -187,6 +189,11 @@ private:
 	CWnd* FindChildFrameWithSkill(const std::string& skillKey) const;
 
 	std::vector<CDashboardWnd*> CollectDashboardPanes();
+	void ActivateDashboardPane(CDashboardWnd& targetPane);
+	void RestoreLastDashboardPane();
+	void RememberLastDashboardPane(const CDashboardWnd& pane);
+	CDashboardWnd* GetDashboardPaneByCommandId(UINT commandId);
+	UINT GetDashboardPaneCommandId(const CDashboardWnd& pane) const;
 	void SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat);
 
 private:
