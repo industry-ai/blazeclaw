@@ -152,6 +152,7 @@ protected:
 	afx_msg LRESULT OnSyncDashboardPanePosition(WPARAM, LPARAM);
 	afx_msg LRESULT OnSyncDashboardAfterFloat(WPARAM, LPARAM);
 	afx_msg LRESULT OnSyncDashboardAfterDock(WPARAM, LPARAM);
+	afx_msg LRESULT OnHideAllDashboards(WPARAM, LPARAM);
 
 	void	SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy);
 	void	SyncDashboardPanePosition(HWND sourceHwnd, int x, int y);

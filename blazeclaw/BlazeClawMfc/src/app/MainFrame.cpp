@@ -187,6 +187,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 
 	ON_MESSAGE(kMsgSyncDashboardAfterFloat, &CMainFrame::OnSyncDashboardAfterFloat)
 	ON_MESSAGE(kMsgSyncDashboardAfterDock, &CMainFrame::OnSyncDashboardAfterDock)
+	ON_MESSAGE(WM_USER + 0x200, &CMainFrame::OnHideAllDashboards)
 
 	ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
@@ -478,7 +479,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	m_wndDashboard_usage.ShowPane(FALSE, FALSE, FALSE);
 	m_wndDashboard_devices.ShowPane(FALSE, FALSE, FALSE);
 
-	RestoreLastDashboardPane();
+	//RestoreLastDashboardPane();  // Don't restore on startup - hide all dashboards
 
 	CDockingManager* pDockMgr = GetDockingManager();
 	// Allow docking on all edges
@@ -2790,4 +2791,21 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 
 	RecalcLayout(FALSE);
 	//m_isSyncingDashboardFloatDock = false;
+}
+
+LRESULT CMainFrame::OnHideAllDashboards(WPARAM, LPARAM)
+{
+	m_wndDashboard.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_overview.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_tools.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_files.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_skills.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_channels.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_cron.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_dreaming.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_nodes.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_instances.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_usage.ShowPane(FALSE, FALSE, FALSE);
+	m_wndDashboard_devices.ShowPane(FALSE, FALSE, FALSE);
+	return 0;
 }
