@@ -187,7 +187,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 
 	ON_MESSAGE(kMsgSyncDashboardAfterFloat, &CMainFrame::OnSyncDashboardAfterFloat)
 	ON_MESSAGE(kMsgSyncDashboardAfterDock, &CMainFrame::OnSyncDashboardAfterDock)
-	ON_MESSAGE(WM_USER + 0x200, &CMainFrame::OnHideAllDashboards)
+	ON_MESSAGE(kMsghideMdiGroup, &CMainFrame::OnHideAllDashboards)
 
 	ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
@@ -2126,6 +2126,20 @@ void CMainFrame::SyncDashboardPanePosition(HWND sourceHwnd, int x, int y)
 				return;
 			}
 
+			// Skip hidden panes to prevent them from being accidentally shown during drag
+			if (!::IsWindowVisible(targetHwnd))
+			{
+				// Record this position for later use when the pane becomes visible
+				CRect rc{};
+			pane.GetWindowRect(&rc);
+				if (rc.left == x && rc.top == y)
+				{
+					return;
+				}
+				// Only store the rect without actually moving the hidden window
+				return;
+			}
+
 			CRect rc{};
 			pane.GetWindowRect(&rc);
 			if (rc.left == x && rc.top == y)
@@ -2204,17 +2218,17 @@ void CMainFrame::SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy)
 		{
 			const HWND targetHwnd = pane.GetSafeHwnd();
 			if (targetHwnd == nullptr || targetHwnd == sourceHwnd || !::IsWindow(targetHwnd))
-			{
+		{
 				return;
-			}
+		}
 
-			CRect rc{};
+		CRect rc{};
 			pane.GetWindowRect(&rc);
-			if (rc.Width() == cx && rc.Height() == cy)
-			{
+		if (rc.Width() == cx && rc.Height() == cy)
+		{
 				// Critical: skip no-op resize to prevent feedback loops.
 				return;
-			}
+		}
 
 			pane.SetWindowPos(nullptr, 0, 0, cx, cy, kFlags);
 		};
@@ -2290,6 +2304,12 @@ LRESULT CMainFrame::OnSyncDashboardAfterFloat(WPARAM wParam, LPARAM)
 		}
 
 		if (!::IsWindow(pane->GetSafeHwnd()))
+		{
+			continue;
+		}
+
+		// Skip hidden panes - don't show them during drag
+		if (!::IsWindowVisible(pane->GetSafeHwnd()))
 		{
 			continue;
 		}
@@ -2447,11 +2467,11 @@ void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)
 			break;
 		}
 
-		if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
+	if (targetHwnd == nullptr || !::IsWindow(targetHwnd))
 		{
 			TRACE0("Dashboard pane is not properly initialized.\n");
-			return;
-		}
+		return;
+	}
 
 		TRACE0("Dashboard pane fallback activated due to invalid target pane.\n");
 	}
@@ -2490,23 +2510,39 @@ void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)
 		}
 	}
 
+	// Use source pane position if available, otherwise use target's last known position
+	CRect targetPosition{};
+	bool hasValidPosition = false;
+
 	if (sourcePane != nullptr && !sourceRect.IsRectEmpty())
 	{
-		if (sourceIsFloating)
+		targetPosition = sourceRect;
+		hasValidPosition = true;
+	}
+	else if (!target.m_lastKnownRect.IsRectEmpty())
+	{
+		// Use the last known position stored when the pane was hidden
+		targetPosition = target.m_lastKnownRect;
+		hasValidPosition = true;
+	}
+
+	if (hasValidPosition)
+	{
+		if (sourcePane != nullptr && sourceIsFloating)
 		{
 			if (target.IsFloating())
 			{
 				target.SetWindowPos(
 					nullptr,
-					sourceRect.left,
-					sourceRect.top,
-					sourceRect.Width(),
-					sourceRect.Height(),
+					targetPosition.left,
+					targetPosition.top,
+					targetPosition.Width(),
+					targetPosition.Height(),
 					SWP_NOZORDER | SWP_NOACTIVATE);
 			}
 			else
 			{
-				target.FloatToRect(sourceRect);
+				target.FloatToRect(targetPosition);
 			}
 		}
 		else
@@ -2518,10 +2554,10 @@ void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)
 
 			target.SetWindowPos(
 				nullptr,
-				sourceRect.left,
-				sourceRect.top,
-				sourceRect.Width(),
-				sourceRect.Height(),
+				targetPosition.left,
+				targetPosition.top,
+				targetPosition.Width(),
+				targetPosition.Height(),
 				SWP_NOZORDER | SWP_NOACTIVATE);
 		}
 	}
@@ -2761,6 +2797,12 @@ void CMainFrame::SyncAllDashboardsFloatState(HWND sourceHwnd, bool shouldFloat)
 		//}
 
 		if (pane == pSourcePane)
+		{
+			continue;
+		}
+
+		// Skip hidden panes to prevent them from being accidentally shown
+		if (!::IsWindowVisible(pane->GetSafeHwnd()))
 		{
 			continue;
 		}

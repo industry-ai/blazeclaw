@@ -1076,7 +1076,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	AppendStartupCheckpoint(L"InitInstance.mainframe.shown");
 
 	pMainFrame->PostMessage(kMsgCreateMdiGroup);
-	//pMainFrame->PostMessage(WM_USER + 0x200);  // Hide all dashboard panes on startup
+	pMainFrame->PostMessage(kMsghideMdiGroup);  // Hide all dashboard panes on startup
 
 	if (startupServiceError.has_value() && !startupServiceError->empty()) {
 		const CString startupErrorLine(
