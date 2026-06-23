@@ -26,7 +26,7 @@ constexpr UINT kMsgSyncDashboardPaneSize = WM_USER + 0x102;
 constexpr UINT kMsgSyncDashboardPanePosition = WM_USER + 0x103;
 constexpr UINT kMsgSyncDashboardAfterFloat = WM_USER + 0x104;
 constexpr UINT kMsgSyncDashboardAfterDock = WM_USER + 0x105;
-
+constexpr UINT kMsghideMdiGroup = WM_USER + 0x107;
 class CMainFrame final : public CMDIFrameWndEx
 {
 	DECLARE_DYNAMIC(CMainFrame)
@@ -152,6 +152,7 @@ protected:
 	afx_msg LRESULT OnSyncDashboardPanePosition(WPARAM, LPARAM);
 	afx_msg LRESULT OnSyncDashboardAfterFloat(WPARAM, LPARAM);
 	afx_msg LRESULT OnSyncDashboardAfterDock(WPARAM, LPARAM);
+	afx_msg LRESULT OnHideAllDashboards(WPARAM, LPARAM);
 
 	void	SyncDashboardPaneSize(HWND sourceHwnd, int cx, int cy);
 	void	SyncDashboardPanePosition(HWND sourceHwnd, int x, int y);

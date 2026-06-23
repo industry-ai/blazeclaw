@@ -42,6 +42,8 @@ public:
 
 	void OnPaneVisibilityChanged(BOOL visible);
 
+	CRect	m_lastKnownRect;  // Store last known window rect for hidden panes
+
 	RECT	m_rcStored;
 
 protected:
@@ -82,6 +84,8 @@ private:
 	bool m_webViewReady = false;
 
 	bool	m_bNewlyCreated = true;
+
+	bool	m_lastKnownVisible = false;  // Track if window was last known to be visible
 
 	bool InitWebView();
 	bool CreateWebViewController();

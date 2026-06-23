@@ -576,9 +576,15 @@ void CDashboardWnd::OnWindowPosChanged(WINDOWPOS* lpwndpos)
 	if ((lpwndpos->flags & SWP_SHOWWINDOW) != 0)
 	{
 		OnPaneVisibilityChanged(TRUE);
+		m_lastKnownVisible = true;
 	}
 	else if ((lpwndpos->flags & SWP_HIDEWINDOW) != 0)
 	{
+		// Record the window rect before hiding so we can restore position later
+		CRect rc;
+		GetWindowRect(&rc);
+		m_lastKnownRect = rc;
+		m_lastKnownVisible = false;
 		OnPaneVisibilityChanged(FALSE);
 	}
 
