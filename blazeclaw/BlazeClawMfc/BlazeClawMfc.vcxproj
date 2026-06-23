@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\Microsoft.ML.OnnxRuntime.DirectML.props" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\Microsoft.ML.OnnxRuntime.DirectML.props')" />
   <ItemGroup Label="ProjectConfigurations">
@@ -186,6 +186,8 @@
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h" />
+    <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
+    <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
     <ClInclude Include="src\core\runtime\pch.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
@@ -436,6 +438,8 @@
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp" />
+    <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp" />
+    <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
@@ -646,6 +650,7 @@
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
+    <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp" />
     <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
@@ -826,3 +831,4 @@
     <Copy SourceFiles="@(BlazeClawLlamaCppRuntimeAssets)" DestinationFiles="@(BlazeClawLlamaCppRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>
+

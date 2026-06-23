@@ -3,7 +3,7 @@
 
 #include "../SpeechCudaCompatibilityGuard.h"
 #include "../StreamingAudioSourceRegistry.h"
-#include "../../debug_switch.h"
+#include "../../../../../debug_switch.h"
 
 #include <kaldi-native-fbank/csrc/online-feature.h>
 
