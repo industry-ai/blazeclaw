@@ -148,6 +148,8 @@
     <ClInclude Include="src\app\SharedTabsDocTemplate.h" />
     <ClInclude Include="src\app\SharedDocWebViewChildFrame.h" />
     <ClInclude Include="src\app\SharedDocMarkdownChildFrame.h" />
+    <ClInclude Include="src\app\SharedDocAgentChatChildFrame.h" />
+    <ClInclude Include="src\app\BlazeClawAgentChatView.h" />
     <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\IoData_c.h" />
     <ClInclude Include="src\app\IoData_cFactory.h" />
@@ -397,6 +399,8 @@
     <ClCompile Include="src\app\SharedTabsDocTemplate.cpp" />
     <ClCompile Include="src\app\SharedDocWebViewChildFrame.cpp" />
     <ClCompile Include="src\app\SharedDocMarkdownChildFrame.cpp" />
+    <ClCompile Include="src\app\SharedDocAgentChatChildFrame.cpp" />
+    <ClCompile Include="src\app\BlazeClawAgentChatView.cpp" />
     <ClCompile Include="src\app\IoData_cFactory.cpp" />
     <ClCompile Include="src\app\Logger.cpp" />
     <ClCompile Include="src\app\LoginDlg.cpp" />

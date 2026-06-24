@@ -8,7 +8,9 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 #include "BlazeClawMarkdownView.h"
+#include "BlazeClawAgentChatView.h"
 #include "SharedDocMarkdownChildFrame.h"
+#include "SharedDocAgentChatChildFrame.h"
 #include "MainFrame.h"
 
 #ifdef _DEBUG
@@ -33,13 +35,10 @@ CDocument* CSharedTabsDocTemplate::CreateSharedTabs(CMDIFrameWnd* pMDIFrame, BOO
     if (!pMDIFrame)
         return nullptr;
 
-    // Step 1: Create the shared document
     CDocument* pDoc = CreateNewDocument();
     if (!pDoc)
         return nullptr;
 
-    // Step 2: Create WebView tab (first tab) using standard MFC pattern
-    // CreateNewFrame(pDoc, pOther) - pOther=null means create new frame
     CFrameWnd* pFrameWebView = CreateNewFrame(pDoc, nullptr);
     if (!pFrameWebView) {
         pDoc->OnCloseDocument();
@@ -47,15 +46,10 @@ CDocument* CSharedTabsDocTemplate::CreateSharedTabs(CMDIFrameWnd* pMDIFrame, BOO
     }
     pFrameWebView->InitialUpdateFrame(pDoc, bMakeVisible);
 
-    // Step 3: Create Markdown tab (second tab) - share the same document
-    CFrameWnd* pFrameMd = CreateMarkdownTab(pDoc, pMDIFrame);
-    if (!pFrameMd) {
-        // Continue anyway, WebView tab was created successfully
-    }
+    CFrameWnd* pFrameRightPane = CreateRightPaneTab(pDoc, pMDIFrame);
 
-    // Step 4: Move the Markdown tab to a new tab group (side-by-side)
     CMDIFrameWndEx* pMDIFrameEx = dynamic_cast<CMDIFrameWndEx*>(pMDIFrame);
-    if (pMDIFrameEx && pFrameMd) {
+    if (pMDIFrameEx && pFrameRightPane) {
         pMDIFrameEx->MDITabNewGroup(TRUE);
     }
     pMDIFrame->RecalcLayout();
@@ -63,28 +57,43 @@ CDocument* CSharedTabsDocTemplate::CreateSharedTabs(CMDIFrameWnd* pMDIFrame, BOO
     return pDoc;
 }
 
-CFrameWnd* CSharedTabsDocTemplate::CreateMarkdownTab(CDocument* pSharedDoc, CMDIFrameWnd* pMDIFrame)
+CFrameWnd* CSharedTabsDocTemplate::CreateRightPaneTab(CDocument* pSharedDoc, CMDIFrameWnd* pMDIFrame)
 {
-    if (!pSharedDoc || !pMDIFrame || !m_pMarkdownFrameClass)
+    if (!pSharedDoc || !pMDIFrame || !m_pRightPaneFrameClass)
         return nullptr;
 
-    // Create the Markdown frame
-    CSharedDocMarkdownChildFrame* pFrame = dynamic_cast<CSharedDocMarkdownChildFrame*>(
-        m_pMarkdownFrameClass->CreateObject());
-    if (!pFrame)
-        return nullptr;
-
-    // Create context for the markdown view
+    CFrameWnd* pFrame = nullptr;
     CCreateContext context;
     context.m_pCurrentDoc = pSharedDoc;
     context.m_pNewDocTemplate = this;
-    context.m_pNewViewClass = RUNTIME_CLASS(CBlazeClawMarkdownView);
 
-    // CMDIChildWnd::Create: BOOL Create(LPCTSTR lpszClassName, LPCTSTR lpszWindowName,
-    //     DWORD dwStyle, const RECT& rect, CMDIFrameWnd* pParentWnd, CCreateContext* pContext = NULL)
-    if (!pFrame->Create(nullptr, _T("Markdown"), WS_CHILD | WS_VISIBLE,
-        CRect(0, 0, 800, 600), pMDIFrame, &context)) {
-        delete pFrame;
+    if (m_pRightPaneFrameClass == RUNTIME_CLASS(CSharedDocMarkdownChildFrame)) {
+        context.m_pNewViewClass = RUNTIME_CLASS(CBlazeClawMarkdownView);
+        auto* pMdFrame = static_cast<CSharedDocMarkdownChildFrame*>(
+            m_pRightPaneFrameClass->CreateObject());
+        if (!pMdFrame)
+            return nullptr;
+        if (!pMdFrame->Create(nullptr, _T("Markdown"), WS_CHILD | WS_VISIBLE,
+            CRect(0, 0, 800, 600), pMDIFrame, &context)) {
+            delete pMdFrame;
+            return nullptr;
+        }
+        pFrame = pMdFrame;
+    }
+    else if (m_pRightPaneFrameClass == RUNTIME_CLASS(CSharedDocAgentChatChildFrame)) {
+        context.m_pNewViewClass = RUNTIME_CLASS(CBlazeClawAgentChatView);
+        auto* pAgentFrame = static_cast<CSharedDocAgentChatChildFrame*>(
+            m_pRightPaneFrameClass->CreateObject());
+        if (!pAgentFrame)
+            return nullptr;
+        if (!pAgentFrame->Create(nullptr, _T("Agent Chat"), WS_CHILD | WS_VISIBLE,
+            CRect(0, 0, 800, 600), pMDIFrame, &context)) {
+            delete pAgentFrame;
+            return nullptr;
+        }
+        pFrame = pAgentFrame;
+    }
+    else {
         return nullptr;
     }
 
