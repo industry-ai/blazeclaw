@@ -501,7 +501,11 @@ Each page should load only the required controller modules where practical, whil
 
 Implemented module-loading strategy in Phase 3:
 
-- All pages keep the shared dashboard host DOM and bridge compatibility elements.
+- Panel-specific pages (`dashboard_*.html`) now remove duplicated UI elements already shown in chat WebView2:
+  - header block
+  - status label
+  - agents tabs strip
+- Panel-specific pages keep only required dashboard host surfaces and bridge compatibility elements (`agentsControlPlane` + `agentsSurface`, approval/messages/notices/live-preview, hidden composer shell).
 - All pages include common support scripts: `scope-errors.js`, `channels-state-contract.js`, `config-form-coerce.js`, `config-form-utils.js`, and `controller-utils.js`.
 - Each page pins fixed-panel mode with:
   - `window.__BLAZECLAW_DASHBOARD_PANEL__ = "<panel>"`

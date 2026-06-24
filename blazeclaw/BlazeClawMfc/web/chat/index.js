@@ -59,6 +59,10 @@
     state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
     function setStatus(text) {
+        if (!statusEl) {
+            return;
+        }
+
         statusEl.textContent = text;
     }
 
