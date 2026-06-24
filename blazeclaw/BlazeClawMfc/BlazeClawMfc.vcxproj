@@ -707,6 +707,9 @@
     <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
   </ItemGroup>
   <ItemGroup>
+    <BlazeClawAgentChatWebAssets Include="$(ProjectDir)web\agent-chat-vanilla\**\*.*" />
+  </ItemGroup>
+  <ItemGroup>
     <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\runtimes\win-x64\native\*.dll" />
   </ItemGroup>
   <PropertyGroup>
@@ -821,6 +824,9 @@
   </Target>
   <Target Name="CopyBlazeClawChatWebAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawChatWebAssets)" DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawAgentChatWebAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawAgentChatWebAssets)" DestinationFiles="@(BlazeClawAgentChatWebAssets->'$(OutDir)web\agent-chat-vanilla\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)" DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />

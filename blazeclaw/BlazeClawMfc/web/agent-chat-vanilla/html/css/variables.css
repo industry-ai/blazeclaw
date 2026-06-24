@@ -1,0 +1,75 @@
+/* ================================================================
+   AgentChat HTML 版 - CSS 设计 Token
+   提取自原 tailwind.css 中的 CSS 变量体系
+   ================================================================ */
+
+:root {
+  color-scheme: light;
+  --app-bg: #fbfbff;
+  --app-page-bg: #fbfbff;
+  --app-surface: #ffffff;
+  --app-surface-strong: #ffffff;
+  --app-surface-elevated: #ffffff;
+  --app-input-bg: #ffffff;
+  --app-subtle-bg: #f7f8fc;
+  --app-border: #e8ebf4;
+  --app-text: #16203a;
+  --app-text-secondary: #526281;
+  --app-muted: #7d86a7;
+  --app-text-muted: #9aa3bf;
+  --app-brand: #6d3df7;
+  --app-brand-strong: #5b2ef0;
+  --app-brand-hover: #7b4cff;
+  --app-brand-active: #5930db;
+  --app-brand-soft: #efe9ff;
+  --app-danger: #ff4d6d;
+  --app-success: #20b26b;
+  --app-warning: #ff9f1f;
+  --app-message-other-bg: #ffffff;
+  --app-message-agent-bg: linear-gradient(180deg, #f6f2ff 0%, #ffffff 100%);
+  --app-message-mine-bg: linear-gradient(135deg, #6b38f6 0%, #8352ff 100%);
+  --app-shadow: 0 24px 70px rgba(88, 63, 160, 0.12);
+  --app-shell-radius: 1.75rem;
+  --app-card-radius: 1.5rem;
+  --app-control-radius: 1rem;
+  --app-header-height: 3.75rem;
+  --app-bottom-bar-height: 5.5rem;
+  --font-page-title: 1.8rem;
+  --font-hero-title: 2.35rem;
+  --font-brand-title: 1.55rem;
+  --font-section-title: 1.25rem;
+  --font-card-title: 1rem;
+  --font-body: 0.95rem;
+  --font-body-sm: 0.88rem;
+  --font-caption: 0.78rem;
+  --font-input: 1rem;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html.dark {
+  color-scheme: dark;
+  --app-bg: #0f1220;
+  --app-page-bg: #0f1220;
+  --app-surface: #171a2a;
+  --app-surface-strong: #1b1f32;
+  --app-surface-elevated: #1f2335;
+  --app-input-bg: #151827;
+  --app-subtle-bg: #121624;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-text: #f7f8fc;
+  --app-text-secondary: #a7aec4;
+  --app-muted: #a7aec4;
+  --app-text-muted: #737b96;
+  --app-brand: #8b5cf6;
+  --app-brand-strong: #8b5cff;
+  --app-brand-hover: #9b75ff;
+  --app-brand-active: #7448ee;
+  --app-brand-soft: rgba(139, 92, 246, 0.16);
+  --app-danger: #ff5c7a;
+  --app-success: #31d08a;
+  --app-warning: #ffb454;
+  --app-message-other-bg: #1c2033;
+  --app-message-agent-bg: #1c2033;
+  --app-message-mine-bg: linear-gradient(135deg, #7c4dff 0%, #8f5bff 100%);
+  --app-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+}

@@ -144,7 +144,7 @@ std::wstring CBlazeClawAgentChatView::GetWebAssetsPath() const
 	PathRemoveFileSpec(exePath);
 
 	std::wstring webAssetsPath(exePath);
-	webAssetsPath += L"\\agent-chat-vanilla\\html";
+	webAssetsPath += L"\\web\\agent-chat-vanilla\\html";
 
 	return webAssetsPath;
 }
