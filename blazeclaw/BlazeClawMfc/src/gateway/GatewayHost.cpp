@@ -519,7 +519,7 @@ namespace blazeclaw::gateway {
 		m_runtimeResolvedSkillDirectories = ResolveAbsoluteSkillDirectories({
 			"blazeclaw/skills",
 			"skills",
-		});
+			});
 		EmitSkillRootDiagnostics("start_local_runtime_dispatch_only", m_runtimeResolvedSkillDirectories);
 		for (const auto& directory : m_runtimeResolvedSkillDirectories) {
 			const auto loadStartMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -884,12 +884,12 @@ namespace blazeclaw::gateway {
 		const std::vector<std::string> resolvedDirectories =
 			ResolveAbsoluteSkillDirectories(
 				std::vector<std::string>{
-					"blazeclaw/skills-bundled",
-					"blazeclaw/skills",
-					"blazeclaw/skills-openclaw-original",
-					"skills",
-					"skills-openclaw-original",
-				},
+			"blazeclaw/skills-bundled",
+				"blazeclaw/skills",
+				"blazeclaw/skills-openclaw-original",
+				"skills",
+				"skills-openclaw-original",
+		},
 				m_preferredSkillRootDirectories.empty());
 		EmitSkillRootDiagnostics("set_skills_catalog_state", resolvedDirectories);
 		m_toolRegistry.SyncSkillToolsManifestFirst(
@@ -1534,9 +1534,17 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		//TRACE(L"【GatewayHost::ExecuteRuntimeToolV2】 tool=%s, argsJson=%s",
+		//	request.tool.c_str(),
+		//	request.argsJson.has_value() ? request.argsJson->c_str() : "null");
+		CStringW toolW(CA2W(request.tool.c_str(), CP_UTF8));
+		CStringW argsW(CA2W(
+			(request.argsJson.has_value() ? request.argsJson->c_str() : "null"),
+			CP_UTF8));
+
 		TRACE(L"【GatewayHost::ExecuteRuntimeToolV2】 tool=%s, argsJson=%s",
-			request.tool.c_str(),
-			request.argsJson.has_value() ? request.argsJson->c_str() : "null");
+			static_cast<LPCWSTR>(toolW),
+			static_cast<LPCWSTR>(argsW));
 #endif
 
 		return m_toolRegistry.ExecuteV2(request);
@@ -1628,7 +1636,7 @@ namespace blazeclaw::gateway {
 			if (seen.insert(value).second) {
 				resolved.push_back(value);
 			}
-		};
+			};
 
 		const auto readEnvOverride = [](const char* name) -> std::optional<std::string> {
 			const std::string value = ReadEnvironmentVariable(name);
@@ -1636,7 +1644,7 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 			return value;
-		};
+			};
 
 		if (includeDefaultRoots) {
 			const std::optional<std::string> genericOverride =
@@ -2166,7 +2174,7 @@ namespace blazeclaw::gateway {
 		context.chatRuntimeCallbackPtr = const_cast<void*>(static_cast<const void*>(&m_chatRuntimeCallback));
 		context.transportBroadcast =
 			[this](const std::string& frame, std::string& outError) {
-				m_transport.BroadcastOutboundFrame(frame, outError);
+			m_transport.BroadcastOutboundFrame(frame, outError);
 			};
 		context.emitTelemetry = EmitTelemetryEvent;
 		context.chatRunsByIdPtr = static_cast<const void*>(&m_chatRunsById);
