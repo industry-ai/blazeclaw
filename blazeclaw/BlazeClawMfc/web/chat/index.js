@@ -3205,9 +3205,13 @@
             });
     }
 
+    const chatEventsApi = window.BlazeClawChatEvents || null;
+    const chatComposerApi = window.BlazeClawChatComposer || null;
+
     if (resolveAssistantRegressionChecksEnabled() &&
-        typeof window.BlazeClawChatEvents.runRegressionChecks === "function") {
-        window.BlazeClawChatEvents.runRegressionChecks()
+        chatEventsApi &&
+        typeof chatEventsApi.runRegressionChecks === "function") {
+        chatEventsApi.runRegressionChecks()
             .then((result) => {
                 if (result && result.ok) {
                     console.log("[assistant-events-regression] passed:", result.checks);
@@ -3879,24 +3883,32 @@
         }
     }
 
-    const eventsModule = window.BlazeClawChatEvents.createEventsModule({
-        state,
-        controller,
-        addMessage(text, kind) {
-            if (typeof controller.appendChatBubble === "function") {
-                controller.appendChatBubble(text, kind);
-                return;
-            }
-            addMessage(text, kind);
-        },
-        appendToolLifecycleRow,
-        setStatus,
-        updateComposerState,
-        finalizeStream,
-        addOrReplaceStream,
-        upsertApprovalToken,
-        onNeedsApprovalEvent: scheduleNeedsApprovalQueueWatch,
-    });
+    const eventsModule = chatEventsApi &&
+        typeof chatEventsApi.createEventsModule === "function"
+        ? chatEventsApi.createEventsModule({
+            state,
+            controller,
+            addMessage(text, kind) {
+                if (typeof controller.appendChatBubble === "function") {
+                    controller.appendChatBubble(text, kind);
+                    return;
+                }
+                addMessage(text, kind);
+            },
+            appendToolLifecycleRow,
+            setStatus,
+            updateComposerState,
+            finalizeStream,
+            addOrReplaceStream,
+            upsertApprovalToken,
+            onNeedsApprovalEvent: scheduleNeedsApprovalQueueWatch,
+        })
+        : {
+            handleChatEvents() {
+            },
+            handleInboundMessage() {
+            },
+        };
 
     if (typeof controller.setPolledEventsHandler === "function") {
         controller.setPolledEventsHandler(function (events) {
@@ -3904,11 +3916,17 @@
         });
     }
 
-    const composerModule = window.BlazeClawChatComposer.createComposerModule({
-        state,
-        controller,
-        updateComposerState,
-    });
+    const composerModule = chatComposerApi &&
+        typeof chatComposerApi.createComposerModule === "function"
+        ? chatComposerApi.createComposerModule({
+            state,
+            controller,
+            updateComposerState,
+        })
+        : {
+            bind() {
+            },
+        };
 
     composerModule.bind();
     void controller.loadSessionCompactions();

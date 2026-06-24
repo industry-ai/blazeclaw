@@ -2,7 +2,8 @@
 
 ## Goal
 
-Split the current shared dashboard WebView entry page into dashboard-specific HTML entry pages so each `CMainFrame` dashboard pane can load a page that matches its own dashboard identity.
+Split the current shared dashboard WebView entry page into dashboard-specific HTML entry pages so each 
+`CMainFrame` dashboard pane can load a page that matches its own dashboard identity.
 
 The first target is the cron dashboard:
 
@@ -10,7 +11,8 @@ The first target is the cron dashboard:
 - Planned cron page: `blazeclaw/BlazeClawMfc/web/chat/dashboard_cron.html`
 - Target pane: `CMainFrame::m_wndDashboard_cron`
 - Target behavior: `m_wndDashboard_cron` loads `dashboard_cron.html` directly.
-- Extraction behavior: `dashboard_cron.html` represents the UI produced when the `cron` dashboard tag is active, with all other dashboard tags removed.
+- Extraction behavior: `dashboard_cron.html` represents the UI produced when the `cron` dashboard tag 
+  is active, with all other dashboard tags removed.
 
 ## Current State Summary
 
@@ -31,7 +33,8 @@ The first target is the cron dashboard:
 - `m_wndDashboard_usage`
 - `m_wndDashboard_devices`
 
-These panes are all instances of `CDashboardWnd`, and each pane currently uses the same URL resolution path:
+These panes are all instances of `CDashboardWnd`, and each pane currently uses the same URL resolution 
+path:
 
 - `CDashboardWnd::ResolveDashboardNavigationUrl()`
 - `ResolveDashboardStartupUrl()`
@@ -41,7 +44,8 @@ These panes are all instances of `CDashboardWnd`, and each pane currently uses t
 
 ### Current Dashboard HTML Shell
 
-`web/chat/dashboard.html` is a small shell page. It does not contain static markup for every dashboard tag. Instead, it provides shared host elements:
+`web/chat/dashboard.html` is a small shell page. It does not contain static markup for every dashboard 
+tag. Instead, it provides shared host elements:
 
 - Header/status elements:
   - `#assistantIdentity`
@@ -92,7 +96,9 @@ The dashboard-specific visible UI is rendered dynamically by `index.js` into `#a
 - chat bridge scripts
 - `index.js`
 
-This difference is important. `agents-controller.js` can create optional panel runtimes only when the corresponding module exists on `window`, for example `window.BlazeClawCronController`. If `dashboard_cron.html` is expected to use `cron-controller.js`, that script should be loaded explicitly before `agents-controller.js`.
+This difference is important. `agents-controller.js` can create optional panel runtimes only when the 
+corresponding module exists on `window`, for example `window.BlazeClawCronController`. If `dashboard_cron.html` 
+is expected to use `cron-controller.js`, that script should be loaded explicitly before `agents-controller.js`.
 
 ## Dashboard HTML and JavaScript Architecture
 
@@ -168,7 +174,8 @@ Its runtime handles:
 - job edit, clone, cancel-edit workflows
 - pagination and filtering
 
-`agents-controller.js` delegates cron behavior to this runtime when `window.BlazeClawCronController` is available.
+`agents-controller.js` delegates cron behavior to this runtime when `window.BlazeClawCronController` 
+is available.
 
 ### Panel Dispatch in `agents-controller.js`
 
@@ -181,13 +188,16 @@ Its runtime handles:
 - `nodes`, `instances`, `usage`, `observability`, and `devices` load global/system surfaces.
 - `overview` loads selected agent identity.
 
-For a dashboard-specific page, the page should set the desired initial panel before the first tab render and before the first panel data load.
+For a dashboard-specific page, the page should set the desired initial panel before the first tab render 
+and before the first panel data load.
 
 ## Recommended Extraction Strategy
 
 ### Prefer Dashboard Page Identity Over Static DOM Extraction
 
-Although the desired behavior can be described as extracting `dashboard_cron.html` from `dashboard.html` when the `cron` tag is clicked, the current page does not contain static per-tag markup. The practical extraction should therefore be implemented as a page identity mechanism:
+Although the desired behavior can be described as extracting `dashboard_cron.html` from `dashboard.html` 
+when the `cron` tag is clicked, the current page does not contain static per-tag markup. The practical 
+extraction should therefore be implemented as a page identity mechanism:
 
 - Keep a shared shell structure.
 - Load only the required dashboard controller scripts for the page.
@@ -248,7 +258,8 @@ Instead, use the same renderer with a fixed initial panel.
 
 ### Add Dashboard Identity to `CDashboardWnd`
 
-`CDashboardWnd` needs a flexible identity field rather than relying on separate classes or hard-coded function paths for each pane.
+`CDashboardWnd` needs a flexible identity field rather than relying on separate classes or hard-coded 
+function paths for each pane.
 
 Recommended model:
 
@@ -270,7 +281,8 @@ Then `MainFrame.cpp` can assign the identity when creating or initializing each 
 
 ### Generalize Dashboard Startup Resolution
 
-Instead of `FindDashboardUiIndex()` always searching for `dashboard.html`, provide a generalized dashboard entry resolver that accepts a file name or panel id.
+Instead of `FindDashboardUiIndex()` always searching for `dashboard.html`, provide a generalized dashboard 
+entry resolver that accepts a file name or panel id.
 
 Recommended resolution order:
 
@@ -293,20 +305,24 @@ This gives a smooth migration path: panes can be wired before every dashboard-sp
 
 ### Preserve Cache Busting
 
-`CDashboardWnd::ResolveDashboardNavigationUrl()` appends `_wv_refresh=<tick>` today. Keep this behavior for panel-specific URLs.
+`CDashboardWnd::ResolveDashboardNavigationUrl()` appends `_wv_refresh=<tick>` today. Keep this behavior 
+for panel-specific URLs.
 
-When adding `panel=cron`, ensure query parameters are composed safely so `_wv_refresh` is still appended exactly once.
+When adding `panel=cron`, ensure query parameters are composed safely so `_wv_refresh` is still appended 
+exactly once.
 
 ## Potential Issues
 
 ### Missing Controller Scripts
 
-`dashboard.html` currently does not load `cron-controller.js`. If `dashboard_cron.html` is based directly on `dashboard.html` and only changes the active panel, cron operations may use no-op fallbacks from `agents-controller.js`.
+`dashboard.html` currently does not load `cron-controller.js`. If `dashboard_cron.html` is based directly 
+on `dashboard.html` and only changes the active panel, cron operations may use no-op fallbacks from `agents-controller.js`.
 
 Recommendation:
 
 - Add `cron-controller.js` to `dashboard_cron.html` before `agents-controller.js`.
-- Consider aligning `dashboard.html` script loading with `index.html` if the shared dashboard page is expected to support all tabs fully.
+- Consider aligning `dashboard.html` script loading with `index.html` if the shared dashboard page is 
+  expected to support all tabs fully.
 
 ### Persistence Can Override the Intended Panel
 
@@ -322,7 +338,8 @@ Recommendation:
 
 ### Tabs Are Rendered Dynamically
 
-Removing non-cron tags from `dashboard_cron.html` cannot be done only by editing the HTML file because tabs are generated by `renderAgentsTabs()`.
+Removing non-cron tags from `dashboard_cron.html` cannot be done only by editing the HTML file because 
+tabs are generated by `renderAgentsTabs()`.
 
 Recommendation:
 
@@ -336,7 +353,8 @@ Cron loading occurs only when `state.agentsPanel === "cron"`.
 Recommendation:
 
 - Set the initial panel before creating or applying the agents controller state.
-- Ensure the first `agentsController.loadAgents().then(...)` path eventually calls `loadPanelDataForCurrentAgent()` with `state.agentsPanel === "cron"`.
+- Ensure the first `agentsController.loadAgents().then(...)` path eventually calls `loadPanelDataForCurrentAgent()` 
+  with `state.agentsPanel === "cron"`.
 
 ### Shared `index.js` Assumes Chat Compatibility DOM
 
@@ -488,6 +506,8 @@ Implemented module-loading strategy in Phase 3:
 - Each page pins fixed-panel mode with:
   - `window.__BLAZECLAW_DASHBOARD_PANEL__ = "<panel>"`
   - `window.__BLAZECLAW_DASHBOARD_PANEL_FIXED__ = true`
+- All pages include shared runtime scripts required for dashboard host execution: `dashboard-host-bootstrap.js`, `agents-controller.js`, `chat-controller.js`, and `index.js`.
+- Dashboard pages no longer load `chat-events.js` and `chat-composer.js`; `index.js` now provides safe no-op fallbacks when those modules are absent.
 - Each page includes only its corresponding panel controller module where needed:
   - `dashboard_tools.html` → `tools-controller.js`
   - `dashboard_files.html` → `files-controller.js`
