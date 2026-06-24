@@ -513,6 +513,11 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
+		if (m_dispatchInitialized) {
+			m_running = true;
+			return true;
+		}
+
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		GatewayHostRuntimeBootstrap::EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		GatewayHostRuntimeBootstrap::EnsurePdfGeneratorRuntimeRegistered(m_toolRegistry);
@@ -534,14 +539,9 @@ namespace blazeclaw::gateway {
 				",\"elapsedMs\":" + std::to_string(loadEndMs >= loadStartMs ? (loadEndMs - loadStartMs) : 0) +
 				"}");
 		}
-		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsList(m_dispatcher, m_toolRegistry);
-		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsCatalog(m_dispatcher, m_toolRegistry);
-		RegisterGatewayRegistryIntrospectionHandlers();
-		if (!m_runtimeHandlersInitialized) {
-			RegisterRuntimeHandlers();
-			m_runtimeHandlersInitialized = true;
-		}
+		RegisterDefaultHandlers();
 		m_dispatchInitialized = true;
+		m_runtimeHandlersInitialized = true;
 
 		m_running = true;
 		return true;
