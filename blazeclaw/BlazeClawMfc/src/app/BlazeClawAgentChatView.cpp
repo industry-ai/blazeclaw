@@ -23,6 +23,8 @@ BEGIN_MESSAGE_MAP(CBlazeClawAgentChatView, CView)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
 	ON_WM_DESTROY()
+	ON_WM_ERASEBKGND()
+	ON_WM_TIMER()
 	ON_MESSAGE(WM_AGENTCHAT_WEBMESSAGE_RECEIVED, &CBlazeClawAgentChatView::OnWebMessageReceived)
 END_MESSAGE_MAP()
 
@@ -69,19 +71,47 @@ int CBlazeClawAgentChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	return 0;
 }
 
-void CBlazeClawAgentChatView::OnSize(UINT nType, int cx, int cy)
+void CBlazeClawAgentChatView::OnInitialUpdate()
 {
-	CView::OnSize(nType, cx, cy);
+	CView::OnInitialUpdate();
+}
 
-	if (m_webViewController != nullptr && cx > 0 && cy > 0)
+void CBlazeClawAgentChatView::OnSize(UINT nType, int /*cx*/, int /*cy*/)
+{
+	CView::OnSize(nType, 0, 0);
+
+	if (m_webViewController != nullptr)
 	{
-		CRect rc(0, 0, cx, cy);
+		CRect rc;
+		GetClientRect(&rc);
+		TRACE("CBlazeClawAgentChatView: OnSize fixing bounds (%d,%d,%d,%d)\n",
+			rc.left, rc.top, rc.right, rc.bottom);
 		m_webViewController->put_Bounds(rc);
 	}
 }
 
+void CBlazeClawAgentChatView::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == 1 && m_webViewController != nullptr)
+	{
+		KillTimer(1);
+		CRect rc;
+		GetClientRect(&rc);
+		TRACE("CBlazeClawAgentChatView: OnTimer fixing bounds (%d,%d,%d,%d)\n",
+			rc.left, rc.top, rc.right, rc.bottom);
+		m_webViewController->put_Bounds(rc);
+	}
+
+	CView::OnTimer(nIDEvent);
+}
+
 void CBlazeClawAgentChatView::OnDraw(CDC* /*pDC*/)
 {
+}
+
+BOOL CBlazeClawAgentChatView::OnEraseBkgnd(CDC* /*pDC*/)
+{
+	return FALSE;
 }
 
 void CBlazeClawAgentChatView::OnDestroy()
@@ -121,9 +151,6 @@ std::wstring CBlazeClawAgentChatView::GetWebAssetsPath() const
 
 bool CBlazeClawAgentChatView::InitWebView()
 {
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
 	return CreateWebViewController();
 }
 
@@ -135,9 +162,6 @@ bool CBlazeClawAgentChatView::CreateWebViewController()
 		TRACE("CBlazeClawAgentChatView: CreateWebViewController HWND is null\n");
 		return false;
 	}
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
 
 	m_webAssetsPath = GetWebAssetsPath();
 	TRACE("CBlazeClawAgentChatView: Web assets folder: %ls\n", m_webAssetsPath.c_str());
@@ -157,7 +181,7 @@ bool CBlazeClawAgentChatView::CreateWebViewController()
 	HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
 		nullptr, nullptr, nullptr,
 		Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-			[this, rcClient](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT
+			[this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT
 			{
 				if (FAILED(result))
 				{
@@ -174,7 +198,7 @@ bool CBlazeClawAgentChatView::CreateWebViewController()
 				return environment->CreateCoreWebView2Controller(
 					GetSafeHwnd(),
 					Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-						[this, rcClient](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
+						[this](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
 						{
 							if (FAILED(result))
 							{
@@ -196,8 +220,17 @@ bool CBlazeClawAgentChatView::CreateWebViewController()
 								return hr;
 							}
 
-							// put_Bounds FIRST (like CAIChatView)
-							controller->put_Bounds(rcClient);
+							// Re-fetch bounds NOW (not captured from OnCreate, which had 0x0)
+							CRect rcNow;
+							GetClientRect(&rcNow);
+							TRACE("CBlazeClawAgentChatView: put_Bounds with rect (%d,%d,%d,%d)\n",
+								rcNow.left, rcNow.top, rcNow.right, rcNow.bottom);
+
+							controller->put_Bounds(rcNow);
+							controller->put_IsVisible(TRUE);
+
+							// Re-apply bounds after delay to handle window sizing timing
+							SetTimer(1, 150, nullptr);
 
 							// Then configure settings
 							ComPtr<ICoreWebView2Settings> settings;
@@ -220,7 +253,7 @@ bool CBlazeClawAgentChatView::CreateWebViewController()
 									COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
 								TRACE("CBlazeClawAgentChatView: SetVirtualHostNameToFolderMapping succeeded\n");
 
-								std::wstring mappedUrl = L"https://";
+								std::wstring mappedUrl = L"http://";
 								mappedUrl += AGENTCHAT_HOST_NAME;
 								mappedUrl += L"/";
 								mappedUrl += AGENTCHAT_INDEX_FILE;
@@ -435,6 +468,19 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 				{
 					TRACE("CBlazeClawAgentChatView: Navigation completed\n");
 				}
+
+				if (m_webViewController != nullptr)
+				{
+					m_webViewController->put_IsVisible(TRUE);
+					m_webViewController->NotifyParentWindowPositionChanged();
+				}
+
+				if (CWnd* parent = GetParent())
+				{
+					parent->Invalidate();
+					parent->UpdateWindow();
+				}
+
 				return S_OK;
 			}).Get(), nullptr);
 }
