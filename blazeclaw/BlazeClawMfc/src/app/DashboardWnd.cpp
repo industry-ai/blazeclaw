@@ -484,7 +484,7 @@ void CDashboardWnd::NavigateDashboardOrShowError()
 	{
 		ShowDashboardStartupError(
 			L"No startup URL resolved",
-			L"Set BLAZECLAW_DASHBOARD_DEV_URL or provide blazeclaw/BlazeClawMfc/web/chat/dashboard.html.");
+			L"Set BLAZECLAW_DASHBOARD_DEV_URL or provide blazeclaw/BlazeClawMfc/web/chat/dashboard_<panel>.html (fallback: dashboard.html).");
 		return;
 	}
 

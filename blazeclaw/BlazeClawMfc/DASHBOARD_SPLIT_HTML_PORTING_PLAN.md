@@ -416,10 +416,38 @@ Implemented files:
 
 ### Phase 2: Generalized Dashboard Page Routing
 
+Status: Completed
+
+Implemented files:
+
+- `blazeclaw/BlazeClawMfc/src/app/MainFrame.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/DashboardWnd.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/ChatUiStartupResolver.h`
+
 - Add dashboard identity assignment for all named `CDashboardWnd` members.
 - Generalize dashboard file lookup to `dashboard_<panel>.html`.
 - Keep `dashboard.html` as the shared fallback.
 - Document environment variable behavior for dev URLs, explicit files, and UI roots.
+
+Environment variable routing behavior after Phase 2:
+
+- `BLAZECLAW_DASHBOARD_DEV_URL`
+  - Highest-priority override URL for all dashboard panes.
+  - Pane `panel` hint is appended if configured and not already present.
+- `OPENCLAW_UI_DEV_URL`
+  - Uses `host=dashboard` suffix and then applies pane `panel` hint when present.
+- `BLAZECLAW_DASHBOARD_UI_FILE`
+  - Explicit file override for all panes when the file exists.
+- `BLAZECLAW_DASHBOARD_UI_ROOT`
+  - Resolves `dashboard_<panel>.html` first.
+  - Falls back to `dashboard.html` in source root.
+  - Then checks `dist/dashboard_<panel>.html` and falls back to `dist/dashboard.html`.
+- `BLAZECLAW_CHAT_UI_MODE`
+  - `dev` uses `http://127.0.0.1:5173/dashboard.html` as base, then appends pane `panel` hint.
+  - `source`/`dist` influence source-vs-dist preference in workspace root scanning.
+- Source/dist workspace scanning
+  - Uses `FindDashboardUiEntry(...)` for preferred `dashboard_<panel>.html`.
+  - Falls back to `dashboard.html` when the preferred page does not exist.
 
 ### Phase 3: Extract Additional Dashboard Pages
 

@@ -930,6 +930,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardOverviewWnd;
 	bNameValid = strDashboardOverviewWnd.LoadString(IDS_DASHBOARD_OVERVIEW_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_overview.SetStartupDashboardIdentity(
+		L"dashboard_overview.html",
+		L"overview");
 	if (!m_wndDashboard_overview.Create(strDashboardOverviewWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_OVERVIEW_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Overview window\n");
@@ -939,6 +942,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardToolsWnd;
 	bNameValid = strDashboardToolsWnd.LoadString(IDS_DASHBOARD_TOOLS_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_tools.SetStartupDashboardIdentity(
+		L"dashboard_tools.html",
+		L"tools");
 	if (!m_wndDashboard_tools.Create(strDashboardToolsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_TOOLS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Tools window\n");
@@ -948,6 +954,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardFilesWnd;
 	bNameValid = strDashboardFilesWnd.LoadString(IDS_DASHBOARD_FILES_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_files.SetStartupDashboardIdentity(
+		L"dashboard_files.html",
+		L"files");
 	if (!m_wndDashboard_files.Create(strDashboardFilesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_FILES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Files window\n");
@@ -957,6 +966,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardSkillsWnd;
 	bNameValid = strDashboardSkillsWnd.LoadString(IDS_DASHBOARD_SKILLS_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_skills.SetStartupDashboardIdentity(
+		L"dashboard_skills.html",
+		L"skills");
 	if (!m_wndDashboard_skills.Create(strDashboardSkillsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_SKILLS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Skills window\n");
@@ -966,6 +978,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardChannelsWnd;
 	bNameValid = strDashboardChannelsWnd.LoadString(IDS_DASHBOARD_CHANNELS_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_channels.SetStartupDashboardIdentity(
+		L"dashboard_channels.html",
+		L"channels");
 	if (!m_wndDashboard_channels.Create(strDashboardChannelsWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_CHANNELS_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Channels window\n");
@@ -987,6 +1002,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardDreamingWnd;
 	bNameValid = strDashboardDreamingWnd.LoadString(IDS_DASHBOARD_DREAMING_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_dreaming.SetStartupDashboardIdentity(
+		L"dashboard_dreaming.html",
+		L"dreaming");
 	if (!m_wndDashboard_dreaming.Create(strDashboardDreamingWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_DREAMING_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Dreaming window\n");
@@ -996,6 +1014,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardNodesWnd;
 	bNameValid = strDashboardNodesWnd.LoadString(IDS_DASHBOARD_NODES_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_nodes.SetStartupDashboardIdentity(
+		L"dashboard_nodes.html",
+		L"nodes");
 	if (!m_wndDashboard_nodes.Create(strDashboardNodesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_NODES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Nodes window\n");
@@ -1005,6 +1026,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardInstancesWnd;
 	bNameValid = strDashboardInstancesWnd.LoadString(IDS_DASHBOARD_INSTANCES_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_instances.SetStartupDashboardIdentity(
+		L"dashboard_instances.html",
+		L"instances");
 	if (!m_wndDashboard_instances.Create(strDashboardInstancesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_INSTANCES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Instances window\n");
@@ -1014,6 +1038,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardUsageWnd;
 	bNameValid = strDashboardUsageWnd.LoadString(IDS_DASHBOARD_USAGE_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_usage.SetStartupDashboardIdentity(
+		L"dashboard_usage.html",
+		L"usage");
 	if (!m_wndDashboard_usage.Create(strDashboardUsageWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_USAGE_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Usage window\n");
@@ -1023,6 +1050,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardDevicesWnd;
 	bNameValid = strDashboardDevicesWnd.LoadString(IDS_DASHBOARD_DEVICES_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_devices.SetStartupDashboardIdentity(
+		L"dashboard_devices.html",
+		L"devices");
 	if (!m_wndDashboard_devices.Create(strDashboardDevicesWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_DEVICES_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Dashboard Devices window\n");
