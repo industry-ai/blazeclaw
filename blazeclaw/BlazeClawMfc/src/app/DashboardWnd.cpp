@@ -103,8 +103,82 @@ bool IsDevModePreferred()
 #endif
 }
 
-std::wstring ResolveDashboardStartupUrl()
+bool UrlHasQueryParameter(const std::wstring& url, const std::wstring& key)
 {
+	if (url.empty() || key.empty())
+	{
+		return false;
+	}
+
+	const std::size_t queryStart = url.find(L'?');
+	if (queryStart == std::wstring::npos)
+	{
+		return false;
+	}
+
+	std::size_t segmentStart = queryStart + 1;
+	while (segmentStart < url.size())
+	{
+		const std::size_t segmentEnd = url.find(L'&', segmentStart);
+		const std::wstring segment = url.substr(
+			segmentStart,
+			segmentEnd == std::wstring::npos
+				? std::wstring::npos
+				: segmentEnd - segmentStart);
+		if (!segment.empty())
+		{
+			const std::size_t equalPos = segment.find(L'=');
+			const std::wstring segmentKey = equalPos == std::wstring::npos
+				? segment
+				: segment.substr(0, equalPos);
+			if (segmentKey == key)
+			{
+				return true;
+			}
+		}
+
+		if (segmentEnd == std::wstring::npos)
+		{
+			break;
+		}
+
+		segmentStart = segmentEnd + 1;
+	}
+
+	return false;
+}
+
+std::wstring AppendQueryParameter(
+	const std::wstring& url,
+	const std::wstring& key,
+	const std::wstring& value,
+	const bool skipWhenExists)
+{
+	if (url.empty() || key.empty() || value.empty())
+	{
+		return url;
+	}
+
+	if (skipWhenExists && UrlHasQueryParameter(url, key))
+	{
+		return url;
+	}
+
+	const std::wstring separator =
+		(url.find(L'?') == std::wstring::npos)
+			? L"?"
+			: L"&";
+	return url + separator + key + L"=" + value;
+}
+
+std::wstring ResolveDashboardStartupUrl(
+	const std::wstring& preferredEntryFileName)
+{
+	const std::wstring preferredEntry =
+		TrimCopy(preferredEntryFileName).empty()
+			? L"dashboard.html"
+			: TrimCopy(preferredEntryFileName);
+
 	if (const auto envUrl = GetEnvValue(L"BLAZECLAW_DASHBOARD_DEV_URL"); envUrl.has_value())
 	{
 		const std::wstring value = TrimCopy(envUrl.value());
@@ -145,15 +219,34 @@ std::wstring ResolveDashboardStartupUrl()
 		if (!value.empty())
 		{
 			const std::filesystem::path root(value);
-			const auto sourceDashboard = root / L"dashboard.html";
-			if (std::filesystem::exists(sourceDashboard))
+			const auto sourcePreferred = root / preferredEntry;
+			if (std::filesystem::exists(sourcePreferred))
 			{
-				return BuildFileUrl(sourceDashboard);
+				return BuildFileUrl(sourcePreferred);
 			}
-			const auto distDashboard = root / L"dist" / L"dashboard.html";
-			if (std::filesystem::exists(distDashboard))
+
+			if (preferredEntry != L"dashboard.html")
 			{
-				return BuildFileUrl(distDashboard);
+				const auto sourceDashboard = root / L"dashboard.html";
+				if (std::filesystem::exists(sourceDashboard))
+				{
+					return BuildFileUrl(sourceDashboard);
+				}
+			}
+
+			const auto distPreferred = root / L"dist" / preferredEntry;
+			if (std::filesystem::exists(distPreferred))
+			{
+				return BuildFileUrl(distPreferred);
+			}
+
+			if (preferredEntry != L"dashboard.html")
+			{
+				const auto distDashboard = root / L"dist" / L"dashboard.html";
+				if (std::filesystem::exists(distDashboard))
+				{
+					return BuildFileUrl(distDashboard);
+				}
 			}
 		}
 	}
@@ -196,10 +289,25 @@ std::wstring ResolveDashboardStartupUrl()
 		: blazeclaw::app::chatui::StartupPreference::PreferDist;
 	for (const auto& root : roots)
 	{
-		if (const auto found = blazeclaw::app::chatui::FindDashboardUiIndex(root, preference);
+		if (const auto found = blazeclaw::app::chatui::FindDashboardUiEntry(
+			root,
+			preference,
+			preferredEntry);
 			found.has_value())
 		{
 			return BuildFileUrl(found->selectedPath);
+		}
+
+		if (preferredEntry != L"dashboard.html")
+		{
+			if (const auto fallback = blazeclaw::app::chatui::FindDashboardUiEntry(
+				root,
+				preference,
+				L"dashboard.html");
+				fallback.has_value())
+			{
+				return BuildFileUrl(fallback->selectedPath);
+			}
 		}
 	}
 
@@ -220,6 +328,17 @@ END_MESSAGE_MAP()
 
 CDashboardWnd::CDashboardWnd() noexcept
 {
+}
+
+void CDashboardWnd::SetStartupDashboardIdentity(
+	const std::wstring& entryFileName,
+	const std::wstring& panelHint)
+{
+	const std::wstring normalizedEntry = TrimCopy(entryFileName);
+	m_startupDashboardEntryFileName = normalizedEntry.empty()
+		? L"dashboard.html"
+		: normalizedEntry;
+	m_startupDashboardPanelHint = TrimCopy(panelHint);
 }
 
 CDashboardWnd::~CDashboardWnd()
@@ -303,16 +422,27 @@ void CDashboardWnd::ResizeWebViewBounds()
 
 std::wstring CDashboardWnd::ResolveDashboardNavigationUrl() const
 {
-	const std::wstring startupUrl = ResolveDashboardStartupUrl();
+	const std::wstring startupUrl = ResolveDashboardStartupUrl(
+		m_startupDashboardEntryFileName);
 	if (startupUrl.empty() || startupUrl == L"about:blank")
 	{
 		return startupUrl;
 	}
 
-	const std::wstring separator = (startupUrl.find(L'?') == std::wstring::npos)
+	std::wstring navigationUrl = startupUrl;
+	if (!m_startupDashboardPanelHint.empty())
+	{
+		navigationUrl = AppendQueryParameter(
+			navigationUrl,
+			L"panel",
+			m_startupDashboardPanelHint,
+			true);
+	}
+
+	const std::wstring separator = (navigationUrl.find(L'?') == std::wstring::npos)
 		? L"?"
 		: L"&";
-	return startupUrl + separator + L"_wv_refresh=" + std::to_wstring(::GetTickCount64());
+	return navigationUrl + separator + L"_wv_refresh=" + std::to_wstring(::GetTickCount64());
 }
 
 void CDashboardWnd::ShowDashboardStartupError(

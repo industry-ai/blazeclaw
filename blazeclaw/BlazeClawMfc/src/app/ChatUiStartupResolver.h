@@ -134,12 +134,16 @@ inline std::optional<StartupSelection> FindChatUiIndex(
 	return std::nullopt;
 }
 
-inline std::optional<StartupSelection> FindDashboardUiIndex(
+inline std::optional<StartupSelection> FindDashboardUiEntry(
 	const std::filesystem::path& start,
-	const StartupPreference preference)
+	const StartupPreference preference,
+	const std::wstring& entryFileName)
 {
 	std::filesystem::path cursor = start;
 	StartupSelection trace;
+	const std::wstring preferredEntry = entryFileName.empty()
+		? L"dashboard.html"
+		: entryFileName;
 
 	while (!cursor.empty()) {
 		trace.inspectedRoots.push_back(cursor);
@@ -149,21 +153,21 @@ inline std::optional<StartupSelection> FindDashboardUiIndex(
 			L"BlazeClawMfc" /
 			L"web" /
 			L"chat" /
-			L"dashboard.html";
+			preferredEntry;
 		const auto projectDist =
 			cursor /
 			L"BlazeClawMfc" /
 			L"web" /
 			L"chat" /
 			L"dist" /
-			L"dashboard.html";
+			preferredEntry;
 		const auto repoSource =
 			cursor /
 			L"blazeclaw" /
 			L"BlazeClawMfc" /
 			L"web" /
 			L"chat" /
-			L"dashboard.html";
+			preferredEntry;
 		const auto repoDist =
 			cursor /
 			L"blazeclaw" /
@@ -171,7 +175,7 @@ inline std::optional<StartupSelection> FindDashboardUiIndex(
 			L"web" /
 			L"chat" /
 			L"dist" /
-			L"dashboard.html";
+			preferredEntry;
 
 		std::vector<std::pair<std::filesystem::path, bool>> orderedCandidates;
 		if (preference == StartupPreference::PreferSource) {
@@ -208,6 +212,13 @@ inline std::optional<StartupSelection> FindDashboardUiIndex(
 	}
 
 	return std::nullopt;
+}
+
+inline std::optional<StartupSelection> FindDashboardUiIndex(
+	const std::filesystem::path& start,
+	const StartupPreference preference)
+{
+	return FindDashboardUiEntry(start, preference, L"dashboard.html");
 }
 
 } // namespace blazeclaw::app::chatui

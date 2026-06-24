@@ -975,6 +975,9 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strDashboardCronWnd;
 	bNameValid = strDashboardCronWnd.LoadString(IDS_DASHBOARD_CRON_WND);
 	ASSERT(bNameValid);
+	m_wndDashboard_cron.SetStartupDashboardIdentity(
+		L"dashboard_cron.html",
+		L"cron");
 	if (!m_wndDashboard_cron.Create(strDashboardCronWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_DASHBOARD_CRON_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create Cron Dashboard window\n");

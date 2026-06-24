@@ -39,6 +39,9 @@ public:
 
 	CDashboardWnd() noexcept;
 	virtual ~CDashboardWnd();
+	void SetStartupDashboardIdentity(
+		const std::wstring& entryFileName,
+		const std::wstring& panelHint);
 
 	void OnPaneVisibilityChanged(BOOL visible);
 
@@ -82,6 +85,8 @@ private:
 
 	blazeclaw::app::dashboard_bridge::CDashboardBridgeHost m_bridgeHost;
 	bool m_webViewReady = false;
+	std::wstring m_startupDashboardEntryFileName = L"dashboard.html";
+	std::wstring m_startupDashboardPanelHint;
 
 	bool	m_bNewlyCreated = true;
 

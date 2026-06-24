@@ -3256,6 +3256,76 @@
         return /dashboard\.html(?:$|[?#])/i.test(String(window.location.pathname || ""));
     }
 
+    function normalizeAgentsPanelId(value) {
+        const normalized = String(value || "").trim().toLowerCase();
+        const supportedPanels = [
+            "overview",
+            "tools",
+            "files",
+            "skills",
+            "channels",
+            "cron",
+            "dreaming",
+            "nodes",
+            "instances",
+            "usage",
+            "observability",
+            "devices",
+        ];
+        if (supportedPanels.indexOf(normalized) >= 0) {
+            return normalized;
+        }
+        return "";
+    }
+
+    function resolveDashboardHostPanelHint() {
+        if (!isDashboardHost()) {
+            return "";
+        }
+
+        const explicitPanel = normalizeAgentsPanelId(
+            window.__BLAZECLAW_DASHBOARD_PANEL__
+        );
+        if (explicitPanel) {
+            return explicitPanel;
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        return normalizeAgentsPanelId(search.get("panel"));
+    }
+
+    function resolveDashboardHostFixedPanel(panelHint) {
+        if (!panelHint || !isDashboardHost()) {
+            return "";
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        const fixedPanelQuery = String(search.get("fixedPanel") || "").trim().toLowerCase();
+        const fixedPanelGlobal = window.__BLAZECLAW_DASHBOARD_PANEL_FIXED__;
+
+        if (fixedPanelGlobal === false ||
+            fixedPanelQuery === "0" ||
+            fixedPanelQuery === "false") {
+            return "";
+        }
+
+        return panelHint;
+    }
+
+    function toPanelLabel(panelId) {
+        const raw = String(panelId || "").trim();
+        if (!raw) {
+            return "Overview";
+        }
+
+        return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
+
+    const dashboardHostPanelHint = resolveDashboardHostPanelHint();
+    const dashboardHostFixedPanelId = resolveDashboardHostFixedPanel(
+        dashboardHostPanelHint
+    );
+
     function applyDashboardHostLayout() {
         if (!isDashboardHost()) {
             return;
@@ -3618,9 +3688,11 @@
         : null;
 
     if (agentsController) {
-        state.agentsPanel = "overview";
-        const persisted = loadAgentsPersistenceSnapshot();
-        if (persisted) {
+        state.agentsPanel = dashboardHostPanelHint || "overview";
+        const persisted = dashboardHostFixedPanelId
+            ? null
+            : loadAgentsPersistenceSnapshot();
+        if (persisted && !dashboardHostFixedPanelId) {
             agentsController.applyPersistenceSnapshot(persisted);
             emitAgentsTelemetry("persistence.restored", persisted);
         }
