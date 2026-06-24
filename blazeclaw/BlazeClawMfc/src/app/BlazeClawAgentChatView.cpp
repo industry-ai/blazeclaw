@@ -291,7 +291,7 @@ std::wstring CBlazeClawAgentChatView::GetServerPath() const
 	PathRemoveFileSpecW(exePath);
 
 	std::wstring serverPath(exePath);
-	serverPath += L"\\agent-chat-vanilla\\server";
+	serverPath += L"\\web\\agent-chat-vanilla\\server";
 
 	if (GetFileAttributesW(serverPath.c_str()) == INVALID_FILE_ATTRIBUTES)
 	{

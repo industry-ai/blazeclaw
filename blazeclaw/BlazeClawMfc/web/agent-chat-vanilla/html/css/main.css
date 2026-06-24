@@ -1888,6 +1888,102 @@ html.dark .composer-card.agent:focus-within {
   height: 1.125rem;
 }
 
+/* 语音输入模式（对齐 Vue 版 ChatComposer voice mode） */
+.composer-voice-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.composer-voice-toggle:active {
+  transform: scale(0.95);
+}
+.composer-voice-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.composer-voice-toggle svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.composer-voice-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+}
+.composer-voice-btn {
+  width: 100%;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-subtle-bg);
+  color: var(--app-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.composer-voice-btn:hover {
+  border-color: var(--app-brand);
+  color: var(--app-brand);
+}
+.composer-voice-btn.active {
+  border-color: var(--app-brand);
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+}
+.composer-voice-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.composer-voice-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--app-border);
+}
+.composer-voice-status {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--app-text);
+}
+.composer-voice-timer {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--app-muted);
+}
+.composer-voice-stop {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--app-brand);
+  background: var(--app-brand);
+  color: #fff;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.composer-voice-stop:active {
+  transform: scale(0.95);
+}
+.composer-voice-stop:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .composer-textarea-wrap {
   position: relative;
   flex: 1;

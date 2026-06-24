@@ -5,6 +5,7 @@
 import ChatStore from '../stores/chatStore.js';
 import UiStore from '../stores/uiStore.js';
 import AuthStore from '../stores/authStore.js';
+import ChatApi from '../api/chatApi.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
 import MarkdownRenderer from '../utils/markdown.js';
@@ -47,6 +48,12 @@ const ChatPage = {
   _lastRenderedConvId: null,
   suppressComposerFocusRestore: false,
   createGroupSubmitting: false,
+  // 语音输入状态（对齐 Vue 版 useVoiceTextInput）
+  isVoiceMode: false,
+  isPreparingVoiceMode: false,
+  voiceState: 'idle', // 'idle' | 'starting' | 'listening' | 'processing'
+  voiceErrorMessage: '',
+  voiceElapsedSeconds: 0,
   createGroupError: '',
   createGroupDialogOpen: false,
   createGroupName: '',
@@ -804,6 +811,10 @@ const ChatPage = {
     const draft = this._getComposerDraft(conv?.id);
     const counter = draft.length;
     const hasText = draft.trim().length > 0;
+    const voiceActive = this.voiceState !== 'idle';
+    const voiceToggleDisabled = (this.isPreparingVoiceMode || voiceActive) ? 'disabled' : '';
+    const voiceStatusText = this._getVoiceStatusText();
+    const voiceElapsedLabel = this._getVoiceElapsedLabel();
     return `
     <div class="composer-wrap">
       <div class="composer-card ${isAgent?'agent':'normal'}">
@@ -812,13 +823,32 @@ const ChatPage = {
           <button class="composer-sparkle" id="composer-sparkle-btn" title="召唤智能助手">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M6 14l.75 2.25L9 17l-2.25.75L6 20l-.75-2.25L3 17l2.25-.75z"/></svg>
           </button>` : ''}
+          ${this.isVoiceMode ? `
+          <button class="composer-voice-toggle" id="composer-voice-toggle-btn" title="切换到键盘输入" ${voiceToggleDisabled}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+          </button>` : `
+          <button class="composer-voice-toggle" id="composer-voice-toggle-btn" title="切换到语音输入" ${voiceToggleDisabled}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4M8 23h8"/></svg>
+          </button>`}
+          ${this.isVoiceMode ? `
+          <div class="composer-voice-area">
+            <button id="composer-voice-btn" class="composer-voice-btn ${voiceActive ? 'active' : ''}" ${this.voiceState === 'processing' ? 'disabled' : ''}>
+              <span>${voiceActive ? voiceStatusText : '点击 录音'}</span>
+            </button>
+          </div>` : `
           <div class="composer-textarea-wrap">
             <textarea id="composer-input" class="composer-textarea" rows="1" placeholder="输入消息... (Enter 发送)">${this._esc(draft)}</textarea>
-          </div>
+          </div>`}
           <button id="composer-send-btn" class="composer-send ${hasText?'enabled':'disabled'} ${isAgent?'agent-send':''}" ${hasText ? '' : 'disabled'}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
         </div>
+        ${this.isVoiceMode && voiceActive ? `
+        <div class="composer-voice-panel">
+          <div class="composer-voice-status">${voiceStatusText}</div>
+          <div class="composer-voice-timer">${voiceElapsedLabel}</div>
+          <button class="composer-voice-stop" ${this.voiceState === 'processing' ? 'disabled' : ''}>${this.voiceState === 'processing' ? '请稍候' : '点击停止'}</button>
+        </div>` : ''}
         <div class="composer-footer">
           <span>重要信息请自行核验</span>
           <span class="composer-counter" id="composer-counter">${counter} / 2000</span>
@@ -834,6 +864,10 @@ const ChatPage = {
     const draft = this._getComposerDraft(conv?.id);
     const counter = draft.length;
     const hasText = draft.trim().length > 0;
+    const voiceActive = this.voiceState !== 'idle';
+    const voiceToggleDisabled = (this.isPreparingVoiceMode || voiceActive) ? 'disabled' : '';
+    const voiceStatusText = this._getVoiceStatusText();
+    const voiceElapsedLabel = this._getVoiceElapsedLabel();
     return `
     <div class="${wrapStyle}">
       <div class="composer-card ${isAgent?'agent':'normal'}">
@@ -842,13 +876,32 @@ const ChatPage = {
           <button class="composer-sparkle" id="composer-sparkle-btn" title="召唤智能助手">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M6 14l.75 2.25L9 17l-2.25.75L6 20l-.75-2.25L3 17l2.25-.75z"/></svg>
           </button>` : ''}
+          ${this.isVoiceMode ? `
+          <button class="composer-voice-toggle" id="composer-voice-toggle-btn" title="切换到键盘输入" ${voiceToggleDisabled}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+          </button>` : `
+          <button class="composer-voice-toggle" id="composer-voice-toggle-btn" title="切换到语音输入" ${voiceToggleDisabled}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4M8 23h8"/></svg>
+          </button>`}
+          ${this.isVoiceMode ? `
+          <div class="composer-voice-area">
+            <button id="composer-voice-btn" class="composer-voice-btn ${voiceActive ? 'active' : ''}" ${this.voiceState === 'processing' ? 'disabled' : ''}>
+              <span>${voiceActive ? voiceStatusText : '点击 录音'}</span>
+            </button>
+          </div>` : `
           <div class="composer-textarea-wrap">
             <textarea id="composer-input" class="composer-textarea" rows="1" placeholder="输入消息... (Enter 发送)">${this._esc(draft)}</textarea>
-          </div>
+          </div>`}
           <button id="composer-send-btn" class="composer-send ${hasText?'enabled':'disabled'} ${isAgent?'agent-send':''}" ${hasText ? '' : 'disabled'}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
         </div>
+        ${this.isVoiceMode && voiceActive ? `
+        <div class="composer-voice-panel">
+          <div class="composer-voice-status">${voiceStatusText}</div>
+          <div class="composer-voice-timer">${voiceElapsedLabel}</div>
+          <button class="composer-voice-stop" ${this.voiceState === 'processing' ? 'disabled' : ''}>${this.voiceState === 'processing' ? '请稍候' : '点击停止'}</button>
+        </div>` : ''}
         <div class="composer-footer">
           <span>重要信息请自行核验</span>
           <span class="composer-counter" id="composer-counter">${counter} / 2000</span>
@@ -1078,6 +1131,23 @@ const ChatPage = {
     const counter = document.getElementById('composer-counter');
     const conversationId = ChatStore.getActiveConversationId();
 
+    // 语音模式切换按钮（对齐 Vue 版 toggleVoiceMode）
+    const voiceToggleBtn = document.getElementById('composer-voice-toggle-btn');
+    if (voiceToggleBtn) {
+      voiceToggleBtn.onclick = () => this._toggleVoiceMode();
+    }
+
+    // 语音录音按钮（对齐 Vue 版 onVoiceClick）
+    const voiceBtn = document.getElementById('composer-voice-btn');
+    if (voiceBtn) {
+      voiceBtn.onclick = () => this._onVoiceClick();
+    }
+    const voiceStopBtn = document.querySelector('.composer-voice-stop');
+    if (voiceStopBtn) {
+      voiceStopBtn.onclick = () => this._onVoiceClick();
+    }
+
+    // 语音模式下没有 textarea，跳过 input 相关绑定
     if (!input) return;
 
     const toggleSendBtn = () => {
@@ -1271,6 +1341,363 @@ const ChatPage = {
     if (counter) counter.textContent = '0 / 2000';
 
     ChatStore.sendUserMessage(text, convId);
+  },
+
+  // ── 语音输入（对齐 Vue 版 useVoiceTextInput） ──
+
+  // 对齐 Vue 版 toggleVoiceMode：进入语音模式前先检查麦克风权限
+  async _toggleVoiceMode() {
+    if (this.isPreparingVoiceMode) return;
+    if (this.isVoiceMode) {
+      this.isVoiceMode = false;
+      this._cancelVoiceInput();
+      this.render();
+      return;
+    }
+    if (!this._isVoiceSupported()) {
+      Toast.show('当前环境不支持语音转文字，请使用新版 Chrome 或 Android WebView', 'warn');
+      return;
+    }
+    this.isPreparingVoiceMode = true;
+    this.render();
+    const prepared = await this._prepareVoiceInput();
+    this.isPreparingVoiceMode = false;
+    if (!prepared) {
+      if (this.voiceErrorMessage) Toast.show(this.voiceErrorMessage, 'warn');
+      this.render();
+      return;
+    }
+    this.isVoiceMode = true;
+    this.render();
+  },
+
+  _isVoiceSupported() {
+    return (
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      typeof MediaRecorder !== 'undefined'
+    );
+  },
+
+  // 对齐 Vue 版 prepare → prepareWeb → requestWebMicrophoneAccess
+  async _prepareVoiceInput() {
+    this.voiceErrorMessage = '';
+    if (!this._canUseWebRecorder()) {
+      this.voiceErrorMessage = '当前环境无法录音转文字';
+      return false;
+    }
+    const permission = await this._queryMicrophonePermission();
+    if (permission === 'denied') {
+      this.voiceErrorMessage = '麦克风权限未开启，请在浏览器设置中允许麦克风';
+      return false;
+    }
+    let permissionStream = null;
+    try {
+      permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const [track] = permissionStream.getAudioTracks();
+      if (!track) throw new Error('没有检测到麦克风设备');
+      if (track.readyState === 'ended' || !track.enabled) {
+        throw new Error('麦克风不可用，请检查权限或设备设置');
+      }
+      return true;
+    } catch (error) {
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+          this.voiceErrorMessage = '麦克风权限未开启';
+        } else if (error.name === 'NotFoundError') {
+          this.voiceErrorMessage = '没有检测到麦克风设备';
+        } else if (error.name === 'NotReadableError') {
+          this.voiceErrorMessage = '麦克风被占用，请关闭其它录音应用后再试';
+        } else {
+          this.voiceErrorMessage = error.message || '麦克风权限检查失败';
+        }
+      } else {
+        this.voiceErrorMessage = error.message || '麦克风权限检查失败';
+      }
+      return false;
+    } finally {
+      if (permissionStream) {
+        for (const track of permissionStream.getTracks()) track.stop();
+      }
+    }
+  },
+
+  async _queryMicrophonePermission() {
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) return 'unknown';
+    try {
+      return (await navigator.permissions.query({ name: 'microphone' })).state;
+    } catch {
+      return 'unknown';
+    }
+  },
+
+  _getVoiceStatusText() {
+    if (this.voiceState === 'processing') return '正在整理文字';
+    if (this.voiceState === 'listening') return '正在听你说';
+    if (this.voiceState === 'starting') return '正在申请麦克风权限';
+    return '点击录音';
+  },
+
+  _getVoiceElapsedLabel() {
+    const minutes = Math.floor(this.voiceElapsedSeconds / 60);
+    const seconds = this.voiceElapsedSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  },
+
+  _canUseWebRecorder() {
+    return (
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      typeof MediaRecorder !== 'undefined'
+    );
+  },
+
+  _selectRecorderMimeType() {
+    if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+    return types.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+  },
+
+  _onVoiceClick() {
+    if (this.voiceState === 'listening' || this.voiceState === 'starting') {
+      void this._stopVoiceInput();
+    } else if (this.voiceState === 'idle') {
+      void this._startVoiceInput();
+    }
+  },
+
+  async _startVoiceInput() {
+    if (this.voiceState !== 'idle') return;
+    if (!this._canUseWebRecorder()) {
+      this.voiceErrorMessage = '当前环境无法录音转文字';
+      Toast.show(this.voiceErrorMessage, 'error');
+      return;
+    }
+
+    this.voiceState = 'starting';
+    this.voiceErrorMessage = '';
+    this.voiceElapsedSeconds = 0;
+    this.render();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const [track] = stream.getAudioTracks();
+      if (!track) throw new Error('没有检测到麦克风设备');
+      if (track.readyState === 'ended' || !track.enabled) {
+        throw new Error('麦克风不可用，请检查权限或设备设置');
+      }
+
+      this._voiceStream = stream;
+      this._startVoiceInputMeter(stream);
+      this._voiceRecorderMimeType = this._selectRecorderMimeType();
+      const recorder = this._voiceRecorderMimeType
+        ? new MediaRecorder(stream, { mimeType: this._voiceRecorderMimeType })
+        : new MediaRecorder(stream);
+      this._voiceRecorderMimeType = recorder.mimeType || this._voiceRecorderMimeType || 'audio/webm';
+      this._voiceRecordedChunks = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) this._voiceRecordedChunks.push(event.data);
+      };
+      recorder.onerror = () => {
+        this.voiceErrorMessage = '录音失败，请再试一次';
+      };
+      recorder.start(250);
+      this._voiceRecorder = recorder;
+
+      this.voiceState = 'listening';
+      this._voiceRecordingStartedAt = Date.now();
+      this._voiceElapsedTimer = setInterval(() => {
+        this.voiceElapsedSeconds += 1;
+        this.render();
+      }, 1000);
+      this._voiceMaxTimer = setTimeout(() => {
+        void this._stopVoiceInput();
+      }, 60000);
+      this.render();
+    } catch (error) {
+      this._cleanupVoiceRecorder();
+      this.voiceState = 'idle';
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+          this.voiceErrorMessage = '麦克风权限未开启';
+        } else if (error.name === 'NotFoundError') {
+          this.voiceErrorMessage = '没有检测到麦克风设备';
+        } else if (error.name === 'NotReadableError') {
+          this.voiceErrorMessage = '麦克风被占用，请关闭其它录音应用后再试';
+        } else {
+          this.voiceErrorMessage = error.message || '录音启动失败';
+        }
+      } else {
+        this.voiceErrorMessage = error.message || '录音启动失败';
+      }
+      Toast.show(this.voiceErrorMessage, 'error');
+      this.render();
+    }
+  },
+
+  async _stopVoiceInput() {
+    if (this.voiceState !== 'listening') return;
+    if (this._voiceElapsedTimer) { clearInterval(this._voiceElapsedTimer); this._voiceElapsedTimer = null; }
+    if (this._voiceMaxTimer) { clearTimeout(this._voiceMaxTimer); this._voiceMaxTimer = null; }
+    this.voiceState = 'processing';
+    this.render();
+
+    try {
+      // 最短录音时长保护
+      const minMs = 650;
+      if (this._voiceRecordingStartedAt) {
+        const remaining = minMs - (Date.now() - this._voiceRecordingStartedAt);
+        if (remaining > 0) await new Promise(r => setTimeout(r, remaining));
+      }
+
+      const recorder = this._voiceRecorder;
+      let audio;
+      if (recorder && recorder.state !== 'inactive') {
+        audio = await new Promise((resolve) => {
+          let settled = false;
+          const fallback = setTimeout(() => {
+            if (!settled) {
+              settled = true;
+              resolve(new Blob(this._voiceRecordedChunks, { type: this._voiceRecorderMimeType || 'audio/webm' }));
+            }
+          }, 5000);
+          recorder.onstop = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallback);
+            resolve(new Blob(this._voiceRecordedChunks, { type: this._voiceRecorderMimeType || 'audio/webm' }));
+          };
+          try { recorder.requestData(); } catch {}
+          try { recorder.stop(); } catch {
+            if (!settled) {
+              settled = true;
+              clearTimeout(fallback);
+              resolve(new Blob(this._voiceRecordedChunks, { type: this._voiceRecorderMimeType || 'audio/webm' }));
+            }
+          }
+        });
+      } else {
+        audio = new Blob(this._voiceRecordedChunks || [], { type: this._voiceRecorderMimeType || 'audio/webm' });
+      }
+
+      const inputMeter = this._stopVoiceInputMeter();
+      this._cleanupVoiceRecorder();
+
+      if (!audio.size) throw new Error('没有录到声音，请再试一次');
+      if (inputMeter.available && inputMeter.maxLevel < 4) {
+        throw new Error('麦克风没有收到声音，请检查权限或靠近麦克风');
+      }
+
+      const text = await ChatApi.transcribeAudio(audio, 'zh-CN');
+      this.voiceState = 'idle';
+      this.voiceErrorMessage = '';
+
+      // 对齐 Vue 版 onVoiceClick：用识别结果替换输入框内容
+      this.isVoiceMode = false;
+      const convId = ChatStore.getActiveConversationId();
+      this._setComposerDraft(convId, text.slice(0, 2000));
+      this.render();
+      setTimeout(() => {
+        const input = document.getElementById('composer-input');
+        if (input) {
+          input.focus();
+          input.selectionStart = input.selectionEnd = input.value.length;
+        }
+      }, 50);
+    } catch (error) {
+      this._cleanupVoiceRecorder();
+      this.voiceState = 'idle';
+      this.voiceErrorMessage = error.message || '语音转文字失败';
+      Toast.show(this.voiceErrorMessage, 'error');
+      this.render();
+    }
+  },
+
+  _cancelVoiceInput() {
+    if (this._voiceElapsedTimer) { clearInterval(this._voiceElapsedTimer); this._voiceElapsedTimer = null; }
+    if (this._voiceMaxTimer) { clearTimeout(this._voiceMaxTimer); this._voiceMaxTimer = null; }
+    this._cleanupVoiceRecorder();
+    this.voiceState = 'idle';
+    this.voiceErrorMessage = '';
+    this.voiceElapsedSeconds = 0;
+  },
+
+  _cleanupVoiceRecorder() {
+    if (this._voiceRecorder) {
+      this._voiceRecorder.ondataavailable = null;
+      this._voiceRecorder.onerror = null;
+      this._voiceRecorder.onstop = null;
+      if (this._voiceRecorder.state !== 'inactive') {
+        try { this._voiceRecorder.stop(); } catch {}
+      }
+      this._voiceRecorder = null;
+    }
+    this._cleanupVoiceInputMeter();
+    if (this._voiceStream) {
+      for (const track of this._voiceStream.getTracks()) track.stop();
+      this._voiceStream = null;
+    }
+    this._voiceRecordedChunks = [];
+    this._voiceRecorderMimeType = '';
+    this._voiceRecordingStartedAt = 0;
+  },
+
+  // 对齐 Vue 版 useVoiceTextInput 音频输入电平检测
+  _startVoiceInputMeter(stream) {
+    this._cleanupVoiceInputMeter();
+    if (typeof window === 'undefined') return;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return;
+    try {
+      this._voiceAudioContext = new AudioContextCtor();
+      this._voiceAudioSource = this._voiceAudioContext.createMediaStreamSource(stream);
+      this._voiceAudioAnalyser = this._voiceAudioContext.createAnalyser();
+      this._voiceAudioAnalyser.fftSize = 512;
+      this._voiceAudioSource.connect(this._voiceAudioAnalyser);
+      this._voiceInputMeterAvailable = true;
+      this._voiceMaxInputLevel = 0;
+      const samples = new Uint8Array(this._voiceAudioAnalyser.fftSize);
+      const measure = () => {
+        if (!this._voiceAudioAnalyser) return;
+        this._voiceAudioAnalyser.getByteTimeDomainData(samples);
+        let peak = 0;
+        for (const sample of samples) {
+          peak = Math.max(peak, Math.abs(sample - 128));
+        }
+        this._voiceMaxInputLevel = Math.max(this._voiceMaxInputLevel, peak);
+        this._voiceMeterRafId = requestAnimationFrame(measure);
+      };
+      measure();
+    } catch {
+      this._cleanupVoiceInputMeter();
+    }
+  },
+
+  _stopVoiceInputMeter() {
+    const result = {
+      available: this._voiceInputMeterAvailable || false,
+      maxLevel: this._voiceMaxInputLevel || 0,
+    };
+    this._cleanupVoiceInputMeter();
+    return result;
+  },
+
+  _cleanupVoiceInputMeter() {
+    if (this._voiceMeterRafId) {
+      cancelAnimationFrame(this._voiceMeterRafId);
+      this._voiceMeterRafId = 0;
+    }
+    try { this._voiceAudioSource?.disconnect(); } catch {}
+    try { this._voiceAudioAnalyser?.disconnect(); } catch {}
+    if (this._voiceAudioContext) {
+      this._voiceAudioContext.close().catch(() => {});
+    }
+    this._voiceAudioSource = null;
+    this._voiceAudioAnalyser = null;
+    this._voiceAudioContext = null;
+    this._voiceInputMeterAvailable = false;
+    this._voiceMaxInputLevel = 0;
   },
 
   // ── Helpers ──

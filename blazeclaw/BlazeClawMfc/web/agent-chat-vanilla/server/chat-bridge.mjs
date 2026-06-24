@@ -36,6 +36,27 @@ import http from 'node:http'
 import net from 'node:net'
 import tls from 'node:tls'
 import { URL } from 'node:url'
+import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// 加载 .env 文件（对齐 Vite 的 loadEnv，使 chat-bridge 也能读取环境变量）
+const __dirname = dirname(fileURLToPath(import.meta.url))
+try {
+  const envPath = join(__dirname, '..', '.env')
+  const envContent = readFileSync(envPath, 'utf8')
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx === -1) continue
+    const key = trimmed.slice(0, eqIdx).trim()
+    const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
+    if (!(key in process.env)) process.env[key] = value
+  }
+} catch { /* .env 不存在或读取失败，忽略 */ }
 
 const MsgType = Object.freeze({
   Unknown: 0,
@@ -989,7 +1010,7 @@ function json(res, code, obj) {
     'Content-Length': Buffer.byteLength(body, 'utf8'),
     Connection: 'close',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, sessionid',
+    'Access-Control-Allow-Headers': 'Content-Type, sessionid, X-Speech-Language',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   })
   res.end(body)
@@ -1021,12 +1042,227 @@ function readJsonBody(req) {
   })
 }
 
+// ── 语音转文字（对齐 Vue 版 vite.config.ts speechTranscribePlugin） ──
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+function _speechProvider() {
+  const raw = (process.env.SPEECH_PROVIDER || '').trim().toLowerCase()
+  return raw === 'dashscope' ? 'dashscope' : 'openai'
+}
+
+function _audioExtensionFromMimeType(mimeType) {
+  const m = String(mimeType || '').toLowerCase()
+  if (m.includes('webm')) return 'webm'
+  if (m.includes('mp4')) return 'mp4'
+  if (m.includes('ogg')) return 'ogg'
+  return 'bin'
+}
+
+async function _speechTranscribeOpenAI(audio, mimeType) {
+  const apiKey = process.env.OPENAI_API_KEY || process.env.SPEECH_OPENAI_API_KEY
+  if (!apiKey) throw new Error('云端语音转文字未配置：请在服务端环境设置 OPENAI_API_KEY。')
+  const extension = _audioExtensionFromMimeType(mimeType)
+  const form = new FormData()
+  form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe')
+  form.append('language', 'zh')
+  form.append('response_format', 'json')
+  form.append('file', new Blob([audio], { type: mimeType }), `voice.${extension}`)
+  const upstream = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+  const raw = await upstream.text()
+  if (!upstream.ok) throw new Error(raw || '语音转文字失败')
+  const data = JSON.parse(raw)
+  return typeof data.text === 'string' ? data.text.trim() : ''
+}
+
+async function _resolveFfmpegPath() {
+  // 1. 优先使用 ffmpeg-static npm 包（自带二进制，无需系统安装）
+  try {
+    const mod = await import('ffmpeg-static')
+    const p = mod.default || mod
+    if (p) return p
+  } catch { /* not installed */ }
+  // 2. 降级到系统 ffmpeg
+  return 'ffmpeg'
+}
+
+async function _audioToPcm16k(audio) {
+  const ffmpegPath = await _resolveFfmpegPath()
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn(ffmpegPath, [
+      '-i', 'pipe:0',
+      '-f', 's16le',
+      '-acodec', 'pcm_s16le',
+      '-ar', '16000',
+      '-ac', '1',
+      'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const chunks = []
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk))
+    ffmpeg.stderr.on('data', () => {})
+    ffmpeg.on('close', (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks))
+      else reject(new Error('音频格式转换失败：请确认已安装 ffmpeg 或 ffmpeg-static npm 包'))
+    })
+    ffmpeg.on('error', () => reject(new Error('音频格式转换失败：请确认已安装 ffmpeg 或 ffmpeg-static npm 包')))
+    ffmpeg.stdin.end(audio)
+  })
+}
+
+function _longestOverlap(prev, next) {
+  const a = prev.trim()
+  const b = next.trim()
+  const maxLen = Math.min(a.length, b.length)
+  for (let len = maxLen; len > 0; len--) {
+    if (a.slice(-len) === b.slice(0, len)) return len
+  }
+  return 0
+}
+
+async function _speechTranscribeDashScope(audio, mimeType) {
+  const apiKey = process.env.DASHSCOPE_API_KEY || process.env.OPENAI_API_KEY || process.env.SPEECH_OPENAI_API_KEY
+  if (!apiKey) throw new Error('DashScope 语音转文字未配置：请在服务端环境设置 DASHSCOPE_API_KEY。')
+
+  // 优先使用 OpenAI 兼容的 qwen3-asr-flash API（支持 base64 音频，无需 ffmpeg）
+  const useOpenAICompatible = process.env.DASHSCOPE_ASR_MODEL !== 'paraformer-realtime-v2'
+  if (useOpenAICompatible) {
+    const model = process.env.DASHSCOPE_ASR_MODEL || 'qwen3-asr-flash'
+    const audioBase64 = audio.toString('base64')
+    const mediaType = mimeType || 'audio/webm'
+    const dataUrl = `data:${mediaType};base64,${audioBase64}`
+
+    const resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'input_audio', input_audio: { data: dataUrl } }],
+        }],
+      }),
+    })
+    const raw = await resp.text()
+    if (!resp.ok) throw new Error(raw || 'DashScope ASR 识别失败')
+    const data = JSON.parse(raw)
+    const text = data?.choices?.[0]?.message?.content || ''
+    return typeof text === 'string' ? text.trim() : ''
+  }
+
+  // 降级：paraformer-realtime-v2 WebSocket 路径（需要 ffmpeg 转 PCM）
+  const model = process.env.DASHSCOPE_ASR_MODEL || 'paraformer-realtime-v2'
+  const pcm = await _audioToPcm16k(audio)
+  if (!pcm.length) throw new Error('音频转换后为空')
+
+  const { default: WebSocket } = await import('ws')
+  return new Promise((resolve, reject) => {
+    const taskId = randomUUID().replace(/-/g, '').slice(0, 32)
+    let taskStarted = false
+    let finalText = ''
+
+    const ws = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/', {
+      headers: { Authorization: `bearer ${apiKey}` },
+    })
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        header: { action: 'run-task', task_id: taskId, streaming: 'duplex' },
+        payload: {
+          task_group: 'audio',
+          task: 'asr',
+          function: 'recognition',
+          model,
+          parameters: { format: 'pcm', sample_rate: 16000 },
+          input: {},
+        },
+      }))
+    })
+
+    const sendAudio = () => {
+      if (ws.readyState !== WebSocket.OPEN) return
+      ws.send(pcm)
+      ws.send(JSON.stringify({
+        header: { action: 'finish-task', task_id: taskId, streaming: 'duplex' },
+        payload: { input: {} },
+      }))
+    }
+
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'))
+        switch (msg?.header?.event) {
+          case 'task-started':
+            taskStarted = true
+            sendAudio()
+            break
+          case 'result-generated': {
+            const seg = (msg?.payload?.output?.sentence?.text || '').trim()
+            if (!seg) break
+            const overlap = _longestOverlap(finalText, seg)
+            finalText += (finalText && overlap === 0 ? ' ' : '') + seg.slice(overlap)
+            break
+          }
+          case 'task-finished':
+            ws.close()
+            resolve(finalText)
+            break
+          case 'task-failed':
+            ws.close()
+            reject(new Error(msg?.header?.error_message || 'DashScope ASR 识别失败'))
+            break
+        }
+      } catch { /* ignore */ }
+    })
+
+    ws.on('error', (err) => { reject(err) })
+    ws.on('close', () => {
+      if (!taskStarted && !finalText) {
+        reject(new Error('DashScope WebSocket 连接提前关闭'))
+      }
+    })
+  })
+}
+
+async function handleSpeechTranscribe(req, res) {
+  if (req.method !== 'POST') {
+    json(res, 405, { ok: false, error: 'Method Not Allowed' })
+    return
+  }
+  try {
+    const audio = await readRawBody(req)
+    if (!audio.length) {
+      json(res, 400, { ok: false, error: '音频为空' })
+      return
+    }
+    const provider = _speechProvider()
+    const text = provider === 'dashscope'
+      ? await _speechTranscribeDashScope(audio, String(req.headers['content-type'] || 'audio/webm'))
+      : await _speechTranscribeOpenAI(audio, String(req.headers['content-type'] || 'audio/webm'))
+    json(res, 200, { ok: true, text })
+  } catch (error) {
+    json(res, 500, { ok: false, error: error instanceof Error ? error.message : '语音转文字失败' })
+  }
+}
+
 async function handleRequest(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       Connection: 'close',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, sessionid',
+      'Access-Control-Allow-Headers': 'Content-Type, sessionid, X-Speech-Language',
       'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     })
     res.end()
@@ -1049,6 +1285,12 @@ async function handleRequest(req, res) {
     } catch (e) {
       json(res, 503, { ok: false, error: `TCP backend unreachable: ${e.message}` })
     }
+    return
+  }
+
+  // 语音转文字（对齐 Vue 版 /api/speech/transcribe）
+  if (req.method === 'POST' && url.pathname === '/api/speech/transcribe') {
+    await handleSpeechTranscribe(req, res)
     return
   }
 
@@ -2084,7 +2326,7 @@ async function handleRequest(req, res) {
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type, sessionid',
+          'Access-Control-Allow-Headers': 'Content-Type, sessionid, X-Speech-Language',
         })
         res.write(sseBody)
         res.end()

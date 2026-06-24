@@ -25,8 +25,7 @@
     "test:watch": "npx vitest",
     "preview": "vite preview",
     "chat-bridge": "node server/chat-bridge-dev.mjs",
-    "chat-bridge:raw": "node server/chat-bridge.mjs",
-    "cos-upload": "node server/cos-upload.mjs"
+    "chat-bridge:raw": "node server/chat-bridge.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",

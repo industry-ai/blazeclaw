@@ -566,6 +566,39 @@ async function broadcastAgentReply(channel, message, sessionId, attachments = []
   });
 }
 
+/**
+ * 语音转文字（对齐 Vue 版 useVoiceTextInput.transcribe）
+ * 发送原始音频 Blob 到 /api/speech/transcribe，返回识别文本
+ */
+async function transcribeAudio(audioBlob, lang = 'zh-CN') {
+  const baseUrl = AppHttp.getBaseUrl();
+  const url = `${baseUrl}/api/speech/transcribe`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': audioBlob.type || 'audio/webm',
+      'Accept': 'application/json',
+      'X-Speech-Language': lang,
+    },
+    body: audioBlob,
+  });
+  const text = await resp.text();
+  let payload;
+  try { payload = JSON.parse(text); } catch { payload = null; }
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('语音转文字服务返回异常，请检查转写服务是否可用');
+  }
+  if (!resp.ok || payload.ok === false) {
+    const err = typeof payload.error === 'string' ? payload.error
+      : (payload.error && typeof payload.error === 'object' ? JSON.stringify(payload.error) : '')
+      || text || '语音转文字失败';
+    throw new Error(err);
+  }
+  const transcript = String(payload.text || '').replace(/\s+/g, ' ').trim();
+  if (!transcript) throw new Error('没有识别到文字，请再说一遍');
+  return transcript.slice(0, 2000);
+}
+
 export default {
   listConversations,
   createConversation,
@@ -596,4 +629,5 @@ export default {
   getConversationHistory,
   callAgent,
   broadcastAgentReply,
+  transcribeAudio,
 };
