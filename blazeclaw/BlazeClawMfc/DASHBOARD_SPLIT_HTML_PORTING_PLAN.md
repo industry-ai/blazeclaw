@@ -565,18 +565,21 @@ Implemented cleanup details in Phase 4:
   - `visibilitychange` re-sync hook
 - Added lightweight dashboard page-identity smoke checks and telemetry emission (`dashboard.host.smoke`).
 
-### Post-Phase 4 Regression Fix: Ribbon-Activated Dedicated Dashboards Not Refreshing
+### Post-Phase 4 Regression Fix: Dashboard Refresh Path Not Running
 
 Status: Completed
 
 Root cause:
 
-- After removing dashboard tabs/header/status from dedicated `dashboard_*.html` pages, the previous tab-click refresh trigger path no longer existed for fixed-panel dashboards.
-- `CMainFrame::ActivateDashboardPane()` correctly showed/focused the pane, but `CDashboardWnd::OnPaneVisibilityChanged(TRUE)` only toggled WebView visibility and did not trigger panel data refresh.
-- Because all dedicated panes share the same `CDashboardWnd` + `index.js` host pipeline, this affected all dedicated dashboards, not only `cron`.
+- The `rc` branch clicked dashboard tabs from `index.html`, which loaded the full dashboard controller set and `chat-events.js`.
+- The split dashboard host pages later omitted `chat-events.js`. That made the `index.js` optional fallback event module a no-op, so WebView lifecycle and RPC result messages were ignored, `state.connected` stayed false, and `agentsController` request/refresh methods returned early.
+- The standalone shared `dashboard.html` also omitted panel controller modules such as `cron-controller.js`. As a result, clicking the `Cron` tab still called `agentsController.setAgentsPanel("cron")` and `agentsController.loadPanelDataForCurrentAgent()`, but the cron runtime had not been registered and the data load path was effectively a no-op.
+- Because all dashboard host pages share the same bridge lifecycle and agent-controller pipeline, this affected the shared `m_wndDashboard` tab flow and all dedicated dashboards.
 
 Implemented fix:
 
+- All dashboard host pages now load `chat-events.js` after `chat-controller.js` and before `index.js`, restoring bridge lifecycle handling, RPC result handling, and `state.connected` updates.
+- The shared tabbed `dashboard.html` now loads the full dashboard controller runtime set before `agents-controller.js`, matching the `index.html` tabbed-dashboard behavior used by `rc`.
 - `CDashboardWnd::OnPaneVisibilityChanged(BOOL visible)` now emits a host refresh message when a pane transitions from hidden to visible:
   - `{"topic":"dashboard.host","action":"refresh","reason":"pane_activated"}`
 - `index.js` now handles this host refresh signal and routes it through a centralized refresh helper that:
@@ -587,15 +590,17 @@ Implemented fix:
 
 Scope confirmation:
 
-- The regression path is shared by all fixed dedicated dashboards:
+- The regression path is shared by the standalone tabbed dashboard and all fixed dedicated dashboards:
   - `overview`, `tools`, `files`, `skills`, `channels`, `cron`, `dreaming`, `nodes`, `instances`, `usage`, and `devices`.
-- The fix is applied at shared host and pane-visibility layers, so all dedicated dashboards receive activation-time refresh.
+- The fix is applied at script-loading, shared host, and pane-visibility layers, so tab clicks and pane activation both reach the real data refresh path.
 
 ## Recommended Validation Checklist
 
 ### File-Level Validation
 
 - `dashboard.html` still loads and shows the shared dashboard.
+- `dashboard.html` loads the same tabbed dashboard controller modules as `index.html` before `agents-controller.js`.
+- All `dashboard*.html` host pages load `chat-events.js` before `index.js` so bridge lifecycle and RPC result messages are processed.
 - `dashboard_cron.html` exists and loads without script errors.
 - `dashboard_cron.html` loads `cron-controller.js` before `agents-controller.js`.
 - The fixed panel hint is defined before `index.js` runs.
@@ -603,6 +608,8 @@ Scope confirmation:
 ### UI Behavior Validation
 
 - Opening the cron dashboard pane shows cron content immediately.
+- Clicking the `Cron` agents tab in the standalone `m_wndDashboard` refreshes cron data from the gateway.
+- Opening each dedicated dashboard pane refreshes its panel data after the bridge lifecycle reaches connected/reconnected state.
 - Non-cron dashboard tabs are removed or hidden in the cron page.
 - Refresh, add/update, edit, clone, run-now, remove, load-more-jobs, and load-more-runs actions are still wired.
 - Cron form input updates state correctly.
