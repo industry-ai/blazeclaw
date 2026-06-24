@@ -650,6 +650,27 @@
         renderDetachedNotices();
     }
 
+    function refreshDashboardPanelData(reason) {
+        if (!agentsController) {
+            return;
+        }
+
+        emitAgentsTelemetry("panel.refresh.request", {
+            panel: String(state.agentsPanel || "overview"),
+            reason: String(reason || "unknown"),
+        });
+
+        void agentsController.loadAgents()
+            .then(() => {
+                if (state.agentsSelectedId) {
+                    persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+                }
+                return agentsController.loadPanelDataForCurrentAgent();
+            })
+            .catch(() => {
+            });
+    }
+
     function renderAssistantIdentity() {
         if (!assistantIdentityEl) {
             return;
@@ -3808,40 +3829,13 @@
                 });
 
             const activePanel = String(state.agentsPanel || "");
-            if (activePanel === "nodes") {
-                emitAgentsTelemetry("nodes.lifecycle.refresh", {
-                    state: lifecycle.state,
-                    wasConnected: Boolean(lifecycle.wasConnected),
-                });
-                triggerNodesRefresh({
-                    quiet: true,
-                });
-                syncNodesPolling();
-                return;
-            }
+            emitAgentsTelemetry("panel.lifecycle.refresh", {
+                panel: activePanel || "overview",
+                state: lifecycle.state,
+                wasConnected: Boolean(lifecycle.wasConnected),
+            });
 
-            if (activePanel === "instances") {
-                emitAgentsTelemetry("presence.lifecycle.refresh", {
-                    state: lifecycle.state,
-                    wasConnected: Boolean(lifecycle.wasConnected),
-                });
-                void agentsController.loadPresence({
-                    quiet: true,
-                    shouldIgnoreResponse: function () {
-                        return String(state.agentsPanel || "") !== "instances";
-                    },
-                });
-            }
-
-            if (activePanel === "observability") {
-                emitAgentsTelemetry("observability.lifecycle.refresh", {
-                    state: lifecycle.state,
-                    wasConnected: Boolean(lifecycle.wasConnected),
-                });
-                triggerObservabilityRefresh({
-                    quiet: true,
-                });
-            }
+            refreshDashboardPanelData("gateway.lifecycle");
 
             syncNodesPolling();
             syncObservabilityPolling();
@@ -3852,6 +3846,9 @@
                 syncNodesPolling();
                 syncObservabilityPolling();
                 syncSessionControlsPolling();
+                if (document.hidden === false) {
+                    refreshDashboardPanelData("document.visible");
+                }
             });
         }
 
@@ -3943,15 +3940,23 @@
                     agentId: state.agentsSelectedId,
                     panel: state.agentsPanel,
                 });
-                return agentsController.loadPanelDataForCurrentAgent();
             }
-            return undefined;
+
+            return agentsController.loadPanelDataForCurrentAgent();
         });
     }
 
     if (state.bridgeAvailable) {
         window.chrome.webview.addEventListener("message", (event) => {
-            eventsModule.handleInboundMessage(event && event.data);
+            const payload = event && event.data;
+            const hostTopic = String(payload && payload.topic || "");
+            const hostAction = String(payload && payload.action || "");
+            if (hostTopic === "dashboard.host" && hostAction === "refresh") {
+                refreshDashboardPanelData(String(payload && payload.reason || "host.signal"));
+                return;
+            }
+
+            eventsModule.handleInboundMessage(payload);
         });
 
         controller.post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });

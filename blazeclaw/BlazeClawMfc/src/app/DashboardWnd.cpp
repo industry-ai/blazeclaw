@@ -549,6 +549,7 @@ void CDashboardWnd::OnPaneVisibilityChanged(BOOL visible)
 	else if (m_webViewController != nullptr)
 	{
 		m_webViewController->put_IsVisible(FALSE);
+		m_lastKnownVisible = false;
 		return;
 	}
 #endif
@@ -557,6 +558,12 @@ void CDashboardWnd::OnPaneVisibilityChanged(BOOL visible)
 	if (visible && m_webViewController != nullptr)
 	{
 		m_webViewController->put_IsVisible(TRUE);
+		if (!m_lastKnownVisible)
+		{
+			PostBridgeMessageJson(
+				L"{\"topic\":\"dashboard.host\",\"action\":\"refresh\",\"reason\":\"pane_activated\"}");
+		}
+		m_lastKnownVisible = true;
 	}
 #endif
 }

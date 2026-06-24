@@ -565,6 +565,32 @@ Implemented cleanup details in Phase 4:
   - `visibilitychange` re-sync hook
 - Added lightweight dashboard page-identity smoke checks and telemetry emission (`dashboard.host.smoke`).
 
+### Post-Phase 4 Regression Fix: Ribbon-Activated Dedicated Dashboards Not Refreshing
+
+Status: Completed
+
+Root cause:
+
+- After removing dashboard tabs/header/status from dedicated `dashboard_*.html` pages, the previous tab-click refresh trigger path no longer existed for fixed-panel dashboards.
+- `CMainFrame::ActivateDashboardPane()` correctly showed/focused the pane, but `CDashboardWnd::OnPaneVisibilityChanged(TRUE)` only toggled WebView visibility and did not trigger panel data refresh.
+- Because all dedicated panes share the same `CDashboardWnd` + `index.js` host pipeline, this affected all dedicated dashboards, not only `cron`.
+
+Implemented fix:
+
+- `CDashboardWnd::OnPaneVisibilityChanged(BOOL visible)` now emits a host refresh message when a pane transitions from hidden to visible:
+  - `{"topic":"dashboard.host","action":"refresh","reason":"pane_activated"}`
+- `index.js` now handles this host refresh signal and routes it through a centralized refresh helper that:
+  - reloads agent state via `agentsController.loadAgents()`
+  - refreshes current panel data via `agentsController.loadPanelDataForCurrentAgent()`
+  - preserves persistence snapshot behavior when an agent is selected
+- The same centralized helper is reused by existing lifecycle and visibility refresh paths, keeping dedicated dashboard refresh behavior consistent.
+
+Scope confirmation:
+
+- The regression path is shared by all fixed dedicated dashboards:
+  - `overview`, `tools`, `files`, `skills`, `channels`, `cron`, `dreaming`, `nodes`, `instances`, `usage`, and `devices`.
+- The fix is applied at shared host and pane-visibility layers, so all dedicated dashboards receive activation-time refresh.
+
 ## Recommended Validation Checklist
 
 ### File-Level Validation
