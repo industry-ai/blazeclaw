@@ -2252,7 +2252,9 @@
         }
 
         async function send(forceError) {
-            const message = String(state.inputEl.value || "").trim();
+            const message = state.inputEl
+                ? String(state.inputEl.value || "").trim()
+                : "";
             const hasAttachments = state.attachments.length > 0;
             if ((!message && !hasAttachments) || !state.bridgeAvailable) {
                 return;
@@ -2260,14 +2262,18 @@
 
             const localCommand = await handleLocalSlashCommand(message);
             if (localCommand.handled) {
-                state.inputEl.value = "";
+                if (state.inputEl) {
+                    state.inputEl.value = "";
+                }
                 persistDraftForSession();
                 updateComposerState();
                 return;
             }
 
             const pendingAttachments = state.attachments.slice();
-            state.inputEl.value = "";
+            if (state.inputEl) {
+                state.inputEl.value = "";
+            }
             state.attachments = [];
             persistDraftForSession();
 

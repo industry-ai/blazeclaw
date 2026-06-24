@@ -502,12 +502,44 @@ Implemented module-loading strategy in Phase 3:
 
 ### Phase 4: Optional Bootstrap Cleanup
 
+Status: Completed
+
+Implemented files:
+
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard-host-bootstrap.js`
+- `blazeclaw/BlazeClawMfc/web/chat/index.js`
+- `blazeclaw/BlazeClawMfc/web/chat/chat-controller.js`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_*.html`
+
 After the page split is stable:
 
 - Extract dashboard-only bootstrap logic from `index.js`.
 - Reduce required hidden chat DOM in dashboard-only pages.
 - Make polling and lifecycle subscriptions visibility-aware.
 - Add small smoke/regression checks for each page identity.
+
+Implemented cleanup details in Phase 4:
+
+- Extracted dashboard host bootstrapping helpers to `dashboard-host-bootstrap.js`:
+  - host detection
+  - panel normalization and fixed-panel resolution
+  - dashboard host layout application
+  - page visibility helper
+  - page-identity smoke check helper
+- Integrated `index.js` with the bootstrap module and kept safe in-file fallbacks.
+- Reduced required hidden chat DOM in dashboard pages by removing hidden compatibility blocks that are no longer required:
+  - `.dashboard-composer-controls`
+  - `.dashboard-session-controls`
+  - hidden `#attachInput`
+- Hardened optional-element handling in `index.js` and `chat-controller.js` so missing hidden controls do not break dashboard startup.
+- Made polling and lifecycle refresh visibility-aware for dashboard hosts:
+  - nodes polling
+  - observability polling
+  - session-control polling
+  - gateway lifecycle refresh short-circuit when page is hidden
+  - `visibilitychange` re-sync hook
+- Added lightweight dashboard page-identity smoke checks and telemetry emission (`dashboard.host.smoke`).
 
 ## Recommended Validation Checklist
 

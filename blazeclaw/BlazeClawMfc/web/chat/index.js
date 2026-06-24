@@ -2664,9 +2664,11 @@
         if (state.sessionCompactionRestoreBtn) {
             state.sessionCompactionRestoreBtn.disabled = !state.bridgeAvailable;
         }
-        state.attachBtn.textContent = state.attachments.length > 0
-            ? `Attach(${state.attachments.length})`
-            : "Attach";
+        if (attachBtn) {
+            attachBtn.textContent = state.attachments.length > 0
+                ? `Attach(${state.attachments.length})`
+                : "Attach";
+        }
 
         renderAssistantIdentity();
         renderSpeechStatus();
@@ -3035,7 +3037,9 @@
                             errorClass: "status",
                         });
                     }
-                    const prompt = String(state.inputEl.value || "").trim();
+                    const prompt = state.inputEl
+                        ? String(state.inputEl.value || "").trim()
+                        : "";
                     startLiveSpeechPoll(startAudioPath, startAudioArtifact, prompt, previewRunId);
                     updateComposerState();
                     return;
@@ -3108,7 +3112,9 @@
                     return;
                 }
 
-                const prompt = String(state.inputEl.value || "").trim();
+                const prompt = state.inputEl
+                    ? String(state.inputEl.value || "").trim()
+                    : "";
                 await controller.transcribeSpeech({
                     audioPath,
                     audioArtifact,
@@ -3212,6 +3218,96 @@
             });
     }
 
+    const dashboardHostBootstrap = window.BlazeClawDashboardHostBootstrap || {};
+
+    function isDashboardHost() {
+        if (typeof dashboardHostBootstrap.isDashboardHost === "function") {
+            return dashboardHostBootstrap.isDashboardHost();
+        }
+
+        if (window.__BLAZECLAW_DASHBOARD_HOST__ === true) {
+            return true;
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        if (search.get("host") === "dashboard") {
+            return true;
+        }
+
+        return /dashboard(?:_[a-z0-9_-]+)?\.html(?:$|[?#])/i
+            .test(String(window.location.pathname || ""));
+    }
+
+    function normalizeAgentsPanelId(value) {
+        if (typeof dashboardHostBootstrap.normalizePanelId === "function") {
+            return dashboardHostBootstrap.normalizePanelId(value);
+        }
+
+        const normalized = String(value || "").trim().toLowerCase();
+        const supportedPanels = [
+            "overview",
+            "tools",
+            "files",
+            "skills",
+            "channels",
+            "cron",
+            "dreaming",
+            "nodes",
+            "instances",
+            "usage",
+            "observability",
+            "devices",
+        ];
+        if (supportedPanels.indexOf(normalized) >= 0) {
+            return normalized;
+        }
+        return "";
+    }
+
+    function resolveDashboardHostPanelHint() {
+        if (typeof dashboardHostBootstrap.resolvePanelHint === "function") {
+            return normalizeAgentsPanelId(dashboardHostBootstrap.resolvePanelHint());
+        }
+
+        if (!isDashboardHost()) {
+            return "";
+        }
+
+        const explicitPanel = normalizeAgentsPanelId(
+            window.__BLAZECLAW_DASHBOARD_PANEL__
+        );
+        if (explicitPanel) {
+            return explicitPanel;
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        return normalizeAgentsPanelId(search.get("panel"));
+    }
+
+    function resolveDashboardHostFixedPanel(panelHint) {
+        if (typeof dashboardHostBootstrap.resolveFixedPanelId === "function") {
+            return normalizeAgentsPanelId(
+                dashboardHostBootstrap.resolveFixedPanelId(panelHint)
+            );
+        }
+
+        if (!panelHint || !isDashboardHost()) {
+            return "";
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        const fixedPanelQuery = String(search.get("fixedPanel") || "").trim().toLowerCase();
+        const fixedPanelGlobal = window.__BLAZECLAW_DASHBOARD_PANEL_FIXED__;
+
+        if (fixedPanelGlobal === false ||
+            fixedPanelQuery === "0" ||
+            fixedPanelQuery === "false") {
+            return "";
+        }
+
+        return panelHint;
+    }
+
     function resolveAgentsEnabled() {
         if (isDashboardHost()) {
             return true;
@@ -3243,75 +3339,6 @@
         return false;
     }
 
-    function isDashboardHost() {
-        if (window.__BLAZECLAW_DASHBOARD_HOST__ === true) {
-            return true;
-        }
-
-        const search = new URLSearchParams(window.location.search || "");
-        if (search.get("host") === "dashboard") {
-            return true;
-        }
-
-        return /dashboard\.html(?:$|[?#])/i.test(String(window.location.pathname || ""));
-    }
-
-    function normalizeAgentsPanelId(value) {
-        const normalized = String(value || "").trim().toLowerCase();
-        const supportedPanels = [
-            "overview",
-            "tools",
-            "files",
-            "skills",
-            "channels",
-            "cron",
-            "dreaming",
-            "nodes",
-            "instances",
-            "usage",
-            "observability",
-            "devices",
-        ];
-        if (supportedPanels.indexOf(normalized) >= 0) {
-            return normalized;
-        }
-        return "";
-    }
-
-    function resolveDashboardHostPanelHint() {
-        if (!isDashboardHost()) {
-            return "";
-        }
-
-        const explicitPanel = normalizeAgentsPanelId(
-            window.__BLAZECLAW_DASHBOARD_PANEL__
-        );
-        if (explicitPanel) {
-            return explicitPanel;
-        }
-
-        const search = new URLSearchParams(window.location.search || "");
-        return normalizeAgentsPanelId(search.get("panel"));
-    }
-
-    function resolveDashboardHostFixedPanel(panelHint) {
-        if (!panelHint || !isDashboardHost()) {
-            return "";
-        }
-
-        const search = new URLSearchParams(window.location.search || "");
-        const fixedPanelQuery = String(search.get("fixedPanel") || "").trim().toLowerCase();
-        const fixedPanelGlobal = window.__BLAZECLAW_DASHBOARD_PANEL_FIXED__;
-
-        if (fixedPanelGlobal === false ||
-            fixedPanelQuery === "0" ||
-            fixedPanelQuery === "false") {
-            return "";
-        }
-
-        return panelHint;
-    }
-
     function toPanelLabel(panelId) {
         const raw = String(panelId || "").trim();
         if (!raw) {
@@ -3326,12 +3353,35 @@
         dashboardHostPanelHint
     );
 
+    function isDashboardHostVisible() {
+        if (!isDashboardHost()) {
+            return true;
+        }
+
+        if (typeof dashboardHostBootstrap.isPageVisible === "function") {
+            return dashboardHostBootstrap.isPageVisible();
+        }
+
+        if (typeof document.hidden === "boolean") {
+            return !document.hidden;
+        }
+
+        return true;
+    }
+
     function applyDashboardHostLayout() {
         if (!isDashboardHost()) {
             return;
         }
 
-        document.body.classList.add("blazeclaw-dashboard-host");
+        if (typeof dashboardHostBootstrap.applyHostLayout === "function") {
+            dashboardHostBootstrap.applyHostLayout(state);
+            return;
+        }
+
+        if (document.body) {
+            document.body.classList.add("blazeclaw-dashboard-host");
+        }
         if (state.agentsControlPlaneEl) {
             state.agentsControlPlaneEl.hidden = false;
         }
@@ -3510,6 +3560,7 @@
         return Boolean(
             agentsController &&
             state.connected &&
+            isDashboardHostVisible() &&
             String(state.agentsPanel || "") === "nodes"
         );
     }
@@ -3565,6 +3616,7 @@
         return Boolean(
             agentsController &&
             state.connected &&
+            isDashboardHostVisible() &&
             state.observabilityEnabled &&
             String(state.agentsPanel || "") === "observability"
         );
@@ -3627,6 +3679,7 @@
         return Boolean(
             state.connected &&
             state.bridgeAvailable &&
+            isDashboardHostVisible() &&
             state.sessionSubscribed
         );
     }
@@ -3730,6 +3783,12 @@
                 return;
             }
 
+            if (!isDashboardHostVisible()) {
+                syncNodesPolling();
+                syncObservabilityPolling();
+                return;
+            }
+
             void controller.loadSpeechCapabilities()
                 .then((snapshot) => {
                     state.speechCapabilities = snapshot && typeof snapshot === "object"
@@ -3779,6 +3838,26 @@
             syncNodesPolling();
             syncObservabilityPolling();
         };
+
+        if (typeof document.addEventListener === "function") {
+            document.addEventListener("visibilitychange", () => {
+                syncNodesPolling();
+                syncObservabilityPolling();
+                syncSessionControlsPolling();
+            });
+        }
+
+        if (typeof dashboardHostBootstrap.runSmokeChecks === "function" &&
+            isDashboardHost()) {
+            const smokeResult = dashboardHostBootstrap.runSmokeChecks({
+                expectedPanel: dashboardHostPanelHint,
+                activePanel: state.agentsPanel,
+                hasControlPlane: Boolean(state.agentsControlPlaneEl),
+            });
+            if (smokeResult && smokeResult.ok) {
+                emitAgentsTelemetry("dashboard.host.smoke", smokeResult);
+            }
+        }
 
         if (resolveAgentsRegressionChecksEnabled() &&
             typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {

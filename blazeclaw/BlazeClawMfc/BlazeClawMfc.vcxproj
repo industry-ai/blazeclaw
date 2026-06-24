@@ -686,6 +686,7 @@
     <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat-controller.js" />
     <None Include="web\chat\cron-controller.js" />
+    <None Include="web\chat\dashboard-host-bootstrap.js" />
     <None Include="web\chat\dashboard_channels.html" />
     <None Include="web\chat\dashboard_devices.html" />
     <None Include="web\chat\dashboard_dreaming.html" />
