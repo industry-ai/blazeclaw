@@ -451,6 +451,21 @@ Environment variable routing behavior after Phase 2:
 
 ### Phase 3: Extract Additional Dashboard Pages
 
+Status: Completed
+
+Implemented files:
+
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_overview.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_tools.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_files.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_skills.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_channels.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_dreaming.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_nodes.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_instances.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_usage.html`
+- `blazeclaw/BlazeClawMfc/web/chat/dashboard_devices.html`
+
 Create additional pages as needed:
 
 - `dashboard_overview.html`
@@ -465,6 +480,25 @@ Create additional pages as needed:
 - `dashboard_devices.html`
 
 Each page should load only the required controller modules where practical, while preserving shared bridge compatibility during the transition.
+
+Implemented module-loading strategy in Phase 3:
+
+- All pages keep the shared dashboard host DOM and bridge compatibility elements.
+- All pages include common support scripts: `scope-errors.js`, `channels-state-contract.js`, `config-form-coerce.js`, `config-form-utils.js`, and `controller-utils.js`.
+- Each page pins fixed-panel mode with:
+  - `window.__BLAZECLAW_DASHBOARD_PANEL__ = "<panel>"`
+  - `window.__BLAZECLAW_DASHBOARD_PANEL_FIXED__ = true`
+- Each page includes only its corresponding panel controller module where needed:
+  - `dashboard_tools.html` → `tools-controller.js`
+  - `dashboard_files.html` → `files-controller.js`
+  - `dashboard_skills.html` → `skills-controller.js`
+  - `dashboard_channels.html` → `channels-controller.js`
+  - `dashboard_dreaming.html` → `dreaming-controller.js`
+  - `dashboard_nodes.html` → `nodes-controller.js`
+  - `dashboard_instances.html` → `instances-controller.js`
+  - `dashboard_usage.html` → `usage-controller.js`
+  - `dashboard_devices.html` → `devices-controller.js`
+  - `dashboard_overview.html` uses no extra panel module.
 
 ### Phase 4: Optional Bootstrap Cleanup
 

@@ -686,6 +686,16 @@
     <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat-controller.js" />
     <None Include="web\chat\cron-controller.js" />
+    <None Include="web\chat\dashboard_channels.html" />
+    <None Include="web\chat\dashboard_devices.html" />
+    <None Include="web\chat\dashboard_dreaming.html" />
+    <None Include="web\chat\dashboard_files.html" />
+    <None Include="web\chat\dashboard_instances.html" />
+    <None Include="web\chat\dashboard_nodes.html" />
+    <None Include="web\chat\dashboard_overview.html" />
+    <None Include="web\chat\dashboard_skills.html" />
+    <None Include="web\chat\dashboard_tools.html" />
+    <None Include="web\chat\dashboard_usage.html" />
     <None Include="web\chat\devices-controller.js" />
     <None Include="web\chat\files-controller.js" />
     <None Include="web\chat\index.css" />
@@ -831,4 +841,3 @@
     <Copy SourceFiles="@(BlazeClawLlamaCppRuntimeAssets)" DestinationFiles="@(BlazeClawLlamaCppRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>
-
