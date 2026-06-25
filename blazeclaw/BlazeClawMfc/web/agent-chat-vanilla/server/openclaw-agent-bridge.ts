@@ -73,12 +73,12 @@ function buildAgentChatCronContext(body: Record<string, unknown>): string {
   const pushToken = resolveOpenClawAgentPushToken()
   const channel = currentConversationChannel(body)
   if (!pushUrl || !pushToken || !channel || isObsoleteAgentPushChannel(channel)) {
-    console.log(`[openclaw-agent-bridge] cron context skipped channel=${channel || '-'} pushUrl=${pushUrl || '-'} tokenConfigured=${Boolean(pushToken)}`)
+    console.log(`[blazeclaw-agent-bridge] cron context skipped channel=${channel || '-'} pushUrl=${pushUrl || '-'} tokenConfigured=${Boolean(pushToken)}`)
     return ''
   }
   const taskScope = conversationTaskScope(channel)
   const eventType = taskScope === 'personal' ? 'personal_task_due' : 'group_reminder_due'
-  console.log(`[openclaw-agent-bridge] cron context enabled channel=${channel} pushUrl=${pushUrl}`)
+  console.log(`[blazeclaw-agent-bridge] cron context enabled channel=${channel} pushUrl=${pushUrl}`)
 
   return [
     '',
@@ -88,7 +88,7 @@ function buildAgentChatCronContext(body: Record<string, unknown>): string {
     `- conversationId: ${toStringValue(body.conversationId) || channel}`,
     `- conversationTaskScope: ${taskScope}`,
     `- defaultEventType: ${eventType}`,
-    '- When the user asks for a future reminder, alarm, timer, or scheduled message, create an OpenClaw cron job instead of saying reminders are unavailable.',
+    '- When the user asks for a future reminder, alarm, timer, or scheduled message, create a BlazeClaw cron job instead of saying reminders are unavailable.',
     '- Use a one-shot cron schedule (kind="at") for relative times such as "in 10 minutes" and absolute times such as "Sunday at 8 PM" or "tomorrow morning at 9".',
     '- The cron job must deliver the reminder to AgentChat by POSTing to the push bridge at the scheduled time.',
     '- Task ownership is determined by the current AgentChat conversation, not by a fixed keyword list.',
@@ -104,9 +104,9 @@ function buildAgentChatCronContext(body: Record<string, unknown>): string {
     '- The agent turn message format (copy this exactly, filling in the placeholders):',
     '  $body = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(\'<BASE64_OF_PUSH_JSON>\')); Invoke-RestMethod -Uri \'<pushUrl>\' -Method Post -ContentType \'application/json; charset=utf-8\' -Body $body',
     '- Encode the push JSON as base64 so no escaping issues occur. The push JSON schema:',
-    '  {"cmd":"AGENT_PUSH","token":"<token>","idempotencyKey":"openclaw:reminder:<channel>:<triggerAt>:<requestId>","channel":"<channel>","message":"提醒：<reminder text>","attachments":[],"scope":"personal","eventType":"personal_task_due","personalTaskId":"<optional frontend personalTaskId>","reminderId":"<optional reminderId>","creatorUserId":"<optional userId>","deliverTo":{"type":"conversation","channel":"<channel>"}}',
-    '  {"cmd":"AGENT_PUSH","token":"<token>","idempotencyKey":"openclaw:group-reminder:<channel>:<triggerAt>:<requestId>","channel":"<channel>","message":"提醒：<group reminder text>","attachments":[],"scope":"group","eventType":"group_reminder_due","postId":"<optional group post/task id>","reminderId":"<optional reminderId>","creatorUserId":"<optional userId>","conversationId":"<conversationId>","deliverTo":{"type":"conversation","channel":"<channel>"}}',
-    '- The idempotencyKey format: openclaw:reminder:<channel>:<triggerAt ISO string>:<random UUID>',
+    '  {"cmd":"AGENT_PUSH","token":"<token>","idempotencyKey":"blazeclaw:reminder:<channel>:<triggerAt>:<requestId>","channel":"<channel>","message":"提醒：<reminder text>","attachments":[],"scope":"personal","eventType":"personal_task_due","personalTaskId":"<optional frontend personalTaskId>","reminderId":"<optional reminderId>","creatorUserId":"<optional userId>","deliverTo":{"type":"conversation","channel":"<channel>"}}',
+    '  {"cmd":"AGENT_PUSH","token":"<token>","idempotencyKey":"blazeclaw:group-reminder:<channel>:<triggerAt>:<requestId>","channel":"<channel>","message":"提醒：<group reminder text>","attachments":[],"scope":"group","eventType":"group_reminder_due","postId":"<optional group post/task id>","reminderId":"<optional reminderId>","creatorUserId":"<optional userId>","conversationId":"<conversationId>","deliverTo":{"type":"conversation","channel":"<channel>"}}',
+    '- The idempotencyKey format: blazeclaw:reminder:<channel>:<triggerAt ISO string>:<random UUID>',
     '- Set timeoutSeconds=30 in the payload.',
     '- Set deleteAfterRun=true so the cron job self-deletes after firing.',
     '- Do not use #group-posts-demo or #personal-workspace. If the channel is missing, do not create an AgentChat push cron job.',

@@ -9,7 +9,8 @@ const AppConfig = (() => {
     authHost: '139.224.189.70',
     authPort: 9443,
     chatHttpBase: 'http://localhost:8787',
-    openclawBridgeUrl: 'http://192.168.20.12:3000',
+    blazeclawBridgeUrl: 'http://localhost:8788',
+    openclawBridgeUrl: 'http://localhost:8788',
     webSmsLoginEnabled: false,
     debugSmsCode: '123456',
     debugSessionId: '',
@@ -42,6 +43,7 @@ const AppConfig = (() => {
     const port = authCfg.port || defaults.authPort;
     return {
       httpBaseUrl: _env('chatHttpBase', defaults.chatHttpBase),
+      blazeclawBridgeUrl: _env('blazeclawBridgeUrl', defaults.blazeclawBridgeUrl),
       openclawBridgeUrl: _env('openclawBridgeUrl', defaults.openclawBridgeUrl),
       wsUrl: _env('chatWsUrl', ''), // 默认为空，使用 HTTP IRC 模式
       forceMockChat: _env('forceMockChat', defaults.forceMockChat),

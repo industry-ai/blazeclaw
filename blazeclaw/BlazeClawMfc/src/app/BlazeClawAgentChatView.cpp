@@ -17,6 +17,21 @@ constexpr UINT WM_AGENTCHAT_WEBMESSAGE_RECEIVED = WM_USER + 210;
 constexpr LPCWSTR AGENTCHAT_HOST_NAME = L"blazeclaw-agentchat.localhost";
 constexpr LPCWSTR AGENTCHAT_INDEX_FILE = L"index.html";
 
+namespace
+{
+	bool IsProcessStillActive(const PROCESS_INFORMATION& processInfo)
+	{
+		if (processInfo.hProcess == nullptr)
+		{
+			return false;
+		}
+
+		DWORD exitCode = 0;
+		return GetExitCodeProcess(processInfo.hProcess, &exitCode) &&
+			exitCode == STILL_ACTIVE;
+	}
+}
+
 IMPLEMENT_DYNCREATE(CBlazeClawAgentChatView, CView)
 
 BEGIN_MESSAGE_MAP(CBlazeClawAgentChatView, CView)
@@ -311,9 +326,73 @@ bool CBlazeClawAgentChatView::WaitForNodeServer(int timeoutMs)
 	return (result == WAIT_OBJECT_0);
 }
 
+bool CBlazeClawAgentChatView::StartNodeScript(
+	const std::wstring& serverPath,
+	const std::wstring& scriptName,
+	PROCESS_INFORMATION& processInfo)
+{
+	std::wstring psCommand =
+		L"Set-Location -Path \"" + serverPath +
+		L"\"; npm run " + scriptName;
+	std::wstring cmdLine =
+		L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" +
+		psCommand +
+		L"\"";
+
+	TRACE("CBlazeClawAgentChatView: Executing %ls: %ls\n",
+		scriptName.c_str(),
+		cmdLine.c_str());
+
+	ZeroMemory(&processInfo, sizeof(processInfo));
+	STARTUPINFOW startupInfo = { sizeof(startupInfo) };
+	std::vector<wchar_t> cmdLineBuffer(cmdLine.begin(), cmdLine.end());
+	cmdLineBuffer.push_back(L'\0');
+
+	const BOOL success = CreateProcessW(
+		NULL,
+		&cmdLineBuffer[0],
+		NULL,
+		NULL,
+		FALSE,
+		CREATE_NO_WINDOW | CREATE_DEFAULT_ERROR_MODE,
+		NULL,
+		NULL,
+		&startupInfo,
+		&processInfo);
+
+	if (!success)
+	{
+		TRACE("CBlazeClawAgentChatView: Failed to start %ls. Error: %lu\n",
+			scriptName.c_str(),
+			GetLastError());
+		return false;
+	}
+
+	TRACE("CBlazeClawAgentChatView: Started %ls. PID: %lu\n",
+		scriptName.c_str(),
+		processInfo.dwProcessId);
+	return true;
+}
+
+void CBlazeClawAgentChatView::StopNodeProcess(PROCESS_INFORMATION& processInfo)
+{
+	if (processInfo.hProcess)
+	{
+		TerminateProcess(processInfo.hProcess, 0);
+		CloseHandle(processInfo.hProcess);
+		processInfo.hProcess = nullptr;
+	}
+
+	if (processInfo.hThread)
+	{
+		CloseHandle(processInfo.hThread);
+		processInfo.hThread = nullptr;
+	}
+}
+
 void CBlazeClawAgentChatView::StartNodeServer()
 {
-	TRACE("CBlazeClawAgentChatView: Starting Node.js server...\n");
+	TRACE("CBlazeClawAgentChatView: Starting AgentChat Node.js services...\n");
 
 	std::wstring serverPath = GetServerPath();
 	if (serverPath.empty())
@@ -322,32 +401,24 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		return;
 	}
 
-	TRACE("CBlazeClawAgentChatView: Server path: %s\n", serverPath.c_str());
+	TRACE("CBlazeClawAgentChatView: Server path: %ls\n", serverPath.c_str());
 
 	m_hNodeStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	std::wstring psCommand = L"Set-Location -Path \"" + serverPath + L"\"; npm run chat-bridge";
-	std::wstring cmdLine = L"powershell.exe -NoExit -Command \"" + psCommand + L"\"";
+	const bool chatBridgeStarted = StartNodeScript(
+		serverPath,
+		L"chat-bridge",
+		m_nodeProcessInfo);
+	const bool agentBridgeStarted = StartNodeScript(
+		serverPath,
+		L"blazeclaw-agent-bridge",
+		m_agentBridgeProcessInfo);
 
-	TRACE("CBlazeClawAgentChatView: Executing: %s\n", cmdLine.c_str());
-
-	ZeroMemory(&m_nodeProcessInfo, sizeof(m_nodeProcessInfo));
-	STARTUPINFOW siNpm = { sizeof(siNpm) };
-	std::vector<wchar_t> cmdLineBuffer(cmdLine.begin(), cmdLine.end());
-	cmdLineBuffer.push_back(L'\0');
-
-	BOOL bSuccess = CreateProcessW(
-		NULL, &cmdLineBuffer[0],
-		NULL, NULL, FALSE,
-		CREATE_NO_WINDOW | CREATE_DEFAULT_ERROR_MODE,
-		NULL, NULL,
-		&siNpm,
-		&m_nodeProcessInfo);
-
-	if (!bSuccess)
+	if (!chatBridgeStarted || !agentBridgeStarted)
 	{
-		DWORD err = GetLastError();
-		TRACE("CBlazeClawAgentChatView: Failed to start Node.js server. Error: %d\n", err);
+		TRACE("CBlazeClawAgentChatView: Failed to start one or more Node.js services\n");
+		StopNodeProcess(m_nodeProcessInfo);
+		StopNodeProcess(m_agentBridgeProcessInfo);
 		if (m_hNodeStartedEvent)
 		{
 			CloseHandle(m_hNodeStartedEvent);
@@ -356,31 +427,33 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		return;
 	}
 
-	TRACE("CBlazeClawAgentChatView: Node.js server started. PID: %d\n", m_nodeProcessInfo.dwProcessId);
-
 	bool serverReady = false;
 	for (int i = 0; i < 30; i++)
 	{
 		Sleep(500);
 
-		DWORD exitCode;
-		if (GetExitCodeProcess(m_nodeProcessInfo.hProcess, &exitCode) && exitCode == STILL_ACTIVE)
+		if (IsProcessStillActive(m_nodeProcessInfo) &&
+			IsProcessStillActive(m_agentBridgeProcessInfo))
 		{
 			serverReady = true;
 			m_bNodeServerStarted = true;
-			TRACE("CBlazeClawAgentChatView: Node.js server started successfully\n");
+			if (m_hNodeStartedEvent)
+			{
+				SetEvent(m_hNodeStartedEvent);
+			}
+			TRACE("CBlazeClawAgentChatView: AgentChat Node.js services started successfully\n");
 			break;
 		}
 		else
 		{
-			TRACE("CBlazeClawAgentChatView: Node.js process exited with code: %d\n", exitCode);
+			TRACE("CBlazeClawAgentChatView: One or more Node.js services exited during startup\n");
 			break;
 		}
 	}
 
 	if (!serverReady)
 	{
-		TRACE("CBlazeClawAgentChatView: Warning: Node.js server may not have started properly\n");
+		TRACE("CBlazeClawAgentChatView: Warning: Node.js services may not have started properly\n");
 		m_bNodeServerStarted = true;
 	}
 }
@@ -395,21 +468,11 @@ void CBlazeClawAgentChatView::StopNodeServer()
 		m_hNodeStartedEvent = nullptr;
 	}
 
-	if (m_nodeProcessInfo.hProcess)
-	{
-		TerminateProcess(m_nodeProcessInfo.hProcess, 0);
-		CloseHandle(m_nodeProcessInfo.hProcess);
-		m_nodeProcessInfo.hProcess = nullptr;
-	}
-
-	if (m_nodeProcessInfo.hThread)
-	{
-		CloseHandle(m_nodeProcessInfo.hThread);
-		m_nodeProcessInfo.hThread = nullptr;
-	}
+	StopNodeProcess(m_agentBridgeProcessInfo);
+	StopNodeProcess(m_nodeProcessInfo);
 
 	m_bNodeServerStarted = false;
-	TRACE("CBlazeClawAgentChatView: Node.js server stopped\n");
+	TRACE("CBlazeClawAgentChatView: Node.js services stopped\n");
 }
 
 void CBlazeClawAgentChatView::SetupWebViewEvents()

@@ -96,10 +96,15 @@ export function resolveAgentPushRequestBody(body: Record<string, unknown>): { bo
   return { body, source: 'direct' }
 }
 export function ensureOpenClawAgentPushEnv(port = 3000): void {
+  process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_URL ||=
+    toStringValue(process.env.BLAZECLAW_AGENT_PUSH_PUBLIC_URL || process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_PUBLIC_URL) ||
+    `http://127.0.0.1:${port}/api/blazeclaw-agent-push`
   process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_URL ||=
     toStringValue(process.env.OPENCLAW_AGENT_PUSH_PUBLIC_URL || process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_PUBLIC_URL) ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_URL ||
     `http://127.0.0.1:${port}/api/openclaw-agent-push`
   const token = resolveOpenClawAgentPushToken()
+  if (token) process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_TOKEN ||= token
   if (token) process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_TOKEN ||= token
 }
 

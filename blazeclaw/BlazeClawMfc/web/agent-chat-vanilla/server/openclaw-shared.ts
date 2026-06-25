@@ -65,8 +65,23 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 // 文件系统工具
 // ══════════════════════════════════════════════════════════════════
 
+function resolveBlazeClawStateRoot(): string {
+  const configured = toStringValue(
+    process.env.BLAZECLAW_AGENTCHAT_STATE_DIR ||
+    process.env.BLAZECLAW_STATE_DIR,
+  )
+  if (configured) return path.resolve(configured)
+
+  const localAppData = toStringValue(process.env.LOCALAPPDATA)
+  if (localAppData) {
+    return path.join(localAppData, 'BlazeClaw', 'state', 'agent-chat', 'bridge')
+  }
+
+  return path.join(os.homedir(), '.blazeclaw', 'agent-chat', 'bridge')
+}
+
 export function statePath(...segments: string[]) {
-  return path.join(os.homedir(), '.openclaw', ...segments)
+  return path.join(resolveBlazeClawStateRoot(), ...segments)
 }
 
 export function readJson(filePath: string) {
@@ -172,7 +187,7 @@ export function fallbackForLowInformationCardResult(text: string, originalReques
 }
 
 export function resolveProtocolVersion(): number {
-  const env = process.env.OPENCLAW_PROTOCOL_VERSION
+  const env = process.env.BLAZECLAW_PROTOCOL_VERSION || process.env.OPENCLAW_PROTOCOL_VERSION
   if (env) {
     const parsed = Number(env)
     if (Number.isFinite(parsed) && parsed > 0) return parsed
@@ -191,6 +206,8 @@ export function tryExtractProtocolMismatchVersion(error: unknown): number | unde
 
 export function resolveGatewayUrl(): string {
   const raw =
+    process.env.BLAZECLAW_GATEWAY_URL ||
+    process.env.BLAZECLAW_GATEWAY_TARGET ||
     process.env.OPENCLAW_GATEWAY_URL ||
     process.env.VITE_OPENCLAW_GATEWAY_TARGET ||
     process.env.VITE_OPENCLAW_PROXY_TARGET ||
@@ -202,6 +219,8 @@ export function resolveGatewayUrl(): string {
 
 export function resolveChatHost(): string {
   return toStringValue(
+    process.env.BLAZECLAW_AGENT_PUSH_CHAT_HOST ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_CHAT_HOST ||
     process.env.OPENCLAW_AGENT_PUSH_CHAT_HOST ||
     process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_CHAT_HOST ||
     process.env.CHAT_TCP_HOST ||
@@ -213,6 +232,8 @@ export function resolveChatHost(): string {
 
 export function resolveChatPort(): number {
   const value = Number(
+    process.env.BLAZECLAW_AGENT_PUSH_CHAT_PORT ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_CHAT_PORT ||
     process.env.OPENCLAW_AGENT_PUSH_CHAT_PORT ||
     process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_CHAT_PORT ||
     process.env.CHAT_TCP_PORT ||
@@ -224,12 +245,22 @@ export function resolveChatPort(): number {
 }
 
 export function resolvePushTimeoutMs(): number {
-  const value = Number(process.env.OPENCLAW_AGENT_PUSH_TIMEOUT_MS || process.env.CHAT_TLS_TIMEOUT_MS || 30000)
+  const value = Number(
+    process.env.BLAZECLAW_AGENT_PUSH_TIMEOUT_MS ||
+    process.env.OPENCLAW_AGENT_PUSH_TIMEOUT_MS ||
+    process.env.CHAT_TLS_TIMEOUT_MS ||
+    30000,
+  )
   return Number.isFinite(value) && value > 0 ? value : 30000
 }
 
 export function resolveAgentPushUrl(): string {
   const configured = toStringValue(
+    process.env.BLAZECLAW_AGENT_PUSH_PUBLIC_URL ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_PUBLIC_URL ||
+    process.env.BLAZECLAW_AGENT_PUSH_BRIDGE_URL ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_URL ||
+    process.env.BLAZECLAW_AGENT_PUSH_URL ||
     process.env.OPENCLAW_AGENT_PUSH_PUBLIC_URL ||
     process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_PUBLIC_URL ||
     process.env.OPENCLAW_AGENT_PUSH_BRIDGE_URL ||
@@ -238,12 +269,14 @@ export function resolveAgentPushUrl(): string {
   )
   if (configured && !configured.includes(`/api/${'agent-push'}`)) return configured
   const port = toStringValue(process.env.PORT || process.env.VITE_PORT) || '3000'
-  return `http://127.0.0.1:${port}/api/openclaw-agent-push`
+  return `http://127.0.0.1:${port}/api/blazeclaw-agent-push`
 }
 
 export function resolveOpenClawAgentPushToken(bodyToken?: unknown): string {
   const configured = toStringValue(
     bodyToken ||
+    process.env.BLAZECLAW_AGENT_PUSH_TOKEN ||
+    process.env.AGENTCHAT_BLAZECLAW_AGENT_PUSH_TOKEN ||
     process.env.OPENCLAW_AGENT_PUSH_TOKEN ||
     process.env.AGENTCHAT_OPENCLAW_AGENT_PUSH_TOKEN,
   )
@@ -721,7 +754,7 @@ export function buildAgentChatReminderCronParams(body: Record<string, unknown>, 
   const reminderId = toStringValue(body.reminderId)
   const creatorUserId = toStringValue(body.userId)
   const conversationId = toStringValue(body.conversationId) || channel
-  const idempotencyKey = `openclaw:personal-reminder:${channel}:${triggerAt.toISOString()}:${toStringValue(body.messageId) || agentRequestId}`
+  const idempotencyKey = `blazeclaw:personal-reminder:${channel}:${triggerAt.toISOString()}:${toStringValue(body.messageId) || agentRequestId}`
   const message = prefixRequesterMention(`提醒：${intent.reminderText}`, body)
 
   const pushPayload = {
@@ -855,7 +888,7 @@ export function buildGroupTaskNativePostAttachment(
 ): Record<string, unknown> {
   const conversationId = currentConversationChannel(body)
   const nowMs = Date.now()
-  const creatorUserId = toStringValue(body.userId) || 'openclaw'
+  const creatorUserId = toStringValue(body.userId) || 'blazeclaw'
   const creatorName = toStringValue(body.userName || body.createdByName) || creatorUserId || '炎图AI助手'
   const title = toStringValue(intent.title).slice(0, 80) || '群任务提醒'
   const summary = `定时提醒：${intent.delayLabel}。${intent.reminderText}`
@@ -895,7 +928,7 @@ export function buildAgentChatGroupTaskCronParams(
     eventType: 'group_task_due',
     message: `提醒：${intent.reminderText}`,
     attachments: [attachment],
-    idempotencyPrefix: 'openclaw:group-task',
+    idempotencyPrefix: 'blazeclaw:group-task',
   })
 }
 

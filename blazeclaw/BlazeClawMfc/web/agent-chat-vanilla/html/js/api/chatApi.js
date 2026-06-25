@@ -364,7 +364,7 @@ async function getConversationHistory(conversationId, limit = 50) {
 }
 
 /**
- * 调用 OpenClaw Agent 获取 AI 回复（SSE 流式）
+ * 调用 BlazeClaw Agent 获取 AI 回复（SSE 流式）
  * 对齐 Vue 版 openclawAgentProvider.buildOpenClawMessage + buildBridgeBody：
  *   1. message 字段构建为 AI_TASK_REQUEST 协议格式（含上下文指令）
  *   2. 检测卡片生成请求时追加 h5-cards 技能指令
@@ -428,8 +428,8 @@ async function callAgent(message, conversationId, sessionId, callbacks, opts = {
   const timeoutMs = 600000; // 对齐 Vue 版 pollTimeoutMs
 
   const chatCfg = AppConfig.getChatConfig();
-  const baseUrl = chatCfg.openclawBridgeUrl || chatCfg.httpBaseUrl || 'http://localhost:8787';
-  const url = `${baseUrl}/api/openclaw-agent`;
+  const baseUrl = chatCfg.blazeclawBridgeUrl || chatCfg.openclawBridgeUrl || chatCfg.httpBaseUrl || 'http://localhost:8788';
+  const url = `${baseUrl}/api/blazeclaw-agent`;
 
   const timer = setTimeout(() => {
     controller.abort();

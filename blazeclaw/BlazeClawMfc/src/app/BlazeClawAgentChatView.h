@@ -74,8 +74,15 @@ private:
 
 private:
 	PROCESS_INFORMATION m_nodeProcessInfo{};
+	PROCESS_INFORMATION m_agentBridgeProcessInfo{};
 	HANDLE m_hNodeStartedEvent = nullptr;
 	bool m_bNodeServerStarted = false;
+
+	bool StartNodeScript(
+		const std::wstring& serverPath,
+		const std::wstring& scriptName,
+		PROCESS_INFORMATION& processInfo);
+	void StopNodeProcess(PROCESS_INFORMATION& processInfo);
 
 public:
 	void StartNodeServer();
