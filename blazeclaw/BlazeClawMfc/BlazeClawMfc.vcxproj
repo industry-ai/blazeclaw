@@ -148,6 +148,8 @@
     <ClInclude Include="src\app\SharedTabsDocTemplate.h" />
     <ClInclude Include="src\app\SharedDocWebViewChildFrame.h" />
     <ClInclude Include="src\app\SharedDocMarkdownChildFrame.h" />
+    <ClInclude Include="src\app\SharedDocAgentChatChildFrame.h" />
+    <ClInclude Include="src\app\BlazeClawAgentChatView.h" />
     <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\IoData_c.h" />
     <ClInclude Include="src\app\IoData_cFactory.h" />
@@ -397,6 +399,8 @@
     <ClCompile Include="src\app\SharedTabsDocTemplate.cpp" />
     <ClCompile Include="src\app\SharedDocWebViewChildFrame.cpp" />
     <ClCompile Include="src\app\SharedDocMarkdownChildFrame.cpp" />
+    <ClCompile Include="src\app\SharedDocAgentChatChildFrame.cpp" />
+    <ClCompile Include="src\app\BlazeClawAgentChatView.cpp" />
     <ClCompile Include="src\app\IoData_cFactory.cpp" />
     <ClCompile Include="src\app\Logger.cpp" />
     <ClCompile Include="src\app\LoginDlg.cpp" />
@@ -714,6 +718,9 @@
     <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
   </ItemGroup>
   <ItemGroup>
+    <BlazeClawAgentChatWebAssets Include="$(ProjectDir)web\agent-chat-vanilla\**\*.*" />
+  </ItemGroup>
+  <ItemGroup>
     <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\runtimes\win-x64\native\*.dll" />
   </ItemGroup>
   <PropertyGroup>
@@ -828,6 +835,9 @@
   </Target>
   <Target Name="CopyBlazeClawChatWebAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawChatWebAssets)" DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawAgentChatWebAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawAgentChatWebAssets)" DestinationFiles="@(BlazeClawAgentChatWebAssets->'$(OutDir)web\agent-chat-vanilla\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)" DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />

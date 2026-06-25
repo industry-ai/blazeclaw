@@ -14,6 +14,7 @@
 #include "SharedTabsDocTemplate.h"
 #include "SharedDocWebViewChildFrame.h"
 #include "SharedDocMarkdownChildFrame.h"
+#include "SharedDocAgentChatChildFrame.h"
 #include "AIChatView.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
@@ -969,13 +970,12 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	}
 	AddDocTemplate(m_pChatDocTemplate);
 
-	// New template: Two MDI tabs (WebView + Markdown) sharing the same document
+	// Template: WebView + AgentChat (replaces old WebView + Markdown)
 	m_pWebViewMarkdownSharedDocTemplate = new CSharedTabsDocTemplate(
 		IDR_BlazeClawMFCTYPE,
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CSharedDocWebViewChildFrame),
-		RUNTIME_CLASS(CSharedDocMarkdownChildFrame));
-		//RUNTIME_CLASS(CAIChatView));
+		RUNTIME_CLASS(CSharedDocAgentChatChildFrame));
 	AddDocTemplate(m_pWebViewMarkdownSharedDocTemplate);
 
 	// New template: Two MDI tabs (WebView + Markdown) sharing the same document

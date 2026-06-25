@@ -6,6 +6,7 @@
 #include <afxwin.h>
 #include "SharedDocWebViewChildFrame.h"
 #include "SharedDocMarkdownChildFrame.h"
+#include "SharedDocAgentChatChildFrame.h"
 #include "BlazeClawMFCView.h"
 
 class CMainFrame;
@@ -19,21 +20,21 @@ public:
         UINT nIDResource,
         CRuntimeClass* pDocClass,
         CRuntimeClass* pWebViewFrameClass,
-        CRuntimeClass* pMarkdownFrameClass)
+        CRuntimeClass* pRightPaneFrameClass)
         : CMultiDocTemplate(nIDResource, pDocClass, pWebViewFrameClass, RUNTIME_CLASS(CBlazeClawMFCView))
-        , m_pMarkdownFrameClass(pMarkdownFrameClass)
+        , m_pRightPaneFrameClass(pRightPaneFrameClass)
     {
     }
 
     virtual ~CSharedTabsDocTemplate() = default;
 
     CDocument* CreateSharedTabs(CMDIFrameWnd* pMDIFrame, BOOL bMakeVisible = TRUE);
-    CFrameWnd* CreateMarkdownTab(CDocument* pSharedDoc, CMDIFrameWnd* pMDIFrame);
+    CFrameWnd* CreateRightPaneTab(CDocument* pSharedDoc, CMDIFrameWnd* pMDIFrame);
 
     virtual CDocument* OpenDocumentFile(
         LPCTSTR lpszPathName,
         BOOL bMakeVisible = TRUE) override;
 
 protected:
-    CRuntimeClass* m_pMarkdownFrameClass = nullptr;
+    CRuntimeClass* m_pRightPaneFrameClass = nullptr;
 };
