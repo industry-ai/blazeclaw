@@ -5,6 +5,7 @@
 #include <memory>
 #include <functional>
 #include <vector>
+#include "Client.h"
 
 #if defined(__has_include)
 # if __has_include(<WebView2.h>)
@@ -82,4 +83,14 @@ public:
 	void StopNodeServer();
 	bool WaitForNodeServer(int timeoutMs);
 	bool IsNodeServerStarted() const { return m_bNodeServerStarted; }
+	void InjectAuthState(const std::string& token, const std::string& sessionId, const std::string& userId, const std::string& phone);
+
+	void _DoInjectAuthState();
+
+private:
+	std::wstring m_injectedToken;
+	std::wstring m_injectedSessionId;
+	std::wstring m_injectedUserId;
+	std::wstring m_injectedPhone;
+	bool m_hasInjectedAuth;
 };

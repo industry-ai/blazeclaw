@@ -30,6 +30,7 @@ END_MESSAGE_MAP()
 
 CBlazeClawAgentChatView::CBlazeClawAgentChatView() noexcept
 	: m_webAssetsPath()
+	, m_hasInjectedAuth(false)
 {
 }
 
@@ -151,6 +152,16 @@ std::wstring CBlazeClawAgentChatView::GetWebAssetsPath() const
 
 bool CBlazeClawAgentChatView::InitWebView()
 {
+	if (CClient::Instance().IsLoggedIn()) {
+		
+				const auto info = CClient::Instance().GetTokenInfo();
+				InjectAuthState(
+					info.token,
+					std::to_string(CClient::Instance().GetSessionId()),
+					info.sub,
+					info.phone);
+		
+	}
 	return CreateWebViewController();
 }
 
@@ -412,6 +423,7 @@ void CBlazeClawAgentChatView::StopNodeServer()
 	TRACE("CBlazeClawAgentChatView: Node.js server stopped\n");
 }
 
+
 void CBlazeClawAgentChatView::SetupWebViewEvents()
 {
 	if (m_webView == nullptr)
@@ -458,31 +470,36 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 			[this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
 				BOOL isSuccess = FALSE;
 				args->get_IsSuccess(&isSuccess);
-				if (!isSuccess)
-				{
-					COREWEBVIEW2_WEB_ERROR_STATUS status;
-					args->get_WebErrorStatus(&status);
-					TRACE("CBlazeClawAgentChatView: Navigation failed: %d\n", status);
-				}
-				else
-				{
-					TRACE("CBlazeClawAgentChatView: Navigation completed\n");
-				}
+			if (!isSuccess)
+			{
+				COREWEBVIEW2_WEB_ERROR_STATUS status;
+				args->get_WebErrorStatus(&status);
+				TRACE("CBlazeClawAgentChatView: Navigation failed: %d\n", status);
+			}
+			else
+			{
+				TRACE("CBlazeClawAgentChatView: Navigation completed\n");
+			}
 
-				if (m_webViewController != nullptr)
-				{
-					m_webViewController->put_IsVisible(TRUE);
-					m_webViewController->NotifyParentWindowPositionChanged();
-				}
+			if (m_webViewController != nullptr)
+			{
+				m_webViewController->put_IsVisible(TRUE);
+				m_webViewController->NotifyParentWindowPositionChanged();
+			}
 
-				if (CWnd* parent = GetParent())
-				{
-					parent->Invalidate();
-					parent->UpdateWindow();
-				}
+			if (CWnd* parent = GetParent())
+			{
+				parent->Invalidate();
+				parent->UpdateWindow();
+			}
 
-				return S_OK;
-			}).Get(), nullptr);
+			if (isSuccess)
+			{
+				_DoInjectAuthState();
+			}
+
+			return S_OK;
+		}).Get(), nullptr);
 }
 
 #else
@@ -582,3 +599,50 @@ void CBlazeClawAgentChatView::StopNodeServer()
 }
 
 #endif
+
+
+void CBlazeClawAgentChatView::InjectAuthState(const std::string& token, const std::string& sessionId, const std::string& userId, const std::string& phone)
+{
+	m_injectedToken = std::wstring(token.begin(), token.end());
+	m_injectedSessionId = std::wstring(sessionId.begin(), sessionId.end());
+	m_injectedUserId = std::wstring(userId.begin(), userId.end());
+	m_injectedPhone = std::wstring(phone.begin(), phone.end());
+	m_hasInjectedAuth = true;
+	_DoInjectAuthState();
+}
+
+void CBlazeClawAgentChatView::_DoInjectAuthState()
+{
+	if (!m_hasInjectedAuth || m_webView == nullptr)
+	{
+		return;
+	}
+
+	m_hasInjectedAuth = false;
+
+	auto escapeForJs = [](const std::wstring& value) -> std::wstring {
+		std::wstring out;
+		out.reserve(value.size());
+		for (wchar_t ch : value) {
+			if (ch == L'\'')
+				out.append(L"\\'");
+			else if (ch == L'\\')
+				out.append(L"\\\\");
+			else
+				out.push_back(ch);
+		}
+		return out;
+		};
+
+	const std::wstring script = L"(function(){"
+		L"try{"
+		L"window.__INJECTED_AUTH__=window.__INJECTED_AUTH__||{};"
+		L"window.__INJECTED_AUTH__.token='" + escapeForJs(m_injectedToken) + L"';"
+		L"window.__INJECTED_AUTH__.sessionId='" + escapeForJs(m_injectedSessionId) + L"';"
+		L"window.__INJECTED_AUTH__.userId='" + escapeForJs(m_injectedUserId) + L"';"
+		L"window.__INJECTED_AUTH__.phone='" + escapeForJs(m_injectedPhone) + L"';"
+		L"window.dispatchEvent(new Event('__auth_injected__'));"
+		L"}catch(e){}}())";
+
+	m_webView->ExecuteScript(script.c_str(), nullptr);
+}

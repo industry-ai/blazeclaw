@@ -254,7 +254,7 @@ const ChatPage = {
     const subtitle = this._convSubtitle(conv);
 
     return `
-    <header class="ds-header" style="flex-shrink:0;border-bottom:1px solid rgba(226,232,240,0.7);padding:1.75rem 1.75rem 0 1.75rem;">
+    <header class="ds-header" style="flex-shrink:0;border-bottom:1px solid rgba(226,232,240,0.7);padding:1.75rem 1.75rem 1rem 1.75rem;">
       <div class="ds-header-inner" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1.5rem;">
         <div style="min-width:0;">
           <div style="display:flex;align-items:center;gap:1rem;">
@@ -269,11 +269,6 @@ const ChatPage = {
                 ${this._renderConnectionLabel()}
               </div>
             </div>
-          </div>
-          <div class="ds-tabs" style="margin-top:1.5rem;display:flex;align-items:center;gap:2rem;">
-            ${['聊天','文件','任务'].map(tab => `
-              <button class="ds-tab-btn ${this.activeTab===tab?'active':''}" data-ds-tab="${tab}" style="font-size:1rem;font-weight:600;border-bottom:2px solid ${this.activeTab===tab?'var(--app-brand)':'transparent'};padding-bottom:0.75rem;color:${this.activeTab===tab?'var(--app-brand)':'var(--app-muted)'};background:none;cursor:pointer;">${tab}</button>
-            `).join('')}
           </div>
         </div>
         <div class="ds-actions" style="display:flex;flex-shrink:0;align-items:center;gap:0.75rem;padding-top:0.25rem;">
@@ -1593,10 +1588,13 @@ const ChatPage = {
       this.voiceState = 'idle';
       this.voiceErrorMessage = '';
 
-      // 对齐 Vue 版 onVoiceClick：用识别结果替换输入框内容
+      // 语音识别结果追加到输入框已有内容后面，而非覆盖（用户先打字再语音时，已有文字应保留）
       this.isVoiceMode = false;
       const convId = ChatStore.getActiveConversationId();
-      this._setComposerDraft(convId, text.slice(0, 2000));
+      const existingDraft = this._getComposerDraft(convId);
+      const separator = existingDraft && !existingDraft.endsWith(' ') ? ' ' : '';
+      const combined = (existingDraft + separator + text).slice(0, 2000);
+      this._setComposerDraft(convId, combined);
       this.render();
       setTimeout(() => {
         const input = document.getElementById('composer-input');

@@ -147,6 +147,9 @@ const ChatStore = (() => {
   // 标记后该会话不会被新消息自动恢复（除非收到带可展示内容的消息）
   let _locallyDeletedConversationIds = {};
 
+    // ── 初始化守卫：防止 init() 被重复调用导致创建多个 transport ──
+  let _initialized = false;
+
   // ── Transport 相关 ──
   let _transport = null;
   let _transportUnsub = null;
@@ -330,7 +333,27 @@ const ChatStore = (() => {
     const { conversationId, messageId, text } = event;
     const convId = _ensureConversationId(conversationId);
     if (!convId) return;
-    const normalizedText = String(text || '').trim();
+    let normalizedText = String(text || '').trim();
+
+    // 对齐 Vue 版 mapNativeTcpPrivmsgToEvent：echo 路径也尝试解码 group agent relay 信封，
+    // 防止服务端推送字段导致 agent 广播误判为 own echo 时显示未解码信封乱码
+    if (normalizedText.startsWith(_GROUP_AGENT_REPLY_RELAY_PREFIX)) {
+      const relay = _decodeGroupAgentReplyRelayEnvelope(normalizedText);
+      if (relay) {
+        normalizedText = relay.message.trim();
+      }
+    }
+
+    // 对齐 Vue 版 chatEventProcessor：agent 消息（含信封解码后的）需剥离末尾的
+    // group agent delivery marker（⁣agent-delivery:<id>⁣），否则会作为乱码尾巴显示。
+    // 同时从 marker 中提取 deliveryId，优先于信封里的 deliveryId（Vue 版发送侧追加的更可靠）。
+    if (author === 'agent') {
+      const marker = _extractGroupAgentDeliveryMarker(normalizedText);
+      normalizedText = marker.content;
+      if (marker.deliveryId) {
+        agentDeliveryId = marker.deliveryId;
+      }
+    }
 
     // 对齐 Vue 版 chatEventProcessor：会话被本地删除时，只有带可展示内容才恢复
     if (isConversationLocallyDeleted(convId)) {
@@ -416,15 +439,20 @@ const ChatStore = (() => {
   }
 
   function _handleMessageReceived(event) {
-    const { conversationId, messageId, author, authorName, text, createdAt, attachments } = event;
+    const { conversationId, messageId, text, createdAt, attachments } = event;
     const convId = _ensureConversationId(conversationId);
     if (!convId) return;
     let normalizedText = String(text || '').trim();
     let msgAttachments = Array.isArray(attachments) ? attachments : [];
+    // author/authorName 在解码信封后可能被修正为 agent
+    let author = event.author;
+    let authorName = event.authorName;
 
-    // 对齐 Vue 版 chatEventProcessor：解析 agent relay envelope，提取 deliveryId + 真实消息
+    // 对齐 Vue 版 mapNativeTcpPrivmsgToEvent：对所有 PRIVMSG 先尝试解码 group agent relay 信封，
+    // 信封存在即视为 agent 广播，不依赖 transport 层 author 字段判定。
+    // 否则服务端推送的 from/session_id 不规范时会漏解码，导致接收方看到未解码的信封乱码。
     let agentDeliveryId = null;
-    if (author === 'agent' && normalizedText.startsWith(_GROUP_AGENT_REPLY_RELAY_PREFIX)) {
+    if (normalizedText.startsWith(_GROUP_AGENT_REPLY_RELAY_PREFIX)) {
       const relay = _decodeGroupAgentReplyRelayEnvelope(normalizedText);
       if (relay) {
         agentDeliveryId = relay.deliveryId;
@@ -432,6 +460,19 @@ const ChatStore = (() => {
         if (relay.attachments && relay.attachments.length) {
           msgAttachments = relay.attachments;
         }
+        author = 'agent';
+        authorName = '炎图AI助手';
+      }
+    }
+
+    // 对齐 Vue 版 chatEventProcessor：agent 消息（含信封解码后的）需剥离末尾的
+    // group agent delivery marker（⁣agent-delivery:<id>⁣），否则会作为乱码尾巴显示。
+    // 同时从 marker 中提取 deliveryId，优先于信封里的 deliveryId（Vue 版发送侧追加的更可靠）。
+    if (author === 'agent') {
+      const marker = _extractGroupAgentDeliveryMarker(normalizedText);
+      normalizedText = marker.content;
+      if (marker.deliveryId) {
+        agentDeliveryId = marker.deliveryId;
       }
     }
 
@@ -1302,6 +1343,26 @@ const ChatStore = (() => {
     }
   }
 
+  // 对齐 Vue 版 extractGroupAgentDeliveryMarker：从消息文本末尾剥离 delivery marker，
+  // 并提取 deliveryId 用于去重。marker 格式为 ⁣agent-delivery:<encoded_id>⁣（U+2063 包裹）。
+  // Vue 版发送侧会用 appendGroupAgentDeliveryMarker 把 marker 追加到 message，
+  // 接收侧必须剥离，否则 marker 会残留在显示文本里（表现为乱码尾巴）。
+  function _extractGroupAgentDeliveryMarker(content) {
+    const text = String(content || '');
+    let deliveryId;
+    const cleaned = text.replace(_GROUP_AGENT_DELIVERY_MARKER_RE, (_match, rawId) => {
+      if (!deliveryId) {
+        try {
+          deliveryId = decodeURIComponent(rawId);
+        } catch {
+          deliveryId = rawId;
+        }
+      }
+      return '';
+    }).trim();
+    return { content: cleaned, deliveryId };
+  }
+
   function _parseReminderAmount(raw) {
     const token = String(raw || '').trim();
     if (!token) return 0;
@@ -1746,6 +1807,10 @@ const ChatStore = (() => {
 
   // ── 初始化 ───
   async function init() {
+        // 防止重复初始化：app.js 的 DOMContentLoaded 和 __auth_injected__ 都可能调用 init()，
+    // 重复调用会创建多个 transport 并引发竞态，导致群聊频道 JOIN 被跳过、消息收不到。
+    if (_initialized) return;
+    _initialized = true;
     // ── 本地初始化（瞬时完成，不依赖网络）──
     _agentSkills = AGENT_SKILL_CONFIGS.map((skill) => ({ ...skill }));
     const disabledSkillIds = _loadDisabledSkillIds();
@@ -3051,16 +3116,42 @@ const ChatStore = (() => {
         if (shouldPreserveLocalMessages) {
           return currentMessages;
         }
-        _messagesByConv[convIdNorm] = msgs.map(msg => ({
-          id: msg.id || _mkId('m'),
-          conversationId: convIdNorm,
-          author: msg.author || msg.sender || 'user',
-          authorName: msg.authorName || msg.senderName || '用户',
-          content: msg.content || msg.text || '',
-          status: 'complete',
-          createdAt: msg.createdAt || msg.created_at || Date.now(),
-          kind: 'default',
-        }));
+        _messagesByConv[convIdNorm] = msgs.map(msg => {
+          const rawContent = String(msg.content || msg.text || '').trim();
+          // 对齐 Vue 版 mapNativeTcpPrivmsgToEvent：历史消息也可能含 group agent relay 信封，
+          // 未解码会显示为乱码（AI 回复其他成员的历史消息）
+          let content = rawContent;
+          let author = msg.author || msg.sender || 'user';
+          let authorName = msg.authorName || msg.senderName || '用户';
+          let attachments = msg.attachments;
+          if (rawContent.startsWith(_GROUP_AGENT_REPLY_RELAY_PREFIX)) {
+            const relay = _decodeGroupAgentReplyRelayEnvelope(rawContent);
+            if (relay) {
+              content = relay.message.trim();
+              author = 'agent';
+              authorName = '炎图AI助手';
+              if (relay.attachments && relay.attachments.length) {
+                attachments = relay.attachments;
+              }
+            }
+          }
+          // 对齐 Vue 版 chatEventProcessor：agent 历史消息也需剥离末尾的 delivery marker
+          if (author === 'agent') {
+            const marker = _extractGroupAgentDeliveryMarker(content);
+            content = marker.content;
+          }
+          return {
+            id: msg.id || _mkId('m'),
+            conversationId: convIdNorm,
+            author,
+            authorName,
+            content,
+            attachments: attachments || [],
+            status: 'complete',
+            createdAt: msg.createdAt || msg.created_at || Date.now(),
+            kind: 'default',
+          };
+        });
         notify();
       }
     } catch (e) {
@@ -3333,6 +3424,7 @@ const ChatStore = (() => {
 
   // ── 清理 ──
   function destroy() {
+    _initialized = false;
     if (_transportUnsub) {
       _transportUnsub();
       _transportUnsub = null;
