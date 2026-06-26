@@ -556,18 +556,47 @@ void CDashboardBridgeHost::AppendDashboardStatus(
 		return;
 	}
 
-	CString line;
-	if (detail.empty())
+	// Throttle frequent poll-related status lines to avoid UI/log spam.
+	// Poll failures are reported each poll cycle with an increasing failure count;
+	// show at most one events.poll* line per 10 seconds per stage to keep the
+	// dashboard status readable while still surfacing degradations.
+	const std::wstring stageW(stage);
+	constexpr std::uint64_t kThrottleMs = 10000; // 10s
+	static std::unordered_map<std::wstring, std::uint64_t> s_lastLogMs;
+	const std::uint64_t now = GetTickCount64();
+	bool shouldThrottle = false;
+	if (stageW.rfind(L"events.poll", 0) == 0 || stageW.rfind(L"events.push", 0) == 0)
 	{
-		line.Format(L"[Dashboard] %s", stage);
-	}
-	else
-	{
-		CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
-		line.Format(L"[Dashboard] %s - %s", stage, detailW.GetString());
+		const auto it = s_lastLogMs.find(stageW);
+		if (it != s_lastLogMs.end())
+		{
+			if ((now - it->second) < kThrottleMs)
+			{
+				shouldThrottle = true;
+			}
+		}
 	}
 
-	mainFrame->AddToolStatusLine(line);
+	if (!shouldThrottle)
+	{
+		CString line;
+		if (detail.empty())
+		{
+			line.Format(L"[Dashboard] %s", stage);
+		}
+		else
+		{
+			CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+			line.Format(L"[Dashboard] %s - %s", stage, detailW.GetString());
+		}
+
+		mainFrame->AddToolStatusLine(line);
+
+		if (stageW.rfind(L"events.poll", 0) == 0 || stageW.rfind(L"events.push", 0) == 0)
+		{
+			s_lastLogMs[stageW] = now;
+		}
+	}
 }
 
 } // namespace blazeclaw::app::dashboard_bridge
