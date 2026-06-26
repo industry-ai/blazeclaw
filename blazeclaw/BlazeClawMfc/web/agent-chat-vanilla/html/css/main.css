@@ -821,7 +821,6 @@ html.dark .ds-sidebar {
 .ds-header {
   flex-shrink: 0;
   border-bottom: 1px solid rgba(226, 232, 240, 0.7);
-  padding: 1.75rem 1.75rem 0 1.75rem;
 }
 html.dark .ds-header {
   border-color: rgba(255, 255, 255, 0.06);
@@ -1548,7 +1547,7 @@ html.dark .sidebar-search-box input::placeholder {
 .msg-stream {
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 22rem);
+  max-height: calc(100vh - 19rem);
   overflow-y: auto;
   padding: 1rem;
 }

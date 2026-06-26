@@ -6,6 +6,11 @@
 import AuthApi from '../api/authApi.js';
 import { mapAuthErrorMessage } from '../utils/authErrorMessage.js';
 
+function _escapeForJson(value) {
+  if (value === undefined || value === null) return '';
+  return String(value);
+}
+
 const AuthStore = (() => {
   // ── 状态 ──
   let _isLoggedIn = false;
@@ -55,14 +60,22 @@ const AuthStore = (() => {
   // ── 初始化 / Bootstrap ──
   async function init() {
     try {
-      const storedJwt = await _getJwt();
-      _isLoggedIn = Boolean(storedJwt.trim());
-      if (_isLoggedIn) {
-        _phone = (await _storageGet(STORAGE_KEYS.phone)).trim();
-        _userId = (await _storageGet(STORAGE_KEYS.userId)).trim();
+      window.removeEventListener('__auth_injected__', _onInjectedAuth);
+      window.addEventListener('__auth_injected__', _onInjectedAuth);
+
+      const injected = window.__INJECTED_AUTH__ || {};
+      if (injected.token) {
+        _applyInjectedAuth(injected);
       } else {
-        _phone = '';
-        _userId = '';
+        const storedJwt = await _getJwt();
+        _isLoggedIn = Boolean(storedJwt.trim());
+        if (_isLoggedIn) {
+          _phone = (await _storageGet(STORAGE_KEYS.phone)).trim();
+          _userId = (await _storageGet(STORAGE_KEYS.userId)).trim();
+        } else {
+          _phone = '';
+          _userId = '';
+        }
       }
     } catch {
       _isLoggedIn = false;
@@ -72,6 +85,25 @@ const AuthStore = (() => {
     _loading = false;
     _error = '';
     _notify();
+  }
+
+  function _onInjectedAuth() {
+    const injected = window.__INJECTED_AUTH__ || {};
+    if (injected.token) {
+      _applyInjectedAuth(injected);
+    }
+  }
+
+  function _applyInjectedAuth(injected) {
+    _isLoggedIn = true;
+    _phone = _escapeForJson(injected.phone).trim();
+    _userId = _escapeForJson(injected.userId).trim();
+    _storageSet(STORAGE_KEYS.jwt, injected.token);
+    _storageSet(STORAGE_KEYS.phone, _phone);
+    _storageSet(STORAGE_KEYS.userId, _userId);
+    if (injected.sessionId) {
+      _storageSet(STORAGE_KEYS.sessionId, injected.sessionId);
+    }
   }
 
   // ── 发送短信验证码 ──

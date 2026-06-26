@@ -39,6 +39,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     ChatStore.subscribe(() => _updateBadges());
   }
 
+  // 监听 auth 注入事件（MFC 侧注入后触发），重新检查路由
+  window.addEventListener('__auth_injected__', async () => {
+    if (AuthStore.isLoggedIn()) {
+      ChatStore.init();
+      ChatStore.subscribe(() => _updateBadges());
+    }
+    const route = _resolveRoute();
+    await _navigateTo(route);
+    _updateBadges();
+  });
+
   // 监听 hash 变化
   window.addEventListener('hashchange', () => {
     const route = _resolveRoute();

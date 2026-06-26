@@ -7,6 +7,10 @@
 import ChatApi from '../api/chatApi.js';
 import AppConfig from '../config.js';
 
+// 对齐 Vue 版 NativeTcpChatTransportClient.AGENT_TYPING_MARKER：
+// 打字指示器 fallback 通过 AGENT_BROADCAST 广播的 marker，接收方需拦截并解析
+const _AGENT_TYPING_MARKER = '[::AGENT_TYPING::]';
+
 class HttpIrcChatTransport {
   constructor(options = {}) {
     this.handler = null;
@@ -350,6 +354,28 @@ class HttpIrcChatTransport {
         const text = this._extractMessageText(evt);
         if (!text) return;
         const conversationId = this._extractConversationId(evt);
+
+        // 对齐 Vue 版 nativeTcpChatTransportClient.sendAgentTypingUnlocked + onFrame：
+        // b 端会通过 AGENT_BROADCAST 广播 [::AGENT_TYPING::]{"s":"started",...} 信封作为
+        // 打字指示器的 fallback 通道，服务端将其转成 PRIVMSG 推送。接收方必须拦截该 marker，
+        // 解析后 emit agent_typing 事件，绝不能当成普通文本消息显示（否则显示为乱码）。
+        if (text.startsWith(_AGENT_TYPING_MARKER)) {
+          try {
+            const jsonStr = text.slice(_AGENT_TYPING_MARKER.length);
+            const parsed = JSON.parse(jsonStr);
+            this._emit({
+              type: 'agent_typing',
+              conversationId,
+              agentRequestId: parsed.r || undefined,
+              isTyping: parsed.s === 'started',
+              ttlMs: typeof parsed.t === 'number' ? parsed.t : undefined,
+            });
+          } catch {
+            // 解析失败时静默丢弃，不作为消息显示
+          }
+          return;
+        }
+
         const baseEvent = {
           conversationId,
           messageId: evt.message_id || evt.messageId || evt.seq,
