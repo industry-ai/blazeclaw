@@ -8,6 +8,7 @@
 #include "BlazeClawMFCViewTextHelpers.h"
 #include "ChatUiStartupResolver.h"
 #include "WebViewBridgeSupport.h"
+#include "WebViewStartupConfigBridge.h"
 
 #include "FloatPaneTracker.h"
 
@@ -627,6 +628,12 @@ bool CDashboardWnd::CreateWebViewController()
 							}
 
 							blazeclaw::app::webview_bridge::InjectOpenClawBridgeShim(m_webView.Get());
+							if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
+							{
+								blazeclaw::app::webview_startup::InjectRuntimeConfigBootstrap(
+									m_webView.Get(),
+									app->Config());
+							}
 							SetupWebViewEvents();
 							m_webViewReady = true;
 							InitializeDashboardBridge();

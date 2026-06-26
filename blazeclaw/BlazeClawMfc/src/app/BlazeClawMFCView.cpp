@@ -38,6 +38,7 @@
 #include "config_bridge/EmailConfigHandler.h"
 #include "BlazeClawMFCViewTextHelpers.h"
 #include "WebViewBridgeSupport.h"
+#include "WebViewStartupConfigBridge.h"
 
 #include <functional>
 
@@ -4308,6 +4309,18 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 		m_bridgeSessionId);
 
 	EnsureOpenClawBridgeShim();
+	if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
+	{
+		blazeclaw::app::webview_startup::InjectRuntimeConfigBootstrap(
+			m_webView.Get(),
+			app->Config());
+		const auto& agentsToggle = app->Config().agents.controlPlaneEnabled;
+		AppendChatProcedureStatusLine(
+			L"startup.agents.controlPlane",
+			agentsToggle.has_value()
+				? (agentsToggle.value() ? "enabled=config" : "disabled=config")
+				: "unset=config");
+	}
 	AppendChatProcedureStatusLine(
 		L"startup.shim.injected");
 

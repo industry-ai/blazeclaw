@@ -1579,6 +1579,12 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"blazeclaw.agents.enabled=", 0) == 0) {
+				outConfig.agents.controlPlaneEnabled =
+					ParseBool(trimmedLine.substr(25), false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
 				const auto keyValuePos = trimmedLine.find(L'=');
 				if (keyValuePos == std::wstring::npos) {

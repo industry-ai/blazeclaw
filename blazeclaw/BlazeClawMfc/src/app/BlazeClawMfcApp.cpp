@@ -496,6 +496,19 @@ namespace {
 			L"[Chat] startup.config.mode - %s",
 			config.chat.mode.c_str());
 		AppendMainFrameStatusLine(modeLine);
+
+		CString agentsLine;
+		if (config.agents.controlPlaneEnabled.has_value())
+		{
+			agentsLine.Format(
+				L"[Chat] startup.agents.controlPlane - enabled=%s source=blazeclaw.conf",
+				config.agents.controlPlaneEnabled.value() ? L"true" : L"false");
+		}
+		else
+		{
+			agentsLine = L"[Chat] startup.agents.controlPlane - enabled=unset source=default";
+		}
+		AppendMainFrameStatusLine(agentsLine);
 	}
 
 	void AppendStartupEmbeddingsStatus(

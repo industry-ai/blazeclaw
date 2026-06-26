@@ -2711,6 +2711,21 @@
         renderDetachedNotices();
     }
 
+    const agentsToggleApi = window.BlazeClawAgentsToggle || null;
+    const agentsToggleTrace = agentsToggleApi &&
+        typeof agentsToggleApi.resolveAgentsEnabled === "function"
+        ? agentsToggleApi.resolveAgentsEnabled()
+        : {
+            resolved: false,
+            source: "default",
+        };
+    if (agentsToggleApi &&
+        typeof agentsToggleApi.emitAgentsToggleTrace === "function") {
+        agentsToggleApi.emitAgentsToggleTrace(agentsToggleTrace);
+    }
+    state.cronCliEnabled = agentsToggleTrace.resolved === true;
+    state.agentsToggleSource = String(agentsToggleTrace.source || "default");
+
     const controller = window.BlazeClawChatController.createController({
         state,
         addMessage,
@@ -2734,6 +2749,19 @@
             updateComposerState();
         },
         onCronSlashCommand: async (input) => {
+            if (!state.cronCliEnabled) {
+                return {
+                    handled: true,
+                    ok: false,
+                    kind: "error",
+                    message: JSON.stringify({
+                        surface: "cron-cli",
+                        ok: false,
+                        code: "unavailable",
+                        message: "/cron is unavailable because agents control plane is disabled.",
+                    }),
+                };
+            }
             if (!agentsController || typeof agentsController.executeCronCliSlashCommand !== "function") {
                 return {
                     handled: true,
@@ -3218,6 +3246,19 @@
     }
 
     if (resolveAssistantRegressionChecksEnabled() &&
+        typeof window.BlazeClawAgentsToggle?.runRegressionChecks === "function") {
+        window.BlazeClawAgentsToggle.runRegressionChecks()
+            .then((result) => {
+                if (result && result.ok) {
+                    console.log("[agents-toggle-regression] passed:", result.checks);
+                }
+            })
+            .catch((err) => {
+                console.error("[agents-toggle-regression] failed:", err);
+            });
+    }
+
+    if (resolveAssistantRegressionChecksEnabled() &&
         typeof window.BlazeClawChatController.runRegressionChecks === "function") {
         window.BlazeClawChatController.runRegressionChecks()
             .then((result) => {
@@ -3335,37 +3376,6 @@
         }
 
         return panelHint;
-    }
-
-    function resolveAgentsEnabled() {
-        if (isDashboardHost()) {
-            return true;
-        }
-
-        const search = new URLSearchParams(window.location.search || "");
-        const queryToggle = search.get("agents");
-        if (queryToggle === "0") {
-            return false;
-        }
-        if (queryToggle === "1") {
-            return true;
-        }
-
-        try {
-            if (window.localStorage) {
-                const storedToggle = window.localStorage.getItem("blazeclaw.agents.enabled");
-                if (storedToggle === "0") {
-                    return false;
-                }
-                if (storedToggle === "1") {
-                    return true;
-                }
-            }
-        } catch (_) {
-        }
-
-        // Native dashboard pane owns agents control-plane; chat WebView keeps it opt-in.
-        return false;
     }
 
     function toPanelLabel(panelId) {
@@ -3751,7 +3761,7 @@
     state.configCoerceEnabled = resolveConfigCoerceEnabled();
     state.observabilityEnabled = resolveObservabilityEnabled();
 
-    const agentsEnabled = resolveAgentsEnabled();
+    const agentsEnabled = agentsToggleTrace.resolved === true;
     const agentsController = agentsEnabled && window.BlazeClawAgentsController
         ? window.BlazeClawAgentsController.createAgentsController({
             state,

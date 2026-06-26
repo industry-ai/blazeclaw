@@ -75,6 +75,51 @@ TEST_CASE("ConfigLoader parses and normalizes speech hotwords policy", "[config]
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader parses blazeclaw.agents.enabled control-plane toggle", "[config][agents]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_agents_toggle_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto enabledConfigPath = root / "agents-enabled.conf";
+	{
+		std::wofstream out(enabledConfigPath);
+		REQUIRE(out.is_open());
+		out << L"blazeclaw.agents.enabled=1\n";
+	}
+
+	blazeclaw::config::AppConfig enabledConfig;
+	REQUIRE(loader.LoadFromFile(enabledConfigPath.wstring(), enabledConfig));
+	REQUIRE(enabledConfig.agents.controlPlaneEnabled.has_value());
+	REQUIRE(enabledConfig.agents.controlPlaneEnabled.value());
+
+	const auto disabledConfigPath = root / "agents-disabled.conf";
+	{
+		std::wofstream out(disabledConfigPath);
+		REQUIRE(out.is_open());
+		out << L"blazeclaw.agents.enabled=0\n";
+	}
+
+	blazeclaw::config::AppConfig disabledConfig;
+	REQUIRE(loader.LoadFromFile(disabledConfigPath.wstring(), disabledConfig));
+	REQUIRE(disabledConfig.agents.controlPlaneEnabled.has_value());
+	REQUIRE_FALSE(disabledConfig.agents.controlPlaneEnabled.value());
+
+	const auto unsetConfigPath = root / "agents-unset.conf";
+	{
+		std::wofstream out(unsetConfigPath);
+		REQUIRE(out.is_open());
+		out << L"gateway.port=18789\n";
+	}
+
+	blazeclaw::config::AppConfig unsetConfig;
+	REQUIRE(loader.LoadFromFile(unsetConfigPath.wstring(), unsetConfig));
+	REQUIRE_FALSE(unsetConfig.agents.controlPlaneEnabled.has_value());
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader parses speech CUDA DLL loading settings", "[config][speech][cuda]") {
 	blazeclaw::config::ConfigLoader loader;
 

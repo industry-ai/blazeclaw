@@ -1746,6 +1746,12 @@
                 { name: "btw", description: "Send detached side-channel message (no local user bubble)" },
                 { name: "abort", description: "Abort active run" },
             ];
+            if (state.cronCliEnabled) {
+                builtins.push({
+                    name: "cron",
+                    description: "Cron jobs CLI (status, list, run, help)",
+                });
+            }
 
             let skillCommands = [];
             try {
@@ -3723,6 +3729,7 @@
             sendQueue: [],
             slashCommands: [],
             slashCommandsLoaded: false,
+            cronCliEnabled: false,
             sessionOptions: [],
             modelOptions: [],
             sessionSubscribed: false,
@@ -4730,6 +4737,30 @@
                 row.text.indexOf("\"command\":\"status\"") >= 0),
                 "chat slash handler should render deterministic /cron execution envelope output");
             summary.push("cron slash execution bridge callback");
+        }
+
+        {
+            const stateDisabled = createRegressionState();
+            stateDisabled.cronCliEnabled = false;
+            const controllerDisabled = createController({
+                state: stateDisabled,
+            });
+            const disabledHints = await controllerDisabled.getSlashCommandHints("");
+            assertRegression(!disabledHints.some((item) => item.name === "cron"),
+                "slash hints should omit /cron when cronCliEnabled is false");
+            summary.push("cron slash hint hidden when disabled");
+        }
+
+        {
+            const stateEnabled = createRegressionState();
+            stateEnabled.cronCliEnabled = true;
+            const controllerEnabled = createController({
+                state: stateEnabled,
+            });
+            const enabledHints = await controllerEnabled.getSlashCommandHints("cron");
+            assertRegression(enabledHints.some((item) => item.name === "cron"),
+                "slash hints should include /cron when cronCliEnabled is true");
+            summary.push("cron slash hint visible when enabled");
         }
 
         {

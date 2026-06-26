@@ -113,6 +113,8 @@ namespace blazeclaw::config {
 	struct AgentsConfig {
 		AgentsDefaultsConfig defaults;
 		std::map<std::wstring, AgentEntryConfig> entries;
+		/// When set, loaded from `blazeclaw.agents.enabled=` in blazeclaw.conf.
+		std::optional<bool> controlPlaneEnabled;
 	};
 
 	struct AcpRuntimeConfig {
