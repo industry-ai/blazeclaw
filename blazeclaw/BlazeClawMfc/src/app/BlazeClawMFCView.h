@@ -25,12 +25,7 @@
 #include <string>
 #include <unordered_set>
 
-#if defined(__has_include)
-# if __has_include(<WebView2.h>)
-# include <WebView2.h>
-# define HAVE_WEBVIEW2_HEADER
-# endif
-#endif
+#include "WebView2Availability.h"
 
 #ifdef HAVE_WEBVIEW2_HEADER
 # include <wrl.h>

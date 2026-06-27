@@ -2712,19 +2712,240 @@
     }
 
     const agentsToggleApi = window.BlazeClawAgentsToggle || null;
-    const agentsToggleTrace = agentsToggleApi &&
-        typeof agentsToggleApi.resolveAgentsEnabled === "function"
-        ? agentsToggleApi.resolveAgentsEnabled()
-        : {
-            resolved: false,
-            source: "default",
-        };
+    let agentsToggleTrace;
     if (agentsToggleApi &&
-        typeof agentsToggleApi.emitAgentsToggleTrace === "function") {
-        agentsToggleApi.emitAgentsToggleTrace(agentsToggleTrace);
+        typeof agentsToggleApi.resolveAgentsEnabled === "function") {
+        agentsToggleTrace = agentsToggleApi.resolveAgentsEnabled();
+        if (typeof agentsToggleApi.emitAgentsToggleTrace === "function") {
+            agentsToggleApi.emitAgentsToggleTrace(agentsToggleTrace, { level: "info" });
+        }
+    } else if (agentsToggleApi &&
+        typeof agentsToggleApi.emitMissingAgentsToggleModule === "function") {
+        agentsToggleTrace = agentsToggleApi.emitMissingAgentsToggleModule();
+    } else {
+        agentsToggleTrace = {
+            resolved: false,
+            source: "missing-module",
+        };
+        try {
+            if (window.chrome &&
+                window.chrome.webview &&
+                typeof window.chrome.webview.postMessage === "function") {
+                window.chrome.webview.postMessage({
+                    channel: "blazeclaw.agents.toggle.trace",
+                    level: "warn",
+                    reason: "agents-toggle.js not loaded",
+                    resolved: false,
+                    source: "missing-module",
+                    modulePresent: false,
+                    config: null,
+                });
+            }
+        } catch (_) {
+        }
     }
     state.cronCliEnabled = agentsToggleTrace.resolved === true;
     state.agentsToggleSource = String(agentsToggleTrace.source || "default");
+
+    let agentsToggleStatusPublished = false;
+
+    function publishAgentsToggleOperatorStatus(trace) {
+        if (agentsToggleStatusPublished) {
+            return;
+        }
+        agentsToggleStatusPublished = true;
+
+        const enabled = trace && trace.resolved === true;
+        const source = trace && trace.source ? String(trace.source) : state.agentsToggleSource;
+        const summary = "agents control-plane: " + (enabled ? "enabled" : "disabled") +
+            " source=" + source;
+        if (statusEl) {
+            const base = String(statusEl.textContent || "").trim();
+            statusEl.textContent = base
+                ? base + " | " + summary
+                : summary;
+        }
+    }
+
+    function buildCronCliUnavailableEnvelope(code, message, extra) {
+        const payload = Object.assign({
+            surface: "cron-cli",
+            ok: false,
+            code: String(code || "unavailable"),
+            agentsToggleSource: String(state.agentsToggleSource || "default"),
+            message: String(message || "/cron is unavailable."),
+        }, extra && typeof extra === "object" ? extra : {});
+        return JSON.stringify(payload);
+    }
+
+    let agentsController = null;
+
+    function syncAgentsControlPlaneFromToggle() {
+        const api = window.BlazeClawAgentsToggle || null;
+        const trace = api && typeof api.resolveAgentsEnabled === "function"
+            ? api.resolveAgentsEnabled()
+            : {
+                resolved: state.cronCliEnabled === true,
+                source: state.agentsToggleSource || "default",
+            };
+        state.cronCliEnabled = trace.resolved === true;
+        state.agentsToggleSource = String(trace.source || "default");
+        if (trace.resolved === true) {
+            initializeAgentsController();
+        }
+        return trace;
+    }
+
+    function initializeAgentsController() {
+        if (agentsController) {
+            return agentsController;
+        }
+
+        const trace = window.BlazeClawAgentsToggle &&
+            typeof window.BlazeClawAgentsToggle.resolveAgentsEnabled === "function"
+            ? window.BlazeClawAgentsToggle.resolveAgentsEnabled()
+            : agentsToggleTrace;
+        if (trace.resolved !== true || !window.BlazeClawAgentsController) {
+            return null;
+        }
+
+        agentsController = window.BlazeClawAgentsController.createAgentsController({
+            state,
+            request: (method, params) => controller.request(method, params),
+            onStateUpdated: () => updateComposerState(),
+            onCronCliExecutionSettled: (result) => {
+                const settled = result && typeof result === "object"
+                    ? result
+                    : {};
+                const messageText = String(settled.message || "").trim();
+                if (messageText) {
+                    addMessage(messageText, settled.kind === "error" ? "error" : "peer");
+                }
+            },
+        });
+
+        wireAgentsController(agentsController);
+        return agentsController;
+    }
+
+    function wireAgentsController(activeController) {
+        if (!activeController) {
+            return;
+        }
+
+        state.agentsPanel = dashboardHostPanelHint || "overview";
+        const persisted = dashboardHostFixedPanelId
+            ? null
+            : loadAgentsPersistenceSnapshot();
+        if (persisted && !dashboardHostFixedPanelId) {
+            activeController.applyPersistenceSnapshot(persisted);
+            emitAgentsTelemetry("persistence.restored", persisted);
+        }
+
+        state.onSessionChanged = () => {
+            activeController.syncSessionContext({
+                sessionKey: state.sessionKey,
+            });
+            emitAgentsTelemetry("session.changed", {
+                sessionKey: state.sessionKey,
+            });
+            void activeController.loadPanelDataForCurrentAgent();
+            syncNodesPolling();
+            syncObservabilityPolling();
+        };
+        state.onModelChanged = () => {
+            activeController.syncSessionContext({
+                sessionKey: state.sessionKey,
+            });
+            emitAgentsTelemetry("model.changed", {
+                model: state.selectedModel,
+            });
+            void activeController.refreshFromConfigSnapshot();
+            syncNodesPolling();
+            syncObservabilityPolling();
+        };
+        activeController.syncSessionContext({
+            sessionKey: state.sessionKey,
+        });
+
+        state.onGatewayLifecycleChanged = (lifecycle) => {
+            if (!lifecycle || !lifecycle.connected) {
+                syncNodesPolling();
+                syncObservabilityPolling();
+                return;
+            }
+
+            if (!isDashboardHostVisible()) {
+                syncNodesPolling();
+                syncObservabilityPolling();
+                return;
+            }
+
+            void controller.loadSpeechCapabilities()
+                .then((snapshot) => {
+                    state.speechCapabilities = snapshot && typeof snapshot === "object"
+                        ? snapshot
+                        : state.speechCapabilities;
+                    updateComposerState();
+                })
+                .catch(() => {
+                });
+
+            const activePanel = String(state.agentsPanel || "");
+            emitAgentsTelemetry("panel.lifecycle.refresh", {
+                panel: activePanel || "overview",
+                state: lifecycle.state,
+                wasConnected: Boolean(lifecycle.wasConnected),
+            });
+
+            refreshDashboardPanelData("gateway.lifecycle");
+
+            syncNodesPolling();
+            syncObservabilityPolling();
+        };
+
+        if (typeof document.addEventListener === "function") {
+            document.addEventListener("visibilitychange", () => {
+                syncNodesPolling();
+                syncObservabilityPolling();
+                syncSessionControlsPolling();
+                if (document.hidden === false) {
+                    refreshDashboardPanelData("document.visible");
+                }
+            });
+        }
+
+        if (typeof dashboardHostBootstrap.runSmokeChecks === "function" &&
+            isDashboardHost()) {
+            const smokeResult = dashboardHostBootstrap.runSmokeChecks({
+                expectedPanel: dashboardHostPanelHint,
+                activePanel: state.agentsPanel,
+                hasControlPlane: Boolean(state.agentsControlPlaneEl),
+            });
+            if (smokeResult && smokeResult.ok) {
+                emitAgentsTelemetry("dashboard.host.smoke", smokeResult);
+            }
+        }
+
+        if (resolveAgentsRegressionChecksEnabled() &&
+            typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
+            window.BlazeClawAgentsController.runRegressionChecks()
+                .then((result) => {
+                    if (result && result.ok) {
+                        console.log("[agents-regression] passed:", result.checks);
+                        emitAgentsTelemetry("regression.passed", {
+                            checks: result.checks,
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.error("[agents-regression] failed:", err);
+                    emitAgentsTelemetry("regression.failed", {
+                        error: String(err || ""),
+                    });
+                });
+        }
+    }
 
     const controller = window.BlazeClawChatController.createController({
         state,
@@ -2749,17 +2970,19 @@
             updateComposerState();
         },
         onCronSlashCommand: async (input) => {
+            const trace = syncAgentsControlPlaneFromToggle();
+            if (window.BlazeClawAgentsToggle &&
+                typeof window.BlazeClawAgentsToggle.emitAgentsToggleTrace === "function") {
+                window.BlazeClawAgentsToggle.emitAgentsToggleTrace(trace, { level: "info" });
+            }
             if (!state.cronCliEnabled) {
                 return {
                     handled: true,
                     ok: false,
                     kind: "error",
-                    message: JSON.stringify({
-                        surface: "cron-cli",
-                        ok: false,
-                        code: "unavailable",
-                        message: "/cron is unavailable because agents control plane is disabled.",
-                    }),
+                    message: buildCronCliUnavailableEnvelope(
+                        "control_plane_disabled",
+                        "/cron is unavailable because agents control plane is disabled."),
                 };
             }
             if (!agentsController || typeof agentsController.executeCronCliSlashCommand !== "function") {
@@ -2767,12 +2990,10 @@
                     handled: true,
                     ok: false,
                     kind: "error",
-                    message: JSON.stringify({
-                        surface: "cron-cli",
-                        ok: false,
-                        code: "unavailable",
-                        message: "/cron is unavailable because agents control plane is disabled.",
-                    }),
+                    message: buildCronCliUnavailableEnvelope(
+                        "agents_controller_missing",
+                        "/cron is unavailable because agents control plane is disabled.",
+                        { controllerPresent: Boolean(agentsController) }),
                 };
             }
             return agentsController.executeCronCliSlashCommand(String(input || ""));
@@ -3761,138 +3982,45 @@
     state.configCoerceEnabled = resolveConfigCoerceEnabled();
     state.observabilityEnabled = resolveObservabilityEnabled();
 
-    const agentsEnabled = agentsToggleTrace.resolved === true;
-    const agentsController = agentsEnabled && window.BlazeClawAgentsController
-        ? window.BlazeClawAgentsController.createAgentsController({
-            state,
-            request: (method, params) => controller.request(method, params),
-            onStateUpdated: () => updateComposerState(),
-            onCronCliExecutionSettled: (result) => {
-                const settled = result && typeof result === "object"
-                    ? result
-                    : {};
-                const messageText = String(settled.message || "").trim();
-                if (messageText) {
-                    addMessage(messageText, settled.kind === "error" ? "error" : "peer");
-                }
-            },
-        })
-        : null;
+    initializeAgentsController();
+    publishAgentsToggleOperatorStatus(
+        window.BlazeClawAgentsToggle &&
+            typeof window.BlazeClawAgentsToggle.resolveAgentsEnabled === "function"
+            ? window.BlazeClawAgentsToggle.resolveAgentsEnabled()
+            : {
+                resolved: state.cronCliEnabled === true,
+                source: state.agentsToggleSource,
+            });
 
-    if (agentsController) {
-        state.agentsPanel = dashboardHostPanelHint || "overview";
-        const persisted = dashboardHostFixedPanelId
-            ? null
-            : loadAgentsPersistenceSnapshot();
-        if (persisted && !dashboardHostFixedPanelId) {
-            agentsController.applyPersistenceSnapshot(persisted);
-            emitAgentsTelemetry("persistence.restored", persisted);
+    window.__BLAZECLAW_RESYNC_AGENTS_CONTROL_PLANE__ = function () {
+        const trace = syncAgentsControlPlaneFromToggle();
+        const api = window.BlazeClawAgentsToggle || null;
+        if (api && typeof api.emitAgentsToggleTrace === "function") {
+            api.emitAgentsToggleTrace(trace, { level: "info", reason: "navigation-resync" });
         }
+        publishAgentsToggleOperatorStatus(trace);
+        updateComposerState();
+        state.slashCommandsLoaded = false;
 
-        state.onSessionChanged = () => {
-            agentsController.syncSessionContext({
-                sessionKey: state.sessionKey,
-            });
-            emitAgentsTelemetry("session.changed", {
-                sessionKey: state.sessionKey,
-            });
-            void agentsController.loadPanelDataForCurrentAgent();
-            syncNodesPolling();
-            syncObservabilityPolling();
+        const runtime = window.__BLAZECLAW_RUNTIME_CONFIG__;
+        const runtimeEnabled = runtime &&
+            runtime.agents &&
+            typeof runtime.agents === "object"
+            ? runtime.agents.enabled
+            : null;
+
+        return {
+            resynced: true,
+            runtimeConfigAgentsEnabled: runtimeEnabled === true ||
+                runtimeEnabled === false
+                ? runtimeEnabled
+                : null,
+            resolved: trace.resolved === true,
+            source: String(trace.source || "default"),
+            controllerPresent: Boolean(agentsController),
+            modulePresent: Boolean(window.BlazeClawAgentsToggle),
         };
-        state.onModelChanged = () => {
-            agentsController.syncSessionContext({
-                sessionKey: state.sessionKey,
-            });
-            emitAgentsTelemetry("model.changed", {
-                model: state.selectedModel,
-            });
-            void agentsController.refreshFromConfigSnapshot();
-            syncNodesPolling();
-            syncObservabilityPolling();
-        };
-        agentsController.syncSessionContext({
-            sessionKey: state.sessionKey,
-        });
-
-        state.onGatewayLifecycleChanged = (lifecycle) => {
-            if (!lifecycle || !lifecycle.connected) {
-                syncNodesPolling();
-                syncObservabilityPolling();
-                return;
-            }
-
-            if (!isDashboardHostVisible()) {
-                syncNodesPolling();
-                syncObservabilityPolling();
-                return;
-            }
-
-            void controller.loadSpeechCapabilities()
-                .then((snapshot) => {
-                    state.speechCapabilities = snapshot && typeof snapshot === "object"
-                        ? snapshot
-                        : state.speechCapabilities;
-                    updateComposerState();
-                })
-                .catch(() => {
-                });
-
-            const activePanel = String(state.agentsPanel || "");
-            emitAgentsTelemetry("panel.lifecycle.refresh", {
-                panel: activePanel || "overview",
-                state: lifecycle.state,
-                wasConnected: Boolean(lifecycle.wasConnected),
-            });
-
-            refreshDashboardPanelData("gateway.lifecycle");
-
-            syncNodesPolling();
-            syncObservabilityPolling();
-        };
-
-        if (typeof document.addEventListener === "function") {
-            document.addEventListener("visibilitychange", () => {
-                syncNodesPolling();
-                syncObservabilityPolling();
-                syncSessionControlsPolling();
-                if (document.hidden === false) {
-                    refreshDashboardPanelData("document.visible");
-                }
-            });
-        }
-
-        if (typeof dashboardHostBootstrap.runSmokeChecks === "function" &&
-            isDashboardHost()) {
-            const smokeResult = dashboardHostBootstrap.runSmokeChecks({
-                expectedPanel: dashboardHostPanelHint,
-                activePanel: state.agentsPanel,
-                hasControlPlane: Boolean(state.agentsControlPlaneEl),
-            });
-            if (smokeResult && smokeResult.ok) {
-                emitAgentsTelemetry("dashboard.host.smoke", smokeResult);
-            }
-        }
-
-        if (resolveAgentsRegressionChecksEnabled() &&
-            typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
-            window.BlazeClawAgentsController.runRegressionChecks()
-                .then((result) => {
-                    if (result && result.ok) {
-                        console.log("[agents-regression] passed:", result.checks);
-                        emitAgentsTelemetry("regression.passed", {
-                            checks: result.checks,
-                        });
-                    }
-                })
-                .catch((err) => {
-                    console.error("[agents-regression] failed:", err);
-                    emitAgentsTelemetry("regression.failed", {
-                        error: String(err || ""),
-                    });
-                });
-        }
-    }
+    };
 
     const eventsModule = chatEventsApi &&
         typeof chatEventsApi.createEventsModule === "function"

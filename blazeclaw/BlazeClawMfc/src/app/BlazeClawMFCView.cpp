@@ -3551,6 +3551,57 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			AppendChatProcedureStatusLine(L"runtime.shim.ready", message);
 			return true;
 		});
+	localHandlers.emplace(
+		"blazeclaw.agents.toggle.trace",
+		[&message]() -> bool
+		{
+			bool resolved = false;
+			bool modulePresent = true;
+			std::string source;
+			std::string level;
+			std::string reason;
+			std::string configRaw;
+
+			blazeclaw::gateway::json::FindBoolField(message, "resolved", resolved);
+			blazeclaw::gateway::json::FindBoolField(message, "modulePresent", modulePresent);
+			blazeclaw::gateway::json::FindStringField(message, "source", source);
+			blazeclaw::gateway::json::FindStringField(message, "level", level);
+			blazeclaw::gateway::json::FindStringField(message, "reason", reason);
+			const bool hasConfig = blazeclaw::gateway::json::FindRawField(
+				message,
+				"config",
+				configRaw);
+
+			std::ostringstream detail;
+			detail << "resolved=" << (resolved ? "true" : "false")
+				<< " source=" << (source.empty() ? "unknown" : source)
+				<< " modulePresent=" << (modulePresent ? "true" : "false");
+			if (!level.empty())
+			{
+				detail << " level=" << level;
+			}
+			if (!reason.empty())
+			{
+				detail << " reason=" << reason;
+			}
+			if (hasConfig)
+			{
+				const std::string trimmedConfig = blazeclaw::gateway::json::Trim(configRaw);
+				if (trimmedConfig == "true" || trimmedConfig == "false")
+				{
+					detail << " config=" << trimmedConfig;
+				}
+				else
+				{
+					detail << " config=unset";
+				}
+			}
+
+			AppendChatProcedureStatusLine(
+				L"startup.webview.agentsToggle.trace",
+				detail.str());
+			return true;
+		});
 
 	CMgrMessage::Instance().ClearWebChannelHandlers();
 	for (auto& entry : localHandlers)
@@ -4311,9 +4362,15 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 	EnsureOpenClawBridgeShim();
 	if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
 	{
+		const blazeclaw::app::webview_startup::StartupLogFn startupLogFn =
+			[](const wchar_t* stage, const std::string& detail)
+			{
+				AppendChatProcedureStatusLine(stage, detail);
+			};
 		blazeclaw::app::webview_startup::InjectRuntimeConfigBootstrap(
 			m_webView.Get(),
-			app->Config());
+			app->Config(),
+			startupLogFn);
 		const auto& agentsToggle = app->Config().agents.controlPlaneEnabled;
 		AppendChatProcedureStatusLine(
 			L"startup.agents.controlPlane",
@@ -4418,6 +4475,17 @@ void CBlazeClawMFCView::OnInitialUpdate()
 													L"Navigation failed",
 													L"Verify OpenClaw UI assets or dev server availability.");
 												return S_OK;
+											}
+
+											if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
+											{
+												blazeclaw::app::webview_startup::EnsureRuntimeConfigAfterNavigation(
+													sender,
+													app->Config(),
+													[](const wchar_t* stage, const std::string& detail)
+													{
+														AppendChatProcedureStatusLine(stage, detail);
+													});
 											}
 
 											if (!g_generatedSkillConfigHtml.empty() && sender != nullptr)

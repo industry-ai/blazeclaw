@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "WebViewBridgeSupport.h"
+#include "WebView2Availability.h"
 
 #include "CMgrMessage.h"
 #include "CBridge.h"
@@ -12,12 +13,6 @@
 #include <cctype>
 #include <functional>
 #include <unordered_map>
-
-#if defined(__has_include)
-# if __has_include(<WebView2.h>)
-#  include <WebView2.h>
-# endif
-#endif
 
 namespace blazeclaw::app::webview_bridge {
 namespace {
@@ -316,6 +311,15 @@ std::string BuildToolResultDetail(
 	}
 
 	return detail;
+}
+
+bool IsWebViewBridgeSupportCompiled()
+{
+#ifdef HAVE_WEBVIEW2_HEADER
+	return true;
+#else
+	return false;
+#endif
 }
 
 void InjectOpenClawBridgeShim(ICoreWebView2* webView)

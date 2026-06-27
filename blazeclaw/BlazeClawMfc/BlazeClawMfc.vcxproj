@@ -134,6 +134,7 @@
     <ClInclude Include="src\app\DashboardWnd.h" />
     <ClInclude Include="src\app\FloatPaneTracker.h" />
     <ClInclude Include="src\app\WebViewBridgeSupport.h" />
+    <ClInclude Include="src\app\WebView2Availability.h" />
     <ClInclude Include="src\app\WebViewStartupConfigBridge.h" />
     <ClInclude Include="src\app\VoiceRecorder.h" />
     <ClInclude Include="src\app\ChildFrm.h" />

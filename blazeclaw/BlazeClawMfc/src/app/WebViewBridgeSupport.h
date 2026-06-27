@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WebView2Availability.h"
 #include "webview_routers/WebViewRouterContext.h"
 
 #include "../gateway/GatewayProtocolModels.h"
@@ -8,10 +9,8 @@
 #include <optional>
 #include <string>
 
-#if defined(__has_include)
-# if __has_include(<WebView2.h>)
+#ifndef HAVE_WEBVIEW2_HEADER
 struct ICoreWebView2;
-# endif
 #endif
 
 class CBridge;
@@ -32,6 +31,9 @@ std::string BuildToolStartDetail(const std::optional<std::string>& paramsJson);
 std::string BuildToolResultDetail(
 	const blazeclaw::gateway::protocol::ResponseFrame& response);
 bool IsToolExecuteMethod(const std::string& method);
+
+// True when this translation unit compiled WebView2 shim injection (not stubs).
+bool IsWebViewBridgeSupportCompiled();
 
 void InjectOpenClawBridgeShim(ICoreWebView2* webView);
 

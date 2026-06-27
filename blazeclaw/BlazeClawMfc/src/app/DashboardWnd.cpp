@@ -630,9 +630,18 @@ bool CDashboardWnd::CreateWebViewController()
 							blazeclaw::app::webview_bridge::InjectOpenClawBridgeShim(m_webView.Get());
 							if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
 							{
+								const blazeclaw::app::webview_startup::StartupLogFn startupLogFn =
+									[](const wchar_t* stage, const std::string& detail)
+									{
+										TRACE(
+											"[Dashboard] %s - %hs\n",
+											stage,
+											detail.c_str());
+									};
 								blazeclaw::app::webview_startup::InjectRuntimeConfigBootstrap(
 									m_webView.Get(),
-									app->Config());
+									app->Config(),
+									startupLogFn);
 							}
 							SetupWebViewEvents();
 							m_webViewReady = true;
@@ -655,6 +664,24 @@ bool CDashboardWnd::CreateWebViewController()
 											ShowDashboardStartupError(
 												L"Navigation failed",
 												L"Verify dashboard web assets or dev server availability.");
+										}
+										else if (m_webView != nullptr)
+										{
+											if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()))
+											{
+												const blazeclaw::app::webview_startup::StartupLogFn startupLogFn =
+													[](const wchar_t* stage, const std::string& detail)
+													{
+														TRACE(
+															"[Dashboard] %s - %hs\n",
+															stage,
+															detail.c_str());
+													};
+												blazeclaw::app::webview_startup::EnsureRuntimeConfigAfterNavigation(
+													m_webView.Get(),
+													app->Config(),
+													startupLogFn);
+											}
 										}
 
 										return S_OK;

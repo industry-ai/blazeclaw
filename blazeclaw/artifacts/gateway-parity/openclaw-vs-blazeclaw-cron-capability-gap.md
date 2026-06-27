@@ -2,6 +2,12 @@
 
 Last refreshed: 2026-06-09 (Phase DI gap-closing procedure execution)
 
+Phase 3 update (2026-06-05): chat `/cron` enablement bridge fix — shared
+`WebView2Availability.h` ensures runtime config injection is compiled into
+`WebViewStartupConfigBridge.obj` (fixes native `enabled=true` vs JS
+`agentsToggleSource: "default"` split-brain). See
+`BlazeClawMfc/CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md` Phase 3.
+
 ## Closure verdict
 
 Cron parity is **closed** for product-scoped BlazeClaw surfaces. Section 2 core
@@ -17,7 +23,7 @@ MFC native dashboard UI explicitly deferred.
 | --- | --- |
 | Gateway RPC + schema | **Pass** |
 | `Cron*` services (jobs/timer/ops/store) | **Pass** |
-| WebView tool + `/cron` CLI surface (§7.7) | **Pass** (non-blocking dispatch, Phase DH) |
+| WebView tool + `/cron` CLI surface (§7.7) | **Pass** (Phase DH dispatch + Phase 2 chat enablement via `blazeclaw.agents.enabled` + Phase 3 `WebView2Availability.h` bridge compile guard; see `BlazeClawMfc/CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md`) |
 | Production `GatewayHost` E2E (wp-f) | **Pass** |
 
 ## Gate evidence (2026-05-23 replay)

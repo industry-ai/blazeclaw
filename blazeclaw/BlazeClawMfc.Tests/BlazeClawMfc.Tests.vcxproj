@@ -42,6 +42,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\CMgrMessageTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigLoaderTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\WebViewStartupConfigBridgeTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigSchemaServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
@@ -281,6 +282,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\DiagnosticsRegressionComparator.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\CMgrMessage.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\app\\WebViewStartupConfigBridge.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\AudioRingBuffer.cpp" />
   </ItemGroup>
   <ItemGroup>
