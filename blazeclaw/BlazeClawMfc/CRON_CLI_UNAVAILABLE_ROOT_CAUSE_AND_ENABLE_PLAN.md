@@ -1,10 +1,14 @@
 # Cron-cli `/cron` Unavailable Root Cause and Enablement Plan
 
-**Status: Complete (2026-06-05)** — Phase 1 (config parse) + Phase 2 (WebView bridge, telemetry, diagnostics) + **Phase 3 (compile guard + shared WebView2 header)** implemented.
+**Status: Complete (2026-06-05)** — Phase 1 (config parse) + Phase 2 (WebView bridge, telemetry, diagnostics) 
++ **Phase 3 (compile guard + shared WebView2 header)** implemented.
 
-**Phase 1 fix note:** `ConfigLoader` used `substr(23)` instead of `substr(25)` for `blazeclaw.agents.enabled=`, parsing `"d=1"` as false. Corrected to `substr(25)`.
+**Phase 1 fix note:** `ConfigLoader` used `substr(23)` instead of `substr(25)` for `blazeclaw.agents.enabled=`, 
+parsing `"d=1"` as false. Corrected to `substr(25)`.
 
-**Phase 3 fix note:** `WebViewStartupConfigBridge.cpp` (and `WebViewBridgeSupport.cpp`) compiled WebView2 injection as no-ops because `HAVE_WEBVIEW2_HEADER` was never defined in those translation units. Corrected via shared `WebView2Availability.h` + `IsWebViewStartupBridgeCompiled()` compile guard.
+**Phase 3 fix note:** `WebViewStartupConfigBridge.cpp` (and `WebViewBridgeSupport.cpp`) compiled WebView2 
+injection as no-ops because `HAVE_WEBVIEW2_HEADER` was never defined in those translation units. Corrected 
+via shared `WebView2Availability.h` + `IsWebViewStartupBridgeCompiled()` compile guard.
 
 ---
 
@@ -17,7 +21,8 @@
 | **WebView toggle resolution** | After navigation + resync | `BlazeClawAgentsToggle.resolveAgentsEnabled()` | `[Chat] startup.webview.agentsToggle - resolved=true source=config ...` |
 | **JS → native trace** | Startup / resync / `/cron` | `blazeclaw.agents.toggle.trace` postMessage | `[Chat] startup.webview.agentsToggle.trace - resolved=... source=...` |
 
-Both planes must agree for `/cron status` to dispatch. Native-only `enabled=true` is necessary but not sufficient.
+Both planes must agree for `/cron status` to dispatch. Native-only `enabled=true` is necessary but not 
+sufficient.
 
 ### Symptom → diagnosis quick map
 
@@ -66,7 +71,8 @@ Catch2 tag: `[webview][agents][bootstrap]` in `WebViewStartupConfigBridgeTests.c
 
 ### Root cause
 
-The `/cron` slash handler is guarded by the agents control-plane toggle in chat WebView. Initially that toggle ignored `blazeclaw.conf`.
+The `/cron` slash handler is guarded by the agents control-plane toggle in chat WebView. Initially that 
+toggle ignored `blazeclaw.conf`.
 
 ### Phase 1 implementation
 
@@ -84,7 +90,9 @@ The `/cron` slash handler is guarded by the agents control-plane toggle in chat 
 
 ### Root cause (design intent)
 
-Split-brain: native `AppConfig` correct, WebView `__BLAZECLAW_RUNTIME_CONFIG__` missing at JS evaluation time. Phase 2 added bridge delivery, telemetry, fallback, and diagnostics — but the bridge `.cpp` was still compiled as stubs until Phase 3.
+Split-brain: native `AppConfig` correct, WebView `__BLAZECLAW_RUNTIME_CONFIG__` missing at JS evaluation 
+time. Phase 2 added bridge delivery, telemetry, fallback, and diagnostics — but the bridge `.cpp` was 
+still compiled as stubs until Phase 3.
 
 ### Phase 2 step-by-step plan
 
@@ -123,7 +131,10 @@ Missing WebView startup lines:
 
 **Translation-unit macro mismatch — bridge compiled as no-op stubs.**
 
-`WebViewStartupConfigBridge.cpp` and `WebViewBridgeSupport.cpp` gate WebView2 code on `#ifdef HAVE_WEBVIEW2_HEADER`, but that macro was only defined in consumer headers (`BlazeClawMFCView.h`, `DashboardWnd.h`, `AIChatView.h`). Those headers are not included by the bridge `.cpp` files, so injection/shim code was stripped at compile time while native config logging still worked.
+`WebViewStartupConfigBridge.cpp` and `WebViewBridgeSupport.cpp` gate WebView2 code on `#ifdef HAVE_WEBVIEW2_HEADER`, 
+but that macro was only defined in consumer headers (`BlazeClawMFCView.h`, `DashboardWnd.h`, `AIChatView.h`). 
+Those headers are not included by the bridge `.cpp` files, so injection/shim code was stripped at compile 
+time while native config logging still worked.
 
 ### Phase 3 implementation
 
@@ -171,6 +182,10 @@ blazeclaw.agents.enabled=0   # explicitly disable (overrides query/localStorage)
 ```
 
 ### Precedence (chat WebView)
+
+Chat WebView (`index.html`) keeps the agents control-plane **UI hidden** even when
+`blazeclaw.agents.enabled=1`; `/cron` uses a headless `agentsController` only.
+Use standalone dashboard panes / `dashboard_*.html` for the full agents UI.
 
 1. Dashboard host → always enabled
 2. `blazeclaw.conf` (via `__BLAZECLAW_RUNTIME_CONFIG__`) → authoritative when set

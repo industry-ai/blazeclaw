@@ -651,7 +651,7 @@
     }
 
     function refreshDashboardPanelData(reason) {
-        if (!agentsController) {
+        if (!agentsController || !isDashboardHost()) {
             return;
         }
 
@@ -982,6 +982,11 @@
 
     function renderAgentsSurface() {
         if (!state.agentsSurfaceEl) {
+            return;
+        }
+
+        if (!shouldShowAgentsControlPlaneUi()) {
+            state.agentsSurfaceEl.innerHTML = "";
             return;
         }
 
@@ -2560,6 +2565,11 @@
             return;
         }
 
+        if (!shouldShowAgentsControlPlaneUi()) {
+            state.agentsTabsEl.innerHTML = "";
+            return;
+        }
+
         if (!agentsController) {
             state.agentsTabsEl.innerHTML = "";
             return;
@@ -2700,7 +2710,7 @@
         renderSpeechLivePreview();
         renderSessionControls();
         if (state.agentsControlPlaneEl) {
-            state.agentsControlPlaneEl.hidden = !agentsController;
+            state.agentsControlPlaneEl.hidden = !shouldShowAgentsControlPlaneUi();
         }
         renderAgentsTabs();
         renderAgentsSurface();
@@ -3629,6 +3639,10 @@
         return true;
     }
 
+    function shouldShowAgentsControlPlaneUi() {
+        return isDashboardHost() && Boolean(agentsController);
+    }
+
     function applyDashboardHostLayout() {
         if (!isDashboardHost()) {
             return;
@@ -3643,7 +3657,7 @@
             document.body.classList.add("blazeclaw-dashboard-host");
         }
         if (state.agentsControlPlaneEl) {
-            state.agentsControlPlaneEl.hidden = false;
+            state.agentsControlPlaneEl.hidden = !shouldShowAgentsControlPlaneUi();
         }
     }
 

@@ -68,6 +68,11 @@ body {
     gap: 8px;
 }
 
+/* Chat WebView keeps prompt/response space; dashboard panes host agents UI standalone. */
+body:not(.blazeclaw-dashboard-host) .agents-control-plane {
+    display: none !important;
+}
+
 .agents-tabs {
     display: flex;
     gap: 6px;
