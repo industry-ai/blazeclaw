@@ -150,7 +150,8 @@ namespace blazeclaw::agentchat {
 					return value;
 				}
 			}
-			return "101.132.254.212";
+			//return "101.132.254.212";
+			return "192.168.20.211";
 		}
 
 		std::uint16_t ResolveRunnerChatPort() {

@@ -19,6 +19,43 @@ constexpr LPCWSTR AGENTCHAT_INDEX_FILE = L"index.html";
 
 namespace
 {
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	std::string WideToUtf8(const std::wstring& value)
+	{
+		if (value.empty())
+		{
+			return {};
+		}
+
+		const int required = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (required <= 0)
+		{
+			return {};
+		}
+
+		std::string utf8(required, '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			utf8.data(),
+			required,
+			nullptr,
+			nullptr);
+		return utf8;
+	}
+	//-------------------------------------------------------------------
+
 	bool IsProcessStillActive(const PROCESS_INFORMATION& processInfo)
 	{
 		if (processInfo.hProcess == nullptr)
@@ -77,7 +114,12 @@ int CBlazeClawAgentChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		return -1;
 	}
 
-	StartNodeServer();
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	//StartNodeServer();
+
+	StartConfiguredRuntime();
+	//-------------------------------------------------------------------
 
 	if (!InitWebView())
 	{
@@ -132,6 +174,10 @@ BOOL CBlazeClawAgentChatView::OnEraseBkgnd(CDC* /*pDC*/)
 
 void CBlazeClawAgentChatView::OnDestroy()
 {
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	StopNativeRuntime();
+	//-------------------------------------------------------------------
 	StopNodeServer();
 
 	if (m_webView != nullptr)
@@ -143,6 +189,150 @@ void CBlazeClawAgentChatView::OnDestroy()
 
 	CView::OnDestroy();
 }
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+blazeclaw::config::AgentChatRuntimeMode CBlazeClawAgentChatView::ResolveRuntimeMode() const
+{
+	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		return blazeclaw::config::AgentChatRuntimeMode::Auto;
+	}
+
+	const std::wstring mode = app->Config().agentChatRuntime.mode;
+	if (_wcsicmp(mode.c_str(), L"legacy") == 0)
+	{
+		return blazeclaw::config::AgentChatRuntimeMode::Legacy;
+	}
+
+	if (_wcsicmp(mode.c_str(), L"native") == 0)
+	{
+		return blazeclaw::config::AgentChatRuntimeMode::Native;
+	}
+
+	return blazeclaw::config::AgentChatRuntimeMode::Auto;
+}
+
+/*
+ *	start the native agent chat bridge + agent chat native runner 
+ */
+bool CBlazeClawAgentChatView::StartNativeRuntime()
+{
+	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		TRACE("CBlazeClawAgentChatView: Native runtime unavailable because app context is null\n");
+		return false;
+	}
+
+	const auto& runtime = app->Config().agentChatRuntime;
+	blazeclaw::agentchat::AgentChatBridgeConfig bridgeConfig;
+	bridgeConfig.enabled = true;
+	bridgeConfig.mode = "native";
+	bridgeConfig.enableHttpListener = true;
+	bridgeConfig.enableGatewayRouting = true;
+	bridgeConfig.enablePushTransport = true;
+	bridgeConfig.compatibilityOpenClawAliases = true;
+	bridgeConfig.bindAddress = WideToUtf8(runtime.bindAddress);
+	if (bridgeConfig.bindAddress.empty())
+	{
+		bridgeConfig.bindAddress = "127.0.0.1";
+	}
+	bridgeConfig.port = runtime.port;
+
+	auto bridgeHost = std::make_unique<blazeclaw::agentchat::AgentChatBridgeHost>();
+	bridgeHost->SetGatewayRequestRouter(
+		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			return app->RouteGatewayRequest(request);
+		});
+	if (!bridgeHost->Initialize(bridgeConfig))
+	{
+		TRACE(
+			"CBlazeClawAgentChatView: Failed to initialize native bridge host (%s:%u)\n",
+			bridgeConfig.bindAddress.c_str(),
+			bridgeConfig.port);
+		return false;
+	}
+
+	auto nativeRunner = std::make_unique<blazeclaw::agentchat::AgentChatNativeRunner>();
+	nativeRunner->SetGatewayRequestRouter(
+		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			return app->RouteGatewayRequest(request);
+		});
+	if (!nativeRunner->Initialize())
+	{
+		bridgeHost->Shutdown();
+		TRACE("CBlazeClawAgentChatView: Failed to initialize native runner\n");
+		return false;
+	}
+
+	m_nativeBridgeHost = std::move(bridgeHost);
+	m_nativeRunner = std::move(nativeRunner);
+	m_nativeRuntimeStarted = true;
+	TRACE(
+		"CBlazeClawAgentChatView: Native runtime started (aliases=%s, bind=%s:%u)\n",
+		bridgeConfig.compatibilityOpenClawAliases ? "true" : "false",
+		WideToUtf8(runtime.bindAddress).c_str(),
+		runtime.port);
+	return true;
+}
+
+void CBlazeClawAgentChatView::StopNativeRuntime()
+{
+	if (m_nativeRunner)
+	{
+		m_nativeRunner->Shutdown();
+		m_nativeRunner.reset();
+	}
+
+	if (m_nativeBridgeHost)
+	{
+		m_nativeBridgeHost->Shutdown();
+		m_nativeBridgeHost.reset();
+	}
+
+	m_nativeRuntimeStarted = false;
+}
+
+void CBlazeClawAgentChatView::StartConfiguredRuntime()
+{
+	m_runtimeModeResolved = ResolveRuntimeMode();
+	m_nodeRuntimeStartedByMode = false;
+
+	switch (m_runtimeModeResolved)
+	{
+	case blazeclaw::config::AgentChatRuntimeMode::Legacy:
+		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=legacy\n");
+		StartNodeServer();
+		m_nodeRuntimeStartedByMode = m_bNodeServerStarted;
+		break;
+
+	case blazeclaw::config::AgentChatRuntimeMode::Native:
+		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=native\n");
+		if (!StartNativeRuntime())
+		{
+			TRACE("CBlazeClawAgentChatView: Native mode startup failed\n");
+		}
+		break;
+
+	case blazeclaw::config::AgentChatRuntimeMode::Auto:
+	default:
+		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=auto\n");
+		if (!StartNativeRuntime())
+		{
+			TRACE("CBlazeClawAgentChatView: Auto mode fallback to legacy Node runtime\n");
+			StopNativeRuntime();
+			StartNodeServer();
+			m_nodeRuntimeStartedByMode = m_bNodeServerStarted;
+			m_runtimeModeResolved = blazeclaw::config::AgentChatRuntimeMode::Legacy;
+		}
+		break;
+	}
+}
+//-------------------------------------------------------------------
 
 LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 {
@@ -401,9 +591,18 @@ void CBlazeClawAgentChatView::StopNodeProcess(PROCESS_INFORMATION& processInfo)
 	}
 }
 
+/*
+ * The legacy runtime bootstrap for AgentChat is based on Node.js and requires 
+ * starting two separate scripts:
+ * 1. chat-bridge: This script handles the WebSocket communication and serves 
+ *    as a bridge between the web UI and the backend services.
+ * 2. blazeclaw-agent-bridge: This script manages the agent chat logic and 
+ *    interfaces with the backend services. 
+ */
 void CBlazeClawAgentChatView::StartNodeServer()
 {
 	TRACE("CBlazeClawAgentChatView: Starting AgentChat Node.js services...\n");
+	TRACE("CBlazeClawAgentChatView: Node.js AgentChat bridge startup will be retired in native cutover mode\n");
 
 	std::wstring serverPath = GetServerPath();
 	if (serverPath.empty())
@@ -416,6 +615,7 @@ void CBlazeClawAgentChatView::StartNodeServer()
 
 	m_hNodeStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
+	// launches two Node.js processes 
 	const bool chatBridgeStarted = StartNodeScript(
 		serverPath,
 		L"chat-bridge",
@@ -446,6 +646,7 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		if (IsProcessStillActive(m_nodeProcessInfo) &&
 			IsProcessStillActive(m_agentBridgeProcessInfo))
 		{
+			// marks the view as “server started” for downstream logic
 			serverReady = true;
 			m_bNodeServerStarted = true;
 			if (m_hNodeStartedEvent)
@@ -610,6 +811,27 @@ int CBlazeClawAgentChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	TRACE0("CBlazeClawAgentChatView: WebView2 is not available. Please install WebView2 runtime.\n");
 	return 0;
 }
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+blazeclaw::config::AgentChatRuntimeMode CBlazeClawAgentChatView::ResolveRuntimeMode() const
+{
+	return blazeclaw::config::AgentChatRuntimeMode::Auto;
+}
+
+bool CBlazeClawAgentChatView::StartNativeRuntime()
+{
+	return false;
+}
+
+void CBlazeClawAgentChatView::StopNativeRuntime()
+{
+}
+
+void CBlazeClawAgentChatView::StartConfiguredRuntime()
+{
+}
+//-------------------------------------------------------------------
 
 void CBlazeClawAgentChatView::OnSize(UINT nType, int cx, int cy)
 {

@@ -533,9 +533,29 @@ namespace blazeclaw::config {
 		bool verboseMetrics = false;
 	};
 
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	// Add explicit runtime mode to config model
+	struct AgentChatRuntimeConfig {
+		std::wstring mode = L"auto"; // legacy | native | auto
+		bool enableOpenClawAliases = true;
+		std::wstring bindAddress = L"127.0.0.1";
+		std::uint16_t port = 8788;
+	};
+
+	enum class AgentChatRuntimeMode { Legacy, Native, Auto };
+
+	// resolve from `static_cast<CBlazeClawMFCApp*>(AfxGetApp())->Config().agentChatRuntime.mode`
+	//-------------------------------------------------------------------
+
 	struct AppConfig {
 		GatewayConfig gateway;
 		AgentConfig agent;
+		//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+		// Add explicit runtime mode to config model
+		AgentChatRuntimeConfig	agentChatRuntime;	
+		//-------------------------------------------------------------------
 		ChatUiConfig chat;
 		LocalModelConfig localModel;
 		SpeechRecognitionConfig speechRecognition;

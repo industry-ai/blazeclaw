@@ -7,6 +7,10 @@
 #include <vector>
 #include "Client.h"
 
+#include "../config/ConfigModels.h"
+#include "../agentchat/AgentChatBridgeHost.h"
+#include "../agentchat/AgentChatNativeRunner.h"
+
 #if defined(__has_include)
 # if __has_include(<WebView2.h>)
 #  include <WebView2.h>
@@ -28,6 +32,13 @@ class CBlazeClawAgentChatView : public CView
 protected:
 	CBlazeClawAgentChatView() noexcept;
 	DECLARE_DYNCREATE(CBlazeClawAgentChatView)
+
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	//std::unique_ptr<blazeclaw::agentchat::AgentChatBridgeHost>		m_nativeBridgeHost;
+	//std::unique_ptr<blazeclaw::agentchat::AgentChatNativeRunner>	m_nativeRunner;
+	//blazeclaw::config::AgentChatRuntimeMode							m_runtimeModeResolved;
+	//-------------------------------------------------------------------
 
 public:
 	~CBlazeClawAgentChatView();
@@ -57,6 +68,13 @@ private:
 	std::wstring GetServerPath() const;
 	bool InitWebView();
 	bool CreateWebViewController();
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	blazeclaw::config::AgentChatRuntimeMode ResolveRuntimeMode() const;
+	bool	StartNativeRuntime();
+	void	StopNativeRuntime();
+	void	StartConfiguredRuntime();
+	//-------------------------------------------------------------------
 
 #ifdef BLAZECLAW_AGENTCHATVIEW_WEBVIEW2
 	void SetupWebViewEvents();
@@ -84,6 +102,16 @@ private:
 		const std::wstring& scriptName,
 		PROCESS_INFORMATION& processInfo);
 	void StopNodeProcess(PROCESS_INFORMATION& processInfo);
+
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	std::unique_ptr<blazeclaw::agentchat::AgentChatBridgeHost>		m_nativeBridgeHost;
+	std::unique_ptr<blazeclaw::agentchat::AgentChatNativeRunner>	m_nativeRunner;
+	blazeclaw::config::AgentChatRuntimeMode	m_runtimeModeResolved	=
+		blazeclaw::config::AgentChatRuntimeMode::Auto;
+	bool m_nativeRuntimeStarted		= false;
+	bool m_nodeRuntimeStartedByMode	= false;
+	//-------------------------------------------------------------------------------------------------
 
 public:
 	void StartNodeServer();

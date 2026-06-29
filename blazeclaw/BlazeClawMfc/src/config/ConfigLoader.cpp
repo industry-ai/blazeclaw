@@ -508,6 +508,36 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+			// Add explicit runtime mode to config model
+			if (trimmedLine.rfind(L"agentchat.runtime.mode=", 0) == 0) {
+				const std::wstring raw = ToLowerTrim(trimmedLine.substr(23));
+				outConfig.agentChatRuntime.mode =
+					(raw == L"legacy" || raw == L"native" || raw == L"auto") ? raw : L"auto";
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.bind=", 0) == 0) {
+				outConfig.agentChatRuntime.bindAddress = Trim(trimmedLine.substr(23));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.port=", 0) == 0) {
+				// parse uint16 safely
+				try {
+					outConfig.agentChatRuntime.port =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(23))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.openclawAliases=", 0) == 0) {
+				outConfig.agentChatRuntime.enableOpenClawAliases =
+					ParseBool(trimmedLine.substr(34), true);
+				continue;
+			}
+			//-------------------------------------------------------------------
+
 			if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {
 				outConfig.chat.mode =
 					NormalizeChatUiMode(trimmedLine.substr(13));

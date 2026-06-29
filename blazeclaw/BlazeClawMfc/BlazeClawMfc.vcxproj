@@ -119,6 +119,12 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\agentchat\AgentChatBridgeConfig.h" />
+    <ClInclude Include="src\agentchat\AgentChatBridgeHost.h" />
+    <ClInclude Include="src\agentchat\AgentChatBridgeHttpListener.h" />
+    <ClInclude Include="src\agentchat\AgentChatBridgeProtocol.h" />
+    <ClInclude Include="src\agentchat\AgentChatBridgeStateStore.h" />
+    <ClInclude Include="src\agentchat\AgentChatNativeRunner.h" />
     <ClInclude Include="src\app\AudioRingBuffer.h" />
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />
     <ClInclude Include="src\app\AIChatView.h" />
@@ -364,6 +370,12 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\agentchat\AgentChatBridgeConfig.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatBridgeHost.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatBridgeHttpListener.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatBridgeProtocol.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatBridgeStateStore.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatNativeRunner.cpp" />
     <ClCompile Include="src\app\AIChatView.cpp" />
     <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\BlazeClawMarkdownView.cpp" />
@@ -669,6 +681,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\docs\readme.md" />
+    <None Include="blazeclaw.conf" />
     <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md" />
     <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />

@@ -31,7 +31,8 @@ namespace blazeclaw::agentchat {
 		constexpr std::size_t kPushIdempotencyMaxEntries = 2000;
 		constexpr const char* kDefaultPushToken =
 			"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ98s7d2b9e3c5a1f0d4";
-		constexpr const char* kDefaultChatHost = "101.132.254.212";
+//		constexpr const char* kDefaultChatHost = "101.132.254.212";
+		constexpr const char* kDefaultChatHost = "192.168.20.211";
 		constexpr std::uint16_t kDefaultChatPort = 8765;
 		constexpr std::uint32_t kDefaultPushTimeoutMs = 30000;
 		constexpr std::size_t kHbpcHeaderSize = 64;
