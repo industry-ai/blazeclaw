@@ -604,6 +604,21 @@ namespace blazeclaw::config {
 					ParseBool(trimmedLine.substr(32), false);
 				continue;
 			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyRollbackEnabled=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyRollbackEnabled =
+					ParseBool(trimmedLine.substr(40), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.nodeStartupDeprecated=", 0) == 0) {
+				outConfig.agentChatRuntime.nodeStartupDeprecated =
+					ParseBool(trimmedLine.substr(39), false);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.nodeRemovalApproved=", 0) == 0) {
+				outConfig.agentChatRuntime.nodeRemovalApproved =
+					ParseBool(trimmedLine.substr(36), false);
+				continue;
+			}
 			//-------------------------------------------------------------------
 
 			if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {

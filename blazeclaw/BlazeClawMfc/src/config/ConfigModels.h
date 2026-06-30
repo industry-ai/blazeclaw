@@ -542,6 +542,9 @@ namespace blazeclaw::config {
 		bool uiInProcessAgentPath = true;
 		bool httpPushIngress = true;
 		bool allowNonLoopbackHttpBind = false;
+		bool legacyRollbackEnabled = true;
+		bool nodeStartupDeprecated = false;
+		bool nodeRemovalApproved = false;
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 8788;
 		std::wstring pushChatHost = L"127.0.0.1";

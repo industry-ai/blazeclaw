@@ -83,6 +83,9 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayParityBatch34ContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayWebChatPhase5ParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewaySpeechPhase56ParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeBridgeHostEndpointTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatBridgeStateStoreMigrationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatWebViewBridgeSmokeContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillPortingPlanPresenceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsCatalogServiceOpenClawOriginalImportTests.cpp" />
@@ -215,6 +218,11 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayUtf8CloseReason.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayTestHooks.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeConfig.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeHttpListener.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeProtocol.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeStateStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNetPolicy.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />

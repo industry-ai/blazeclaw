@@ -587,7 +587,9 @@
     <ClInclude Include="src\app\BlazeClawMFCView.h">
       <Filter>app</Filter>
     </ClInclude>
-    <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
+    <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\dashboard_wnd.ico" />
@@ -698,7 +700,9 @@
     <None Include="blazeclaw.conf">
       <Filter>config</Filter>
     </None>
-    <None Include="web\agent-chat-vanilla\html\js\api\agentBridgeTransport.js" />
+    <None Include="web\agent-chat-vanilla\html\js\api\agentBridgeTransport.js">
+      <Filter>agent-chat-bridge</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">
@@ -712,6 +716,9 @@
     </Filter>
     <Filter Include="app\res">
       <UniqueIdentifier>{3e9fb80b-450a-4e23-a3f4-f34a456df7a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="agent-chat">
+      <UniqueIdentifier>{591d8147-d4ce-4186-9e6e-0d4b817aa16c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
