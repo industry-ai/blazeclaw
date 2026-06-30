@@ -34,6 +34,6 @@ TEST_CASE("Native startup keeps bridge alive when runner init fails", "[agentcha
 	REQUIRE(source.find("m_nativeRunnerStarted = false;") != std::string::npos);
 	REQUIRE(source.find("m_nativeModeDegraded = true;") != std::string::npos);
 	REQUIRE(source.find("m_nativeRuntimeStarted = true;") != std::string::npos);
-	REQUIRE(source.find("Native runtime started in degraded mode (bridge on, runner off)") != std::string::npos);
+	REQUIRE(source.find("Native runtime started in degraded mode (bridge on, runner off, httpListenerFallback=") != std::string::npos);
 	REQUIRE(source.find("Native mode running degraded (bridge on, runner off)") != std::string::npos);
 }

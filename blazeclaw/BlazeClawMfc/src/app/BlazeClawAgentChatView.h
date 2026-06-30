@@ -116,6 +116,8 @@ private:
 	bool m_nativeBridgeHostStarted	= false;
 	bool m_nativeRunnerStarted		= false;
 	bool m_nativeModeDegraded		= false;
+	bool m_nativeHttpListenerStarted = false;
+	std::uint16_t m_nativeHttpListenerPort = 0;
 	bool m_nodeRuntimeStartedByMode	= false;
 	//-------------------------------------------------------------------------------------------------
 

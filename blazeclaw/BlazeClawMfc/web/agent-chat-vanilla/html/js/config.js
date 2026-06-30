@@ -22,6 +22,9 @@ const AppConfig = (() => {
     nativeBridgeHostStarted: false,
     nativeRunnerStarted: false,
     nativeModeDegraded: false,
+    nativeHttpListenerStarted: false,
+    nativeHttpListenerPort: 0,
+    nativeBridgeEffectiveMode: 'native-inprocess-only',
     agentBridgeReachabilityHint: 'unknown',
   };
 
@@ -65,6 +68,9 @@ const AppConfig = (() => {
       nativeBridgeHostStarted: _env('nativeBridgeHostStarted', defaults.nativeBridgeHostStarted),
       nativeRunnerStarted: _env('nativeRunnerStarted', defaults.nativeRunnerStarted),
       nativeModeDegraded: _env('nativeModeDegraded', defaults.nativeModeDegraded),
+      nativeHttpListenerStarted: _env('nativeHttpListenerStarted', defaults.nativeHttpListenerStarted),
+      nativeHttpListenerPort: Number(_env('nativeHttpListenerPort', defaults.nativeHttpListenerPort)),
+      nativeBridgeEffectiveMode: _env('nativeBridgeEffectiveMode', defaults.nativeBridgeEffectiveMode),
       agentBridgeReachabilityHint: _env('agentBridgeReachabilityHint', defaults.agentBridgeReachabilityHint),
     };
   }

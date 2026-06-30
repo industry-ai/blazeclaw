@@ -279,6 +279,8 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	m_nativeBridgeHostStarted = false;
 	m_nativeRunnerStarted = false;
 	m_nativeModeDegraded = false;
+	m_nativeHttpListenerStarted = false;
+	m_nativeHttpListenerPort = 0;
 	m_nativeBridgeHost.reset();
 	m_nativeRunner.reset();
 
@@ -327,15 +329,38 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 			return app->RouteGatewayRequest(request);
 		});
 	bridgeHost->SetOrchestratorAdapter(orchestratorAdapter);
+	bool httpListenerFallbackApplied = false;
 	if (!bridgeHost->Initialize(bridgeConfig))
 	{
 		TRACE(
-			"CBlazeClawAgentChatView: Failed to initialize native bridge host (%s:%u)\n",
+			"CBlazeClawAgentChatView: Failed to initialize native bridge host with HTTP listener (%s:%u). Trying in-process-only fallback.\n",
 			bridgeConfig.bindAddress.c_str(),
 			bridgeConfig.port);
-		return false;
+
+		blazeclaw::agentchat::AgentChatBridgeConfig inProcessOnlyConfig = bridgeConfig;
+		inProcessOnlyConfig.enableHttpListener = false;
+
+		auto inProcessOnlyBridgeHost = std::make_unique<blazeclaw::agentchat::AgentChatBridgeHost>();
+		inProcessOnlyBridgeHost->SetOrchestratorAdapter(orchestratorAdapter);
+		if (!inProcessOnlyBridgeHost->Initialize(inProcessOnlyConfig))
+		{
+			TRACE(
+				"CBlazeClawAgentChatView: Failed to initialize native bridge host in in-process-only mode\n");
+			return false;
+		}
+
+		bridgeHost = std::move(inProcessOnlyBridgeHost);
+		httpListenerFallbackApplied = true;
 	}
 	m_nativeBridgeHostStarted = true;
+	m_nativeHttpListenerStarted = !httpListenerFallbackApplied;
+	m_nativeHttpListenerPort = m_nativeHttpListenerStarted ? bridgeConfig.port : 0;
+	if (httpListenerFallbackApplied)
+	{
+		m_nativeModeDegraded = true;
+		TRACE(
+			"CBlazeClawAgentChatView: Native bridge host started in in-process-only mode (HTTP listener disabled)\n");
+	}
 
 	auto nativeRunner = std::make_unique<blazeclaw::agentchat::AgentChatNativeRunner>();
 	nativeRunner->SetChatEndpoint(
@@ -350,7 +375,8 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 		m_nativeModeDegraded = true;
 		m_nativeRuntimeStarted = true;
 		TRACE(
-			"CBlazeClawAgentChatView: Native runtime started in degraded mode (bridge on, runner off). bind=%s:%u\n",
+			"CBlazeClawAgentChatView: Native runtime started in degraded mode (bridge on, runner off, httpListenerFallback=%s). bind=%s:%u\n",
+			httpListenerFallbackApplied ? "true" : "false",
 			bridgeConfig.bindAddress.c_str(),
 			bridgeConfig.port);
 		return true;
@@ -359,13 +385,14 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	m_nativeBridgeHost = std::move(bridgeHost);
 	m_nativeRunner = std::move(nativeRunner);
 	m_nativeRunnerStarted = true;
-	m_nativeModeDegraded = false;
+	m_nativeModeDegraded = httpListenerFallbackApplied;
 	m_nativeRuntimeStarted = true;
 	TRACE(
-		"CBlazeClawAgentChatView: Native runtime started (aliases=%s, bind=%s:%u)\n",
+		"CBlazeClawAgentChatView: Native runtime started (aliases=%s, bind=%s:%u, httpListenerFallback=%s)\n",
 		bridgeConfig.compatibilityOpenClawAliases ? "true" : "false",
 		WideToUtf8(runtime.bindAddress).c_str(),
-		runtime.port);
+		runtime.port,
+		httpListenerFallbackApplied ? "true" : "false");
 	return true;
 }
 
@@ -387,6 +414,8 @@ void CBlazeClawAgentChatView::StopNativeRuntime()
 	m_nativeBridgeHostStarted = false;
 	m_nativeRunnerStarted = false;
 	m_nativeModeDegraded = false;
+	m_nativeHttpListenerStarted = false;
+	m_nativeHttpListenerPort = 0;
 }
 
 void CBlazeClawAgentChatView::StartConfiguredRuntime()
@@ -1264,6 +1293,8 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 	const bool nativeBridgeHostStarted = m_nativeBridgeHostStarted;
 	const bool nativeRunnerStarted = m_nativeRunnerStarted;
 	const bool nativeModeDegraded = m_nativeModeDegraded;
+	const bool nativeHttpListenerStarted = m_nativeHttpListenerStarted;
+	const std::uint16_t nativeHttpListenerPort = m_nativeHttpListenerPort;
 	bool uiInProcessAgentPath = true;
 	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app != nullptr)
@@ -1272,6 +1303,9 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 	}
 	const bool nativeUiBridgeEnabled = nativeBridgeEnabled && uiInProcessAgentPath;
 	const std::wstring transportMode = nativeUiBridgeEnabled ? L"native-webview" : L"http";
+	const std::wstring effectiveMode = nativeHttpListenerStarted
+		? L"native-inprocess+http"
+		: L"native-inprocess-only";
 	const std::wstring reachabilityHint = nativeUiBridgeEnabled
 		? L"native-inprocess"
 		: (nativeBridgeHostStarted ? L"http-bridge" : L"bridge-unavailable");
@@ -1285,6 +1319,9 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 		L"window.__APP_CONFIG__.nativeBridgeHostStarted=" + std::wstring(nativeBridgeHostStarted ? L"true" : L"false") + L";"
 		L"window.__APP_CONFIG__.nativeRunnerStarted=" + std::wstring(nativeRunnerStarted ? L"true" : L"false") + L";"
 		L"window.__APP_CONFIG__.nativeModeDegraded=" + std::wstring(nativeModeDegraded ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.nativeHttpListenerStarted=" + std::wstring(nativeHttpListenerStarted ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.nativeHttpListenerPort=" + std::to_wstring(nativeHttpListenerPort) + L";"
+		L"window.__APP_CONFIG__.nativeBridgeEffectiveMode='" + EscapeJsSingleQuotedString(effectiveMode) + L"';"
 		L"window.__APP_CONFIG__.agentBridgeReachabilityHint='" + EscapeJsSingleQuotedString(reachabilityHint) + L"';"
 		L"window.__APP_CONFIG__.agentBridgeTransport='" + EscapeJsSingleQuotedString(transportMode) + L"';"
 		L"window.__APP_CONFIG__.enableHttpFallbackOnNativeBridgeError=true;"

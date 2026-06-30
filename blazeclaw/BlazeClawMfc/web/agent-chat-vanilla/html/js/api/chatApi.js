@@ -468,9 +468,19 @@ async function callAgent(message, conversationId, sessionId, callbacks, opts = {
       return { text: '' };
     }
     const rawMessage = String(err?.message || '');
-    const normalized = /Failed to fetch/i.test(rawMessage)
-      ? 'Agent bridge unavailable (fetch_failed)'
-      : rawMessage;
+    let normalized = rawMessage;
+    if (/Failed to fetch/i.test(rawMessage)) {
+      const effectiveMode = String(chatCfg?.nativeBridgeEffectiveMode || '').trim() || 'unknown';
+      const listenerStarted = String(chatCfg?.nativeHttpListenerStarted).toLowerCase() === 'true' || chatCfg?.nativeHttpListenerStarted === true;
+      const listenerPort = Number(chatCfg?.nativeHttpListenerPort || 0);
+      if (effectiveMode === 'native-inprocess-only') {
+        normalized = 'Agent bridge unavailable (fetch_failed; mode=native-inprocess-only; http_listener=disabled)';
+      } else if (!listenerStarted) {
+        normalized = `Agent bridge unavailable (fetch_failed; mode=${effectiveMode}; http_listener=down)`;
+      } else {
+        normalized = `Agent bridge unavailable (fetch_failed; mode=${effectiveMode}; http_listener_port=${listenerPort || 'unknown'})`;
+      }
+    }
     const wrappedError = new Error(normalized || 'Agent request failed');
     onError?.(wrappedError);
     return { text: '', error: wrappedError.message };

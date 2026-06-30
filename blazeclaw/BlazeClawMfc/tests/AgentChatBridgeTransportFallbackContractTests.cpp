@@ -40,5 +40,5 @@ TEST_CASE("Chat API normalizes generic fetch failure into actionable bridge erro
 	const std::string source = ReadUtf8File(chatApiPath);
 
 	REQUIRE(source.find("/Failed to fetch/i.test(rawMessage)") != std::string::npos);
-	REQUIRE(source.find("Agent bridge unavailable (fetch_failed)") != std::string::npos);
+	REQUIRE(source.find("Agent bridge unavailable (fetch_failed; mode=") != std::string::npos);
 }

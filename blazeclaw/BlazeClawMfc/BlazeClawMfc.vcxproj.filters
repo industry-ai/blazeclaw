@@ -316,6 +316,7 @@
     </ClCompile>
     <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp" />
     <ClCompile Include="tests\AgentChatBridgeTransportFallbackContractTests.cpp" />
+    <ClCompile Include="tests\AgentChatListenerFallbackDiagnosticsContractTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
