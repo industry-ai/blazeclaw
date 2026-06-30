@@ -21,6 +21,18 @@ namespace blazeclaw::agentchat {
 		return allowOpenClawAliases && path == kOpenClawAgentPushPath;
 	}
 
+	bool AgentChatBridgeProtocol::IsCollaborationPath(
+		const std::string& path) {
+		return path == kCollaborationPrefix ||
+			(path.size() > std::char_traits<char>::length(kCollaborationPrefix) &&
+				path.rfind(kCollaborationPrefix, 0) == 0);
+	}
+
+	bool AgentChatBridgeProtocol::IsTtsSynthesizePath(
+		const std::string& path) {
+		return path == kTtsSynthesizePath;
+	}
+
 	AgentChatBridgeHttpResponse AgentChatBridgeProtocol::BuildHealthResponse(
 		const std::string& gatewayUrl,
 		const bool running) {

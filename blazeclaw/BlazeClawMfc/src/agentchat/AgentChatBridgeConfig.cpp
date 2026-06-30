@@ -103,12 +103,21 @@ namespace blazeclaw::agentchat {
 		config.enableHttpListener = ParseBool(
 			GetEnv("BLAZECLAW_AGENTCHAT_NATIVE_HTTP_LISTENER"),
 			true);
+		config.enableHttpPushIngress = ParseBool(
+			GetEnv("BLAZECLAW_AGENTCHAT_NATIVE_HTTP_PUSH_INGRESS"),
+			true);
 		config.enableGatewayRouting = ParseBool(
 			GetEnv("BLAZECLAW_AGENTCHAT_NATIVE_GATEWAY_ROUTING"),
 			true);
 		config.enablePushTransport = ParseBool(
 			GetEnv("BLAZECLAW_AGENTCHAT_NATIVE_PUSH_TRANSPORT"),
 			true);
+		config.enableUiInProcessAgentPath = ParseBool(
+			GetEnv("BLAZECLAW_AGENTCHAT_NATIVE_UI_INPROCESS_AGENT_PATH"),
+			true);
+		config.allowNonLoopbackHttpBind = ParseBool(
+			GetEnv("BLAZECLAW_AGENTCHAT_ALLOW_NON_LOOPBACK_HTTP_BIND"),
+			false);
 		config.compatibilityOpenClawAliases = ParseBool(
 			GetEnv("BLAZECLAW_AGENTCHAT_OPENCLAW_ALIASES"),
 			true);

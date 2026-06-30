@@ -197,6 +197,34 @@ namespace blazeclaw::agentchat {
 			};
 		}
 
+		bool StartsWithIgnoreCase(const std::string& value, const std::string& prefix) {
+			if (value.size() < prefix.size()) {
+				return false;
+			}
+			for (std::size_t index = 0; index < prefix.size(); ++index) {
+				if (std::tolower(static_cast<unsigned char>(value[index])) !=
+					std::tolower(static_cast<unsigned char>(prefix[index]))) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		bool IsHttpUrl(const std::string& value) {
+			return StartsWithIgnoreCase(value, "http://") || StartsWithIgnoreCase(value, "https://");
+		}
+
+		std::string LastPathSegment(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+			const std::size_t index = value.find_last_of("/\\");
+			if (index == std::string::npos || index + 1 >= value.size()) {
+				return value;
+			}
+			return value.substr(index + 1);
+		}
+
 		int HttpStatusForPushErrorCode(const std::string& code) {
 			const std::string upper = ToUpperCopy(code);
 			if (upper == "INVALID_TOKEN" || upper == "NOT_AUTHENTICATED") {
@@ -893,6 +921,12 @@ namespace blazeclaw::agentchat {
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_config = config;
+			if (!m_config.allowNonLoopbackHttpBind &&
+				m_config.bindAddress != "127.0.0.1" &&
+				m_config.bindAddress != "localhost") {
+				m_running = false;
+				return false;
+			}
 			if (!m_config.enabled) {
 				m_running = false;
 				return false;
@@ -967,10 +1001,14 @@ namespace blazeclaw::agentchat {
 		const std::string& requestBodyJson) const {
 		bool running = false;
 		bool allowAliases = true;
+		bool enableUiInProcessAgentPath = true;
+		bool enableHttpPushIngress = true;
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			running = m_running;
 			allowAliases = m_config.compatibilityOpenClawAliases;
+			enableUiInProcessAgentPath = m_config.enableUiInProcessAgentPath;
+			enableHttpPushIngress = m_config.enableHttpPushIngress;
 		}
 
 		if (path == AgentChatBridgeProtocol::kHealthPath) {
@@ -986,6 +1024,9 @@ namespace blazeclaw::agentchat {
 		if (AgentChatBridgeProtocol::IsAgentPath(
 			path,
 			allowAliases)) {
+			if (enableUiInProcessAgentPath) {
+				return AgentChatBridgeProtocol::BuildNotFoundResponse();
+			}
 			if (method == "OPTIONS") {
 				AgentChatBridgeHttpResponse response;
 				response.statusCode = 204;
@@ -1008,6 +1049,9 @@ namespace blazeclaw::agentchat {
 		if (AgentChatBridgeProtocol::IsPushPath(
 			path,
 			allowAliases)) {
+			if (!enableHttpPushIngress) {
+				return AgentChatBridgeProtocol::BuildNotFoundResponse();
+			}
 			if (method == "OPTIONS") {
 				AgentChatBridgeHttpResponse response;
 				response.statusCode = 204;
@@ -1025,6 +1069,42 @@ namespace blazeclaw::agentchat {
 				return BuildBadRequestResponse("invalid_json");
 			}
 			return HandlePushRequest(payload);
+		}
+
+		if (AgentChatBridgeProtocol::IsCollaborationPath(path)) {
+			if (method == "OPTIONS") {
+				AgentChatBridgeHttpResponse response;
+				response.statusCode = 204;
+				response.body = "{\"ok\":true}";
+				return response;
+			}
+
+			nlohmann::json payload = nlohmann::json::object();
+			if (method == "POST") {
+				payload = nlohmann::json::parse(requestBodyJson, nullptr, false);
+				if (payload.is_discarded() || !payload.is_object()) {
+					return BuildBadRequestResponse("invalid_json");
+				}
+			}
+			return HandleCollaborationRequest(method, path, payload);
+		}
+
+		if (AgentChatBridgeProtocol::IsTtsSynthesizePath(path)) {
+			if (method == "OPTIONS") {
+				AgentChatBridgeHttpResponse response;
+				response.statusCode = 204;
+				response.body = "{\"ok\":true}";
+				return response;
+			}
+			if (method != "POST") {
+				return BuildMethodNotAllowedResponse();
+			}
+			const nlohmann::json payload =
+				nlohmann::json::parse(requestBodyJson, nullptr, false);
+			if (payload.is_discarded() || !payload.is_object()) {
+				return BuildBadRequestResponse("invalid_json");
+			}
+			return HandleTtsSynthesizeRequest(payload);
 		}
 
 		return AgentChatBridgeProtocol::BuildNotFoundResponse();
@@ -1716,6 +1796,333 @@ namespace blazeclaw::agentchat {
 		response.statusCode =
 			eventName == "ERROR" ? HttpStatusForPushErrorCode(errorCode) : 200;
 		response.body = JsonDumpCompact(transportResponse);
+		return response;
+	}
+
+	AgentChatBridgeHttpResponse AgentChatBridgeHost::HandleCollaborationRequest(
+		const std::string& method,
+		const std::string& path,
+		const nlohmann::json& payload) const {
+		const std::string prefix = AgentChatBridgeProtocol::kCollaborationPrefix;
+		std::string subPath = path.size() > prefix.size() ? path.substr(prefix.size()) : std::string();
+		if (subPath.empty()) {
+			subPath = "/";
+		}
+
+		if (method == "GET") {
+			if (subPath != "/" && subPath != "/current-display" && subPath.rfind("/current-display/", 0) != 0) {
+				return AgentChatBridgeProtocol::BuildNotFoundResponse();
+			}
+
+			std::string conversationId;
+			if (subPath.rfind("/current-display/", 0) == 0) {
+				conversationId = TrimCopy(subPath.substr(std::string("/current-display/").size()));
+			}
+			if (conversationId.empty()) {
+				return BuildBadRequestResponse("collaboration_conversation_id_required");
+			}
+
+			nlohmann::json currentDisplay = nullptr;
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const auto it = m_collaborationCurrentDisplayByConversation.find(conversationId);
+				if (it != m_collaborationCurrentDisplayByConversation.end()) {
+					currentDisplay = it->second;
+				}
+			}
+
+			AgentChatBridgeHttpResponse response;
+			response.statusCode = 200;
+			response.body = JsonDumpCompact(nlohmann::json{
+				{ "ok", true },
+				{ "currentDisplay", currentDisplay },
+			});
+			return response;
+		}
+
+		if (method != "POST") {
+			return BuildMethodNotAllowedResponse();
+		}
+
+		if (subPath != "/" && subPath != "/dispatch") {
+			return AgentChatBridgeProtocol::BuildNotFoundResponse();
+		}
+
+		const nlohmann::json instruction = payload.contains("instruction") && payload["instruction"].is_object()
+			? payload["instruction"]
+			: payload;
+		if (!instruction.is_object()) {
+			return BuildBadRequestResponse("collaboration_bad_instruction");
+		}
+
+		const std::string protocol = JsonStringValue(instruction, "protocol");
+		if (protocol != "agentchat.collaboration") {
+			return BuildBadRequestResponse("collaboration_bad_protocol");
+		}
+		const int version = instruction.contains("version") && instruction["version"].is_number_integer()
+			? instruction["version"].get<int>()
+			: 0;
+		if (version != 1) {
+			return BuildBadRequestResponse("collaboration_bad_version");
+		}
+
+		const std::string action = JsonStringValue(instruction, "action");
+		if (action != "device.open_content" &&
+			action != "device.speak" &&
+			action != "ai.skill_result" &&
+			action != "ai.task_status") {
+			return BuildBadRequestResponse("collaboration_unsupported_action");
+		}
+
+		const std::string conversationId = JsonStringValue(instruction, "conversationId");
+		if (conversationId.empty()) {
+			return BuildBadRequestResponse("collaboration_conversation_id_required");
+		}
+
+		const std::string dispatchId = JsonStringValue(instruction, "dispatchId");
+		const std::string dedupeKeyRaw = JsonStringValue(instruction, "dedupeKey");
+		const std::string dedupeKey = dedupeKeyRaw.empty() ? dispatchId : dedupeKeyRaw;
+		if (dedupeKey.empty()) {
+			return BuildBadRequestResponse("collaboration_dedupe_key_required");
+		}
+
+		if (!instruction.contains("payload") || !instruction["payload"].is_object()) {
+			return BuildBadRequestResponse("collaboration_payload_required");
+		}
+		const nlohmann::json instructionPayload = instruction["payload"];
+
+		const std::uint64_t now = CurrentEpochMilliseconds();
+		const std::uint64_t ttlMs = instruction.contains("ttlMs") && instruction["ttlMs"].is_number_unsigned()
+			? instruction["ttlMs"].get<std::uint64_t>()
+			: 30000ULL;
+		const std::uint64_t timestamp = instruction.contains("timestamp") && instruction["timestamp"].is_number_unsigned()
+			? instruction["timestamp"].get<std::uint64_t>()
+			: now;
+		if (timestamp + ttlMs < now) {
+			AgentChatBridgeHttpResponse response;
+			response.statusCode = 200;
+			response.body = JsonDumpCompact(nlohmann::json{
+				{ "ok", false },
+				{ "status", "ignored" },
+				{ "code", "EXPIRED" },
+				{ "message", "instruction expired" },
+			});
+			return response;
+		}
+
+		nlohmann::json currentDisplay = nullptr;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			for (auto it = m_collaborationDedupeByKey.begin(); it != m_collaborationDedupeByKey.end();) {
+				if (it->second <= now) {
+					it = m_collaborationDedupeByKey.erase(it);
+				}
+				else {
+					++it;
+				}
+			}
+
+			const auto dedupeIt = m_collaborationDedupeByKey.find(dedupeKey);
+			if (dedupeIt != m_collaborationDedupeByKey.end() && dedupeIt->second > now) {
+				const auto currentDisplayIt = m_collaborationCurrentDisplayByConversation.find(conversationId);
+				if (currentDisplayIt != m_collaborationCurrentDisplayByConversation.end()) {
+					currentDisplay = currentDisplayIt->second;
+				}
+
+				AgentChatBridgeHttpResponse response;
+				response.statusCode = 200;
+				response.body = JsonDumpCompact(nlohmann::json{
+					{ "ok", true },
+					{ "status", "deduplicated" },
+					{ "code", "DUPLICATED" },
+					{ "currentDisplay", currentDisplay },
+				});
+				return response;
+			}
+
+			m_collaborationDedupeByKey.insert_or_assign(dedupeKey, now + ttlMs);
+		}
+
+		if (action == "device.open_content") {
+			const std::string url = JsonStringValue(instructionPayload, "url").empty()
+				? JsonStringValue(instructionPayload, "resourceUrl")
+				: JsonStringValue(instructionPayload, "url");
+			if (!url.empty() && !IsHttpUrl(url)) {
+				return BuildBadRequestResponse("collaboration_unsupported_url");
+			}
+			currentDisplay = nlohmann::json{
+				{ "conversationId", conversationId },
+				{ "displayId", dispatchId.empty() ? dedupeKey : dispatchId },
+				{ "title", JsonStringValue(instructionPayload, "title").empty() ? std::string("当前展示内容") : JsonStringValue(instructionPayload, "title") },
+				{ "summary", JsonStringValue(instructionPayload, "summary") },
+				{ "contentType", JsonStringValue(instructionPayload, "contentType").empty() ? std::string("webview") : JsonStringValue(instructionPayload, "contentType") },
+				{ "url", url.empty() ? nlohmann::json(nullptr) : nlohmann::json(url) },
+				{ "speakText", JsonStringValue(instructionPayload, "speakText") },
+				{ "updatedAt", now },
+			};
+		}
+		else if (action == "device.speak") {
+			const std::string text = JsonStringValue(instructionPayload, "displayText").empty()
+				? JsonStringValue(instructionPayload, "text")
+				: JsonStringValue(instructionPayload, "displayText");
+			if (!text.empty()) {
+				currentDisplay = nlohmann::json{
+					{ "conversationId", conversationId },
+					{ "displayId", dispatchId.empty() ? dedupeKey : dispatchId },
+					{ "title", text },
+					{ "contentType", "text" },
+					{ "speakText", JsonStringValue(instructionPayload, "text").empty() ? text : JsonStringValue(instructionPayload, "text") },
+					{ "updatedAt", now },
+				};
+			}
+		}
+		else {
+			std::string summary = JsonStringValue(instructionPayload, "summary");
+			if (summary.empty()) {
+				summary = JsonStringValue(instructionPayload, "message");
+			}
+			if (summary.empty()) {
+				summary = JsonStringValue(instructionPayload, "status");
+			}
+
+			std::string url;
+			const auto outputsIt = instructionPayload.find("outputs");
+			if (outputsIt != instructionPayload.end() && outputsIt->is_array()) {
+				for (const auto& output : *outputsIt) {
+					if (!output.is_object()) {
+						continue;
+					}
+					if (JsonStringValue(output, "type") != "webview") {
+						continue;
+					}
+					url = JsonStringValue(output, "url");
+					break;
+				}
+			}
+
+			currentDisplay = nlohmann::json{
+				{ "conversationId", conversationId },
+				{ "displayId", dispatchId.empty() ? dedupeKey : dispatchId },
+				{ "title", summary.empty() ? std::string("ai_result") : summary },
+				{ "summary", JsonStringValue(instructionPayload, "skillName") },
+				{ "contentType", "ai_result" },
+				{ "url", IsHttpUrl(url) ? nlohmann::json(url) : nlohmann::json(nullptr) },
+				{ "updatedAt", now },
+			};
+		}
+
+		if (!currentDisplay.is_null()) {
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_collaborationCurrentDisplayByConversation.insert_or_assign(conversationId, currentDisplay);
+		}
+
+		AgentChatBridgeHttpResponse response;
+		response.statusCode = 200;
+		response.body = JsonDumpCompact(nlohmann::json{
+			{ "ok", true },
+			{ "status", "accepted" },
+			{ "currentDisplay", currentDisplay },
+		});
+		return response;
+	}
+
+	AgentChatBridgeHttpResponse AgentChatBridgeHost::HandleTtsSynthesizeRequest(
+		const nlohmann::json& payload) const {
+		const std::string text = JsonStringValue(payload, "text");
+		if (text.empty()) {
+			return BuildBadRequestResponse("tts_text_required");
+		}
+
+		nlohmann::json params = {
+			{ "text", text },
+		};
+		const std::string provider = JsonStringValue(payload, "provider");
+		if (!provider.empty()) {
+			params["provider"] = provider;
+		}
+
+		const RequestFrame request{
+			.id = "agentchat-native-tts-convert",
+			.method = "tts.convert",
+			.paramsJson = params.dump(),
+		};
+		const auto routed = RouteGatewayRequest(request);
+		if (!routed.has_value()) {
+			return BuildBadGatewayResponse("native_gateway_routing_unavailable");
+		}
+		if (!routed->ok || !routed->payloadJson.has_value()) {
+			AgentChatBridgeHttpResponse response;
+			response.statusCode = 502;
+			response.body = JsonDumpCompact(nlohmann::json{
+				{ "ok", false },
+				{ "error", routed->error.has_value() ? routed->error->code : std::string("tts_convert_failed") },
+				{ "message", routed->error.has_value() ? routed->error->message : std::string("tts.convert failed") },
+			});
+			return response;
+		}
+
+		const auto ttsPayload = nlohmann::json::parse(routed->payloadJson.value(), nullptr, false);
+		if (ttsPayload.is_discarded() || !ttsPayload.is_object()) {
+			return BuildBadGatewayResponse("tts_convert_invalid_payload");
+		}
+
+		std::string audioUrl = JsonStringValue(ttsPayload, "audioUrl");
+		if (audioUrl.empty()) {
+			audioUrl = JsonStringValue(ttsPayload, "audio_url");
+		}
+		std::string audioPath = JsonStringValue(ttsPayload, "audioPath");
+		if (audioPath.empty()) {
+			audioPath = JsonStringValue(ttsPayload, "audio_path");
+		}
+
+		if (audioUrl.empty() && !audioPath.empty()) {
+			const std::array<const char*, 2> names = {
+				"TTS_AUDIO_PUBLIC_BASE_URL",
+				"MOSS_TTS_AUDIO_PUBLIC_BASE_URL",
+			};
+			for (const char* name : names) {
+				const std::string publicBaseUrl = TrimCopy(GetEnv(name));
+				if (publicBaseUrl.empty()) {
+					continue;
+				}
+				const std::string filename = LastPathSegment(audioPath);
+				if (filename.empty()) {
+					continue;
+				}
+				audioUrl = publicBaseUrl;
+				if (!audioUrl.empty() && audioUrl.back() == '/') {
+					audioUrl.pop_back();
+				}
+				audioUrl += "/" + filename;
+				break;
+			}
+		}
+
+		if (audioUrl.empty() && !audioPath.empty()) {
+			audioUrl = audioPath;
+		}
+
+		if (audioUrl.empty()) {
+			AgentChatBridgeHttpResponse response;
+			response.statusCode = 502;
+			response.body = JsonDumpCompact(nlohmann::json{
+				{ "ok", false },
+				{ "error", "tts_audio_url_missing" },
+				{ "hint", "Set TTS_AUDIO_PUBLIC_BASE_URL to map audioPath to public URL." },
+				{ "upstream", ttsPayload },
+			});
+			return response;
+		}
+
+		AgentChatBridgeHttpResponse response;
+		response.statusCode = 200;
+		response.body = JsonDumpCompact(nlohmann::json{
+			{ "ok", true },
+			{ "source", "native-tts" },
+			{ "text", text },
+			{ "audioUrl", audioUrl },
+			{ "upstream", ttsPayload },
+		});
 		return response;
 	}
 

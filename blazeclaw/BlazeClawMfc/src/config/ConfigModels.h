@@ -539,6 +539,9 @@ namespace blazeclaw::config {
 	struct AgentChatRuntimeConfig {
 		std::wstring mode = L"auto"; // legacy | native | auto
 		bool enableOpenClawAliases = true;
+		bool uiInProcessAgentPath = true;
+		bool httpPushIngress = true;
+		bool allowNonLoopbackHttpBind = false;
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 8788;
 	};

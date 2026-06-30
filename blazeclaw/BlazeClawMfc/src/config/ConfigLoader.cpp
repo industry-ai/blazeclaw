@@ -536,6 +536,26 @@ namespace blazeclaw::config {
 					ParseBool(trimmedLine.substr(34), true);
 				continue;
 			}
+			if (trimmedLine.rfind(L"native.openclawAliases=", 0) == 0) {
+				outConfig.agentChatRuntime.enableOpenClawAliases =
+					ParseBool(trimmedLine.substr(23), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.uiInProcessAgentPath=", 0) == 0) {
+				outConfig.agentChatRuntime.uiInProcessAgentPath =
+					ParseBool(trimmedLine.substr(28), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.httpPushIngress=", 0) == 0) {
+				outConfig.agentChatRuntime.httpPushIngress =
+					ParseBool(trimmedLine.substr(23), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.allowNonLoopbackHttpBind=", 0) == 0) {
+				outConfig.agentChatRuntime.allowNonLoopbackHttpBind =
+					ParseBool(trimmedLine.substr(32), false);
+				continue;
+			}
 			//-------------------------------------------------------------------
 
 			if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {

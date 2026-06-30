@@ -287,9 +287,12 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	bridgeConfig.enabled = true;
 	bridgeConfig.mode = "native";
 	bridgeConfig.enableHttpListener = true;
+	bridgeConfig.enableHttpPushIngress = runtime.httpPushIngress;
 	bridgeConfig.enableGatewayRouting = true;
 	bridgeConfig.enablePushTransport = true;
-	bridgeConfig.compatibilityOpenClawAliases = true;
+	bridgeConfig.enableUiInProcessAgentPath = runtime.uiInProcessAgentPath;
+	bridgeConfig.allowNonLoopbackHttpBind = runtime.allowNonLoopbackHttpBind;
+	bridgeConfig.compatibilityOpenClawAliases = runtime.enableOpenClawAliases;
 	bridgeConfig.bindAddress = WideToUtf8(runtime.bindAddress);
 	if (bridgeConfig.bindAddress.empty())
 	{
@@ -1219,14 +1222,21 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 	}
 
 	const bool nativeBridgeEnabled = m_nativeRuntimeStarted;
-	const std::wstring transportMode = nativeBridgeEnabled ? L"native-webview" : L"http";
+	bool uiInProcessAgentPath = true;
+	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app != nullptr)
+	{
+		uiInProcessAgentPath = app->Config().agentChatRuntime.uiInProcessAgentPath;
+	}
+	const bool nativeUiBridgeEnabled = nativeBridgeEnabled && uiInProcessAgentPath;
+	const std::wstring transportMode = nativeUiBridgeEnabled ? L"native-webview" : L"http";
 
 	const std::wstring script =
 		L"(function(){"
 		L"try{"
 		L"window.__APP_CONFIG__=window.__APP_CONFIG__||{};"
 		L"window.__APP_CONFIG__.agentRuntimeMode='" + EscapeJsSingleQuotedString(runtimeMode) + L"';"
-		L"window.__APP_CONFIG__.enableNativeAgentBridge=" + std::wstring(nativeBridgeEnabled ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.enableNativeAgentBridge=" + std::wstring(nativeUiBridgeEnabled ? L"true" : L"false") + L";"
 		L"window.__APP_CONFIG__.agentBridgeTransport='" + EscapeJsSingleQuotedString(transportMode) + L"';"
 		L"window.__APP_CONFIG__.enableHttpFallbackOnNativeBridgeError=true;"
 		L"}catch(e){}"
