@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AgentChatOrchestratorAdapter.h"
 #include "../gateway/GatewayProtocolModels.h"
 
 #include <functional>
@@ -55,6 +56,7 @@ public:
 	AgentChatNativeRunner();
 	~AgentChatNativeRunner();
 
+	void SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter);
 	void SetGatewayRequestRouter(GatewayRouter router);
 	bool Initialize();
 	void Shutdown();
@@ -97,7 +99,7 @@ private:
 		std::string& errorOut) const;
 
 	mutable std::mutex m_mutex;
-	GatewayRouter m_gatewayRouter;
+	AgentChatOrchestratorAdapterPtr m_orchestratorAdapter;
 	std::thread m_worker;
 	bool m_running = false;
 	std::unordered_set<std::string> m_processingMessageIds;

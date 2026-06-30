@@ -587,6 +587,7 @@
     <ClInclude Include="src\app\BlazeClawMFCView.h">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\dashboard_wnd.ico" />
@@ -697,6 +698,7 @@
     <None Include="blazeclaw.conf">
       <Filter>config</Filter>
     </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\agentBridgeTransport.js" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">

@@ -5,6 +5,7 @@
 
 import AppHttp from './httpClient.js';
 import AppConfig from '../config.js';
+import { callAgentWithDualTransport } from './agentBridgeTransport.js';
 
 function _trim(value) {
   return String(value ?? '').trim();
@@ -437,108 +438,29 @@ async function callAgent(message, conversationId, sessionId, callbacks, opts = {
   }, timeoutMs);
 
   try {
-    // 对齐 Vue 版 buildBridgeBody：构建 AI_TASK_REQUEST 协议消息
     const openclawMessage = _buildOpenClawMessage(message, opts.conversationContext);
     const sessionKey = _scopeSessionKey(conversationId);
+    const requestBody = {
+      sessionKey,
+      message: openclawMessage,
+      rawMessage: message,
+      conversationId: conversationId || 'default',
+      sessionId: sessionId || '0',
+      stream: true,
+      timeoutMs: 10000,
+      pollTimeoutMs: 600000,
+    };
 
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sessionKey,
-        message: openclawMessage,
-        rawMessage: message,
-        conversationId: conversationId || 'default',
-        sessionId: sessionId || '0',
-        stream: true,
-        timeoutMs: 10000,
-        pollTimeoutMs: 600000,
-      }),
+    const result = await callAgentWithDualTransport({
+      baseUrl,
+      body: requestBody,
+      callbacks,
       signal: controller.signal,
+      timeoutMs,
     });
 
     clearTimeout(timer);
-
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      throw new Error(errText || `Agent API error: ${resp.status}`);
-    }
-
-    const contentType = resp.headers.get('content-type') || '';
-
-    if (contentType.includes('text/event-stream')) {
-      // SSE 流式响应
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-
-        // 保留最后一个不完整的行
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-
-          const jsonStr = trimmed.slice(6);
-          if (!jsonStr) continue;
-
-          try {
-            const event = JSON.parse(jsonStr);
-
-            if (event.type === 'delta' && event.text) {
-              fullText += event.text;
-              onDelta?.(event.text, fullText);
-            } else if (event.type === 'tool_result') {
-              // 对齐 Vue 版 requestBridgeStream onToolResult：
-              // OpenClaw 上传 H5 卡片后的 URL 在 tool_result.content 中
-              const toolResultContent = String(event.content || '').trim();
-              if (toolResultContent) {
-                callbacks?.onToolResult?.(toolResultContent);
-              }
-            } else if (event.type === 'final') {
-              const finalText = event.text || fullText;
-              onDone?.(finalText);
-              return { text: finalText };
-            } else if (event.type === 'error') {
-              throw new Error(event.message || 'Agent stream error');
-            }
-          } catch (parseErr) {
-            if (parseErr instanceof SyntaxError) continue;
-            throw parseErr;
-          }
-        }
-      }
-
-      // 流结束但没有 final 事件
-      if (fullText) {
-        onDone?.(fullText);
-        return { text: fullText };
-      }
-      onDone?.('');
-      return { text: '' };
-    } else {
-      // JSON 响应（非流式）
-      const data = await resp.json();
-      if (data.ok && data.text) {
-        onDelta?.(data.text, data.text);
-        onDone?.(data.text);
-        return { text: data.text };
-      } else if (data.error) {
-        throw new Error(data.error);
-      }
-      onDone?.('');
-      return { text: '' };
-    }
+    return result;
   } catch (err) {
     clearTimeout(timer);
     if (err.name === 'AbortError') {

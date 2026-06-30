@@ -872,9 +872,20 @@ namespace blazeclaw::agentchat {
 
 	AgentChatBridgeHost::AgentChatBridgeHost() = default;
 
+	void AgentChatBridgeHost::SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_orchestratorAdapter = std::move(adapter);
+	}
+
 	void AgentChatBridgeHost::SetGatewayRequestRouter(GatewayRouter router) {
 		std::lock_guard<std::mutex> lock(m_mutex);
-		m_gatewayRouter = std::move(router);
+		auto callbackAdapter =
+			std::dynamic_pointer_cast<CallbackAgentChatOrchestratorAdapter>(m_orchestratorAdapter);
+		if (!callbackAdapter) {
+			callbackAdapter = std::make_shared<CallbackAgentChatOrchestratorAdapter>();
+			m_orchestratorAdapter = callbackAdapter;
+		}
+		callbackAdapter->SetRouter(std::move(router));
 	}
 
 	bool AgentChatBridgeHost::Initialize(const AgentChatBridgeConfig& config) {
@@ -2062,19 +2073,18 @@ namespace blazeclaw::agentchat {
 
 	std::optional<ResponseFrame> AgentChatBridgeHost::RouteGatewayRequest(
 		const RequestFrame& request) const {
-		GatewayRouter router;
+		AgentChatOrchestratorAdapterPtr adapter;
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			if (!m_config.enableGatewayRouting) {
 				return std::nullopt;
 			}
-			router = m_gatewayRouter;
+			adapter = m_orchestratorAdapter;
 		}
-		if (!static_cast<bool>(router)) {
+		if (!adapter) {
 			return std::nullopt;
 		}
-
-		return router(request);
+		return adapter->Route(request);
 	}
 
 } // namespace blazeclaw::agentchat

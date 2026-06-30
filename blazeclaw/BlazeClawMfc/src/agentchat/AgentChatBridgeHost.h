@@ -2,6 +2,7 @@
 
 #include "AgentChatBridgeConfig.h"
 #include "AgentChatBridgeHttpListener.h"
+#include "AgentChatOrchestratorAdapter.h"
 #include "AgentChatBridgeProtocol.h"
 #include "AgentChatBridgeStateStore.h"
 #include "../gateway/GatewayProtocolModels.h"
@@ -21,6 +22,7 @@ public:
 		const blazeclaw::gateway::protocol::RequestFrame& request)>;
 
 	AgentChatBridgeHost();
+	void SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter);
 	void SetGatewayRequestRouter(GatewayRouter router);
 
 	bool Initialize(const AgentChatBridgeConfig& config);
@@ -58,7 +60,7 @@ private:
 	AgentChatBridgeConfig m_config;
 	std::optional<AgentChatBridgeStateStore> m_stateStore;
 	std::unique_ptr<AgentChatBridgeHttpListener> m_httpListener;
-	GatewayRouter m_gatewayRouter;
+	AgentChatOrchestratorAdapterPtr m_orchestratorAdapter;
 	bool m_running = false;
 };
 

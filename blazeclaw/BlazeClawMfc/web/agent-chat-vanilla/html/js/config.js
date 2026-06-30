@@ -15,6 +15,10 @@ const AppConfig = (() => {
     debugSmsCode: '123456',
     debugSessionId: '',
     forceMockChat: false,
+    agentRuntimeMode: 'legacy',
+    enableNativeAgentBridge: false,
+    agentBridgeTransport: 'http',
+    enableHttpFallbackOnNativeBridgeError: true,
   };
 
   function _env(key, fallback) {
@@ -47,6 +51,13 @@ const AppConfig = (() => {
       openclawBridgeUrl: _env('openclawBridgeUrl', defaults.openclawBridgeUrl),
       wsUrl: _env('chatWsUrl', ''), // 默认为空，使用 HTTP IRC 模式
       forceMockChat: _env('forceMockChat', defaults.forceMockChat),
+      agentRuntimeMode: _env('agentRuntimeMode', defaults.agentRuntimeMode),
+      enableNativeAgentBridge: _env('enableNativeAgentBridge', defaults.enableNativeAgentBridge),
+      agentBridgeTransport: _env('agentBridgeTransport', defaults.agentBridgeTransport),
+      enableHttpFallbackOnNativeBridgeError: _env(
+        'enableHttpFallbackOnNativeBridgeError',
+        defaults.enableHttpFallbackOnNativeBridgeError,
+      ),
     };
   }
 

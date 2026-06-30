@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <mutex>
+#include <unordered_set>
 #include <vector>
 #include "Client.h"
 
@@ -68,6 +70,7 @@ private:
 	std::wstring GetServerPath() const;
 	bool InitWebView();
 	bool CreateWebViewController();
+	void InjectRuntimeBridgeConfig();
 	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
 	blazeclaw::config::AgentChatRuntimeMode ResolveRuntimeMode() const;
@@ -128,4 +131,8 @@ private:
 	std::wstring m_injectedUserId;
 	std::wstring m_injectedPhone;
 	bool m_hasInjectedAuth;
+	std::mutex m_webBridgeMutex;
+	std::wstring m_pendingWebMessageJson;
+	std::unordered_set<std::string> m_activeAgentBridgeRequestIds;
+	std::unordered_set<std::string> m_cancelledAgentBridgeRequestIds;
 };

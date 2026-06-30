@@ -4,6 +4,10 @@
 #include "BlazeClawMfcApp.h"
 
 #include <Shlwapi.h>
+#include <nlohmann/json.hpp>
+
+#include <chrono>
+#include <sstream>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -53,6 +57,58 @@ namespace
 			nullptr,
 			nullptr);
 		return utf8;
+	}
+
+	std::wstring Utf8ToWide(const std::string& value)
+	{
+		if (value.empty())
+		{
+			return {};
+		}
+
+		const int required = MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0);
+		if (required <= 0)
+		{
+			return {};
+		}
+
+		std::wstring wide(required, L'\0');
+		MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			wide.data(),
+			required);
+		return wide;
+	}
+
+	std::wstring EscapeJsSingleQuotedString(const std::wstring& value)
+	{
+		std::wstring out;
+		out.reserve(value.size());
+		for (wchar_t ch : value)
+		{
+			if (ch == L'\'')
+			{
+				out.append(L"\\'");
+			}
+			else if (ch == L'\\')
+			{
+				out.append(L"\\\\");
+			}
+			else
+			{
+				out.push_back(ch);
+			}
+		}
+		return out;
 	}
 	//-------------------------------------------------------------------
 
@@ -242,11 +298,13 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	bridgeConfig.port = runtime.port;
 
 	auto bridgeHost = std::make_unique<blazeclaw::agentchat::AgentChatBridgeHost>();
-	bridgeHost->SetGatewayRequestRouter(
+	auto orchestratorAdapter = std::make_shared<blazeclaw::agentchat::CallbackAgentChatOrchestratorAdapter>();
+	orchestratorAdapter->SetRouter(
 		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
 		{
 			return app->RouteGatewayRequest(request);
 		});
+	bridgeHost->SetOrchestratorAdapter(orchestratorAdapter);
 	if (!bridgeHost->Initialize(bridgeConfig))
 	{
 		TRACE(
@@ -257,11 +315,7 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	}
 
 	auto nativeRunner = std::make_unique<blazeclaw::agentchat::AgentChatNativeRunner>();
-	nativeRunner->SetGatewayRequestRouter(
-		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
-		{
-			return app->RouteGatewayRequest(request);
-		});
+	nativeRunner->SetOrchestratorAdapter(orchestratorAdapter);
 	if (!nativeRunner->Initialize())
 	{
 		bridgeHost->Shutdown();
@@ -336,6 +390,257 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 
 LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 {
+	std::wstring pendingJson;
+	{
+		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+		pendingJson = std::move(m_pendingWebMessageJson);
+		m_pendingWebMessageJson.clear();
+	}
+
+	if (pendingJson.empty())
+	{
+		return 0;
+	}
+
+	const nlohmann::json frame = nlohmann::json::parse(
+		WideToUtf8(pendingJson),
+		nullptr,
+		false);
+	if (frame.is_discarded() || !frame.is_object())
+	{
+		return 0;
+	}
+
+	const std::string channel = frame.value("channel", std::string());
+	if (channel != "agentchat.bridge.request")
+	{
+		return 0;
+	}
+
+	const std::string requestId = frame.value("requestId", std::string());
+	const std::string kind = frame.value("kind", std::string());
+	if (requestId.empty() || kind.empty())
+	{
+		return 0;
+	}
+
+	auto emitToWeb = [this](const nlohmann::json& message)
+	{
+		if (m_webView == nullptr)
+		{
+			return;
+		}
+		const std::string jsonUtf8 = message.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+		const std::wstring script =
+			L"(function(){try{const __msg=" +
+			Utf8ToWide(jsonUtf8) +
+			L";window.dispatchEvent(new CustomEvent('agentchat.bridge.message',{detail:__msg}));}catch(e){}})();";
+		m_webView->ExecuteScript(script.c_str(), nullptr);
+	};
+
+	if (kind == "agent.abort")
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+			m_cancelledAgentBridgeRequestIds.insert(requestId);
+		}
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.response" },
+			{ "requestId", requestId },
+			{ "ok", true },
+			{ "payload", nlohmann::json{ { "aborted", true } } },
+		});
+		return 0;
+	}
+
+	if (kind == "agent.health")
+	{
+		if (!m_nativeBridgeHost)
+		{
+			emitToWeb(nlohmann::json{
+				{ "channel", "agentchat.bridge.response" },
+				{ "requestId", requestId },
+				{ "ok", false },
+				{ "error", nlohmann::json{ { "message", "native_bridge_unavailable" } } },
+			});
+			return 0;
+		}
+
+		const auto healthResponse = m_nativeBridgeHost->HandleRequest("GET", "/health", "{}");
+		nlohmann::json payload = nlohmann::json::object();
+		if (!healthResponse.body.empty())
+		{
+			const auto parsed = nlohmann::json::parse(healthResponse.body, nullptr, false);
+			if (!parsed.is_discarded())
+			{
+				payload = parsed;
+			}
+		}
+
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.response" },
+			{ "requestId", requestId },
+			{ "ok", healthResponse.statusCode >= 200 && healthResponse.statusCode < 300 },
+			{ "payload", payload },
+		});
+		return 0;
+	}
+
+	if (kind != "agent.turn")
+	{
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.response" },
+			{ "requestId", requestId },
+			{ "ok", false },
+			{ "error", nlohmann::json{ { "message", "unsupported_kind" } } },
+		});
+		return 0;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+		if (m_activeAgentBridgeRequestIds.find(requestId) != m_activeAgentBridgeRequestIds.end())
+		{
+			emitToWeb(nlohmann::json{
+				{ "channel", "agentchat.bridge.response" },
+				{ "requestId", requestId },
+				{ "ok", false },
+				{ "error", nlohmann::json{ { "message", "request_already_in_progress" } } },
+			});
+			return 0;
+		}
+		m_activeAgentBridgeRequestIds.insert(requestId);
+		m_cancelledAgentBridgeRequestIds.erase(requestId);
+	}
+
+	auto finalizeRequest = [this, &requestId]()
+	{
+		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+		m_activeAgentBridgeRequestIds.erase(requestId);
+		m_cancelledAgentBridgeRequestIds.erase(requestId);
+	};
+
+	auto isCancelled = [this, &requestId]()
+	{
+		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+		return m_cancelledAgentBridgeRequestIds.find(requestId) != m_cancelledAgentBridgeRequestIds.end();
+	};
+
+	if (!m_nativeBridgeHost)
+	{
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.response" },
+			{ "requestId", requestId },
+			{ "ok", false },
+			{ "error", nlohmann::json{ { "message", "native_bridge_unavailable" } } },
+		});
+		finalizeRequest();
+		return 0;
+	}
+
+	if (isCancelled())
+	{
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.stream.error" },
+			{ "requestId", requestId },
+			{ "payload", nlohmann::json{ { "type", "error" }, { "message", "request_aborted" } } },
+		});
+		finalizeRequest();
+		return 0;
+	}
+
+	const nlohmann::json payload = frame.contains("payload") && frame["payload"].is_object()
+		? frame["payload"]
+		: nlohmann::json::object();
+	const bool stream = payload.value("stream", true);
+	const std::string requestBody = payload.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+	const auto response = m_nativeBridgeHost->HandleRequest("POST", "/api/blazeclaw-agent", requestBody);
+
+	if (stream || response.contentType.find("text/event-stream") != std::string::npos)
+	{
+		std::stringstream ss(response.body);
+		std::string line;
+		while (std::getline(ss, line))
+		{
+			if (isCancelled())
+			{
+				emitToWeb(nlohmann::json{
+					{ "channel", "agentchat.bridge.stream.error" },
+					{ "requestId", requestId },
+					{ "payload", nlohmann::json{ { "type", "error" }, { "message", "request_aborted" } } },
+				});
+				break;
+			}
+
+			if (line.rfind("data:", 0) != 0)
+			{
+				continue;
+			}
+			std::string jsonText = line.substr(5);
+			if (!jsonText.empty() && jsonText[0] == ' ')
+			{
+				jsonText.erase(jsonText.begin());
+			}
+			const auto eventPayload = nlohmann::json::parse(jsonText, nullptr, false);
+			if (eventPayload.is_discarded() || !eventPayload.is_object())
+			{
+				continue;
+			}
+
+			const std::string type = eventPayload.value("type", std::string());
+			if (type == "delta")
+			{
+				emitToWeb(nlohmann::json{
+					{ "channel", "agentchat.bridge.stream.delta" },
+					{ "requestId", requestId },
+					{ "payload", eventPayload },
+				});
+			}
+			else if (type == "final")
+			{
+				emitToWeb(nlohmann::json{
+					{ "channel", "agentchat.bridge.stream.final" },
+					{ "requestId", requestId },
+					{ "payload", eventPayload },
+				});
+			}
+			else if (type == "error")
+			{
+				emitToWeb(nlohmann::json{
+					{ "channel", "agentchat.bridge.stream.error" },
+					{ "requestId", requestId },
+					{ "payload", eventPayload },
+				});
+			}
+		}
+
+		emitToWeb(nlohmann::json{
+			{ "channel", "agentchat.bridge.response" },
+			{ "requestId", requestId },
+			{ "ok", response.statusCode >= 200 && response.statusCode < 300 },
+			{ "payload", nlohmann::json{ { "statusCode", response.statusCode } } },
+		});
+		finalizeRequest();
+		return 0;
+	}
+
+	nlohmann::json responsePayload = nlohmann::json::object();
+	if (!response.body.empty())
+	{
+		const auto parsedResponse = nlohmann::json::parse(response.body, nullptr, false);
+		if (!parsedResponse.is_discarded())
+		{
+			responsePayload = parsedResponse;
+		}
+	}
+
+	emitToWeb(nlohmann::json{
+		{ "channel", "agentchat.bridge.response" },
+		{ "requestId", requestId },
+		{ "ok", response.statusCode >= 200 && response.statusCode < 300 },
+		{ "payload", responsePayload },
+	});
+	finalizeRequest();
 	return 0;
 }
 
@@ -699,16 +1004,20 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 		Callback<ICoreWebView2WebMessageReceivedEventHandler>(
 			[this](ICoreWebView2* sender, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
 			{
-				LPWSTR rawMessage = nullptr;
-				if (SUCCEEDED(args->TryGetWebMessageAsString(&rawMessage)) && rawMessage != nullptr)
+				LPWSTR rawMessageJson = nullptr;
+				if (SUCCEEDED(args->get_WebMessageAsJson(&rawMessageJson)) && rawMessageJson != nullptr)
 				{
-					std::wstring message(rawMessage);
+					std::wstring message(rawMessageJson);
 					if (m_messageHandler)
 					{
 						m_messageHandler(message);
 					}
+					{
+						std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+						m_pendingWebMessageJson = message;
+					}
 					PostMessage(WM_AGENTCHAT_WEBMESSAGE_RECEIVED);
-					CoTaskMemFree(rawMessage);
+					CoTaskMemFree(rawMessageJson);
 				}
 
 				return S_OK;
@@ -759,6 +1068,7 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 
 			if (isSuccess)
 			{
+				InjectRuntimeBridgeConfig();
 				_DoInjectAuthState();
 			}
 
@@ -885,6 +1195,45 @@ void CBlazeClawAgentChatView::StopNodeServer()
 
 #endif
 
+
+void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
+{
+	if (m_webView == nullptr)
+	{
+		return;
+	}
+
+	std::wstring runtimeMode = L"auto";
+	switch (m_runtimeModeResolved)
+	{
+	case blazeclaw::config::AgentChatRuntimeMode::Legacy:
+		runtimeMode = L"legacy";
+		break;
+	case blazeclaw::config::AgentChatRuntimeMode::Native:
+		runtimeMode = L"native";
+		break;
+	case blazeclaw::config::AgentChatRuntimeMode::Auto:
+	default:
+		runtimeMode = L"auto";
+		break;
+	}
+
+	const bool nativeBridgeEnabled = m_nativeRuntimeStarted;
+	const std::wstring transportMode = nativeBridgeEnabled ? L"native-webview" : L"http";
+
+	const std::wstring script =
+		L"(function(){"
+		L"try{"
+		L"window.__APP_CONFIG__=window.__APP_CONFIG__||{};"
+		L"window.__APP_CONFIG__.agentRuntimeMode='" + EscapeJsSingleQuotedString(runtimeMode) + L"';"
+		L"window.__APP_CONFIG__.enableNativeAgentBridge=" + std::wstring(nativeBridgeEnabled ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.agentBridgeTransport='" + EscapeJsSingleQuotedString(transportMode) + L"';"
+		L"window.__APP_CONFIG__.enableHttpFallbackOnNativeBridgeError=true;"
+		L"}catch(e){}"
+		L"}())";
+
+	m_webView->ExecuteScript(script.c_str(), nullptr);
+}
 
 void CBlazeClawAgentChatView::InjectAuthState(const std::string& token, const std::string& sessionId, const std::string& userId, const std::string& phone)
 {

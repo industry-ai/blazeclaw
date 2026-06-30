@@ -320,9 +320,20 @@ namespace blazeclaw::agentchat {
 		Shutdown();
 	}
 
+	void AgentChatNativeRunner::SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_orchestratorAdapter = std::move(adapter);
+	}
+
 	void AgentChatNativeRunner::SetGatewayRequestRouter(GatewayRouter router) {
 		std::lock_guard<std::mutex> lock(m_mutex);
-		m_gatewayRouter = std::move(router);
+		auto callbackAdapter =
+			std::dynamic_pointer_cast<CallbackAgentChatOrchestratorAdapter>(m_orchestratorAdapter);
+		if (!callbackAdapter) {
+			callbackAdapter = std::make_shared<CallbackAgentChatOrchestratorAdapter>();
+			m_orchestratorAdapter = callbackAdapter;
+		}
+		callbackAdapter->SetRouter(std::move(router));
 	}
 
 	bool AgentChatNativeRunner::Initialize() {
@@ -668,12 +679,12 @@ namespace blazeclaw::agentchat {
 		const std::string& userText,
 		std::string& responseText,
 		std::string& errorOut) const {
-		GatewayRouter router;
+		AgentChatOrchestratorAdapterPtr adapter;
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
-			router = m_gatewayRouter;
+			adapter = m_orchestratorAdapter;
 		}
-		if (!router) {
+		if (!adapter) {
 			errorOut = "gateway_router_unavailable";
 			return false;
 		}
@@ -691,7 +702,12 @@ namespace blazeclaw::agentchat {
 			.method = "chat.send",
 			.paramsJson = sendParams.dump(),
 		};
-		const ResponseFrame sendResponse = router(sendRequest);
+		const auto sendResponseMaybe = adapter->Route(sendRequest);
+		if (!sendResponseMaybe.has_value()) {
+			errorOut = "gateway_router_unavailable";
+			return false;
+		}
+		const ResponseFrame sendResponse = sendResponseMaybe.value();
 		if (!sendResponse.ok) {
 			errorOut = sendResponse.error.has_value()
 				? sendResponse.error->message
@@ -730,7 +746,12 @@ namespace blazeclaw::agentchat {
 				.method = "chat.events.poll",
 				.paramsJson = pollParams.dump(),
 			};
-			const ResponseFrame pollResponse = router(pollRequest);
+			const auto pollResponseMaybe = adapter->Route(pollRequest);
+			if (!pollResponseMaybe.has_value()) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(kGatewayPollIntervalMs));
+				continue;
+			}
+			const ResponseFrame pollResponse = pollResponseMaybe.value();
 			if (!pollResponse.ok || !pollResponse.payloadJson.has_value()) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(kGatewayPollIntervalMs));
 				continue;
