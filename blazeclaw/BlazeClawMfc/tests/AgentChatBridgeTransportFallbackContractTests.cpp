@@ -1,3 +1,12 @@
+#include "pch.h"
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 #include <catch2/catch_all.hpp>
 
 #include <filesystem>
