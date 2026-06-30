@@ -37,6 +37,11 @@ function _buildBridgeRequestId() {
   return `agent-bridge-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function _traceBridge(requestId, stage, detail) {
+  const suffix = detail ? ` ${detail}` : '';
+  console.info(`[AgentBridge][${requestId}] ${stage}${suffix}`);
+}
+
 function _toError(errorLike, fallbackMessage) {
   if (errorLike instanceof Error) return errorLike;
   const message = typeof errorLike === 'string'
@@ -156,6 +161,7 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
       if (settled) return;
       settled = true;
       cleanup();
+      _traceBridge(requestId, 'native.settle.resolve');
       resolve(result);
     };
 
@@ -163,6 +169,7 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
       if (settled) return;
       settled = true;
       cleanup();
+      _traceBridge(requestId, 'native.settle.reject', _toError(errorLike, 'Native bridge request failed').message);
       reject(_toError(errorLike, 'Native bridge request failed'));
     };
 
@@ -182,6 +189,7 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
       sendAbort();
       const abortError = new Error('Agent request aborted');
       abortError.name = 'AbortError';
+      _traceBridge(requestId, 'native.abort.signal');
       settleReject(abortError);
     };
 
@@ -195,6 +203,7 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
         const payload = msg.payload || {};
         const deltaText = String(payload.text || '');
         if (deltaText) {
+          _traceBridge(requestId, 'native.stream.delta', `len=${deltaText.length}`);
           fullText += deltaText;
           onDelta?.(deltaText, fullText);
         }
@@ -203,24 +212,28 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
       if (channel === 'agentchat.bridge.stream.final') {
         const payload = msg.payload || {};
         const finalText = String(payload.text || fullText || '');
+        _traceBridge(requestId, 'native.stream.final', `len=${finalText.length}`);
         onDone?.(finalText);
         settleResolve({ text: finalText });
         return;
       }
       if (channel === 'agentchat.bridge.stream.error') {
         const payload = msg.payload || {};
+        _traceBridge(requestId, 'native.stream.error', String(payload.message || 'Native bridge stream error'));
         settleReject(new Error(String(payload.message || 'Native bridge stream error')));
         return;
       }
       if (channel === 'agentchat.bridge.response') {
         if (msg.ok === false) {
           const errorMessage = msg?.error?.message || 'Native bridge response error';
+          _traceBridge(requestId, 'native.response.error', String(errorMessage));
           settleReject(new Error(String(errorMessage)));
           return;
         }
         if (body.stream !== true) {
           const payload = msg.payload || {};
           const text = String(payload.text || fullText || '');
+          _traceBridge(requestId, 'native.response.final', `len=${text.length}`);
           onDone?.(text);
           settleResolve({ text });
         }
@@ -230,6 +243,7 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
     const timeoutHandle = timeoutMs > 0
       ? setTimeout(() => {
           sendAbort();
+          _traceBridge(requestId, 'native.timeout', `ms=${timeoutMs}`);
           settleReject(new Error('Agent request timed out'));
         }, timeoutMs)
       : null;
@@ -244,11 +258,91 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
     }
 
     try {
+      _traceBridge(requestId, 'native.request.posted', 'kind=agent.turn');
       window.chrome.webview.postMessage({
         channel: 'agentchat.bridge.request',
         requestId,
         kind: 'agent.turn',
         payload: body,
+      });
+    } catch (err) {
+      settleReject(err);
+    }
+  });
+}
+
+function _preflightNativeBridgeHealth(signal, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const requestId = _buildBridgeRequestId();
+    let settled = false;
+
+    const cleanup = () => {
+      window.removeEventListener('agentchat.bridge.message', onBridgeMessage);
+      if (signal) signal.removeEventListener('abort', onAbortSignal);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    };
+
+    const settleResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const settleReject = (errorLike) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(_toError(errorLike, 'Native bridge health failed'));
+    };
+
+    const onAbortSignal = () => {
+      const abortError = new Error('Native bridge health aborted');
+      abortError.name = 'AbortError';
+      _traceBridge(requestId, 'native.health.abort');
+      settleReject(abortError);
+    };
+
+    const onBridgeMessage = (event) => {
+      const msg = event?.detail;
+      if (!msg || typeof msg !== 'object') return;
+      if (String(msg.requestId || '') !== requestId) return;
+      if (String(msg.channel || '') !== 'agentchat.bridge.response') return;
+
+      if (msg.ok === false) {
+        const message = msg?.error?.message || 'native_health_response_error';
+        _traceBridge(requestId, 'native.health.fail', String(message));
+        settleReject(new Error(String(message)));
+        return;
+      }
+
+      _traceBridge(requestId, 'native.health.ok');
+      settleResolve(true);
+    };
+
+    const timeoutHandle = timeoutMs > 0
+      ? setTimeout(() => {
+          _traceBridge(requestId, 'native.health.timeout', `ms=${timeoutMs}`);
+          settleReject(new Error('native_health_timeout'));
+        }, timeoutMs)
+      : null;
+
+    window.addEventListener('agentchat.bridge.message', onBridgeMessage);
+    if (signal) {
+      if (signal.aborted) {
+        onAbortSignal();
+        return;
+      }
+      signal.addEventListener('abort', onAbortSignal, { once: true });
+    }
+
+    try {
+      _traceBridge(requestId, 'native.health.posted');
+      window.chrome.webview.postMessage({
+        channel: 'agentchat.bridge.request',
+        requestId,
+        kind: 'agent.health',
+        payload: {},
       });
     } catch (err) {
       settleReject(err);
@@ -266,17 +360,28 @@ export async function callAgentWithDualTransport({
   const cfg = AppConfig.getChatConfig();
   const preferNative = String(cfg.agentBridgeTransport || '').toLowerCase() === 'native-webview';
   const nativeBridgeHostStarted = _toBool(cfg.nativeBridgeHostStarted);
+  const nativeHttpListenerStarted = _toBool(cfg.nativeHttpListenerStarted);
   const nativeModeDegraded = _toBool(cfg.nativeModeDegraded);
   const reachabilityHint = String(cfg.agentBridgeReachabilityHint || '').trim().toLowerCase();
 
   if (preferNative && _supportsNativeWebViewBridge()) {
+    const allowHttpFallback = String(cfg.enableHttpFallbackOnNativeBridgeError).toLowerCase() !== 'false';
     try {
+      await _preflightNativeBridgeHealth(signal, Math.min(Math.max(Math.floor(timeoutMs / 4), 1500), 8000));
       return await _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs);
     } catch (nativeError) {
-      const allowHttpFallback = String(cfg.enableHttpFallbackOnNativeBridgeError).toLowerCase() !== 'false';
-      if (!allowHttpFallback) {
-        throw nativeError;
+      const reason = String(nativeError?.message || 'native_bridge_failed');
+      const fallbackAllowedByPolicy =
+        allowHttpFallback &&
+        nativeHttpListenerStarted &&
+        !nativeBridgeHostStarted &&
+        (reachabilityHint === 'bridge-unavailable' || reachabilityHint === 'http-bridge');
+
+      if (!fallbackAllowedByPolicy) {
+        throw new Error(`Native bridge request failed (${reason})`);
       }
+
+      _traceBridge('fallback', 'native->http', `reason=${reason}`);
     }
   }
 

@@ -494,6 +494,10 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 	{
 		return 0;
 	}
+	TRACE(
+		"CBlazeClawAgentChatView: native bridge request received requestId=%s kind=%s\n",
+		requestId.c_str(),
+		kind.c_str());
 
 	auto emitToWeb = [this](const nlohmann::json& message)
 	{
@@ -515,6 +519,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			std::lock_guard<std::mutex> lock(m_webBridgeMutex);
 			m_cancelledAgentBridgeRequestIds.insert(requestId);
 		}
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge request aborted requestId=%s\n",
+			requestId.c_str());
 		emitToWeb(nlohmann::json{
 			{ "channel", "agentchat.bridge.response" },
 			{ "requestId", requestId },
@@ -528,6 +535,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 	{
 		if (!m_nativeBridgeHost)
 		{
+			TRACE(
+				"CBlazeClawAgentChatView: native bridge health unavailable requestId=%s\n",
+				requestId.c_str());
 			emitToWeb(nlohmann::json{
 				{ "channel", "agentchat.bridge.response" },
 				{ "requestId", requestId },
@@ -538,6 +548,10 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		}
 
 		const auto healthResponse = m_nativeBridgeHost->HandleRequest("GET", "/health", "{}");
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge health response requestId=%s status=%d\n",
+			requestId.c_str(),
+			healthResponse.statusCode);
 		nlohmann::json payload = nlohmann::json::object();
 		if (!healthResponse.body.empty())
 		{
@@ -599,6 +613,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 	if (!m_nativeBridgeHost)
 	{
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge unavailable for requestId=%s\n",
+			requestId.c_str());
 		emitToWeb(nlohmann::json{
 			{ "channel", "agentchat.bridge.response" },
 			{ "requestId", requestId },
@@ -611,6 +628,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 	if (isCancelled())
 	{
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge request cancelled before dispatch requestId=%s\n",
+			requestId.c_str());
 		emitToWeb(nlohmann::json{
 			{ "channel", "agentchat.bridge.stream.error" },
 			{ "requestId", requestId },
@@ -625,6 +645,10 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		: nlohmann::json::object();
 	const bool stream = payload.value("stream", true);
 	const std::string requestBody = payload.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+	TRACE(
+		"CBlazeClawAgentChatView: native bridge request posted requestId=%s stream=%s\n",
+		requestId.c_str(),
+		stream ? "true" : "false");
 	const auto response = m_nativeBridgeHost->HandleRequest("POST", "/api/blazeclaw-agent", requestBody);
 
 	if (stream || response.contentType.find("text/event-stream") != std::string::npos)
@@ -661,6 +685,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			const std::string type = eventPayload.value("type", std::string());
 			if (type == "delta")
 			{
+				TRACE(
+					"CBlazeClawAgentChatView: native bridge delta requestId=%s\n",
+					requestId.c_str());
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.delta" },
 					{ "requestId", requestId },
@@ -669,6 +696,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			}
 			else if (type == "final")
 			{
+				TRACE(
+					"CBlazeClawAgentChatView: native bridge final requestId=%s\n",
+					requestId.c_str());
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.final" },
 					{ "requestId", requestId },
@@ -677,6 +707,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			}
 			else if (type == "error")
 			{
+				TRACE(
+					"CBlazeClawAgentChatView: native bridge error requestId=%s\n",
+					requestId.c_str());
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.error" },
 					{ "requestId", requestId },
@@ -691,6 +724,10 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "ok", response.statusCode >= 200 && response.statusCode < 300 },
 			{ "payload", nlohmann::json{ { "statusCode", response.statusCode } } },
 		});
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge response sent requestId=%s status=%d\n",
+			requestId.c_str(),
+			response.statusCode);
 		finalizeRequest();
 		return 0;
 	}
