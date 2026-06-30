@@ -1,5 +1,28 @@
 import AppConfig from '../config.js';
 
+function _toBool(value) {
+  return String(value).toLowerCase() === 'true' || value === true;
+}
+
+async function _preflightHttpBridgeHealth(baseUrl, signal) {
+  const url = `${baseUrl}/health`;
+  const resp = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    signal,
+  });
+  if (!resp.ok) {
+    throw new Error(`bridge_health_http_${resp.status}`);
+  }
+  const data = await resp.json().catch(() => ({}));
+  if (data && data.ok === false) {
+    throw new Error('bridge_health_unhealthy');
+  }
+  return true;
+}
+
 function _supportsNativeWebViewBridge() {
   const cfg = AppConfig.getChatConfig();
   const enabled = String(cfg.enableNativeAgentBridge).toLowerCase() === 'true' || cfg.enableNativeAgentBridge === true;
@@ -242,6 +265,9 @@ export async function callAgentWithDualTransport({
 }) {
   const cfg = AppConfig.getChatConfig();
   const preferNative = String(cfg.agentBridgeTransport || '').toLowerCase() === 'native-webview';
+  const nativeBridgeHostStarted = _toBool(cfg.nativeBridgeHostStarted);
+  const nativeModeDegraded = _toBool(cfg.nativeModeDegraded);
+  const reachabilityHint = String(cfg.agentBridgeReachabilityHint || '').trim().toLowerCase();
 
   if (preferNative && _supportsNativeWebViewBridge()) {
     try {
@@ -251,6 +277,21 @@ export async function callAgentWithDualTransport({
       if (!allowHttpFallback) {
         throw nativeError;
       }
+    }
+  }
+
+  const shouldPreflightHttp =
+    !preferNative ||
+    !nativeBridgeHostStarted ||
+    nativeModeDegraded ||
+    reachabilityHint === 'bridge-unavailable';
+
+  if (shouldPreflightHttp) {
+    try {
+      await _preflightHttpBridgeHealth(baseUrl, signal);
+    } catch (healthErr) {
+      const reason = healthErr instanceof Error ? healthErr.message : 'bridge_health_check_failed';
+      throw new Error(`Agent bridge unavailable (${reason})`);
     }
   }
 

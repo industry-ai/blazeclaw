@@ -113,6 +113,9 @@ private:
 	blazeclaw::config::AgentChatRuntimeMode	m_runtimeModeResolved	=
 		blazeclaw::config::AgentChatRuntimeMode::Auto;
 	bool m_nativeRuntimeStarted		= false;
+	bool m_nativeBridgeHostStarted	= false;
+	bool m_nativeRunnerStarted		= false;
+	bool m_nativeModeDegraded		= false;
 	bool m_nodeRuntimeStartedByMode	= false;
 	//-------------------------------------------------------------------------------------------------
 

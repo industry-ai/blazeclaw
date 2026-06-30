@@ -275,6 +275,13 @@ blazeclaw::config::AgentChatRuntimeMode CBlazeClawAgentChatView::ResolveRuntimeM
  */
 bool CBlazeClawAgentChatView::StartNativeRuntime()
 {
+	m_nativeRuntimeStarted = false;
+	m_nativeBridgeHostStarted = false;
+	m_nativeRunnerStarted = false;
+	m_nativeModeDegraded = false;
+	m_nativeBridgeHost.reset();
+	m_nativeRunner.reset();
+
 	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app == nullptr)
 	{
@@ -328,6 +335,7 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 			bridgeConfig.port);
 		return false;
 	}
+	m_nativeBridgeHostStarted = true;
 
 	auto nativeRunner = std::make_unique<blazeclaw::agentchat::AgentChatNativeRunner>();
 	nativeRunner->SetChatEndpoint(
@@ -336,13 +344,22 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	nativeRunner->SetOrchestratorAdapter(orchestratorAdapter);
 	if (!nativeRunner->Initialize())
 	{
-		bridgeHost->Shutdown();
-		TRACE("CBlazeClawAgentChatView: Failed to initialize native runner\n");
-		return false;
+		m_nativeBridgeHost = std::move(bridgeHost);
+		m_nativeRunner.reset();
+		m_nativeRunnerStarted = false;
+		m_nativeModeDegraded = true;
+		m_nativeRuntimeStarted = true;
+		TRACE(
+			"CBlazeClawAgentChatView: Native runtime started in degraded mode (bridge on, runner off). bind=%s:%u\n",
+			bridgeConfig.bindAddress.c_str(),
+			bridgeConfig.port);
+		return true;
 	}
 
 	m_nativeBridgeHost = std::move(bridgeHost);
 	m_nativeRunner = std::move(nativeRunner);
+	m_nativeRunnerStarted = true;
+	m_nativeModeDegraded = false;
 	m_nativeRuntimeStarted = true;
 	TRACE(
 		"CBlazeClawAgentChatView: Native runtime started (aliases=%s, bind=%s:%u)\n",
@@ -367,6 +384,9 @@ void CBlazeClawAgentChatView::StopNativeRuntime()
 	}
 
 	m_nativeRuntimeStarted = false;
+	m_nativeBridgeHostStarted = false;
+	m_nativeRunnerStarted = false;
+	m_nativeModeDegraded = false;
 }
 
 void CBlazeClawAgentChatView::StartConfiguredRuntime()
@@ -387,6 +407,10 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 		if (!StartNativeRuntime())
 		{
 			TRACE("CBlazeClawAgentChatView: Native mode startup failed\n");
+		}
+		else if (m_nativeModeDegraded)
+		{
+			TRACE("CBlazeClawAgentChatView: Native mode running degraded (bridge on, runner off)\n");
 		}
 		break;
 
@@ -1237,6 +1261,9 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 	}
 
 	const bool nativeBridgeEnabled = m_nativeRuntimeStarted;
+	const bool nativeBridgeHostStarted = m_nativeBridgeHostStarted;
+	const bool nativeRunnerStarted = m_nativeRunnerStarted;
+	const bool nativeModeDegraded = m_nativeModeDegraded;
 	bool uiInProcessAgentPath = true;
 	auto* app = static_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app != nullptr)
@@ -1245,6 +1272,9 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 	}
 	const bool nativeUiBridgeEnabled = nativeBridgeEnabled && uiInProcessAgentPath;
 	const std::wstring transportMode = nativeUiBridgeEnabled ? L"native-webview" : L"http";
+	const std::wstring reachabilityHint = nativeUiBridgeEnabled
+		? L"native-inprocess"
+		: (nativeBridgeHostStarted ? L"http-bridge" : L"bridge-unavailable");
 
 	const std::wstring script =
 		L"(function(){"
@@ -1252,6 +1282,10 @@ void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 		L"window.__APP_CONFIG__=window.__APP_CONFIG__||{};"
 		L"window.__APP_CONFIG__.agentRuntimeMode='" + EscapeJsSingleQuotedString(runtimeMode) + L"';"
 		L"window.__APP_CONFIG__.enableNativeAgentBridge=" + std::wstring(nativeUiBridgeEnabled ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.nativeBridgeHostStarted=" + std::wstring(nativeBridgeHostStarted ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.nativeRunnerStarted=" + std::wstring(nativeRunnerStarted ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.nativeModeDegraded=" + std::wstring(nativeModeDegraded ? L"true" : L"false") + L";"
+		L"window.__APP_CONFIG__.agentBridgeReachabilityHint='" + EscapeJsSingleQuotedString(reachabilityHint) + L"';"
 		L"window.__APP_CONFIG__.agentBridgeTransport='" + EscapeJsSingleQuotedString(transportMode) + L"';"
 		L"window.__APP_CONFIG__.enableHttpFallbackOnNativeBridgeError=true;"
 		L"}catch(e){}"

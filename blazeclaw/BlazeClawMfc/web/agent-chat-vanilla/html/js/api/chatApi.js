@@ -467,8 +467,13 @@ async function callAgent(message, conversationId, sessionId, callbacks, opts = {
       console.warn('[ChatApi] Agent request aborted');
       return { text: '' };
     }
-    onError?.(err);
-    return { text: '', error: err.message };
+    const rawMessage = String(err?.message || '');
+    const normalized = /Failed to fetch/i.test(rawMessage)
+      ? 'Agent bridge unavailable (fetch_failed)'
+      : rawMessage;
+    const wrappedError = new Error(normalized || 'Agent request failed');
+    onError?.(wrappedError);
+    return { text: '', error: wrappedError.message };
   }
 }
 

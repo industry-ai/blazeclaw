@@ -19,6 +19,10 @@ const AppConfig = (() => {
     enableNativeAgentBridge: false,
     agentBridgeTransport: 'http',
     enableHttpFallbackOnNativeBridgeError: true,
+    nativeBridgeHostStarted: false,
+    nativeRunnerStarted: false,
+    nativeModeDegraded: false,
+    agentBridgeReachabilityHint: 'unknown',
   };
 
   function _env(key, fallback) {
@@ -58,6 +62,10 @@ const AppConfig = (() => {
         'enableHttpFallbackOnNativeBridgeError',
         defaults.enableHttpFallbackOnNativeBridgeError,
       ),
+      nativeBridgeHostStarted: _env('nativeBridgeHostStarted', defaults.nativeBridgeHostStarted),
+      nativeRunnerStarted: _env('nativeRunnerStarted', defaults.nativeRunnerStarted),
+      nativeModeDegraded: _env('nativeModeDegraded', defaults.nativeModeDegraded),
+      agentBridgeReachabilityHint: _env('agentBridgeReachabilityHint', defaults.agentBridgeReachabilityHint),
     };
   }
 
