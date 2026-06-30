@@ -536,6 +536,54 @@ namespace blazeclaw::config {
 					ParseBool(trimmedLine.substr(34), true);
 				continue;
 			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushChatHost=", 0) == 0) {
+				outConfig.agentChatRuntime.pushChatHost = Trim(trimmedLine.substr(29));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushChatPort=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.pushChatPort =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(29))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushTimeoutMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.pushTimeoutMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(30))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.runnerChatHost=", 0) == 0) {
+				outConfig.agentChatRuntime.runnerChatHost = Trim(trimmedLine.substr(31));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.runnerChatPort=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.runnerChatPort =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(31))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.stateRoot=", 0) == 0) {
+				outConfig.agentChatRuntime.stateRoot = Trim(trimmedLine.substr(28));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyStateRoot=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyStateRoot = Trim(trimmedLine.substr(34));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyStateMigrationEnabled=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyStateMigrationEnabled =
+					ParseBool(trimmedLine.substr(45), true);
+				continue;
+			}
 			if (trimmedLine.rfind(L"native.openclawAliases=", 0) == 0) {
 				outConfig.agentChatRuntime.enableOpenClawAliases =
 					ParseBool(trimmedLine.substr(23), true);

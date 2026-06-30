@@ -299,6 +299,18 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 		bridgeConfig.bindAddress = "127.0.0.1";
 	}
 	bridgeConfig.port = runtime.port;
+	bridgeConfig.pushChatHost = WideToUtf8(runtime.pushChatHost);
+	bridgeConfig.pushChatPort = runtime.pushChatPort;
+	bridgeConfig.pushTimeoutMs = runtime.pushTimeoutMs;
+	if (!runtime.stateRoot.empty())
+	{
+		bridgeConfig.stateRoot = std::filesystem::path(runtime.stateRoot);
+	}
+	if (!runtime.legacyStateRoot.empty())
+	{
+		bridgeConfig.legacyStateRoot = std::filesystem::path(runtime.legacyStateRoot);
+	}
+	bridgeConfig.legacyStateMigrationEnabled = runtime.legacyStateMigrationEnabled;
 
 	auto bridgeHost = std::make_unique<blazeclaw::agentchat::AgentChatBridgeHost>();
 	auto orchestratorAdapter = std::make_shared<blazeclaw::agentchat::CallbackAgentChatOrchestratorAdapter>();
@@ -318,6 +330,9 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	}
 
 	auto nativeRunner = std::make_unique<blazeclaw::agentchat::AgentChatNativeRunner>();
+	nativeRunner->SetChatEndpoint(
+		WideToUtf8(runtime.runnerChatHost),
+		runtime.runnerChatPort);
 	nativeRunner->SetOrchestratorAdapter(orchestratorAdapter);
 	if (!nativeRunner->Initialize())
 	{

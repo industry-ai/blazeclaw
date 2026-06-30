@@ -57,6 +57,7 @@ public:
 	~AgentChatNativeRunner();
 
 	void SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter);
+	void SetChatEndpoint(const std::string& host, std::uint16_t port);
 	void SetGatewayRequestRouter(GatewayRouter router);
 	bool Initialize();
 	void Shutdown();
@@ -100,6 +101,8 @@ private:
 
 	mutable std::mutex m_mutex;
 	AgentChatOrchestratorAdapterPtr m_orchestratorAdapter;
+	std::string m_chatHost;
+	std::uint16_t m_chatPort = 0;
 	std::thread m_worker;
 	bool m_running = false;
 	std::unordered_set<std::string> m_processingMessageIds;

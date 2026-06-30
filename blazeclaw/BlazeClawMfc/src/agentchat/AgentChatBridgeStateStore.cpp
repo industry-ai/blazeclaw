@@ -4,15 +4,21 @@
 #include "../gateway/GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
+#include <cstdlib>
 
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::agentchat {
 
 	AgentChatBridgeStateStore::AgentChatBridgeStateStore(
-		std::filesystem::path stateRoot)
-		: m_stateRoot(std::move(stateRoot)) {
+		std::filesystem::path stateRoot,
+		std::filesystem::path legacyStateRoot,
+		const bool legacyStateMigrationEnabled)
+		: m_stateRoot(std::move(stateRoot))
+		, m_legacyStateRoot(std::move(legacyStateRoot))
+		, m_legacyStateMigrationEnabled(legacyStateMigrationEnabled) {
 		if (m_stateRoot.empty()) {
 			m_stateRoot = ResolveDefaultStateRoot();
 		}
@@ -221,7 +227,98 @@ namespace blazeclaw::agentchat {
 	}
 
 	bool AgentChatBridgeStateStore::MigrateLegacyOpenClawStateIfNeeded() const {
-		return false;
+		if (!m_legacyStateMigrationEnabled) {
+			return false;
+		}
+
+		const std::filesystem::path markerPath = m_stateRoot / "migration" / "openclaw-state.migrated.json";
+		std::error_code ec;
+		if (std::filesystem::exists(markerPath, ec)) {
+			return false;
+		}
+
+		std::vector<std::filesystem::path> legacyCandidates;
+		if (!m_legacyStateRoot.empty()) {
+			legacyCandidates.push_back(m_legacyStateRoot);
+		}
+
+		char* envValue = nullptr;
+		size_t envLength = 0;
+		if (_dupenv_s(&envValue, &envLength, "OPENCLAW_AGENTCHAT_STATE_DIR") == 0 && envValue != nullptr) {
+			legacyCandidates.emplace_back(envValue);
+			free(envValue);
+			envValue = nullptr;
+		}
+		if (_dupenv_s(&envValue, &envLength, "LOCALAPPDATA") == 0 && envValue != nullptr) {
+			std::filesystem::path localAppData(envValue);
+			free(envValue);
+			envValue = nullptr;
+			legacyCandidates.push_back(localAppData / "OpenClaw" / "agent-chat" / "bridge");
+			legacyCandidates.push_back(localAppData / "openclaw" / "agent-chat" / "bridge");
+		}
+
+		std::filesystem::path sourceRoot;
+		for (const auto& candidate : legacyCandidates) {
+			if (candidate.empty()) {
+				continue;
+			}
+			std::error_code existsError;
+			if (std::filesystem::exists(candidate, existsError)) {
+				sourceRoot = candidate;
+				break;
+			}
+		}
+
+		std::filesystem::create_directories(markerPath.parent_path(), ec);
+
+		nlohmann::json marker = {
+			{ "timestampMs", static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count()) },
+			{ "source", sourceRoot.empty() ? std::string() : sourceRoot.string() },
+			{ "applied", false },
+		};
+
+		if (sourceRoot.empty()) {
+			std::ofstream markerFile(markerPath, std::ios::binary | std::ios::trunc);
+			if (markerFile.is_open()) {
+				markerFile << marker.dump(2);
+			}
+			return false;
+		}
+
+		bool migratedAny = false;
+		auto tryCopyIfMissing = [&migratedAny](
+			const std::filesystem::path& source,
+			const std::filesystem::path& destination) {
+			std::error_code copyError;
+			if (!std::filesystem::exists(source, copyError)) {
+				return;
+			}
+			if (std::filesystem::exists(destination, copyError)) {
+				return;
+			}
+			std::filesystem::create_directories(destination.parent_path(), copyError);
+			std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, copyError);
+			if (!copyError) {
+				migratedAny = true;
+			}
+		};
+
+		tryCopyIfMissing(
+			sourceRoot / "cache" / "push.idempotency.json",
+			m_stateRoot / "cache" / "push.idempotency.json");
+
+		marker["applied"] = migratedAny;
+		std::ofstream markerFile(markerPath, std::ios::binary | std::ios::trunc);
+		if (markerFile.is_open()) {
+			markerFile << marker.dump(2);
+		}
+
+		if (migratedAny) {
+			OutputDebugStringA((std::string("[agentchat-state] migrated legacy state from: ") + sourceRoot.string() + "\n").c_str());
+		}
+		return migratedAny;
 	}
 
 	const std::filesystem::path& AgentChatBridgeStateStore::StateRoot() const noexcept {

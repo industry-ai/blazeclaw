@@ -10,7 +10,10 @@ namespace blazeclaw::agentchat {
 
 class AgentChatBridgeStateStore {
 public:
-	explicit AgentChatBridgeStateStore(std::filesystem::path stateRoot);
+	explicit AgentChatBridgeStateStore(
+		std::filesystem::path stateRoot,
+		std::filesystem::path legacyStateRoot = {},
+		bool legacyStateMigrationEnabled = true);
 
 	void EnsureInitialized() const;
 	bool MigrateLegacyOpenClawStateIfNeeded() const;
@@ -46,6 +49,8 @@ private:
 
 	mutable std::mutex m_mutex;
 	std::filesystem::path m_stateRoot;
+	std::filesystem::path m_legacyStateRoot;
+	bool m_legacyStateMigrationEnabled = true;
 	std::filesystem::path m_pushIdempotencyPath;
 	bool m_pushIdempotencyLoaded = false;
 	std::unordered_map<std::string, std::uint64_t> m_pushIdempotencyByKey;

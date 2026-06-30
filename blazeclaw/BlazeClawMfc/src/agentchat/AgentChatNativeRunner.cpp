@@ -150,8 +150,7 @@ namespace blazeclaw::agentchat {
 					return value;
 				}
 			}
-			//return "101.132.254.212";
-			return "192.168.20.211";
+			return "127.0.0.1";
 		}
 
 		std::uint16_t ResolveRunnerChatPort() {
@@ -318,6 +317,12 @@ namespace blazeclaw::agentchat {
 
 	AgentChatNativeRunner::~AgentChatNativeRunner() {
 		Shutdown();
+	}
+
+	void AgentChatNativeRunner::SetChatEndpoint(const std::string& host, const std::uint16_t port) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_chatHost = TrimCopy(host);
+		m_chatPort = port;
 	}
 
 	void AgentChatNativeRunner::SetOrchestratorAdapter(AgentChatOrchestratorAdapterPtr adapter) {

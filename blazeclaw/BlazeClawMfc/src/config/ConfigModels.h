@@ -544,6 +544,14 @@ namespace blazeclaw::config {
 		bool allowNonLoopbackHttpBind = false;
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 8788;
+		std::wstring pushChatHost = L"127.0.0.1";
+		std::uint16_t pushChatPort = 8765;
+		std::uint32_t pushTimeoutMs = 30000;
+		std::wstring runnerChatHost = L"127.0.0.1";
+		std::uint16_t runnerChatPort = 8765;
+		std::wstring stateRoot;
+		std::wstring legacyStateRoot;
+		bool legacyStateMigrationEnabled = true;
 	};
 
 	enum class AgentChatRuntimeMode { Legacy, Native, Auto };

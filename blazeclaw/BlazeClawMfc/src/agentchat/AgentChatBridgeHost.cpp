@@ -32,7 +32,7 @@ namespace blazeclaw::agentchat {
 		constexpr const char* kDefaultPushToken =
 			"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ98s7d2b9e3c5a1f0d4";
 //		constexpr const char* kDefaultChatHost = "101.132.254.212";
-		constexpr const char* kDefaultChatHost = "192.168.20.211";
+		constexpr const char* kDefaultChatHost = "127.0.0.1";
 		constexpr std::uint16_t kDefaultChatPort = 8765;
 		constexpr std::uint32_t kDefaultPushTimeoutMs = 30000;
 		constexpr std::size_t kHbpcHeaderSize = 64;
@@ -936,7 +936,10 @@ namespace blazeclaw::agentchat {
 			if (resolvedStateRoot.empty()) {
 				resolvedStateRoot = AgentChatBridgeStateStore::ResolveDefaultStateRoot();
 			}
-			m_stateStore.emplace(std::move(resolvedStateRoot));
+			m_stateStore.emplace(
+				std::move(resolvedStateRoot),
+				m_config.legacyStateRoot,
+				m_config.legacyStateMigrationEnabled);
 			m_stateStore->EnsureInitialized();
 			m_stateStore->MigrateLegacyOpenClawStateIfNeeded();
 
@@ -2154,6 +2157,12 @@ namespace blazeclaw::agentchat {
 	}
 
 	std::string AgentChatBridgeHost::ResolveChatHost() const {
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			if (!TrimCopy(m_config.pushChatHost).empty()) {
+				return TrimCopy(m_config.pushChatHost);
+			}
+		}
 		const std::array<const char*, 8> names = {
 			"BLAZECLAW_AGENT_PUSH_CHAT_HOST",
 			"AGENTCHAT_BLAZECLAW_AGENT_PUSH_CHAT_HOST",
@@ -2174,6 +2183,12 @@ namespace blazeclaw::agentchat {
 	}
 
 	std::uint16_t AgentChatBridgeHost::ResolveChatPort() const {
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			if (m_config.pushChatPort > 0) {
+				return m_config.pushChatPort;
+			}
+		}
 		const std::array<const char*, 7> names = {
 			"BLAZECLAW_AGENT_PUSH_CHAT_PORT",
 			"AGENTCHAT_BLAZECLAW_AGENT_PUSH_CHAT_PORT",
