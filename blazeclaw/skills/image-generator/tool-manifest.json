@@ -1,1 +1,10 @@
-{"tools":[{"id":"image-generator.generate","label":"image_generator","category":"skill","enabled":true}]}
+{
+  "tools": [
+    {
+      "id": "image-generator.generate",
+      "label": "image_generator",
+      "category": "skill",
+      "enabled": true
+    }
+  ]
+}
