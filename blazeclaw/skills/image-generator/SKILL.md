@@ -7,7 +7,19 @@ source: internal
 tags: [image, generation, illustration, cartoon, education]
 compatibility: python>=3.10
 allowed-tools: Bash(python:*)
+command-dispatch: tool
+command-tool: image-generator.generate
+command-arg-schema: schema://image-generator.generate.args.v1
+command-result-schema: schema://image-generator.generate.result.v1
 description: Generate cartoon-style educational illustrations from Chinese words or phrases, with automatic English prompt generation via LLM, DashScope wan2.7 image generation, transparent background removal, and OSS upload. Use when the user asks to generate images, draw illustrations, create educational clipart, or produce word-picture cards — especially for English word cards, classroom materials, and children's learning content. Do not use when the task requires photorealistic images, UI mockups, logo design, multi-character scenes, or non-educational illustration styles.
+commands:
+  - name: image-generator
+    description: Generate an educational cartoon illustration.
+    arguments:
+      - name: word
+        type: string
+        required: true
+        description: Chinese word or phrase to illustrate.
 ---
 
 # Image Generator — 教育插图生成

@@ -631,6 +631,10 @@ namespace blazeclaw::core {
 						!preparedChatRequest.resolvedSkillInvocationToolTarget.has_value())
 					? std::optional<std::string>("intent_not_matched")
 					: std::nullopt;
+				const std::optional<std::string> invocationMissReason =
+					manager.ResolveSkillInvocationMissReason(
+						preparedChatRequest.commandBodyForInline,
+						preparedChatRequest.resolvedSkillInvocationToolTarget);
 				blazeclaw::gateway::EmitTelemetryEvent(
 					"gateway.chat.routing.decision",
 					std::string("{\"runId\":") +
@@ -655,6 +659,10 @@ namespace blazeclaw::core {
 					",\"fallbackReason\":" +
 					(routingFallbackReason.has_value()
 						? blazeclaw::gateway::JsonString(routingFallbackReason.value())
+						: std::string("null")) +
+					",\"invocationMissReason\":" +
+					(invocationMissReason.has_value()
+						? blazeclaw::gateway::JsonString(invocationMissReason.value())
 						: std::string("null")) +
 					"}");
 

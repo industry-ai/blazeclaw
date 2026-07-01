@@ -1484,6 +1484,13 @@ namespace blazeclaw::core::tools {
 		};
 	}
 
+	std::vector<ImageGeneratorToolRuntimeSpec> BuildImageGeneratorToolRuntimeSpecs()
+	{
+		return {
+			{ "image-generator.generate", "Image Generator", "scripts/generate.py" },
+		};
+	}
+
 	std::optional<std::string> ExtractTextArgument(const nlohmann::json& params)
 	{
 		if (!params.is_object())
@@ -2477,6 +2484,66 @@ namespace blazeclaw::core::tools {
 			}
 
 			args.push_back(url);
+		}
+
+		return args;
+	}
+
+	std::optional<std::vector<std::string>> BuildImageGeneratorCliArgs(
+		const ImageGeneratorToolRuntimeSpec& spec,
+		const nlohmann::json& params,
+		std::string& errorCode,
+		std::string& errorMessage)
+	{
+		errorCode.clear();
+		errorMessage.clear();
+
+		if (spec.id != "image-generator.generate")
+		{
+			errorCode = "invalid_arguments";
+			errorMessage = "unsupported image generator tool id";
+			return std::nullopt;
+		}
+
+		const auto promptIt = params.find("prompt");
+		if (promptIt == params.end())
+		{
+			errorCode = "invalid_arguments";
+			errorMessage = "prompt is required";
+			return std::nullopt;
+		}
+
+		const auto promptValue = JsonValueToCliString(*promptIt);
+		if (!promptValue.has_value() || TrimAsciiForBraveSearch(promptValue.value()).empty())
+		{
+			errorCode = "invalid_arguments";
+			errorMessage = "prompt is invalid";
+			return std::nullopt;
+		}
+
+		std::vector<std::string> args;
+		args.push_back("--prompt");
+		args.push_back(promptValue.value());
+
+		if (const auto modelIt = params.find("model");
+			modelIt != params.end())
+		{
+			AppendFlagWithValue(args, "model", JsonValueToCliString(*modelIt));
+		}
+
+		if (const auto sizeIt = params.find("size");
+			sizeIt != params.end())
+		{
+			AppendFlagWithValue(args, "size", JsonValueToCliString(*sizeIt));
+		}
+
+		if (const auto noRemoveBgIt = params.find("no_remove_bg");
+			noRemoveBgIt != params.end() && noRemoveBgIt->is_boolean())
+		{
+			if (noRemoveBgIt->get<bool>())
+			{
+				args.push_back("--no-remove-bg");
+			}
 		}
 
 		return args;

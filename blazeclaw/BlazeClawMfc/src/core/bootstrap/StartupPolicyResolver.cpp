@@ -596,6 +596,9 @@ namespace blazeclaw::core::bootstrap {
 			{ L"blazeclaw", L"skills", L"brave-search" },
 			{ std::filesystem::path(L"scripts") / L"search.js",
 			  std::filesystem::path(L"scripts") / L"content.js" });
+		settings.imageGeneratorSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills", L"image-generator" },
+			{ std::filesystem::path(L"scripts") / L"generate.py" });
 		settings.webBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
 			{ L"blazeclaw", L"skills", L"web-browsing" },
 			{ std::filesystem::path(L"scripts") / L"search_web.py" });

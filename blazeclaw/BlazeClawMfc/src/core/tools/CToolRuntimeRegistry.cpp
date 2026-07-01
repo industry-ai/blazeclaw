@@ -26,6 +26,10 @@ namespace blazeclaw::core {
 		{
 			deps.registerBaiduSearch(host, toolPolicy);
 		}
+		if (deps.registerImageGenerator)
+		{
+			deps.registerImageGenerator(host, toolPolicy);
+		}
 	}
 
 	void CToolRuntimeRegistry::RegisterWithAdapters(
@@ -38,6 +42,7 @@ namespace blazeclaw::core {
 			.imapSmtpSkillRoot = toolPolicy.imapSmtpSkillRoot,
 			.baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot,
 			.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
+			.imageGeneratorSkillRoot = toolPolicy.imageGeneratorSkillRoot,
 			.openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot,
 			.braveRequireApiKey = toolPolicy.braveRequireApiKey,
 			.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
