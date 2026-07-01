@@ -649,7 +649,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		"CBlazeClawAgentChatView: native bridge request posted requestId=%s stream=%s\n",
 		requestId.c_str(),
 		stream ? "true" : "false");
-	const auto response = m_nativeBridgeHost->HandleRequest("POST", "/api/blazeclaw-agent", requestBody);
+	const auto response = m_nativeBridgeHost->HandleInProcessAgentTurn(requestBody);
 	const bool isSseResponse = response.contentType.find("text/event-stream") != std::string::npos;
 
 	if (isSseResponse)

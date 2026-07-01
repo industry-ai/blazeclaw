@@ -35,6 +35,9 @@ public:
 		const std::string& path,
 		const std::string& requestBodyJson) const;
 
+	AgentChatBridgeHttpResponse HandleInProcessAgentTurn(
+		const std::string& requestBodyJson) const;
+
 	const AgentChatBridgeConfig& Config() const noexcept;
 
 private:

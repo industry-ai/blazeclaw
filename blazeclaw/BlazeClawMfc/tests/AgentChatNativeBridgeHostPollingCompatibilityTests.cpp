@@ -1,3 +1,12 @@
+#include "pch.h"
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 #include "agentchat/AgentChatBridgeHost.h"
 #include "agentchat/AgentChatOrchestratorAdapter.h"
 

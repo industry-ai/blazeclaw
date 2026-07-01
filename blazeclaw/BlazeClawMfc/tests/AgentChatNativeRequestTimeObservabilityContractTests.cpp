@@ -35,6 +35,7 @@ TEST_CASE("Native WebView bridge emits requestId-correlated observability traces
 	REQUIRE(source.find("native bridge error requestId=") != std::string::npos);
 	REQUIRE(source.find("native bridge response sent requestId=") != std::string::npos);
 	REQUIRE(source.find("const bool isSseResponse =") != std::string::npos);
+	REQUIRE(source.find("HandleInProcessAgentTurn(requestBody)") != std::string::npos);
 	REQUIRE(source.find("native bridge non-sse error requestId=") != std::string::npos);
 	REQUIRE(source.find("responsePayload[\"statusCode\"] = response.statusCode;") != std::string::npos);
 	REQUIRE(source.find("bridgeResponse[\"error\"] = responseError;") != std::string::npos);

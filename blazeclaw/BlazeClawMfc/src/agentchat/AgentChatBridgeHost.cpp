@@ -1113,6 +1113,16 @@ namespace blazeclaw::agentchat {
 		return AgentChatBridgeProtocol::BuildNotFoundResponse();
 	}
 
+	AgentChatBridgeHttpResponse AgentChatBridgeHost::HandleInProcessAgentTurn(
+		const std::string& requestBodyJson) const {
+		const nlohmann::json payload =
+			nlohmann::json::parse(requestBodyJson, nullptr, false);
+		if (payload.is_discarded() || !payload.is_object()) {
+			return BuildBadRequestResponse("invalid_json");
+		}
+		return HandleAgentRequest(payload);
+	}
+
 	AgentChatBridgeHttpResponse AgentChatBridgeHost::HandleAgentRequest(
 		const nlohmann::json& payload) const {
 		const std::string message = JsonStringValue(payload, "message");

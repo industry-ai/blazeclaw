@@ -21,7 +21,7 @@ TEST_CASE("WebView native bridge request-stream-final wiring contract is present
 
 	REQUIRE(source.find("channel != \"agentchat.bridge.request\"") != std::string::npos);
 	REQUIRE(source.find("if (kind != \"agent.turn\")") != std::string::npos);
-	REQUIRE(source.find("/api/blazeclaw-agent") != std::string::npos);
+	REQUIRE(source.find("HandleInProcessAgentTurn(requestBody)") != std::string::npos);
 	REQUIRE(source.find("agentchat.bridge.stream.delta") != std::string::npos);
 	REQUIRE(source.find("agentchat.bridge.stream.final") != std::string::npos);
 	REQUIRE(source.find("agentchat.bridge.response") != std::string::npos);

@@ -107,6 +107,85 @@ TEST_CASE("Native tts synthesize route uses orchestrator tts.convert", "[agentch
 	REQUIRE(body.value("audioUrl", std::string()) == "artifacts/tts/tts-1.wav");
 }
 
+TEST_CASE("Native in-process agent turn bypasses HTTP not_found gate", "[agentchat][native][inprocess][contract]") {
+	AgentChatBridgeHost host;
+	AgentChatBridgeConfig config;
+	config.enabled = true;
+	config.enableHttpListener = false;
+	config.enableUiInProcessAgentPath = true;
+	config.enableHttpPushIngress = true;
+	config.enablePushTransport = false;
+	config.compatibilityOpenClawAliases = true;
+	config.bindAddress = "127.0.0.1";
+	config.port = 8788;
+	REQUIRE(host.Initialize(config));
+
+	auto adapter = std::make_shared<CallbackAgentChatOrchestratorAdapter>();
+	adapter->SetRouter([](const RequestFrame& request) -> ResponseFrame {
+		if (request.method == "chat.send") {
+			return ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = nlohmann::json{ { "runId", "run-inprocess-1" } }.dump(),
+				.error = std::nullopt,
+			};
+		}
+		if (request.method == "chat.events.poll") {
+			return ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = nlohmann::json{
+					{ "events", nlohmann::json::array({
+						nlohmann::json{
+							{ "runId", "run-inprocess-1" },
+							{ "state", "final" },
+							{ "message", nlohmann::json{ { "text", "in-process ok" } } },
+						},
+					}) },
+				}.dump(),
+				.error = std::nullopt,
+			};
+		}
+
+		return ResponseFrame{
+			.id = request.id,
+			.ok = false,
+			.payloadJson = std::nullopt,
+			.error = blazeclaw::gateway::protocol::ErrorShape{
+				.code = "unexpected_method",
+				.message = "unexpected_method",
+				.detailsJson = std::nullopt,
+				.retryable = false,
+				.retryAfterMs = std::nullopt,
+			},
+		};
+	});
+	host.SetOrchestratorAdapter(adapter);
+
+	const auto httpResponse = host.HandleRequest(
+		"POST",
+		"/api/blazeclaw-agent",
+		nlohmann::json{
+			{ "sessionKey", "main" },
+			{ "message", "hello" },
+			{ "stream", true },
+		}.dump());
+	REQUIRE(httpResponse.statusCode == 404);
+	const auto httpBody = ParseBody(httpResponse.body);
+	REQUIRE(httpBody.value("ok", true) == false);
+	REQUIRE(httpBody.value("error", std::string()) == "not_found");
+
+	const auto inProcessResponse = host.HandleInProcessAgentTurn(
+		nlohmann::json{
+			{ "sessionKey", "main" },
+			{ "message", "hello" },
+			{ "stream", true },
+		}.dump());
+	REQUIRE(inProcessResponse.statusCode == 200);
+	REQUIRE(inProcessResponse.contentType.find("text/event-stream") != std::string::npos);
+	REQUIRE(inProcessResponse.body.find("\"type\":\"final\"") != std::string::npos);
+}
+
 TEST_CASE("Native agent stream emits delta before final", "[agentchat][native][sse]") {
 	AgentChatBridgeHost host;
 	ConfigureHostForTests(host);
