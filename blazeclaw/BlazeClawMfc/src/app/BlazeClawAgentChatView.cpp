@@ -650,8 +650,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		requestId.c_str(),
 		stream ? "true" : "false");
 	const auto response = m_nativeBridgeHost->HandleRequest("POST", "/api/blazeclaw-agent", requestBody);
+	const bool isSseResponse = response.contentType.find("text/event-stream") != std::string::npos;
 
-	if (stream || response.contentType.find("text/event-stream") != std::string::npos)
+	if (isSseResponse)
 	{
 		std::stringstream ss(response.body);
 		std::string line;
@@ -733,21 +734,83 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 	}
 
 	nlohmann::json responsePayload = nlohmann::json::object();
+	nlohmann::json responseError = nlohmann::json::object();
 	if (!response.body.empty())
 	{
 		const auto parsedResponse = nlohmann::json::parse(response.body, nullptr, false);
 		if (!parsedResponse.is_discarded())
 		{
-			responsePayload = parsedResponse;
+			if (parsedResponse.is_object())
+			{
+				responsePayload = parsedResponse;
+			}
+			else
+			{
+				responsePayload["raw"] = parsedResponse;
+			}
 		}
 	}
 
-	emitToWeb(nlohmann::json{
+	if (response.statusCode < 200 || response.statusCode >= 300)
+	{
+		std::string errorMessage;
+		std::string errorCode;
+
+		if (responsePayload.is_object())
+		{
+			errorMessage = responsePayload.value("message", std::string());
+			if (errorMessage.empty() && responsePayload.contains("error") && responsePayload["error"].is_object())
+			{
+				const auto& nestedError = responsePayload["error"];
+				errorMessage = nestedError.value("message", std::string());
+				errorCode = nestedError.value("code", std::string());
+			}
+			if (errorMessage.empty() && responsePayload.contains("error") && responsePayload["error"].is_string())
+			{
+				errorMessage = responsePayload["error"].get<std::string>();
+				if (errorCode.empty())
+				{
+					errorCode = errorMessage;
+				}
+			}
+			if (errorCode.empty())
+			{
+				errorCode = responsePayload.value("code", std::string());
+			}
+		}
+
+		if (errorMessage.empty())
+		{
+			errorMessage = std::string("native_bridge_http_") + std::to_string(response.statusCode);
+		}
+
+		responseError["message"] = errorMessage;
+		if (!errorCode.empty())
+		{
+			responseError["code"] = errorCode;
+		}
+
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge non-sse error requestId=%s status=%d message=%s\n",
+			requestId.c_str(),
+			response.statusCode,
+			errorMessage.c_str());
+	}
+
+	responsePayload["statusCode"] = response.statusCode;
+
+	nlohmann::json bridgeResponse = nlohmann::json{
 		{ "channel", "agentchat.bridge.response" },
 		{ "requestId", requestId },
 		{ "ok", response.statusCode >= 200 && response.statusCode < 300 },
 		{ "payload", responsePayload },
-	});
+	};
+	if (!responseError.empty())
+	{
+		bridgeResponse["error"] = responseError;
+	}
+
+	emitToWeb(bridgeResponse);
 	finalizeRequest();
 	return 0;
 }

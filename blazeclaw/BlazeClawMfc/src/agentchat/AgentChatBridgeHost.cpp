@@ -1499,6 +1499,12 @@ namespace blazeclaw::agentchat {
 				false);
 			if (!sendPayload.is_discarded() && sendPayload.is_object()) {
 				runId = JsonStringValue(sendPayload, "runId");
+				if (runId.empty()) {
+					runId = JsonStringValue(sendPayload, "run_id");
+				}
+				if (runId.empty()) {
+					runId = JsonStringValue(sendPayload, "id");
+				}
 			}
 		}
 		if (runId.empty()) {
@@ -1591,11 +1597,22 @@ namespace blazeclaw::agentchat {
 				if (!event.is_object()) {
 					continue;
 				}
-				if (JsonStringValue(event, "runId") != runId) {
+				std::string eventRunId = JsonStringValue(event, "runId");
+				if (eventRunId.empty()) {
+					eventRunId = JsonStringValue(event, "run_id");
+				}
+				if (eventRunId != runId) {
 					continue;
 				}
 
-				const std::string state = JsonStringValue(event, "state");
+				std::string state = JsonStringValue(event, "state");
+				std::transform(
+					state.begin(),
+					state.end(),
+					state.begin(),
+					[](unsigned char ch) {
+						return static_cast<char>(std::tolower(ch));
+					});
 				if (state == "delta") {
 					const auto messageIt = event.find("message");
 					if (messageIt != event.end()) {
@@ -1613,7 +1630,7 @@ namespace blazeclaw::agentchat {
 					continue;
 				}
 
-				if (state == "error") {
+				if (state == "error" || state == "failed") {
 					const std::string errorMessage = JsonStringValue(event, "errorMessage");
 					if (stream) {
 						AppendSseEvent(ssePayload, nlohmann::json{
@@ -1634,7 +1651,13 @@ namespace blazeclaw::agentchat {
 							: errorMessage);
 				}
 
-				if (state == "final" || state == "aborted") {
+				if (state == "final" ||
+					state == "aborted" ||
+					state == "completed" ||
+					state == "terminal" ||
+					state == "done" ||
+					state == "canceled" ||
+					state == "cancelled") {
 					const auto messageIt = event.find("message");
 					if (messageIt != event.end()) {
 						const std::string terminalText = ExtractTextFromChatEventMessage(*messageIt);
@@ -1644,7 +1667,11 @@ namespace blazeclaw::agentchat {
 					}
 
 					if (stream) {
-						if (state == "aborted") {
+						const bool isAbortedState =
+							state == "aborted" ||
+							state == "canceled" ||
+							state == "cancelled";
+						if (isAbortedState) {
 							AppendSseEvent(ssePayload, nlohmann::json{
 								{ "type", "error" },
 								{ "message", "OpenClaw chat runtime aborted." },
@@ -1653,7 +1680,7 @@ namespace blazeclaw::agentchat {
 						AppendSseEvent(ssePayload, nlohmann::json{
 							{ "type", "final" },
 							{ "text", finalText.empty() ? "已处理完成，请查看当前结果。" : finalText },
-							{ "state", state == "aborted" ? "aborted" : "final" },
+							{ "state", isAbortedState ? "aborted" : "final" },
 						});
 						AgentChatBridgeHttpResponse response;
 						response.statusCode = 200;

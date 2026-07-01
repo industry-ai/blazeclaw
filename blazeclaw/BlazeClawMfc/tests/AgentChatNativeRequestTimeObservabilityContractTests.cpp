@@ -34,6 +34,10 @@ TEST_CASE("Native WebView bridge emits requestId-correlated observability traces
 	REQUIRE(source.find("native bridge final requestId=") != std::string::npos);
 	REQUIRE(source.find("native bridge error requestId=") != std::string::npos);
 	REQUIRE(source.find("native bridge response sent requestId=") != std::string::npos);
+	REQUIRE(source.find("const bool isSseResponse =") != std::string::npos);
+	REQUIRE(source.find("native bridge non-sse error requestId=") != std::string::npos);
+	REQUIRE(source.find("responsePayload[\"statusCode\"] = response.statusCode;") != std::string::npos);
+	REQUIRE(source.find("bridgeResponse[\"error\"] = responseError;") != std::string::npos);
 }
 
 TEST_CASE("Agent bridge transport preserves native first-failure reason and uses health preflight", "[agentchat][native][observability][contract]") {
@@ -45,4 +49,6 @@ TEST_CASE("Agent bridge transport preserves native first-failure reason and uses
 	REQUIRE(source.find("kind: 'agent.health'") != std::string::npos);
 	REQUIRE(source.find("Native bridge request failed (${reason})") != std::string::npos);
 	REQUIRE(source.find("fallbackAllowedByPolicy") != std::string::npos);
+	REQUIRE(source.find("|| payload?.message") != std::string::npos);
+	REQUIRE(source.find("|| payloadError") != std::string::npos);
 }

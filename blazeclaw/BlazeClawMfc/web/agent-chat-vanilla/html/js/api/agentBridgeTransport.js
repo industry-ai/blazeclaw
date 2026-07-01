@@ -225,7 +225,14 @@ function _callAgentViaNativeBridge(body, callbacks, signal, timeoutMs) {
       }
       if (channel === 'agentchat.bridge.response') {
         if (msg.ok === false) {
-          const errorMessage = msg?.error?.message || 'Native bridge response error';
+          const payload = msg.payload || {};
+          const payloadError = payload && typeof payload.error === 'string'
+            ? payload.error
+            : '';
+          const errorMessage = msg?.error?.message
+            || payload?.message
+            || payloadError
+            || 'Native bridge response error';
           _traceBridge(requestId, 'native.response.error', String(errorMessage));
           settleReject(new Error(String(errorMessage)));
           return;
