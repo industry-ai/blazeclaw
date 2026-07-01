@@ -16,6 +16,7 @@
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
 #include "SettingsDialog.h"
+#include "CronTasksDialog.h"
 #include "BlazeClawMFCView.h"
 #include "BlazeClawMarkdownView.h"
 #include "SharedTabsDocTemplate.h"
@@ -211,6 +212,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(ID_EDIT_CHAT, &CMainFrame::OnEditChat)
 	ON_COMMAND(ID_EDIT_DASHBOARD, &CMainFrame::OnEditDashboard)
 	ON_UPDATE_COMMAND_UI(ID_EDIT_DASHBOARD, &CMainFrame::OnUpdateEditDashboard)
+	ON_COMMAND(ID_EDIT_DOC, &CMainFrame::OnEditCronTasks)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() noexcept
@@ -2474,6 +2476,12 @@ void CMainFrame::OnEditDashboard()
 	}
 
 	m_isSwitchFloatDock = false;
+}
+
+void CMainFrame::OnEditCronTasks()
+{
+	CCronTasksDialog dlg(this);
+	dlg.DoModal();
 }
 
 void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)

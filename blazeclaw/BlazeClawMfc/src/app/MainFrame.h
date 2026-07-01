@@ -257,4 +257,5 @@ public:
 	afx_msg void OnEditChat();
 	afx_msg void OnEditDashboard();
 	afx_msg void OnUpdateEditDashboard(CCmdUI* pCmdUI);
+	afx_msg void OnEditCronTasks();
 };
