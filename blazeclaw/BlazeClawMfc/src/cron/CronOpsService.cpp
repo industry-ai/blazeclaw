@@ -588,11 +588,32 @@ namespace blazeclaw::cron {
 					const auto rv = right.value("updatedAtMs", static_cast<std::int64_t>(0));
 					return ascending ? lv < rv : lv > rv;
 				}
+
+				//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+				// fix a bug for cron jobs that don't have a state object or nextRunAtMs, treat them as 0
+				// jicheng @ 2024-07-01
+				// 
+				//const auto leftState = left.value("state", CronJson::object());
+				//const auto rightState = right.value("state", CronJson::object());
+				//const auto lv = leftState.value("nextRunAtMs", static_cast<std::int64_t>(0));
+				//const auto rv = rightState.value("nextRunAtMs", static_cast<std::int64_t>(0));
+				//return ascending ? lv < rv : lv > rv;
+
+				const auto getNextRunAtMs = [](const CronJson& state) -> std::int64_t {
+					if (!state.is_object()) return 0;
+					const auto it = state.find("nextRunAtMs");
+					if (it != state.end() && it->is_number()) {
+						return it->get<std::int64_t>();
+					}
+					return 0;
+					};
+
 				const auto leftState = left.value("state", CronJson::object());
 				const auto rightState = right.value("state", CronJson::object());
-				const auto lv = leftState.value("nextRunAtMs", static_cast<std::int64_t>(0));
-				const auto rv = rightState.value("nextRunAtMs", static_cast<std::int64_t>(0));
+				const auto lv = getNextRunAtMs(leftState);
+				const auto rv = getNextRunAtMs(rightState);
 				return ascending ? lv < rv : lv > rv;
+				//----------------------------------------------------------------------------------
 			});
 
 		const std::size_t total = filtered.size();
