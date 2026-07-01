@@ -1,0 +1,16 @@
+{
+  "api_key": "sk-7f6cc7633bf54d4ab7369f882c32c5c1",
+  "models": {
+    "image_generation": "wan2.7-image-pro",
+    "card_image_generation": "wan2.7-image-pro",
+    "fallback_image_generation": "wanx2.1-t2i-plus"
+  },
+  "default_params": {
+    "image_size": "1024*1024",
+    "max_retries": 60,
+    "retry_interval": 5
+  },
+  "paths": {
+    "output_folder": "outputs"
+  }
+}
