@@ -132,7 +132,7 @@ void CCronTasksDialog::PopulateList()
 		m_listTasks.SetItemText(itemIndex, 1, schedule.empty() ? _T("-") : schedule.c_str());
 		m_listTasks.SetItemText(itemIndex, 2, last.empty() ? _T("-") : last.c_str());
 		m_listTasks.SetItemData(itemIndex, static_cast<DWORD_PTR>(row));
-		m_listTasks.SetCheck(itemIndex, TRUE);
+		m_listTasks.SetCheck(itemIndex, FALSE);
 	}
 
 	RefreshTaskDisplay();
@@ -297,6 +297,7 @@ void CCronTasksDialog::OnDeleteSelected()
 
 	LoadTasks();
 	PopulateList();
+	OnDeselectAll();
 }
 
 void CCronTasksDialog::OnDeselectAll()
