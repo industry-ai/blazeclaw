@@ -1,0 +1,344 @@
+/* ================================================================
+   english-sentence-card/ai-card.css
+   Template: Sticky note card with ribbon + English sentence
+   Interactive: click to speak English sentence, show Chinese translation
+   ================================================================ */
+
+/* ── Component: host ── */
+:host {
+  display: block;
+  max-width: 420px;
+  margin: 0 auto;
+  font-family: "Patrick Hand", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", cursive, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Sticky Note Card ── */
+.sentence-card {
+  background:
+    linear-gradient(#d0d0d0 1px, transparent 1px),
+    #fffef9;
+  background-size: 100% 20px;
+  border-radius: 10px;
+  border: 1px solid #e5e0d5;
+  padding: 10px 18px 16px 18px;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Ribbon badge ── */
+.sentence-card .sentence-ribbon {
+  position: absolute;
+  top: -10px;
+  left: -5px;
+  background: var(--c-brand, #2563eb);
+  color: white;
+  padding: 4px 15px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 18px;
+  transform: rotate(-2deg);
+  z-index: 10;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Card body ── */
+.sentence-card .sentence-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 18px;
+}
+
+/* ── Sentence text area ── */
+.sentence-card .sentence-text-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* ── English sentence ── */
+.sentence-card .sentence-en {
+  font-family: inherit;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.6;
+  cursor: pointer;
+  user-select: none;
+  color: #2c3e50;
+  text-shadow: 1px 1px 0 rgba(255,255,255,.8), 2px 2px 0 rgba(0,0,0,.06);
+  transition: transform 0.15s;
+  word-break: break-word;
+}
+
+.sentence-card .sentence-en:active {
+  transform: scale(0.97);
+}
+
+/* ── Chinese translation (hidden until click) ── */
+.sentence-card .sentence-zh {
+  font-family: "Patrick Hand", "STSong", "SimSun", "Noto Serif SC", "Songti SC", serif;
+  font-size: 17px;
+  color: var(--c-brand, #2563eb);
+  font-weight: 400;
+  line-height: 1.5;
+  min-height: 1.5em;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+
+.sentence-card .sentence-zh.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Button ── */
+.sentence-card .actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.sentence-card .btn {
+  display: inline-block;
+  padding: 8px 28px;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sentence-card .btn.primary {
+  background: var(--c-brand, #2563eb);
+  color: #fff;
+}
+
+.sentence-card .btn.primary:active {
+  opacity: 0.8;
+}
+
+/* ── Shadow (跟读) button ── */
+.sentence-card .btn.shadow {
+  background: transparent;
+  color: var(--c-brand, #2563eb);
+  border: 2px solid var(--c-brand, #2563eb);
+  padding: 6px 26px;
+}
+
+.sentence-card .btn.shadow:active {
+  background: var(--c-soft, #dbeafe);
+  opacity: 1;
+}
+
+.sentence-card .btn.shadow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Shadow feedback ── */
+.sentence-card .shadow-feedback {
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 28px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  margin-top: 6px;
+}
+
+.sentence-card .shadow-feedback.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sentence-card .shadow-feedback.listening {
+  color: var(--c-brand, #2563eb);
+  animation: shadowPulse 1.2s ease-in-out infinite;
+}
+
+.sentence-card .shadow-feedback.correct {
+  color: #16a34a;
+}
+
+.sentence-card .shadow-feedback.incorrect {
+  color: #dc2626;
+}
+
+.sentence-card .shadow-feedback.timeout {
+  color: #d97706;
+}
+
+/* ── Playback button (inside feedback) ── */
+.sentence-card .btn-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: rgba(37, 99, 235, 0.10);
+  color: #2563eb;
+  vertical-align: middle;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+@media (hover: hover) {
+  .sentence-card .btn-play:hover {
+    background: rgba(37, 99, 235, 0.18);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+    transform: translateY(-1px);
+  }
+}
+
+.sentence-card .btn-play:active {
+  transform: scale(0.96);
+  background: rgba(37, 99, 235, 0.24);
+}
+
+/* ── AI Rating display ── */
+.sentence-card .shadow-feedback.ai-rating-wrapper {
+  pointer-events: auto; text-align: left; font-weight: normal; color: inherit; animation: none;
+}
+.sentence-card .ai-rating {
+  background: #fafaf5; border: 1px solid #e8e4d8; border-radius: 12px;
+  padding: 12px 14px; margin-top: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.sentence-card .rating-overall {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e8e4d8;
+}
+.sentence-card .overall-score { font-size: 42px; font-weight: 700; color: var(--c-brand, #2563eb); line-height: 1; }
+.sentence-card .overall-meta { display: flex; flex-direction: column; gap: 2px; }
+.sentence-card .overall-label { font-size: 13px; color: #777; font-weight: 500; }
+.sentence-card .overall-stars { font-size: 16px; letter-spacing: 1px; }
+.sentence-card .rating-dim { margin-bottom: 6px; }
+.sentence-card .dim-head { display: flex; justify-content: space-between; align-items: center; }
+.sentence-card .dim-label { font-size: 13px; color: #555; font-weight: 600; }
+.sentence-card .dim-score { font-size: 16px; font-weight: 700; color: var(--c-brand, #2563eb); }
+.sentence-card .dim-bar { height: 5px; background: var(--c-soft, #dbeafe); border-radius: 3px; margin: 3px 0; overflow: hidden; }
+.sentence-card .dim-bar-fill { height: 100%; background: linear-gradient(90deg, var(--c-grad-end, #60a5fa), var(--c-brand, #2563eb)); border-radius: 3px; transition: width 0.6s ease; }
+.sentence-card .dim-comment { font-size: 12px; color: #888; display: block; line-height: 1.4; }
+.sentence-card .feedback-text { font-size: 14px; color: #444; line-height: 1.6; margin: 10px 0 0; font-weight: 500; padding-top: 8px; border-top: 1px solid #e8e4d8; }
+.sentence-card .rating-suggestions { margin-top: 8px; background: var(--c-light, #eff6ff); border-radius: 8px; padding: 8px 10px; }
+.sentence-card .suggestion-label { font-size: 12px; font-weight: 700; color: var(--c-brand, #2563eb); display: block; margin-bottom: 2px; }
+.sentence-card .suggestion-text { font-size: 13px; color: #555; line-height: 1.5; margin: 0; }
+.sentence-card .rating-actions { display: flex; justify-content: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e8e4d8; }
+.sentence-card .rating-actions .btn-play { margin-left: 0; vertical-align: baseline; }
+
+/* ── Pulse animation ── */
+@keyframes shadowPulse {
+  0%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+  50% { opacity: 0.5; transform: translateY(0) scale(1.08); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Responsive breakpoints
+   ══════════════════════════════════════════════════════════════ */
+
+/* Tablet 480px+ */
+@media (min-width: 480px) {
+  :host { max-width: 460px; }
+  .sentence-card { border-radius: 12px; padding: 12px 22px 20px 22px; }
+
+  .sentence-card .sentence-ribbon { font-size: 20px; padding: 5px 18px; top: -11px; }
+  .sentence-card .sentence-body { margin-top: 20px; }
+
+  .sentence-card .sentence-en { font-size: 30px; }
+  .sentence-card .sentence-zh { font-size: 18px; }
+  .sentence-card .btn { padding: 9px 32px; font-size: 16px; }
+  .sentence-card .btn.shadow { padding: 7px 28px; font-size: 16px; border-width: 2px; }
+  .sentence-card .shadow-feedback { font-size: 16px; }
+  .sentence-card .btn-play { font-size: 14px; padding: 5px 16px; }
+  .sentence-card .actions { gap: 12px; }
+}
+
+/* Large screen 768px+ */
+@media (min-width: 768px) {
+  :host { max-width: 500px; }
+  .sentence-card { border-radius: 14px; padding: 14px 26px 24px 26px; }
+
+  .sentence-card .sentence-ribbon { font-size: 22px; padding: 6px 22px; top: -12px; }
+  .sentence-card .sentence-body { margin-top: 22px; }
+
+  .sentence-card .sentence-en { font-size: 34px; }
+  .sentence-card .sentence-zh { font-size: 20px; }
+  .sentence-card .btn { padding: 10px 36px; font-size: 17px; }
+  .sentence-card .btn.shadow { padding: 8px 30px; font-size: 17px; }
+  .sentence-card .shadow-feedback { font-size: 17px; }
+  .sentence-card .btn-play { font-size: 14px; padding: 6px 18px; }
+  .sentence-card .actions { gap: 14px; }
+}
+
+/* Desktop 1024px+ */
+@media (min-width: 1024px) {
+  :host { max-width: 540px; }
+  .sentence-card { border-radius: 16px; padding: 16px 32px 28px 32px; }
+
+  .sentence-card .sentence-ribbon { font-size: 24px; padding: 7px 26px; top: -13px; left: -6px; }
+  .sentence-card .sentence-body { margin-top: 24px; }
+
+  .sentence-card .sentence-en { font-size: 38px; }
+  .sentence-card .sentence-zh { font-size: 22px; }
+  .sentence-card .btn { padding: 11px 40px; font-size: 18px; }
+  .sentence-card .btn.shadow { padding: 9px 34px; font-size: 18px; }
+  .sentence-card .shadow-feedback { font-size: 18px; }
+  .sentence-card .btn-play { font-size: 15px; padding: 6px 20px; }
+  .sentence-card .actions { gap: 16px; }
+}
+
+/* TV 1440px+ */
+@media (min-width: 1440px) {
+  :host { max-width: 600px; }
+  .sentence-card { border-radius: 18px; padding: 18px 36px 32px 36px; }
+
+  .sentence-card .sentence-ribbon { font-size: 28px; padding: 8px 30px; top: -15px; left: -8px; }
+  .sentence-card .sentence-body { margin-top: 28px; }
+
+  .sentence-card .sentence-en { font-size: 42px; }
+  .sentence-card .sentence-zh { font-size: 24px; }
+  .sentence-card .btn { padding: 13px 48px; font-size: 20px; }
+  .sentence-card .btn.shadow { padding: 10px 40px; font-size: 20px; }
+  .sentence-card .shadow-feedback { font-size: 19px; }
+  .sentence-card .btn-play { font-size: 16px; padding: 7px 22px; }
+  .sentence-card .actions { gap: 18px; }
+}
+
+/* ── Page-level: standalone index.html only (ignored inside Shadow DOM) ── */
+body {
+  padding-top: 20px;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}

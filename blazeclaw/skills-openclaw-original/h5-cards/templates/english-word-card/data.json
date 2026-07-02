@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "card_type": "english_word",
+  "title": "ABC · 字母启蒙",
+  "subtitle": "apple",
+  "description": "苹果",
+  "button_text": "单词发音",
+  "target_url": "https://works.blazegraph.site/works/e02656c2-d563-4ca2-8406-33031d109b48/2-1-6-4-1779693877148/images/img16.png",
+  "theme": "abc",
+  "layout": {
+    "variant": "english_word",
+    "icon": "abc"
+  }
+}

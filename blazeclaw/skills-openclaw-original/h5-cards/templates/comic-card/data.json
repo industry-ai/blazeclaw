@@ -1,0 +1,112 @@
+[
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 1 Pets",
+    "subtitle": "Meet My Little Friends",
+    "description": "Watch the video and learn how to introduce your pets. Say hello to Yaya, Maomao, Dora, Snowball and Orange!",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit1_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit1_panel1.png", "texts": ["It's Yaya. It's my rabbit."] },
+      { "image": "../assets/image/unit1_panel2.png", "texts": ["It's Maomao. It's my cat."] },
+      { "image": "../assets/image/unit1_panel3.png", "texts": ["It's Dora. It's my bird."] },
+      { "image": "../assets/image/unit1_panel4.png", "texts": ["It's Snowball. It's my dog."] },
+      { "image": "../assets/image/unit1_panel5.png", "texts": ["And it's Orange. It's my fish!"] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  },
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 2 Animals",
+    "subtitle": "A Day at the Zoo",
+    "description": "Watch the video and explore the zoo. Learn to name wild animals and describe them with simple sentences!",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit2_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit2_panel1.png", "texts": ["It's the zoo!"] },
+      { "image": "../assets/image/unit2_panel2.png", "texts": ["It's a tiger."] },
+      { "image": "../assets/image/unit2_panel3.png", "texts": ["They're lions."] },
+      { "image": "../assets/image/unit2_panel4.png", "texts": ["Look at the bears. They're big."] },
+      { "image": "../assets/image/unit2_panel5.png", "texts": ["They're monkeys."] },
+      { "image": "../assets/image/unit2_panel6.png", "texts": ["They're cute."] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  },
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 3 Face",
+    "subtitle": "We Are Twins!",
+    "description": "Watch the video first, then flip through the comic story. Practice describing facial features with Meimei and Feifei!",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit3_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit3_panel1.png", "texts": ["Hi, I'm Meimei.", "I'm Feifei.", "We are twins."] },
+      { "image": "../assets/image/unit3_panel2.png", "texts": ["I have big eyes.", "Me too."] },
+      { "image": "../assets/image/unit3_panel3.png", "texts": ["I have a small nose.", "Me too."] },
+      { "image": "../assets/image/unit3_panel4.png", "texts": ["I have a small mouth.", "Me too."] },
+      { "image": "../assets/image/unit3_panel5.png", "texts": ["We look the same.", "I know!"] },
+      { "image": "../assets/image/unit3_panel6.png", "texts": ["Now I have long hair.", "I have short hair.", "We are different now."] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  },
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 4 Body",
+    "subtitle": "My Robot Monster",
+    "description": "Watch the video and learn body parts with a funny robot story. Can you spot the monster?",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit4_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit4_panel1.png", "texts": ["Look at my robot! It has a big head and two big feet!", "Cool! And it has long arms and long legs!"] },
+      { "image": "../assets/image/unit4_panel2.png", "texts": ["Oh! No! Look!"] },
+      { "image": "../assets/image/unit4_panel3.png", "texts": ["It has two heads and three arms!", "It's a monster!"] },
+      { "image": "../assets/image/unit4_panel4.png", "texts": ["Ha ha! It's Aunt Lucy and her cat!"] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  },
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 5 My Home",
+    "subtitle": "Tidy Up Time",
+    "description": "Watch the video and learn words for rooms and furniture. Help Tiantian and her friend clean up the home!",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit5_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit5_panel1.png", "texts": ["Tiantian, come to my home. Let's play!"] },
+      { "image": "../assets/image/unit5_panel2.png", "texts": ["Oh, so many things!", "Here's the sofa. Please sit down."] },
+      { "image": "../assets/image/unit5_panel3.png", "texts": ["Come to my room. It's my bed.", "Oh, so many things!"] },
+      { "image": "../assets/image/unit5_panel4.png", "texts": ["It's my table.", "Oh, so many things!"] },
+      { "image": "../assets/image/unit5_panel5.png", "texts": [] },
+      { "image": "../assets/image/unit5_panel6.png", "texts": ["OK!", "It's clean and tidy now. Let's play."] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  },
+  {
+    "schema_version": "1.0",
+    "card_type": "comic_strip",
+    "title": "PEP外研版 · Unit 6 Time",
+    "subtitle": "Happy Birthday, Dad!",
+    "description": "Watch the video and learn to talk about daily routines and time. Join Toby as he prepares a birthday surprise!",
+    "button_text": "查看完整内容",
+    "video_url": "../assets/video/unit6_activity1.mp4",
+    "theme": "comic",
+    "frames": [
+      { "image": "../assets/image/unit6_panel1.png", "texts": ["Happy birthday, Dad!", "Thank you, Toby!"] },
+      { "image": "../assets/image/unit6_panel2.png", "texts": ["Let's have lunch together!", "OK!"] },
+      { "image": "../assets/image/unit6_panel3.png", "texts": ["Dad is not home yet."] },
+      { "image": "../assets/image/unit6_panel4.png", "texts": ["Dad is busy.", "I know!"] },
+      { "image": "../assets/image/unit6_panel5.png", "texts": ["Thank you!"] }
+    ],
+    "layout": { "variant": "comic_strip", "icon": "comic" }
+  }
+]

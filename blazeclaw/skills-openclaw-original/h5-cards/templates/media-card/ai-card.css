@@ -1,0 +1,175 @@
+/* media-card/ai-card.css — 媒体预览卡片样式（5端响应式） */
+
+:host {
+  display: block;
+  max-width: 380px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --c-brand: #4f46e5;
+  --c-light: #eef2ff;
+  --c-soft: #e0e7ff;
+  --c-grad-start: #4f46e5;
+  --c-grad-end: #818cf8;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-area {
+  background: #1e1b4b;
+}
+.media-area .media-preview {
+  height: 150px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.media-area video {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+.media-play {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.9);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  color: var(--c-brand);
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.media-badge {
+  position: absolute; top: 10px; left: 10px;
+  font-size: 10px; font-weight: 600;
+  padding: 4px 9px; border-radius: 4px;
+  background: rgba(0,0,0,.5); color: #fff;
+  backdrop-filter: blur(4px);
+}
+.media-dur {
+  position: absolute; bottom: 8px; right: 8px;
+  font-size: 10px; font-weight: 600;
+  padding: 3px 7px; border-radius: 4px;
+  background: rgba(0,0,0,.65); color: #fff;
+}
+
+.card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hdr { display: flex; align-items: flex-start; gap: 10px; }
+.icon {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+  background: var(--c-light);
+  color: var(--c-brand);
+}
+.hinfo { flex: 1; min-width: 0; }
+.title { font-size: 16px; font-weight: 600; color: #111827; line-height: 1.35; }
+
+.desc { font-size: 13px; color: #374151; line-height: 1.6; }
+
+.actions { display: flex; gap: 8px; }
+.btn {
+  flex: 1;
+  text-align: center;
+  padding: 10px 0; border-radius: 8px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; border: none;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.btn:active { opacity: .7; }
+.btn.primary { background: var(--c-brand); color: #fff; }
+
+/* ── 平板端 480px+ ── */
+@media (min-width: 480px) {
+  :host { max-width: 420px; }
+  .card { border-radius: 18px; }
+  .media-area .media-preview { height: 170px; }
+  .media-area video { max-height: 260px; }
+  .media-play { width: 56px; height: 56px; font-size: 22px; }
+  .media-badge { top: 12px; left: 12px; font-size: 11px; }
+  .media-dur { bottom: 10px; right: 10px; font-size: 11px; }
+  .card-body { padding: 18px; gap: 12px; }
+  .hdr { gap: 12px; }
+  .icon { width: 46px; height: 46px; border-radius: 11px; font-size: 22px; }
+  .title { font-size: 17px; }
+  .desc { font-size: 14px; }
+  .btn { font-size: 15px; padding: 11px 0; }
+}
+
+/* ── 大屏端 768px+ ── */
+@media (min-width: 768px) {
+  :host { max-width: 460px; }
+  .card { border-radius: 20px; }
+  .media-area .media-preview { height: 190px; }
+  .media-area video { max-height: 280px; }
+  .media-play { width: 60px; height: 60px; font-size: 24px; }
+  .media-badge { top: 14px; left: 14px; font-size: 11px; padding: 5px 10px; }
+  .media-dur { bottom: 12px; right: 12px; font-size: 11px; }
+  .card-body { padding: 20px; gap: 14px; }
+  .hdr { gap: 14px; }
+  .icon { width: 50px; height: 50px; border-radius: 12px; font-size: 24px; }
+  .title { font-size: 18px; }
+  .desc { font-size: 14px; }
+  .btn { font-size: 16px; padding: 12px 0; border-radius: 10px; }
+}
+
+/* ── 电脑端 1024px+ ── */
+@media (min-width: 1024px) {
+  :host { max-width: 500px; }
+  .card { border-radius: 22px; }
+  .media-area .media-preview { height: 210px; }
+  .media-area video { max-height: 300px; }
+  .media-play { width: 66px; height: 66px; font-size: 26px; }
+  .media-badge { top: 16px; left: 16px; font-size: 12px; }
+  .media-dur { bottom: 14px; right: 14px; font-size: 12px; }
+  .card-body { padding: 24px; gap: 16px; }
+  .hdr { gap: 16px; }
+  .icon { width: 54px; height: 54px; border-radius: 13px; font-size: 26px; }
+  .title { font-size: 19px; }
+  .desc { font-size: 15px; }
+  .btn { font-size: 16px; padding: 13px 0; }
+}
+
+/* ── 电视投屏端 1440px+ ── */
+@media (min-width: 1440px) {
+  :host { max-width: 560px; }
+  .card { border-radius: 24px; }
+  .media-area .media-preview { height: 240px; }
+  .media-area video { max-height: 340px; }
+  .media-play { width: 72px; height: 72px; font-size: 28px; }
+  .media-badge { top: 18px; left: 18px; font-size: 13px; padding: 6px 12px; }
+  .media-dur { bottom: 16px; right: 16px; font-size: 13px; padding: 4px 10px; }
+  .card-body { padding: 28px; gap: 18px; }
+  .hdr { gap: 18px; }
+  .icon { width: 60px; height: 60px; border-radius: 14px; font-size: 28px; }
+  .title { font-size: 21px; }
+  .desc { font-size: 16px; line-height: 1.7; }
+  .btn { font-size: 18px; padding: 14px 0; border-radius: 10px; }
+}
+
+/* ── Page-level layout (loaded via <link> in <head>) ── */
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:20px}
+h1{font-size:18px;font-weight:700;color:#111827}
+.sub{font-size:12px;color:#9ca3af;text-align:center}
+#root{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:400px}
+.wrap{display:flex;flex-direction:column;gap:6px;width:100%}
+.label{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;padding-left:4px}
+
+@media(min-width:480px){body{padding:32px 24px}#root{max-width:440px}}
+@media(min-width:768px){h1{font-size:22px}.sub{font-size:13px}#root{max-width:720px;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}.wrap{gap:4px}}
+@media(min-width:1024px){body{padding:40px 32px}#root{max-width:880px;gap:24px}}
+@media(min-width:1440px){body{padding:48px 40px;gap:28px}h1{font-size:26px}.sub{font-size:14px}#root{max-width:1200px;grid-template-columns:repeat(3,1fr);gap:28px}}

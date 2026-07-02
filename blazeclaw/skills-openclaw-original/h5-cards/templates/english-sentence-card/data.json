@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "card_type": "english_sentence",
+  "title": "每日一句",
+  "subtitle": "The best preparation for tomorrow is doing your best today.",
+  "description": "为明天做的最好准备，就是今天做到最好。",
+  "button_text": "句子发音",
+  "theme": "sentence",
+  "layout": {
+    "variant": "english_sentence",
+    "icon": "sentence"
+  }
+}

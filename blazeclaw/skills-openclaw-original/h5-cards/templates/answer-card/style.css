@@ -1,0 +1,442 @@
+/* ========================================
+   炎图 AI 知识问答 — 问答卡片样式
+   ======================================== */
+
+:root {
+  --bg: #f5f6fa;
+  --card-bg: #ffffff;
+  --text: #1a1a2e;
+  --text-secondary: #5a5d7a;
+  --text-muted: #9a9cb8;
+  --border: #e8eaf0;
+  --border-light: #f2f3f8;
+  --primary: #5b5fe3;
+  --primary-soft: #eeeffd;
+  --accent: #8b5cf6;
+  --accent-soft: #f3f0ff;
+  --danger: #e85d75;
+  --danger-soft: #fff0f3;
+  --success: #3ecf8e;
+  --warning: #f59e0b;
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --font: 'Segoe UI', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --shadow-card: 0 0 0 1px rgba(0,0,0,.03), 0 2px 4px rgba(0,0,0,.02), 0 12px 40px rgba(0,0,0,.08);
+  --shadow-input: 0 0 0 1px rgba(0,0,0,.04), 0 2px 4px rgba(0,0,0,.02), 0 8px 24px rgba(0,0,0,.06);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(91,95,227,.06), transparent),
+    radial-gradient(ellipse 60% 40% at 85% 20%, rgba(139,92,246,.04), transparent);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 24px;
+  padding-top: 48px;
+}
+
+/* ========================================
+   Card
+   ======================================== */
+.qa-card {
+  width: 100%;
+  max-width: 600px;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: box-shadow 0.4s ease;
+}
+
+/* 顶部渐变条 */
+.qa-card::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, #5b5fe3, #8b5cf6, #c084fc, #8b5cf6, #5b5fe3);
+  background-size: 200% 100%;
+  animation: shimmer 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* ========================================
+   Body
+   ======================================== */
+.qa-card-body {
+  padding: 32px 28px 28px;
+  min-height: 100px;
+  max-height: 500px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.qa-card-body::-webkit-scrollbar {
+  width: 4px;
+}
+.qa-card-body::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+.qa-card-body::-webkit-scrollbar-thumb {
+  background: #d8dae5;
+  border-radius: 8px;
+}
+.qa-card-body::-webkit-scrollbar-thumb:hover {
+  background: #b8bad0;
+}
+
+/* ========================================
+   Idle 空闲
+   ======================================== */
+.qa-state {
+  text-align: center;
+  padding: 44px 24px;
+  animation: fadeInUp 0.5s ease both;
+}
+
+.qa-state .state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, var(--primary-soft) 0%, var(--accent-soft) 100%);
+  font-size: 2.4rem;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(91,95,227,.1);
+}
+
+.qa-state .state-text {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.qa-state .state-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ========================================
+   Answer
+   ======================================== */
+.qa-answer {
+  animation: fadeInUp 0.45s ease both;
+}
+
+/* 回答头 */
+.answer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.answer-header .answer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5b5fe3, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.answer-header .answer-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.answer-header .answer-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.answer-header .answer-badge {
+  font-size: 0.65rem;
+  color: var(--success);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 答案正文 */
+.qa-answer .answer-text {
+  font-size: 0.9rem;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  color: var(--text);
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #fafbfe, #f8f7ff);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  margin-bottom: 24px;
+  position: relative;
+}
+
+/* 正文左侧渐变竖线 */
+.qa-answer .answer-text::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #5b5fe3, #8b5cf6);
+}
+
+/* ========================================
+   Sources
+   ======================================== */
+.sources-block {
+  background: #fafbfd;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+
+.sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sources-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+}
+
+.sources-label .label-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.sources-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: #fff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.sources-files {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.source-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.source-file:hover {
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(91,95,227,.06);
+  transform: translateX(3px);
+}
+
+.source-file .file-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.source-file .file-icon-wrap.type-md    { background: #eef2ff; }
+.source-file .file-icon-wrap.type-docx  { background: #e0f2fe; }
+.source-file .file-icon-wrap.type-pptx  { background: #fef3c7; }
+.source-file .file-icon-wrap.type-pdf   { background: #fee2e2; }
+.source-file .file-icon-wrap.type-xlsx  { background: #dcfce7; }
+.source-file .file-icon-wrap.type-txt   { background: #f3f4f6; }
+.source-file .file-icon-wrap.type-other { background: #f3f4f6; }
+
+.source-file .file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.source-file .file-name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+}
+
+.source-file .file-category {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.source-file .file-type-tag {
+  font-size: 0.6rem;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.source-file .file-type-tag.tag-md    { background: #eef2ff; color: #4f46e5; }
+.source-file .file-type-tag.tag-docx  { background: #e0f2fe; color: #0369a1; }
+.source-file .file-type-tag.tag-pptx  { background: #fef3c7; color: #a16207; }
+.source-file .file-type-tag.tag-pdf   { background: #fee2e2; color: #b91c1c; }
+.source-file .file-type-tag.tag-xlsx  { background: #dcfce7; color: #15803d; }
+.source-file .file-type-tag.tag-txt   { background: #f3f4f6; color: #4b5563; }
+.source-file .file-type-tag.tag-other { background: #f3f4f6; color: #6b7280; }
+
+/* ========================================
+   Loading
+   ======================================== */
+.typing-dots {
+  display: flex;
+  gap: 6px;
+  padding: 48px 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.typing-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dotPulse 1.4s ease-in-out infinite both;
+}
+
+.typing-dots span:nth-child(1) { animation-delay: 0s; }
+.typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes dotPulse {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.25; }
+  40%           { transform: scale(1.1); opacity: 1; }
+}
+
+/* ========================================
+   Error
+   ======================================== */
+.qa-error {
+  text-align: center;
+  padding: 28px 20px;
+  animation: fadeInUp 0.45s ease both;
+  background: var(--danger-soft);
+  border-radius: var(--radius-md);
+  border: 1px solid #fdd;
+}
+
+.qa-error .err-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #fde8ec;
+  font-size: 1.5rem;
+  margin-bottom: 14px;
+}
+
+.qa-error .err-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--danger);
+  margin-bottom: 6px;
+}
+
+.qa-error .err-detail {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+/* ========================================
+   Animations
+   ======================================== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 480px) {
+  body {
+    padding: 12px;
+    padding-top: 24px;
+    gap: 12px;
+  }
+
+  .qa-card-body { padding: 22px 16px 20px; max-height: 400px; }
+
+  .qa-state .state-icon { width: 64px; height: 64px; font-size: 2rem; border-radius: 20px; }
+
+  .qa-answer .answer-text { padding: 14px 16px; font-size: 0.85rem; }
+  .qa-answer .answer-text::before { top: 10px; bottom: 10px; }
+
+  .sources-block { padding: 14px; }
+}
