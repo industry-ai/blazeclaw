@@ -1,0 +1,29 @@
+{
+  "api_key": "sk-7f6cc7633bf54d4ab7369f882c32c5c1",
+  "models": {
+    "video_generation": "happyhorse-1.0-t2v",
+    "video_generation_ref": "happyhorse-1.0-r2v"
+  },
+  "default_params": {
+    "video_duration": 3,
+    "video_resolution": "1080P"
+  },
+  "paths": {
+    "output_folder": "outputs"
+  },
+  "cos": {
+    "base_url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio",
+    "videos": {
+      "cat": 2,
+      "dog": 2,
+      "tiger": 3,
+      "rabbit": 2,
+      "cow": 2,
+      "elephant": 2,
+      "horse": 2,
+      "mouse": 3,
+      "bird": 1,
+      "monkey": 1
+    }
+  }
+}
