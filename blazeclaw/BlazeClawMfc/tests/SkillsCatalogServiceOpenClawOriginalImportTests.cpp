@@ -213,6 +213,29 @@ TEST_CASE("SkillsCatalogService imports family-tree style quoted trigger skill a
 			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
 			std::wstring(L"郭家的族谱")) !=
 		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
+	REQUIRE_FALSE(
+		std::any_of(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			[](const std::wstring& hint) {
+				const std::wstring lowered = [&hint]() {
+					std::wstring copy = hint;
+					std::transform(
+						copy.begin(),
+						copy.end(),
+						copy.begin(),
+						[](const wchar_t ch) {
+							return static_cast<wchar_t>(std::towlower(ch));
+						});
+					return copy;
+				}();
+				return lowered == L"type" ||
+					lowered == L"url" ||
+					lowered == L"title" ||
+					lowered == L"q" ||
+					lowered.find(L"https://") != std::wstring::npos ||
+					lowered.find(L"corp.blazegraph.site") != std::wstring::npos;
+			}));
 	REQUIRE(
 		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
 	REQUIRE(
