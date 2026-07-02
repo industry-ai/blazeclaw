@@ -258,6 +258,33 @@ namespace blazeclaw::core {
 		std::vector<std::wstring> ExtractTriggerHints(const std::wstring& body) {
 			std::set<std::wstring> unique;
 
+			auto registerCandidate = [&unique](const std::wstring& raw) {
+				std::wstring candidate = Trim(raw);
+				if (candidate.empty()) {
+					return;
+				}
+
+				while (!candidate.empty() &&
+					(candidate.front() == L'"' ||
+						candidate.front() == L'\'' ||
+						candidate.front() == L'“' ||
+						candidate.front() == L'‘')) {
+					candidate.erase(candidate.begin());
+				}
+				while (!candidate.empty() &&
+					(candidate.back() == L'"' ||
+						candidate.back() == L'\'' ||
+						candidate.back() == L'”' ||
+						candidate.back() == L'’')) {
+					candidate.pop_back();
+				}
+
+				candidate = Trim(candidate);
+				if (!candidate.empty() && candidate.size() <= 128) {
+					unique.insert(candidate);
+				}
+			};
+
 			std::size_t cursor = 0;
 			while (cursor < body.size()) {
 				const std::size_t left = body.find(L'“', cursor);
@@ -268,12 +295,29 @@ namespace blazeclaw::core {
 				if (right == std::wstring::npos) {
 					break;
 				}
-				const std::wstring quoted = Trim(body.substr(left + 1, right - left - 1));
-				if (!quoted.empty()) {
-					unique.insert(quoted);
-				}
+				registerCandidate(body.substr(left + 1, right - left - 1));
 				cursor = right + 1;
 			}
+
+			auto collectAsciiQuotedCandidates =
+				[&registerCandidate](const std::wstring& text, const wchar_t quoteChar) {
+					std::size_t localCursor = 0;
+					while (localCursor < text.size()) {
+						const std::size_t left = text.find(quoteChar, localCursor);
+						if (left == std::wstring::npos) {
+							break;
+						}
+						const std::size_t right = text.find(quoteChar, left + 1);
+						if (right == std::wstring::npos) {
+							break;
+						}
+
+						registerCandidate(text.substr(left + 1, right - left - 1));
+						localCursor = right + 1;
+					}
+				};
+			collectAsciiQuotedCandidates(body, L'"');
+			collectAsciiQuotedCandidates(body, L'\'');
 
 			std::size_t lineBegin = 0;
 			while (lineBegin < body.size()) {
@@ -284,12 +328,14 @@ namespace blazeclaw::core {
 				std::wstring line = Trim(body.substr(lineBegin, len));
 				if (line.size() > 2 && (line.rfind(L"- ", 0) == 0 || line.rfind(L"* ", 0) == 0)) {
 					line = Trim(line.substr(2));
-					if (!line.empty() && line.front() == L'“' && line.back() == L'”' && line.size() >= 2) {
-						line = Trim(line.substr(1, line.size() - 2));
-					}
-					if (!line.empty() && line.size() <= 128) {
-						unique.insert(line);
-					}
+					registerCandidate(line);
+				}
+
+				if (line.size() > 1 && line.front() == L'>') {
+					std::wstring quoted = Trim(line.substr(1));
+					registerCandidate(quoted);
+					collectAsciiQuotedCandidates(quoted, L'"');
+					collectAsciiQuotedCandidates(quoted, L'\'');
 				}
 
 				if (lineEnd == std::wstring::npos) {

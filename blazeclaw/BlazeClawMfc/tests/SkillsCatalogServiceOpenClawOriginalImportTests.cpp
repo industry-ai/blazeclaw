@@ -156,6 +156,88 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 	std::filesystem::remove_all(workspaceRoot);
 }
 
+TEST_CASE("SkillsCatalogService imports family-tree style quoted trigger skill as tool-enabled generated contract", "[skills][catalog][openclaw-original][fixture][family-tree]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("family_tree_fixture");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"family-tree";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: family-tree\n"
+		L"description: Family tree skill routing\n"
+		L"---\n"
+		L"# Family Tree\n"
+		L"\n"
+		L"> \"郭家的族谱\"\n"
+		L"> \"张三和李四是什么关系\"\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"type\":\"webview\",\"title\":\"族谱树\",\"url\":\"https://corp.blazegraph.site/family-tree/dist/index.html#/tree?text=郭家的族谱\"}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService service;
+	const auto snapshot = service.LoadCatalog(workspaceRoot, config);
+
+	const auto entryIt = std::find_if(
+		snapshot.entries.begin(),
+		snapshot.entries.end(),
+		[](const blazeclaw::core::SkillsCatalogEntry& entry) {
+			return entry.skillName == L"family-tree" &&
+				entry.sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal;
+		});
+	REQUIRE(entryIt != snapshot.entries.end());
+	REQUIRE(entryIt->validFrontmatter);
+	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalActivationState.value() ==
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract.has_value());
+	REQUIRE(
+		std::find(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			std::wstring(L"郭家的族谱")) !=
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->kind ==
+		L"webview");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->title ==
+		L"族谱树");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->url.find(
+			L"https://corp.blazegraph.site/family-tree/dist/index.html#/tree") ==
+		0);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(
+					L"tool-enabled via generated manifestless runtime contract") !=
+					std::wstring::npos;
+			}));
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
 TEST_CASE("SkillsCatalogService reports failed activation for malformed openclaw-original SKILL", "[skills][catalog][openclaw-original][failed]") {
 	ScopedOpenClawOriginalDirOverride envOverrideGuard(
 		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
