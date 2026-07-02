@@ -218,6 +218,98 @@ TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[s
 	std::filesystem::remove_all(workspaceRoot);
 }
 
+TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-fatal discovered entry", "[skills][catalog][openclaw-original][fixture][h5-ppt]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("h5_ppt_fixture");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"h5-ppt";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: h5-ppt\n"
+		L"description: Return fixed URL for h5-ppt intents.\n"
+		L"tags: h5-ppt\n"
+		L"---\n"
+		L"# Open h5-ppt\n"
+		L"\n"
+		L"Trigger scenarios:\n"
+		L"- luyan h5\n"
+		L"- open luyan h5\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"outputs\":[{\"type\":\"webview\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService service;
+	const auto snapshot = service.LoadCatalog(workspaceRoot, config);
+
+	const auto entryIt = std::find_if(
+		snapshot.entries.begin(),
+		snapshot.entries.end(),
+		[](const blazeclaw::core::SkillsCatalogEntry& entry) {
+			return entry.skillName == L"h5-ppt" &&
+				entry.sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal;
+		});
+	REQUIRE(entryIt != snapshot.entries.end());
+	REQUIRE(entryIt->validFrontmatter);
+	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalActivationState.value() ==
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::Imported);
+	REQUIRE(entryIt->metadata.has_value());
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->skillKey ==
+		L"h5-ppt");
+	REQUIRE_FALSE(
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.empty());
+	REQUIRE(
+		std::find(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			std::wstring(L"luyan h5")) !=
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->kind ==
+		L"webview");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->url ==
+		L"https://static.blazegraph.site/h5-ppt/index.html");
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract->complete);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(L"missing tool manifest") != std::wstring::npos;
+			}));
+	REQUIRE_FALSE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(L"malformed metadata") != std::wstring::npos;
+			}));
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
 TEST_CASE("SkillsCatalogService discovers configured sourceDir skill-creator-0.1.0", "[skills][catalog][openclaw-original][source-dir]") {
 	ScopedOpenClawOriginalDirOverride envOverrideGuard(
 		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");

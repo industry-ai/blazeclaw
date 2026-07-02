@@ -53,6 +53,21 @@ namespace blazeclaw::core {
 		bool userInvocable = true;
 	};
 
+	struct OpenClawOriginalExtractedOutputSpec {
+		std::wstring kind;
+		std::wstring title;
+		std::wstring url;
+		std::wstring jsonPayload;
+	};
+
+	struct OpenClawOriginalExtractedRuntimeContractSpec {
+		std::wstring skillKey;
+		std::vector<std::wstring> triggerHints;
+		std::optional<OpenClawOriginalExtractedOutputSpec> output;
+		bool complete = false;
+		std::vector<std::wstring> diagnostics;
+	};
+
 	struct SkillRunView {
 		std::wstring name;
 		std::wstring primaryEnv;
