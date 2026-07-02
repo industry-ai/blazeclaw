@@ -475,8 +475,17 @@ namespace blazeclaw::core {
 			}
 		}
 
-		if (result.hasToolManifest && appConfig.skills.openclawOriginal.autoImportTools) {
+		const bool hasGeneratedInvokableContract =
+			result.extractedRuntimeContract.has_value() &&
+			result.extractedRuntimeContract->complete;
+
+		if ((result.hasToolManifest || hasGeneratedInvokableContract) &&
+			appConfig.skills.openclawOriginal.autoImportTools) {
 			result.activationState = OpenClawOriginalImportActivationState::ToolEnabled;
+			if (!result.hasToolManifest && hasGeneratedInvokableContract) {
+				result.diagnostics.push_back(
+					L"tool-enabled via generated manifestless runtime contract");
+			}
 		}
 
 		if (appConfig.skills.openclawOriginal.promoteToManaged) {

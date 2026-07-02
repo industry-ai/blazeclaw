@@ -368,3 +368,56 @@ TEST_CASE("GatewayHost skill directories resolver stays parity-stable across rep
 	REQUIRE(sortedRepoResolved == sortedProjectResolved);
 }
 
+TEST_CASE("GatewayHost registers generated openclaw-original catalog tool through manifest-first sync", "[gateway][tools][skills][openclaw-original][generated]") {
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const auto skillsRoot = MakeTempDir("openclaw_generated_host_registration");
+	const auto skillDir = skillsRoot / "h5-ppt";
+	std::filesystem::create_directories(skillDir);
+
+	host.SetPreferredSkillRootDirectories({ skillsRoot.string() });
+
+	blazeclaw::gateway::SkillsCatalogGatewayState state;
+	state.entries.push_back(blazeclaw::gateway::SkillsCatalogGatewayEntry{
+		.name = "h5-ppt",
+		.skillKey = "h5-ppt",
+		.commandName = "h5-ppt",
+		.commandToolName = "h5_ppt.openclaw.generated",
+		.source = "openclaw-original",
+		.browserGroup = "enabled",
+		.browserSourceLabel = "openclaw-original",
+	});
+	host.SetSkillsCatalogState(state);
+
+	const auto toolsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "openclaw-generated-tools-list",
+			.method = "gateway.tools.list",
+			.paramsJson = std::string("{\"category\":\"skill\"}"),
+		});
+	REQUIRE(toolsResponse.ok);
+	REQUIRE(toolsResponse.payloadJson.has_value());
+	REQUIRE(toolsResponse.payloadJson->find("\"h5_ppt.openclaw.generated\"") != std::string::npos);
+	REQUIRE(toolsResponse.payloadJson->find("\"source\":\"skills.tool-manifest\"") != std::string::npos);
+
+	REQUIRE(std::filesystem::exists(skillDir / "tool-manifest.json"));
+
+	const auto diagnosticsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "openclaw-generated-skills-diagnostics",
+			.method = "gateway.skills.diagnostics",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(diagnosticsResponse.ok);
+	REQUIRE(diagnosticsResponse.payloadJson.has_value());
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"projectedToolDispatchCount\":1") != std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"runtimeRegisteredSkillToolCount\":") != std::string::npos);
+
+	host.Stop();
+
+	std::error_code ec;
+	std::filesystem::remove_all(skillsRoot, ec);
+}
+

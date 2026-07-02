@@ -144,10 +144,72 @@ TEST_CASE("Skills gateway projection marks imported openclaw-original skills for
 		nullptr);
 
 	REQUIRE(gatewayEntry.browserGroup == "imported");
+	REQUIRE(gatewayEntry.commandToolName.empty());
 	REQUIRE(gatewayEntry.browserDisplayName.find("missing tool-manifest") == std::string::npos);
 	REQUIRE(gatewayEntry.browserSourceLabel == "openclaw-original");
 	REQUIRE(gatewayEntry.browserVariantLabel == "skill-creator-0.1.0");
 	REQUIRE(gatewayEntry.browserDisplayName.find("skill-creator-0.1.0") != std::string::npos);
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
+TEST_CASE("Skills gateway projection generates deterministic command tool for manifestless openclaw-original runtime contract", "[skills][browser][projection][openclaw-original][generated-tool]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("openclaw_generated_tool_projection");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"h5-ppt";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: h5-ppt\n"
+		L"description: Return fixed URL for h5-ppt intents.\n"
+		L"tags: h5-ppt\n"
+		L"---\n"
+		L"# Open h5-ppt\n"
+		L"\n"
+		L"Trigger scenarios:\n"
+		L"- luyan h5\n"
+		L"- open luyan h5\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"outputs\":[{\"type\":\"webview\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService catalogService;
+	const auto catalog = catalogService.LoadCatalog(workspaceRoot, config);
+	const auto* catalogEntry = FindCatalogEntry(catalog, L"h5-ppt");
+	REQUIRE(catalogEntry != nullptr);
+	REQUIRE(catalogEntry->sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal);
+
+	blazeclaw::core::SkillsEligibilityService eligibilityService;
+	const auto eligibility = eligibilityService.Evaluate(catalog, config);
+	const auto* eligibilityEntry = FindEligibility(eligibility, L"h5-ppt");
+	REQUIRE(eligibilityEntry != nullptr);
+
+	blazeclaw::core::SkillsGatewayProjectionService projectionService;
+	const auto gatewayEntry = projectionService.BuildGatewaySkillEntry(
+		*catalogEntry,
+		eligibilityEntry,
+		nullptr,
+		nullptr);
+
+	REQUIRE(gatewayEntry.browserGroup == "enabled");
+	REQUIRE(gatewayEntry.commandToolName == "h5_ppt.openclaw.generated");
+	REQUIRE(gatewayEntry.commandResultSchema == "openclaw.generated.runtime-contract");
 
 	std::filesystem::remove_all(workspaceRoot);
 }

@@ -269,7 +269,7 @@ TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-f
 	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
 	REQUIRE(
 		entryIt->openClawOriginalActivationState.value() ==
-		blazeclaw::core::SkillsOpenClawOriginalActivationState::Imported);
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
 	REQUIRE(entryIt->metadata.has_value());
 	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract.has_value());
 	REQUIRE(
@@ -292,6 +292,15 @@ TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-f
 		entryIt->openClawOriginalExtractedRuntimeContract->output->url ==
 		L"https://static.blazegraph.site/h5-ppt/index.html");
 	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract->complete);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(
+					L"tool-enabled via generated manifestless runtime contract") !=
+					std::wstring::npos;
+			}));
 	REQUIRE(
 		std::any_of(
 			entryIt->openClawOriginalImportDiagnostics.begin(),
