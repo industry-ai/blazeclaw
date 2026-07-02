@@ -266,6 +266,29 @@ namespace blazeclaw::core {
 					if (!context.commandToolName.empty()) {
 						builder << L"; tool=" << context.commandToolName;
 					}
+					if (!context.openClawOriginalTriggerHints.empty()) {
+						builder << L"; triggerHints=";
+						for (std::size_t index = 0;
+							index < context.openClawOriginalTriggerHints.size();
+							++index) {
+							if (index > 0) {
+								builder << L"|";
+							}
+							builder << context.openClawOriginalTriggerHints[index];
+						}
+					}
+					if (!context.openClawOriginalOutputKind.empty()) {
+						builder << L"; outputKind="
+							<< context.openClawOriginalOutputKind;
+					}
+					if (!context.openClawOriginalOutputTitle.empty()) {
+						builder << L"; outputTitle="
+							<< context.openClawOriginalOutputTitle;
+					}
+					if (!context.openClawOriginalOutputUrl.empty()) {
+						builder << L"; outputUrl="
+							<< context.openClawOriginalOutputUrl;
+					}
 					builder << L"\n";
 				}
 			}
@@ -315,6 +338,23 @@ namespace blazeclaw::core {
 					entry.frontmatter,
 					{ L"command-tool", L"command_tool" }),
 				80);
+
+			if (entry.openClawOriginalExtractedRuntimeContract.has_value()) {
+				const auto& extracted =
+					entry.openClawOriginalExtractedRuntimeContract.value();
+				context.openClawOriginalTriggerHints = extracted.triggerHints;
+				if (extracted.output.has_value()) {
+					context.openClawOriginalOutputKind = TruncateField(
+						extracted.output->kind,
+						60);
+					context.openClawOriginalOutputTitle = TruncateField(
+						extracted.output->title,
+						80);
+					context.openClawOriginalOutputUrl = TruncateField(
+						extracted.output->url,
+						120);
+				}
+			}
 			return context;
 		}
 

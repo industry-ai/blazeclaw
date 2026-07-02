@@ -474,7 +474,15 @@ std::string SerializeSkillCatalogEntry(
 		EscapeJsonLocal(entry.openClawOriginalOrigin) +
 		"\",\"openclawOriginalImportDiagnostics\":" +
 		SerializeStringArrayLocal(entry.openClawOriginalImportDiagnostics) +
-		",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
+		",\"openclawOriginalTriggerHints\":" +
+		SerializeStringArrayLocal(entry.openClawOriginalTriggerHints) +
+		",\"openclawOriginalOutputKind\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputKind) +
+		"\",\"openclawOriginalOutputTitle\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputTitle) +
+		"\",\"openclawOriginalOutputUrl\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputUrl) +
+		"\",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
 		std::string(entry.openClawOriginalMetadataConvertedFromClawdbot
 			? "true"
 			: "false") +

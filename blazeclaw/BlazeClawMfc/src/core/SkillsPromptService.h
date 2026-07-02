@@ -16,6 +16,10 @@ namespace blazeclaw::core {
 			std::wstring preconditions;
 			std::wstring sideEffects;
 			std::wstring commandToolName;
+			std::vector<std::wstring> openClawOriginalTriggerHints;
+			std::wstring openClawOriginalOutputKind;
+			std::wstring openClawOriginalOutputTitle;
+			std::wstring openClawOriginalOutputUrl;
 		};
 
 		std::wstring prompt;

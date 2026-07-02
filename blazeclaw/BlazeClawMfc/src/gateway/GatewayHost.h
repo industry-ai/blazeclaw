@@ -96,6 +96,10 @@ namespace blazeclaw::gateway {
 		std::string openClawOriginalActivationState;
 		std::string openClawOriginalOrigin;
 		std::vector<std::string> openClawOriginalImportDiagnostics;
+		std::vector<std::string> openClawOriginalTriggerHints;
+		std::string openClawOriginalOutputKind;
+		std::string openClawOriginalOutputTitle;
+		std::string openClawOriginalOutputUrl;
 		bool openClawOriginalMetadataConvertedFromClawdbot = false;
 		bool openClawOriginalMissingToolManifest = false;
 		std::string browserGroup;

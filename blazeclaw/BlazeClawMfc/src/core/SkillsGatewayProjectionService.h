@@ -245,6 +245,20 @@ namespace blazeclaw::core {
 				ToNarrow(entry.openClawOriginalOrigin);
 			gatewayEntry.openClawOriginalImportDiagnostics =
 				UniqueNarrowValues(entry.openClawOriginalImportDiagnostics);
+			if (entry.openClawOriginalExtractedRuntimeContract.has_value()) {
+				const auto& extracted =
+					entry.openClawOriginalExtractedRuntimeContract.value();
+				gatewayEntry.openClawOriginalTriggerHints =
+					UniqueNarrowValues(extracted.triggerHints);
+				if (extracted.output.has_value()) {
+					gatewayEntry.openClawOriginalOutputKind =
+						ToNarrow(TrimWide(extracted.output->kind));
+					gatewayEntry.openClawOriginalOutputTitle =
+						ToNarrow(TrimWide(extracted.output->title));
+					gatewayEntry.openClawOriginalOutputUrl =
+						ToNarrow(TrimWide(extracted.output->url));
+				}
+			}
 			gatewayEntry.openClawOriginalMetadataConvertedFromClawdbot =
 				entry.openClawOriginalMetadataConvertedFromClawdbot;
 			gatewayEntry.openClawOriginalMissingToolManifest = std::any_of(
