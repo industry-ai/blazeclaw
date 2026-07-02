@@ -144,6 +144,7 @@ CBlazeClawAgentChatView::CBlazeClawAgentChatView() noexcept
 
 CBlazeClawAgentChatView::~CBlazeClawAgentChatView()
 {
+	StopNodeServer();
 }
 
 #ifdef _DEBUG
@@ -433,6 +434,7 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 
 	case blazeclaw::config::AgentChatRuntimeMode::Native:
 		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=native\n");
+		StartNodeServer();
 		if (!StartNativeRuntime())
 		{
 			TRACE("CBlazeClawAgentChatView: Native mode startup failed\n");
@@ -1008,13 +1010,13 @@ bool CBlazeClawAgentChatView::StartNodeScript(
 	const std::wstring& scriptName,
 	PROCESS_INFORMATION& processInfo)
 {
-	std::wstring psCommand =
-		L"Set-Location -Path \"" + serverPath +
-		L"\"; npm run " + scriptName;
-	std::wstring cmdLine =
-		L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" +
-		psCommand +
-		L"\"";
+		std::wstring psCommand =
+			L"Set-Location -Path \"" + serverPath +
+			L"\"; npm run " + scriptName;
+		std::wstring cmdLine =
+			L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" +
+			psCommand +
+			L"\"";
 
 	TRACE("CBlazeClawAgentChatView: Executing %ls: %ls\n",
 		scriptName.c_str(),
@@ -1053,12 +1055,50 @@ bool CBlazeClawAgentChatView::StartNodeScript(
 
 void CBlazeClawAgentChatView::StopNodeProcess(PROCESS_INFORMATION& processInfo)
 {
-	if (processInfo.hProcess)
+	if (!processInfo.hProcess)
 	{
-		TerminateProcess(processInfo.hProcess, 0);
+		return;
+	}
+
+	// check if the process is still running
+	DWORD exitCode = 0;
+	if (!GetExitCodeProcess(processInfo.hProcess, &exitCode) || exitCode != STILL_ACTIVE)
+	{
+		TRACE(L"CBlazeClawAgentChatView: Process already exited\n");
 		CloseHandle(processInfo.hProcess);
 		processInfo.hProcess = nullptr;
+		if (processInfo.hThread)
+		{
+			CloseHandle(processInfo.hThread);
+			processInfo.hThread = nullptr;
+		}
+		return;
 	}
+
+	// use taskkill /T to terminate the entire process tree
+	wchar_t cmd[MAX_PATH];
+	_snwprintf_s(cmd, _TRUNCATE, L"taskkill /F /T /PID %lu", GetProcessId(processInfo.hProcess));
+
+	TRACE(L"CBlazeClawAgentChatView: Stopping process tree: %ls\n", cmd);
+	int result = _wsystem(cmd);
+
+	if (result != 0)
+	{
+		TRACE(L"CBlazeClawAgentChatView: taskkill returned %d, trying TerminateProcess\n", result);
+		// taskkill faled, fallback to TerminateProcess
+		TerminateProcess(processInfo.hProcess, 0);
+	}
+
+	// wait for the process to exit
+	DWORD waitResult = WaitForSingleObject(processInfo.hProcess, 2000);
+	if (waitResult == WAIT_TIMEOUT)
+	{
+		TRACE(L"CBlazeClawAgentChatView: Process did not exit in time, force terminating\n");
+		TerminateProcess(processInfo.hProcess, 1);
+	}
+
+	CloseHandle(processInfo.hProcess);
+	processInfo.hProcess = nullptr;
 
 	if (processInfo.hThread)
 	{
@@ -1091,6 +1131,14 @@ void CBlazeClawAgentChatView::StartNodeServer()
 
 	m_hNodeStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
+	// Create a job object so all child processes are terminated on close
+	m_hNodeJobObject = CreateJobObjectW(nullptr, nullptr);
+	if (m_hNodeJobObject) {
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
+		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		SetInformationJobObject(m_hNodeJobObject, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+	}
+
 	// launches two Node.js processes 
 	const bool chatBridgeStarted = StartNodeScript(
 		serverPath,
@@ -1100,6 +1148,16 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		serverPath,
 		L"blazeclaw-agent-bridge",
 		m_agentBridgeProcessInfo);
+
+	// Assign processes to job for guaranteed cleanup
+	if (m_hNodeJobObject) {
+		if (m_nodeProcessInfo.hProcess) {
+			AssignProcessToJobObject(m_hNodeJobObject, m_nodeProcessInfo.hProcess);
+		}
+		if (m_agentBridgeProcessInfo.hProcess) {
+			AssignProcessToJobObject(m_hNodeJobObject, m_agentBridgeProcessInfo.hProcess);
+		}
+	}
 
 	if (!chatBridgeStarted || !agentBridgeStarted)
 	{
@@ -1154,6 +1212,14 @@ void CBlazeClawAgentChatView::StopNodeServer()
 	{
 		CloseHandle(m_hNodeStartedEvent);
 		m_hNodeStartedEvent = nullptr;
+	}
+
+	// Terminate the job object to kill all child processes (PowerShell -> npm -> node)
+	if (m_hNodeJobObject)
+	{
+		TerminateJobObject(m_hNodeJobObject, 0);
+		CloseHandle(m_hNodeJobObject);
+		m_hNodeJobObject = nullptr;
 	}
 
 	StopNodeProcess(m_agentBridgeProcessInfo);
