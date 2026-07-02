@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="src\app\AIChatView.cpp" />
     <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\FloatPaneTracker.cpp" />
     <ClCompile Include="src\app\WebViewBridgeSupport.cpp" />
@@ -12,7 +11,6 @@
     <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp" />
     <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp" />
-    <ClCompile Include="src\app\config_bridge\SkillConfigHandler.cpp" />
     <ClCompile Include="src\app\config_bridge\EmailConfigHandler.cpp" />
     <ClCompile Include="src\app\calendarbar.cpp" />
     <ClCompile Include="src\app\CBridge.cpp" />
@@ -23,7 +21,6 @@
     <ClCompile Include="src\app\CMgrMessage.cpp" />
     <ClCompile Include="src\app\EventTransport.cpp" />
     <ClCompile Include="src\app\Client.cpp" />
-    <ClCompile Include="src\app\CNetwork_c.cpp" />
     <ClCompile Include="src\app\Connection_c.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\WebViewOnlyChildFrame.cpp" />
@@ -36,7 +33,6 @@
     <ClCompile Include="src\app\LoginDlg.cpp" />
     <ClCompile Include="src\app\LogSinks.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
-    <ClCompile Include="src\app\ApiKeyDialog.cpp" />
     <ClCompile Include="src\app\SettingsDialog.cpp" />
     <ClCompile Include="src\app\NewTabDialog.cpp" />
     <ClCompile Include="src\app\OutputWnd.cpp" />
@@ -65,11 +61,8 @@
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp" />
-    <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp" />
-    <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
-    <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
     <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc" />
     <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-functions.cc" />
     <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-window.cc" />
@@ -110,32 +103,15 @@
     <ClCompile Include="src\core\HookCatalogService.cpp" />
     <ClCompile Include="src\core\HookEventService.cpp" />
     <ClCompile Include="src\core\HookExecutionService.cpp" />
-    <ClCompile Include="src\core\SkillsConfigEval.cpp" />
     <ClCompile Include="src\core\SharedFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\ChatProviderRuntimeService.cpp" />
     <ClCompile Include="src\core\OperatorDiagnosticsAssembler.cpp" />
-    <ClCompile Include="src\core\SkillCommandInvocationService.cpp" />
-    <ClCompile Include="src\core\SkillsCommandService.cpp" />
-    <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
     <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
-    <ClCompile Include="src\core\SkillsAgentCommandDescriptorPolicy.cpp" />
-    <ClCompile Include="src\core\SkillsCatalogService.cpp" />
-    <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\OpenClawOriginalImportService.cpp" />
-    <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
-    <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
-    <ClCompile Include="src\core\SkillsFacade.cpp" />
-    <ClCompile Include="src\core\SkillsInstallService.cpp" />
-    <ClCompile Include="src\core\SkillsPromptFormatterCompat.cpp" />
-    <ClCompile Include="src\core\SkillSecurityScanService.cpp" />
-    <ClCompile Include="src\core\SkillsPromptService.cpp" />
-    <ClCompile Include="src\core\SkillsSyncService.cpp" />
-    <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
     <ClCompile Include="src\core\ChatRuntimeOrchestrationCoordinator.cpp" />
     <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp" />
-    <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />
     <ClCompile Include="src\core\startup\ServiceStartupPhaseModule.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
@@ -252,9 +228,6 @@
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
-    <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
-    <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
-    <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp" />
     <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
@@ -311,10 +284,6 @@
     <ClCompile Include="src\app\BlazeClawMFCViewTextHelpers.cpp">
       <Filter>app</Filter>
     </ClCompile>
-    <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp" />
-    <ClCompile Include="tests\AgentChatBridgeTransportFallbackContractTests.cpp" />
-    <ClCompile Include="tests\AgentChatListenerFallbackDiagnosticsContractTests.cpp" />
-    <ClCompile Include="tests\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
     <ClCompile Include="src\app\CronTasksDialog.cpp" />
     <ClCompile Include="src\app\SkillView.cpp">
       <Filter>app</Filter>
@@ -325,10 +294,102 @@
     <ClCompile Include="src\app\DashboardWnd.cpp">
       <Filter>app\dashboard</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\SkillCommandInvocationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillCommandsAggregationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\config_bridge\SkillConfigHandler.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsAgentCommandDescriptorPolicy.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCatalogService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCommandService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsConfigEval.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillSecurityScanService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsEligibilityService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsEnvOverrideService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFacade.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsInstallService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsPromptFormatterCompat.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsPromptService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsSyncService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsWatchService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatBridgeTransportFallbackContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatListenerFallbackDiagnosticsContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\AIChatView.cpp">
+      <Filter>others</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiKeyDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CNetwork_c.cpp">
+      <Filter>network</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
-    <ClInclude Include="src\app\AIChatView.h" />
     <ClInclude Include="src\app\calendarbar.h" />
     <ClInclude Include="src\app\CBridge.h" />
     <ClInclude Include="src\app\ChatInputEdit.h" />
@@ -343,7 +404,6 @@
     <ClInclude Include="src\app\CMgrMessage.h" />
     <ClInclude Include="src\app\EventTransport.h" />
     <ClInclude Include="src\app\Client.h" />
-    <ClInclude Include="src\app\CNetwork_c.h" />
     <ClInclude Include="src\app\Connection_c.h" />
     <ClInclude Include="src\app\FileView.h" />
     <ClInclude Include="src\app\SettingsDialog.h" />
@@ -388,8 +448,6 @@
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h" />
-    <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
-    <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
     <ClInclude Include="src\core\runtime\pch.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
@@ -397,7 +455,6 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
-    <ClInclude Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.h" />
     <ClInclude Include="src\cron\CronHygiene.h" />
     <ClInclude Include="src\cron\CronJsonCompat.h" />
     <ClInclude Include="src\cron\CronModels.h" />
@@ -427,28 +484,9 @@
     <ClInclude Include="src\core\HookCatalogService.h" />
     <ClInclude Include="src\core\HookEventService.h" />
     <ClInclude Include="src\core\HookExecutionService.h" />
-    <ClInclude Include="src\core\SkillsConfigEval.h" />
     <ClInclude Include="src\core\SharedFrontmatterCompat.h" />
     <ClInclude Include="src\core\MarkdownFrontmatterCompat.h" />
-    <ClInclude Include="src\core\SkillCommandInvocationService.h" />
-    <ClInclude Include="src\core\SkillsCommandService.h" />
-    <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
-    <ClInclude Include="src\core\SkillsContracts.h" />
-    <ClInclude Include="src\core\SkillsFrontmatterCompat.h" />
     <ClInclude Include="src\core\OpenClawOriginalImportService.h" />
-    <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
-    <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h" />
-    <ClInclude Include="src\core\SkillsCatalogService.h" />
-    <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
-    <ClInclude Include="src\core\SkillsEligibilityService.h" />
-    <ClInclude Include="src\core\SkillsGatewayPublicationCoordinator.h" />
-    <ClInclude Include="src\core\SkillsFacade.h" />
-    <ClInclude Include="src\core\SkillsInstallService.h" />
-    <ClInclude Include="src\core\SkillsPromptFormatterCompat.h" />
-    <ClInclude Include="src\core\SkillSecurityScanService.h" />
-    <ClInclude Include="src\core\SkillsPromptService.h" />
-    <ClInclude Include="src\core\SkillsSyncService.h" />
-    <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
     <ClInclude Include="src\core\GatewayHostBindingCoordinator.h" />
     <ClInclude Include="src\core\ServiceLifecycleStartupCoordinator.h" />
@@ -608,9 +646,80 @@
     <ClInclude Include="src\app\DashboardBridgeHost.h">
       <Filter>app\dashboard</Filter>
     </ClInclude>
+    <ClInclude Include="src\core\SkillCommandInvocationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillCommandsAggregationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCatalogService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCommandService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsConfigEval.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsContracts.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillSecurityScanService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsEligibilityService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsEnvOverrideService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFacade.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFrontmatterCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsGatewayPublicationCoordinator.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsInstallService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsPromptFormatterCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsPromptService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsSkillContractCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsSyncService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsWatchService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\AIChatView.h">
+      <Filter>others</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CNetwork_c.h">
+      <Filter>network</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="src\app\res\buttons.bmp" />
     <Image Include="src\app\res\classview.bmp" />
     <Image Include="src\app\res\classview_hc.bmp" />
     <Image Include="src\app\res\class_view.ico" />
@@ -674,15 +783,16 @@
     <Image Include="src\app\res\dashboard_wnd_hc.ico">
       <Filter>app\dashboard</Filter>
     </Image>
+    <Image Include="src\app\res\buttons.bmp">
+      <Filter>app\res</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime.dll" />
     <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime_providers_shared.dll" />
     <None Include="..\docs\readme.md" />
     <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md" />
-    <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
-    <None Include="tools\.tmp_sherpa_no_output_baseline.json" />
     <None Include="tools\compare_sherpa_baseline.py" />
     <None Include="tools\freeze_sherpa_no_output_baseline.py" />
     <None Include="tools\Invoke-Catch2CiWithSummary.ps1" />
@@ -712,7 +822,6 @@
     <None Include="web\chat\instances-controller.js" />
     <None Include="web\chat\nodes-controller.js" />
     <None Include="web\chat\observability-controller.js" />
-    <None Include="web\chat\skills-controller.js" />
     <None Include="web\chat\tools-controller.js" />
     <None Include="web\chat\usage-controller.js" />
     <None Include="src\config\blazeclaw.conf">
@@ -757,6 +866,15 @@
     <None Include="web\chat\dashboard_usage.html">
       <Filter>app\dashboard</Filter>
     </None>
+    <None Include="web\chat\skills-controller.js">
+      <Filter>skills</Filter>
+    </None>
+    <None Include="tools\.tmp_sherpa_no_output_baseline.json">
+      <Filter>STT</Filter>
+    </None>
+    <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md">
+      <Filter>STT</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">
@@ -776,6 +894,18 @@
     </Filter>
     <Filter Include="app\dashboard">
       <UniqueIdentifier>{b339135a-da5e-40a1-81f5-78c6911ff23f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="skills">
+      <UniqueIdentifier>{fcf97d0f-9fac-49bb-9201-33c188c091d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="STT">
+      <UniqueIdentifier>{4043f7e6-d03e-4d1d-8d30-ee6a8bce7232}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="others">
+      <UniqueIdentifier>{e75aa253-2d1f-4937-8444-a12a41b1a74d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network">
+      <UniqueIdentifier>{b12c692f-664c-4d1a-80ce-21e05dd6565c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

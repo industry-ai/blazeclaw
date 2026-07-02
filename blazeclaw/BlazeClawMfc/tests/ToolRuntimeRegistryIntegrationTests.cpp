@@ -739,8 +739,40 @@ TEST_CASE("OpenClaw generated invocation includes constant-output and URL-friend
 
 	REQUIRE(source.find("TryExecuteGeneratedOpenClawConstantOutputTool") != std::string::npos);
 	REQUIRE(source.find("openclaw.generated.runtime-contract") != std::string::npos);
-	REQUIRE(source.find("ExtractGeneratedOpenClawOutputTitleAndUrl") != std::string::npos);
-	REQUIRE(source.find("Open this URL:") != std::string::npos);
+	REQUIRE(source.find("ExtractGeneratedOpenClawOutputKindTitleAndUrl") != std::string::npos);
+	REQUIRE(source.find("type=") != std::string::npos);
+	REQUIRE(source.find("title=") != std::string::npos);
+	REQUIRE(source.find("url=") != std::string::npos);
+}
+
+TEST_CASE("OpenClaw generated invocation includes h5-ppt end-to-end route/response contract", "[skills][dispatch][openclaw-original][generated][h5-ppt][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("NormalizeInlineTriggerText") != std::string::npos);
+	REQUIRE(source.find("ContainsNormalizedTriggerHint") != std::string::npos);
+	REQUIRE(source.find("TryExecuteGeneratedOpenClawConstantOutputTool") != std::string::npos);
+	REQUIRE(source.find("source\"] = \"openclaw.generated.runtime-contract\"") != std::string::npos);
+	REQUIRE(source.find("title=") != std::string::npos);
+	REQUIRE(source.find("url=") != std::string::npos);
 }
 
 TEST_CASE("Runtime recovery enforces email-intent cross-skill guard", "[tools][runtime][fallback][contract]") {

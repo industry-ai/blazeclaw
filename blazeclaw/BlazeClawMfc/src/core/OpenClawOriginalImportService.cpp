@@ -104,16 +104,6 @@ namespace blazeclaw::core {
 		std::wstring ReadUtf8FileToWide(
 			const std::filesystem::path& path,
 			std::vector<std::wstring>& diagnostics) {
-			std::wifstream wideInput(path);
-			if (wideInput.is_open()) {
-				const std::wstring wideContent(
-					(std::istreambuf_iterator<wchar_t>(wideInput)),
-					std::istreambuf_iterator<wchar_t>());
-				if (!wideContent.empty()) {
-					return wideContent;
-				}
-			}
-
 			std::ifstream input(path, std::ios::binary);
 			if (!input.is_open()) {
 				diagnostics.push_back(

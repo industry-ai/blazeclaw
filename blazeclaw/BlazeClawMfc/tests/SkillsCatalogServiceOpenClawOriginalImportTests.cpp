@@ -8,11 +8,43 @@
 
 namespace {
 
+	std::string WideToUtf8(const std::wstring& value) {
+		if (value.empty()) {
+			return {};
+		}
+
+		const int required = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (required <= 0) {
+			return {};
+		}
+
+		std::string output(static_cast<std::size_t>(required), '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			required,
+			nullptr,
+			nullptr);
+		return output;
+	}
+
 	void WriteTextFile(const std::filesystem::path& path, const std::wstring& content) {
 		std::filesystem::create_directories(path.parent_path());
-		std::wofstream output(path);
+		std::ofstream output(path, std::ios::binary);
 		REQUIRE(output.is_open());
-		output << content;
+		const std::string utf8 = WideToUtf8(content);
+		output.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
 	}
 
 	std::filesystem::path CreateWorkspaceRoot(const std::string& suffix) {
@@ -105,6 +137,13 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 		});
 	REQUIRE(entryIt != snapshot.entries.end());
 	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	if (entryIt->openClawOriginalActivationState.value() !=
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled) {
+		INFO("activation diagnostics begin");
+		for (const auto& diagnostic : entryIt->openClawOriginalImportDiagnostics) {
+			INFO(std::string("diag: ") + WideToUtf8(diagnostic));
+		}
+	}
 	REQUIRE(
 		entryIt->openClawOriginalActivationState.value() ==
 		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
@@ -235,15 +274,15 @@ TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-f
 		L"description: Return fixed URL for h5-ppt intents.\n"
 		L"tags: h5-ppt\n"
 		L"---\n"
-		L"# Open h5-ppt\n"
+		L"# 炎图科技PPT\n"
 		L"\n"
 		L"Trigger scenarios:\n"
-		L"- luyan h5\n"
-		L"- open luyan h5\n"
+		L"- 路演h5\n"
+		L"- 打开路演h5\n"
 		L"\n"
 		L"Output:\n"
 		L"```json\n"
-		L"{\"outputs\":[{\"type\":\"webview\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
+		L"{\"outputs\":[{\"type\":\"webview\",\"title\":\"炎图科技PPT\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
 		L"```\n");
 
 	blazeclaw::config::AppConfig config;
@@ -281,13 +320,16 @@ TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-f
 		std::find(
 			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
 			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
-			std::wstring(L"luyan h5")) !=
+			std::wstring(L"路演h5")) !=
 		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
 	REQUIRE(
 		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
 	REQUIRE(
 		entryIt->openClawOriginalExtractedRuntimeContract->output->kind ==
 		L"webview");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->title ==
+		L"炎图科技PPT");
 	REQUIRE(
 		entryIt->openClawOriginalExtractedRuntimeContract->output->url ==
 		L"https://static.blazegraph.site/h5-ppt/index.html");

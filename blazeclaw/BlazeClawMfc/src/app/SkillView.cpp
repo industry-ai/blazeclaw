@@ -189,6 +189,29 @@ namespace {
 		{
 			label += " [metadata converted from clawdbot]";
 		}
+
+		const std::string activation = payload.value("openclawOriginalActivationState", "");
+		if (activation == "imported")
+		{
+			label += " [discovered-only: not invokable]";
+		}
+		else if (activation == "tool_enabled")
+		{
+			const std::string commandToolName =
+				payload.value("commandToolName", std::string());
+			if (commandToolName.find(".openclaw.generated") != std::string::npos)
+			{
+				label += " [generated runtime contract]";
+			}
+			else
+			{
+				label += " [manifest runtime contract]";
+			}
+		}
+		else if (activation == "failed")
+		{
+			label += " [import failed or policy rejected]";
+		}
 		return label;
 	}
 
@@ -573,15 +596,15 @@ void CSkillView::FillSkillView()
 				std::string openClawGroupLabel = openClawGroup;
 				if (openClawGroup == "imported")
 				{
-					openClawGroupLabel = "imported";
+					openClawGroupLabel = "imported (discovered, not invokable)";
 				}
 				else if (openClawGroup == "enabled")
 				{
-					openClawGroupLabel = "enabled";
+					openClawGroupLabel = "enabled (invokable)";
 				}
 				else if (openClawGroup == "failed")
 				{
-					openClawGroupLabel = "failed";
+					openClawGroupLabel = "failed (invalid or policy rejected)";
 				}
 				groupNode = m_wndSkillView.InsertItem(
 					CString(CA2W(openClawGroupLabel.c_str(), CP_UTF8)),

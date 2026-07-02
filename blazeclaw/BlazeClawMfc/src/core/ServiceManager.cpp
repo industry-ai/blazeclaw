@@ -1078,8 +1078,14 @@ namespace blazeclaw::core {
 			return result;
 		}
 
-		std::optional<std::pair<std::string, std::string>>
-			ExtractGeneratedOpenClawOutputTitleAndUrl(
+		struct GeneratedOpenClawOutputTuple {
+			std::string kind;
+			std::string title;
+			std::string url;
+		};
+
+		std::optional<GeneratedOpenClawOutputTuple>
+			ExtractGeneratedOpenClawOutputKindTitleAndUrl(
 				const blazeclaw::gateway::ToolExecuteResultV2& result) {
 			const std::string trimmedResult =
 				blazeclaw::gateway::json::Trim(result.result);
@@ -1087,10 +1093,22 @@ namespace blazeclaw::core {
 				return std::nullopt;
 			}
 
-			auto readTitleAndUrl = [](const nlohmann::json& node)
-				-> std::optional<std::pair<std::string, std::string>> {
+			auto readKindTitleAndUrl = [](const nlohmann::json& node)
+				-> std::optional<GeneratedOpenClawOutputTuple> {
 				if (!node.is_object()) {
 					return std::nullopt;
+				}
+
+				std::string kind;
+				const auto typeIt = node.find("type");
+				if (typeIt != node.end() && typeIt->is_string()) {
+					kind = blazeclaw::gateway::json::Trim(
+						typeIt->get<std::string>());
+				}
+				const auto kindIt = node.find("kind");
+				if (kind.empty() && kindIt != node.end() && kindIt->is_string()) {
+					kind = blazeclaw::gateway::json::Trim(
+						kindIt->get<std::string>());
 				}
 
 				const auto urlIt = node.find("url");
@@ -1104,9 +1122,10 @@ namespace blazeclaw::core {
 					title = blazeclaw::gateway::json::Trim(
 						titleIt->get<std::string>());
 				}
-				return std::pair<std::string, std::string>{
-					title,
-					blazeclaw::gateway::json::Trim(urlIt->get<std::string>())
+				return GeneratedOpenClawOutputTuple{
+					.kind = kind,
+					.title = title,
+					.url = blazeclaw::gateway::json::Trim(urlIt->get<std::string>()),
 				};
 			};
 
@@ -1116,16 +1135,16 @@ namespace blazeclaw::core {
 					nullptr,
 					false);
 				if (!parsed.is_discarded() && parsed.is_object()) {
-					if (const auto direct = readTitleAndUrl(parsed);
-						direct.has_value() && !direct->second.empty()) {
+					if (const auto direct = readKindTitleAndUrl(parsed);
+						direct.has_value() && !direct->url.empty()) {
 						return direct;
 					}
 
 					const auto outputsIt = parsed.find("outputs");
 					if (outputsIt != parsed.end() && outputsIt->is_array()) {
 						for (const auto& item : *outputsIt) {
-							if (const auto nested = readTitleAndUrl(item);
-								nested.has_value() && !nested->second.empty()) {
+							if (const auto nested = readKindTitleAndUrl(item);
+								nested.has_value() && !nested->url.empty()) {
 								return nested;
 							}
 						}
@@ -1135,9 +1154,10 @@ namespace blazeclaw::core {
 
 			if (trimmedResult.rfind("http://", 0) == 0 ||
 				trimmedResult.rfind("https://", 0) == 0) {
-				return std::pair<std::string, std::string>{
-					std::string(),
-					trimmedResult
+				return GeneratedOpenClawOutputTuple{
+					.kind = std::string(),
+					.title = std::string(),
+					.url = trimmedResult,
 				};
 			}
 
@@ -1230,15 +1250,16 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::ToolExecuteResultV2& result) {
 			if (IsGeneratedOpenClawToolId(resolvedToolId)) {
 				const auto output =
-					ExtractGeneratedOpenClawOutputTitleAndUrl(result);
+					ExtractGeneratedOpenClawOutputKindTitleAndUrl(result);
 				if (output.has_value()) {
-					if (!output->first.empty()) {
-						return std::string("Open ") +
-							output->first +
-							": " +
-							output->second;
+					std::string formatted = "url=" + output->url;
+					if (!output->title.empty()) {
+						formatted = "title=" + output->title + "; " + formatted;
 					}
-					return std::string("Open this URL: ") + output->second;
+					if (!output->kind.empty()) {
+						formatted = "type=" + output->kind + "; " + formatted;
+					}
+					return formatted;
 				}
 			}
 
