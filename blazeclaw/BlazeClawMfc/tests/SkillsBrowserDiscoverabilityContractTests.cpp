@@ -185,6 +185,77 @@ TEST_CASE("Skills gateway projection marks imported openclaw-original skills for
 	std::filesystem::remove_all(workspaceRoot);
 }
 
+TEST_CASE("Skills gateway projection exposes generated family-tree command tool and trigger hints", "[skills][browser][projection][openclaw-original][family-tree]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("openclaw_family_tree_generated_projection");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"family-tree";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: family-tree\n"
+		L"description: Family tree skill routing\n"
+		L"---\n"
+		L"# Family Tree\n"
+		L"\n"
+		L"> \"郭家的族谱\"\n"
+		L"> \"张三和李四是什么关系\"\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"type\":\"webview\",\"title\":\"族谱树\",\"url\":\"https://corp.blazegraph.site/family-tree/dist/index.html#/tree?text=郭家的族谱\"}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService catalogService;
+	const auto catalog = catalogService.LoadCatalog(workspaceRoot, config);
+	const auto* catalogEntry = FindCatalogEntry(catalog, L"family-tree");
+	REQUIRE(catalogEntry != nullptr);
+
+	blazeclaw::core::SkillsEligibilityService eligibilityService;
+	const auto eligibility = eligibilityService.Evaluate(catalog, config);
+	const auto* eligibilityEntry = FindEligibility(eligibility, L"family-tree");
+	REQUIRE(eligibilityEntry != nullptr);
+
+	blazeclaw::core::SkillsGatewayProjectionService projectionService;
+	const auto gatewayEntry = projectionService.BuildGatewaySkillEntry(
+		*catalogEntry,
+		eligibilityEntry,
+		nullptr,
+		nullptr);
+
+	REQUIRE(gatewayEntry.browserGroup == "enabled");
+	REQUIRE(gatewayEntry.commandToolName == "family_tree.openclaw.generated");
+	REQUIRE(gatewayEntry.commandResultSchema == "openclaw.generated.runtime-contract");
+	REQUIRE_FALSE(gatewayEntry.openClawOriginalTriggerHints.empty());
+	REQUIRE(
+		std::find(
+			gatewayEntry.openClawOriginalTriggerHints.begin(),
+			gatewayEntry.openClawOriginalTriggerHints.end(),
+			std::string("郭家的族谱")) !=
+		gatewayEntry.openClawOriginalTriggerHints.end());
+	REQUIRE(gatewayEntry.openClawOriginalOutputKind == "webview");
+	REQUIRE(gatewayEntry.openClawOriginalOutputTitle == "族谱树");
+	REQUIRE(
+		gatewayEntry.openClawOriginalOutputUrl.find(
+			"https://corp.blazegraph.site/family-tree/dist/index.html#/tree") ==
+		0);
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
 TEST_CASE("Skills gateway projection generates deterministic command tool for manifestless openclaw-original runtime contract", "[skills][browser][projection][openclaw-original][generated-tool]") {
 	ScopedOpenClawOriginalDirOverride envOverrideGuard(
 		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");

@@ -84,6 +84,37 @@ namespace blazeclaw::core {
 			return servicemanager_text::Utf8ToWideLocal(value);
 		}
 
+		std::string WideToUtf8Local(const std::wstring& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int required = WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0,
+				nullptr,
+				nullptr);
+			if (required <= 0) {
+				return {};
+			}
+
+			std::string output(static_cast<std::size_t>(required), '\0');
+			WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				required,
+				nullptr,
+				nullptr);
+			return output;
+		}
+
 		std::uint64_t CurrentEpochMs();
 
 		bool IsLlamaLocalModelId(const std::string& modelId) {
@@ -204,6 +235,37 @@ namespace blazeclaw::core {
 
 				output.append(buffer, buffer + bytesRead);
 			}
+		}
+
+		std::uint64_t Fnv1a64(const std::string& value) {
+			constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+			constexpr std::uint64_t kPrime = 1099511628211ULL;
+			std::uint64_t hash = kOffset;
+			for (const unsigned char ch : value) {
+				hash ^= static_cast<std::uint64_t>(ch);
+				hash *= kPrime;
+			}
+			return hash;
+		}
+
+		std::string BuildHexLower(std::uint64_t value) {
+			std::ostringstream out;
+			out << std::hex << std::nouppercase << value;
+			return out.str();
+		}
+
+		std::string BuildNormalizedPromptPreview(
+			const std::wstring& normalizedPrompt,
+			const std::size_t maxChars) {
+			if (maxChars == 0) {
+				return {};
+			}
+
+			const std::wstring truncated =
+				normalizedPrompt.size() > maxChars
+				? normalizedPrompt.substr(0, maxChars)
+				: normalizedPrompt;
+			return WideToUtf8Local(truncated);
 		}
 
 		void AppendStartupTrace(const char* stage) {
@@ -872,14 +934,6 @@ namespace blazeclaw::core {
 				return false;
 			}
 
-			if (normalizedPrompt == normalizedHint) {
-				return true;
-			}
-
-			if (normalizedPrompt.find(normalizedHint) != std::wstring::npos) {
-				return true;
-			}
-
 			const std::wstring promptNoSpace = [&normalizedPrompt]() {
 				std::wstring value;
 				value.reserve(normalizedPrompt.size());
@@ -905,7 +959,116 @@ namespace blazeclaw::core {
 				return false;
 			}
 
+			if (normalizedPrompt == normalizedHint) {
+				return true;
+			}
+
+			if (promptNoSpace == hintNoSpace) {
+				return true;
+			}
+
+			if (normalizedPrompt.find(normalizedHint) != std::wstring::npos) {
+				return true;
+			}
+
 			return promptNoSpace.find(hintNoSpace) != std::wstring::npos;
+		}
+
+		enum class GeneratedTriggerMatchMode {
+			None = 0,
+			SpaceStrippedContains = 1,
+			Contains = 2,
+			NormalizedExact = 3,
+			Exact = 4,
+		};
+
+		struct GeneratedTriggerHintMatchResult {
+			GeneratedTriggerMatchMode mode = GeneratedTriggerMatchMode::None;
+			int score = 0;
+			std::wstring normalizedHint;
+			std::size_t normalizedHintNoSpaceLength = 0;
+		};
+
+		struct GeneratedOpenClawRoutingDecisionDiagnostics {
+			std::wstring normalizedPrompt;
+			std::size_t candidateCountConsidered = 0;
+			std::wstring matchedSkillKey;
+			std::wstring matchedTriggerHint;
+			GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+		};
+
+		std::wstring RemoveWideSpaces(const std::wstring& value) {
+			std::wstring collapsed;
+			collapsed.reserve(value.size());
+			for (const auto ch : value) {
+				if (ch != L' ') {
+					collapsed.push_back(ch);
+				}
+			}
+			return collapsed;
+		}
+
+		GeneratedTriggerHintMatchResult EvaluateGeneratedTriggerHintMatch(
+			const std::wstring& normalizedPrompt,
+			const std::wstring& triggerHint) {
+			GeneratedTriggerHintMatchResult result;
+			if (!ContainsNormalizedTriggerHint(normalizedPrompt, triggerHint)) {
+				return result;
+			}
+
+			result.normalizedHint = NormalizeInlineTriggerText(triggerHint);
+			if (result.normalizedHint.empty() || normalizedPrompt.empty()) {
+				return result;
+			}
+
+			const std::wstring promptNoSpace = RemoveWideSpaces(normalizedPrompt);
+			const std::wstring hintNoSpace = RemoveWideSpaces(result.normalizedHint);
+			if (promptNoSpace.empty() || hintNoSpace.empty()) {
+				return result;
+			}
+
+			result.normalizedHintNoSpaceLength = hintNoSpace.size();
+			if (normalizedPrompt == result.normalizedHint) {
+				result.mode = GeneratedTriggerMatchMode::Exact;
+				result.score = 400;
+				return result;
+			}
+
+			if (promptNoSpace == hintNoSpace) {
+				result.mode = GeneratedTriggerMatchMode::NormalizedExact;
+				result.score = 300;
+				return result;
+			}
+
+			if (normalizedPrompt.find(result.normalizedHint) != std::wstring::npos) {
+				result.mode = GeneratedTriggerMatchMode::Contains;
+				result.score = 200;
+				return result;
+			}
+
+			if (promptNoSpace.find(hintNoSpace) != std::wstring::npos) {
+				result.mode = GeneratedTriggerMatchMode::SpaceStrippedContains;
+				result.score = 100;
+				return result;
+			}
+
+			return result;
+		}
+
+		std::string GeneratedTriggerMatchModeToTelemetry(
+			const GeneratedTriggerMatchMode mode) {
+			switch (mode) {
+			case GeneratedTriggerMatchMode::Exact:
+				return "exact";
+			case GeneratedTriggerMatchMode::NormalizedExact:
+				return "normalized-exact";
+			case GeneratedTriggerMatchMode::Contains:
+				return "contains";
+			case GeneratedTriggerMatchMode::SpaceStrippedContains:
+				return "space-stripped contains";
+			default:
+				return "none";
+			}
 		}
 
 		std::wstring NormalizeOpenClawGeneratedToolToken(
@@ -1166,12 +1329,30 @@ namespace blazeclaw::core {
 
 		std::optional<std::string> ResolveGeneratedOpenClawToolTargetFromTriggerHints(
 			const std::vector<SkillsCatalogEntry>& catalogEntries,
-			const std::string& commandBodyNormalized) {
-			const std::wstring normalizedPrompt =
+			const std::string& commandBodyNormalized,
+			GeneratedOpenClawRoutingDecisionDiagnostics* diagnostics = nullptr) {
+			GeneratedOpenClawRoutingDecisionDiagnostics localDiagnostics;
+			GeneratedOpenClawRoutingDecisionDiagnostics& activeDiagnostics =
+				diagnostics == nullptr ? localDiagnostics : *diagnostics;
+			activeDiagnostics = GeneratedOpenClawRoutingDecisionDiagnostics{};
+
+			activeDiagnostics.normalizedPrompt =
 				NormalizeInlineTriggerText(Utf8ToWideLocal(commandBodyNormalized));
+			const std::wstring& normalizedPrompt = activeDiagnostics.normalizedPrompt;
 			if (normalizedPrompt.empty()) {
 				return std::nullopt;
 			}
+
+			struct CandidateMatch {
+				int score = 0;
+				std::size_t hintLength = 0;
+				std::wstring skillKey;
+				std::wstring triggerHint;
+				std::string generatedToolName;
+				GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+			};
+
+			std::optional<CandidateMatch> bestMatch;
 
 			for (const auto& entry : catalogEntries) {
 				if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
@@ -1189,25 +1370,51 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				const bool matched = std::any_of(
-					extracted.triggerHints.begin(),
-					extracted.triggerHints.end(),
-					[&normalizedPrompt](const std::wstring& triggerHint) {
-						return ContainsNormalizedTriggerHint(
-							normalizedPrompt,
-							triggerHint);
-					});
-				if (!matched) {
-					continue;
-				}
-
 				const std::string generatedToolName =
 					BuildGeneratedOpenClawToolName(
 						extracted,
 						entry.skillName);
-				if (!generatedToolName.empty()) {
-					return generatedToolName;
+				if (generatedToolName.empty()) {
+					continue;
 				}
+
+				for (const auto& triggerHint : extracted.triggerHints) {
+					++activeDiagnostics.candidateCountConsidered;
+					const auto matchResult = EvaluateGeneratedTriggerHintMatch(
+						normalizedPrompt,
+						triggerHint);
+					if (matchResult.mode == GeneratedTriggerMatchMode::None) {
+						continue;
+					}
+
+					CandidateMatch candidate;
+					candidate.score = matchResult.score;
+					candidate.hintLength = matchResult.normalizedHintNoSpaceLength;
+					candidate.skillKey = extracted.skillKey.empty()
+						? entry.skillName
+						: extracted.skillKey;
+					candidate.triggerHint = triggerHint;
+					candidate.generatedToolName = generatedToolName;
+					candidate.matchMode = matchResult.mode;
+
+					const bool shouldReplace = !bestMatch.has_value() ||
+						candidate.score > bestMatch->score ||
+						(candidate.score == bestMatch->score &&
+							candidate.hintLength > bestMatch->hintLength) ||
+						(candidate.score == bestMatch->score &&
+							candidate.hintLength == bestMatch->hintLength &&
+							candidate.skillKey < bestMatch->skillKey);
+					if (shouldReplace) {
+						bestMatch = candidate;
+					}
+				}
+			}
+
+			if (bestMatch.has_value()) {
+				activeDiagnostics.matchedSkillKey = bestMatch->skillKey;
+				activeDiagnostics.matchedTriggerHint = bestMatch->triggerHint;
+				activeDiagnostics.matchMode = bestMatch->matchMode;
+				return bestMatch->generatedToolName;
 			}
 
 			return std::nullopt;
@@ -3273,6 +3480,57 @@ namespace blazeclaw::core {
 		}
 
 		return std::nullopt;
+	}
+
+	std::optional<std::string>
+		ServiceManager::BuildGeneratedOpenClawRoutingDecisionTelemetry(
+			const std::string& commandBodyNormalized) const
+	{
+		const std::string canonicalCommandBody =
+			CanonicalizeForRouting(commandBodyNormalized);
+
+		GeneratedOpenClawRoutingDecisionDiagnostics diagnostics;
+		const std::optional<std::string> resolvedGeneratedToolTarget =
+			ResolveGeneratedOpenClawToolTargetFromTriggerHints(
+				m_skillsCatalog.entries,
+				canonicalCommandBody,
+				&diagnostics);
+
+		if (diagnostics.normalizedPrompt.empty() &&
+			diagnostics.candidateCountConsidered == 0 &&
+			!resolvedGeneratedToolTarget.has_value()) {
+			return std::nullopt;
+		}
+
+		const std::string normalizedPromptUtf8 =
+			WideToUtf8Local(diagnostics.normalizedPrompt);
+		const std::string normalizedPromptPreview =
+			BuildNormalizedPromptPreview(diagnostics.normalizedPrompt, 96);
+		const std::string normalizedPromptHash =
+			BuildHexLower(Fnv1a64(normalizedPromptUtf8));
+
+		return std::string("{") +
+			"\"normalizedPromptPreview\":" +
+			blazeclaw::gateway::JsonString(normalizedPromptPreview) +
+			",\"normalizedPromptHash\":" +
+			blazeclaw::gateway::JsonString(normalizedPromptHash) +
+			",\"candidateCountConsidered\":" +
+			std::to_string(diagnostics.candidateCountConsidered) +
+			",\"matchMode\":" +
+			blazeclaw::gateway::JsonString(
+				GeneratedTriggerMatchModeToTelemetry(diagnostics.matchMode)) +
+			",\"matchedSkillKey\":" +
+			blazeclaw::gateway::JsonString(
+				WideToUtf8Local(diagnostics.matchedSkillKey)) +
+			",\"matchedTriggerHint\":" +
+			blazeclaw::gateway::JsonString(
+				WideToUtf8Local(diagnostics.matchedTriggerHint)) +
+			",\"resolvedGeneratedToolTarget\":" +
+			(resolvedGeneratedToolTarget.has_value()
+				? blazeclaw::gateway::JsonString(
+					resolvedGeneratedToolTarget.value())
+				: std::string("null")) +
+			"}";
 	}
 
 	bool ServiceManager::ShouldLoadSkillCommandsForInlineActions(

@@ -257,39 +257,231 @@ namespace blazeclaw::core {
 
 		std::vector<std::wstring> ExtractTriggerHints(const std::wstring& body) {
 			std::set<std::wstring> unique;
+			const std::set<std::wstring> rejectedSchemaTokens = {
+				L"type",
+				L"url",
+				L"title",
+				L"q",
+				L"query",
+				L"output",
+				L"outputs",
+				L"json",
+				L"webview",
+				L"http",
+				L"https",
+			};
 
-			std::size_t cursor = 0;
-			while (cursor < body.size()) {
-				const std::size_t left = body.find(L'“', cursor);
-				if (left == std::wstring::npos) {
-					break;
-				}
-				const std::size_t right = body.find(L'”', left + 1);
-				if (right == std::wstring::npos) {
-					break;
-				}
-				const std::wstring quoted = Trim(body.substr(left + 1, right - left - 1));
-				if (!quoted.empty()) {
-					unique.insert(quoted);
-				}
-				cursor = right + 1;
-			}
+			auto normalizeForQuality = [](const std::wstring& value) {
+				std::wstring normalized;
+				normalized.reserve(value.size());
+				bool previousSpace = false;
+				for (const auto ch : value) {
+					const wchar_t lowered =
+						static_cast<wchar_t>(std::towlower(ch));
+					const bool isAlphaNum =
+						(lowered >= L'a' && lowered <= L'z') ||
+						(lowered >= L'0' && lowered <= L'9') ||
+						(lowered >= 0x4E00 && lowered <= 0x9FFF);
+					if (isAlphaNum) {
+						normalized.push_back(lowered);
+						previousSpace = false;
+						continue;
+					}
 
+					if (!previousSpace) {
+						normalized.push_back(L' ');
+						previousSpace = true;
+					}
+				}
+
+				return Trim(normalized);
+			};
+
+			auto looksLikeTriggerCandidate =
+				[&rejectedSchemaTokens, &normalizeForQuality](const std::wstring& value) {
+					if (value.empty() || value.size() > 128) {
+						return false;
+					}
+
+					const std::wstring lowered = ToLower(value);
+					if (lowered.find(L"http://") != std::wstring::npos ||
+						lowered.find(L"https://") != std::wstring::npos ||
+						lowered.find(L".html") != std::wstring::npos ||
+						lowered.find(L"#/") != std::wstring::npos ||
+						lowered.find(L"=") != std::wstring::npos ||
+						lowered.find(L"://") != std::wstring::npos ||
+						lowered.find(L"\"type\"") != std::wstring::npos ||
+						lowered.find(L"\"url\"") != std::wstring::npos ||
+						lowered.find(L"\"title\"") != std::wstring::npos) {
+						return false;
+					}
+
+					const std::wstring normalized = normalizeForQuality(value);
+					if (normalized.empty() || normalized.size() < 3) {
+						return false;
+					}
+
+					bool hasCjk = false;
+					std::size_t alphaNumCount = 0;
+					std::size_t tokenCount = 0;
+					bool insideToken = false;
+					for (const auto ch : normalized) {
+						if (ch >= 0x4E00 && ch <= 0x9FFF) {
+							hasCjk = true;
+						}
+						const bool alphaNum =
+							(ch >= L'a' && ch <= L'z') ||
+							(ch >= L'0' && ch <= L'9') ||
+							(ch >= 0x4E00 && ch <= 0x9FFF);
+						if (alphaNum) {
+							++alphaNumCount;
+							if (!insideToken) {
+								insideToken = true;
+								++tokenCount;
+							}
+						}
+						else {
+							insideToken = false;
+						}
+					}
+
+					if (alphaNumCount < 3) {
+						return false;
+					}
+
+					if (!hasCjk && tokenCount < 2 && alphaNumCount < 8) {
+						return false;
+					}
+
+					if (tokenCount == 1 && rejectedSchemaTokens.find(normalized) !=
+						rejectedSchemaTokens.end()) {
+						return false;
+					}
+
+					return true;
+				};
+
+			auto isTriggerSectionHeader = [](const std::wstring& line) {
+				const std::wstring lowered = ToLower(line);
+				return lowered.find(L"trigger") != std::wstring::npos ||
+					lowered.find(L"scenario") != std::wstring::npos ||
+					lowered.find(L"example") != std::wstring::npos ||
+					lowered.find(L"input") != std::wstring::npos ||
+					lowered.find(L"触发") != std::wstring::npos ||
+					lowered.find(L"示例") != std::wstring::npos ||
+					lowered.find(L"输入") != std::wstring::npos;
+			};
+
+			auto isOutputSectionHeader = [](const std::wstring& line) {
+				const std::wstring lowered = ToLower(line);
+				return lowered.find(L"output") != std::wstring::npos ||
+					lowered.find(L"result") != std::wstring::npos ||
+					lowered.find(L"response") != std::wstring::npos ||
+					lowered.find(L"输出") != std::wstring::npos ||
+					lowered.find(L"返回") != std::wstring::npos;
+			};
+
+			auto registerCandidate = [&unique, &looksLikeTriggerCandidate](
+				const std::wstring& raw) {
+				std::wstring candidate = Trim(raw);
+				if (candidate.empty()) {
+					return;
+				}
+
+				while (!candidate.empty() &&
+					(candidate.front() == L'"' ||
+						candidate.front() == L'\'' ||
+						candidate.front() == L'“' ||
+						candidate.front() == L'‘')) {
+					candidate.erase(candidate.begin());
+				}
+				while (!candidate.empty() &&
+					(candidate.back() == L'"' ||
+						candidate.back() == L'\'' ||
+						candidate.back() == L'”' ||
+						candidate.back() == L'’')) {
+					candidate.pop_back();
+				}
+
+				candidate = Trim(candidate);
+				if (looksLikeTriggerCandidate(candidate)) {
+					unique.insert(candidate);
+				}
+			};
+
+			auto collectAsciiQuotedCandidates =
+				[&registerCandidate](const std::wstring& text, const wchar_t quoteChar) {
+					std::size_t localCursor = 0;
+					while (localCursor < text.size()) {
+						const std::size_t left = text.find(quoteChar, localCursor);
+						if (left == std::wstring::npos) {
+							break;
+						}
+						const std::size_t right = text.find(quoteChar, left + 1);
+						if (right == std::wstring::npos) {
+							break;
+						}
+
+						registerCandidate(text.substr(left + 1, right - left - 1));
+						localCursor = right + 1;
+					}
+				};
 			std::size_t lineBegin = 0;
+			bool inFenceBlock = false;
+			bool inTriggerSection = false;
 			while (lineBegin < body.size()) {
 				const std::size_t lineEnd = body.find(L'\n', lineBegin);
 				const std::size_t len = lineEnd == std::wstring::npos
 					? body.size() - lineBegin
 					: lineEnd - lineBegin;
 				std::wstring line = Trim(body.substr(lineBegin, len));
+				if (line.rfind(L"```", 0) == 0) {
+					inFenceBlock = !inFenceBlock;
+					if (lineEnd == std::wstring::npos) {
+						break;
+					}
+					lineBegin = lineEnd + 1;
+					continue;
+				}
+				if (inFenceBlock) {
+					if (lineEnd == std::wstring::npos) {
+						break;
+					}
+					lineBegin = lineEnd + 1;
+					continue;
+				}
+
+				if (isOutputSectionHeader(line)) {
+					inTriggerSection = false;
+				}
+				if (isTriggerSectionHeader(line)) {
+					inTriggerSection = true;
+				}
+
 				if (line.size() > 2 && (line.rfind(L"- ", 0) == 0 || line.rfind(L"* ", 0) == 0)) {
 					line = Trim(line.substr(2));
-					if (!line.empty() && line.front() == L'“' && line.back() == L'”' && line.size() >= 2) {
-						line = Trim(line.substr(1, line.size() - 2));
+					if (inTriggerSection) {
+						registerCandidate(line);
+						collectAsciiQuotedCandidates(line, L'"');
+						collectAsciiQuotedCandidates(line, L'\'');
 					}
-					if (!line.empty() && line.size() <= 128) {
-						unique.insert(line);
-					}
+				}
+
+				if (line.size() > 1 && line.front() == L'>') {
+					std::wstring quoted = Trim(line.substr(1));
+					inTriggerSection = true;
+					registerCandidate(quoted);
+					collectAsciiQuotedCandidates(quoted, L'"');
+					collectAsciiQuotedCandidates(quoted, L'\'');
+				}
+
+				if (inTriggerSection && !line.empty() &&
+					line.rfind(L"#", 0) != 0 &&
+					line.rfind(L">", 0) != 0 &&
+					line.rfind(L"- ", 0) != 0 &&
+					line.rfind(L"* ", 0) != 0) {
+					collectAsciiQuotedCandidates(line, L'"');
+					collectAsciiQuotedCandidates(line, L'\'');
 				}
 
 				if (lineEnd == std::wstring::npos) {

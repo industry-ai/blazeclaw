@@ -1,0 +1,124 @@
+{
+  "resources": [
+    {
+      "id": "bird_1",
+      "tags": ["小鸟", "小鸟悠哉", "鸟休息", "bird", "bird resting"],
+      "description": "一只小鸟悠哉地停在枝头",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/bird_1.mp4"
+    },
+    {
+      "id": "cat_1",
+      "tags": ["猫", "小猫", "小猫捕猎", "猫捕猎", "cat hunting", "cat捕猎"],
+      "description": "一只小猫在捕猎",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/cat_1.mp4"
+    },
+    {
+      "id": "cat_2",
+      "tags": ["猫", "小猫", "小猫翻墙", "猫翻墙", "猫跳墙", "cat jumping", "cat climbing wall"],
+      "description": "一只小猫在翻墙",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/cat_2.mp4"
+    },
+    {
+      "id": "cow_1",
+      "tags": ["牛", "牛吃草", "cow eating", "cow grazing"],
+      "description": "一头牛在草地上吃草",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/cow_1.mp4"
+    },
+    {
+      "id": "cow_2",
+      "tags": ["牛", "牛走路", "cow walking"],
+      "description": "一头牛在走路",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/cow_2.mp4"
+    },
+    {
+      "id": "dog_1",
+      "tags": ["狗", "狗跑步", "狗在草地上跑步", "狗草地", "dog running", "dog grass"],
+      "description": "一只狗在草地上快乐地奔跑",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/dog_1.mp4"
+    },
+    {
+      "id": "dog_2",
+      "tags": ["狗", "狗跑步", "狗在海边跑步", "狗海边", "狗沙滩", "dog beach", "dog sea"],
+      "description": "一只狗在海边奔跑",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/dog_2.mp4"
+    },
+    {
+      "id": "elephant_1",
+      "tags": ["大象", "一群大象", "象群", "大象群", "elephant herd", "group of elephants"],
+      "description": "一群大象在行走",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/elephant_1.mp4"
+    },
+    {
+      "id": "elephant_2",
+      "tags": ["大象", "一只大象", "一个大象", "elephant", "single elephant"],
+      "description": "一头大象在活动",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/elephant_2.mp4"
+    },
+    {
+      "id": "horse_1",
+      "tags": ["马", "一匹马", "一只马", "马跑步", "一匹马跑步", "horse running", "single horse"],
+      "description": "一匹马在奔跑",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/horse_1.mp4"
+    },
+    {
+      "id": "horse_2",
+      "tags": ["马", "两只马", "两匹马", "马跑步", "两匹马跑步", "two horses", "horses running"],
+      "description": "两匹马在奔跑",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/horse_2.mp4"
+    },
+    {
+      "id": "monkey_1",
+      "tags": ["猴子", "一群猴子", "猴子吃水果", "猴子吃", "monkey", "monkeys eating"],
+      "description": "一些猴子在吃水果",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/monkey_1.mp4"
+    },
+    {
+      "id": "mouse_1",
+      "tags": ["老鼠", "一只老鼠", "老鼠觅食", "mouse", "mouse foraging"],
+      "description": "一只老鼠在觅食",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/mouse_1.mp4"
+    },
+    {
+      "id": "mouse_2",
+      "tags": ["老鼠", "两只老鼠", "老鼠抢吃", "老鼠打架", "两只老鼠抢吃的", "mice", "two mice fighting"],
+      "description": "两只老鼠在抢吃的",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/mouse_2.mp4"
+    },
+    {
+      "id": "mouse_3",
+      "tags": ["老鼠", "一只老鼠", "老鼠回家", "mouse", "mouse going home"],
+      "description": "一只老鼠在回家路上",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/mouse_3.mp4"
+    },
+    {
+      "id": "rabbit_1",
+      "tags": ["兔子", "一群兔子", "兔子蹦蹦跳跳", "兔子跳", "rabbit", "rabbits hopping"],
+      "description": "一群兔子在蹦蹦跳跳",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/rabbit_1.mp4"
+    },
+    {
+      "id": "rabbit_2",
+      "tags": ["兔子", "三只兔子", "3只兔子", "兔子蹦蹦跳跳", "rabbit", "three rabbits"],
+      "description": "三只兔子在蹦蹦跳跳",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/rabbit_2.mp4"
+    },
+    {
+      "id": "tiger_1",
+      "tags": ["老虎", "两只老虎", "老虎对峙", "tiger", "two tigers", "tigers facing"],
+      "description": "两只老虎在对峙",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/tiger_1.mp4"
+    },
+     {
+      "id": "tiger_2",
+      "tags": ["老虎","老虎打架", "老虎搏斗", "老虎打闹", "老虎嬉闹","两只老虎打架", "tigers fighting", "two tigers fighting"],
+      "description": "两只老虎在打架搏斗",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/tiger_2.mp4"
+    },
+    {
+      "id": "tiger_3",
+      "tags": ["老虎", "一只老虎", "老虎休息", "老虎躺", "tiger resting", "tiger lying"],
+      "description": "一只老虎在休息",
+      "url": "https://static-1386436960.cos.ap-guangzhou.myqcloud.com/vedio/tiger_3.mp4"
+    }
+  ]
+}

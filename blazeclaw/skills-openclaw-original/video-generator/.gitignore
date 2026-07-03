@@ -1,0 +1,11 @@
+# 生成的视频
+outputs/
+*.mp4
+
+# Python
+__pycache__/
+*.pyc
+
+# 音频文件
+*.wav
+*.txt
