@@ -50,6 +50,7 @@ private:
     CConnection_c connection_;
     std::atomic<bool> is_connected_{ false };
 
-    static constexpr const char* DEFAULT_SERVER_IP = "192.168.0.211";
+//    static constexpr const char* DEFAULT_SERVER_IP = "192.168.0.211";
+    static constexpr const char* DEFAULT_SERVER_IP = "101.132.254.212";
     static constexpr int DEFAULT_SERVER_PORT = 9443;
 };

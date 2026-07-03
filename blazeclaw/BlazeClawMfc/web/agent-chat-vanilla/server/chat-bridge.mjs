@@ -109,8 +109,8 @@ const PROTO_MAGIC = Buffer.from('HBPC', 'ascii')
 
 const TCP_MODE = (process.env.CHAT_TCP_MODE ?? 'plain').trim().toLowerCase()
 const USE_TLS = TCP_MODE === 'tls'
-//const HOST = process.env.CHAT_TCP_HOST ?? process.env.CHAT_TLS_HOST ?? '101.132.254.212'
-const HOST = process.env.CHAT_TCP_HOST ?? process.env.CHAT_TLS_HOST ?? '192.168.20.211'
+const HOST = process.env.CHAT_TCP_HOST ?? process.env.CHAT_TLS_HOST ?? '101.132.254.212'
+//const HOST = process.env.CHAT_TCP_HOST ?? process.env.CHAT_TLS_HOST ?? '192.168.20.211'
 const PORT = Number(process.env.CHAT_TCP_PORT ?? process.env.CHAT_TLS_PORT ?? '8765')
 const BRIDGE = Number(process.env.CHAT_BRIDGE_PORT ?? '8787')
 const TLS_TIMEOUT_MS = Number(process.env.CHAT_TLS_TIMEOUT_MS ?? '30000')
