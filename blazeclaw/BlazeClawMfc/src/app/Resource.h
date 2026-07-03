@@ -421,6 +421,10 @@
 #define IDS_DEEPSEEK_STORED_MARKER      42002
 #define IDS_BTN_SHOW                    42012
 #define IDS_BTN_HIDE                    42013
+#define IDS_TCP_RECEIVER_WND            42020
+#define ID_VIEW_TCP_RECEIVER_WND        42030
+#define ID_TCPRECEIVER_CLEAR           42031
+#define IDC_TCPRECEIVER_SEARCH         42032
 
 // Next default values for new objects
 // 

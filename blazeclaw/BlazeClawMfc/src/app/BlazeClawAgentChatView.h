@@ -98,7 +98,7 @@ private:
 	PROCESS_INFORMATION m_nodeProcessInfo{};
 	PROCESS_INFORMATION m_agentBridgeProcessInfo{};
 	HANDLE m_hNodeStartedEvent = nullptr;
-	HANDLE m_hNodeJobObject = nullptr;
+	HANDLE m_hNodeJsJobObject = nullptr;
 	bool m_bNodeServerStarted = false;
 
 	bool StartNodeScript(

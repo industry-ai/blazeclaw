@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url'
 
 // 加载 .env 文件（对齐 Vite 的 loadEnv，使 chat-bridge 也能读取环境变量）
 const __dirname = dirname(fileURLToPath(import.meta.url))
+let __envLoadedCount = 0
 try {
   const envPath = join(__dirname, '..', '.env')
   const envContent = readFileSync(envPath, 'utf8')
@@ -54,9 +55,12 @@ try {
     if (eqIdx === -1) continue
     const key = trimmed.slice(0, eqIdx).trim()
     const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (!(key in process.env)) process.env[key] = value
+    if (!(key in process.env)) { process.env[key] = value; __envLoadedCount++ }
   }
-} catch { /* .env 不存在或读取失败，忽略 */ }
+  console.log(`[chat-bridge] .env loaded: ${__envLoadedCount} vars from ${envPath}`)
+} catch (e) {
+  console.warn(`[chat-bridge] .env 加载失败: ${e.message}（语音转文字等依赖 .env 的功能可能不可用）`)
+}
 
 const MsgType = Object.freeze({
   Unknown: 0,
@@ -177,6 +181,95 @@ const pushEventQueueBySession = new Map()
 const knownSessions = new Set()
 let bgReaderActive = false
 let bgReaderSocket = null
+
+// ── 常驻 PowerShell 子进程，通过 WM_COPYDATA 发消息到 MFC CTcpReceiverWnd ──
+let psProc = null
+let psReady = false
+/** 待发送消息队列（PowerShell 未就绪时缓存） */
+const psMsgQueue = []
+
+async function initPsBridge() {
+  const hwnd = process.env.CHAT_BRIDGE_HWND
+  if (!hwnd) {
+    console.log('[ps-bridge] CHAT_BRIDGE_HWND not set, skipping PowerShell bridge init')
+    return
+  }
+
+  console.log('[ps-bridge] Initializing with HWND=' + hwnd)
+
+  // PowerShell 脚本
+  const scriptContent = `
+[Console]::InputEncoding=[System.Text.Encoding]::UTF8
+[Console]::OutputEncoding=[System.Text.Encoding]::UTF8
+Add-Type @'
+using System;using System.Runtime.InteropServices;
+public class Mc{public struct C{public IntPtr d;public int c;public IntPtr l;}
+[DllImport("user32")]public static extern IntPtr SendMessage(IntPtr h,uint m,IntPtr w,ref C c);}
+'@
+[Console]::WriteLine('RDY')
+while(($l=[Console]::In.ReadLine())-ne$null){if($l.Length-gt0){try{
+$b=[System.Text.Encoding]::Unicode.GetBytes($l);$p=[Runtime.InteropServices.Marshal]::AllocHGlobal($b.Length);
+[Runtime.InteropServices.Marshal]::Copy($b,0,$p,$b.Length);$c=New-Object Mc+C -Property @{d=0xACDC;c=$b.Length;l=$p};
+[Mc]::SendMessage([IntPtr]${hwnd},0x4A,0,[ref]$c)|Out-Null;[Runtime.InteropServices.Marshal]::FreeHGlobal($p)
+}catch{[Console]::Error.WriteLine("PS_ERR:"+$_.Exception.Message)}}}
+`
+
+  // 写入临时文件（UTF-8 with BOM）
+  const os = await import('node:os')
+  const fs = await import('node:fs')
+  const tmpFile = os.tmpdir() + '/blazeclaw_psbridge_' + process.pid + '.ps1'
+  await fs.promises.writeFile(tmpFile, Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from(scriptContent, 'utf8')]))
+
+  psProc = spawn('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpFile
+  ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+
+  let buf = ''
+  psProc.stdout.on('data', (c) => {
+    const text = c.toString()
+    buf += text
+    if (buf.includes('RDY') && !psReady) {
+      psReady = true
+      console.log('[ps-bridge] PowerShell ready, flushing ' + psMsgQueue.length + ' queued messages')
+      while (psMsgQueue.length > 0) {
+        const msg = psMsgQueue.shift()
+        try { psProc.stdin.write(msg + '\n') } catch { /* ignore */ }
+      }
+    }
+  })
+  psProc.stderr.on('data', (c) => console.error('[ps-bridge-err]', c.toString().trim()))
+  psProc.on('exit', (code) => {
+    console.log('[ps-bridge] PowerShell exited with code ' + code + ', reconnecting in 2s...')
+    psProc = null
+    psReady = false
+    setTimeout(() => { initPsBridge() }, 2000)
+    fs.promises.unlink(tmpFile).catch(() => {})
+  })
+}
+
+// 启动时尝试初始化 PowerShell 桥接（如果 CHAT_BRIDGE_HWND 已设置）
+initPsBridge()
+
+/** 刷新待发送消息到 PowerShell stdin */
+function flushQueue() {
+  while (psMsgQueue.length > 0 && psReady && psProc) {
+    const msg = psMsgQueue.shift()
+    try { psProc.stdin.write(msg + '\n') } catch { psProc = null; psReady = false; break }
+  }
+}
+
+function sendToMfc(message) {
+  if (!psProc) {
+    console.log('[ps-bridge] PowerShell not running, queuing message: ' + String(message).slice(0, 80))
+    psMsgQueue.push(message)
+    return
+  }
+  if (!psReady) {
+    psMsgQueue.push(message)
+    return
+  }
+  try { psProc.stdin.write(message + '\n') } catch { psProc = null; psReady = false; psMsgQueue.push(message) }
+}
 
 function _trackSession(sessionId) {
   const sid = String(sessionId || '').trim()
@@ -451,6 +544,12 @@ function buildHeader(type, payloadByteLength, sessionId = 0n, timestampMs = 0n, 
       `[bridge-header] seq=${buf.readUInt32BE(8)} payload_len=${buf.readUInt32BE(12)} session_id=${sid.toString()} wire_session_id=${wireSid.toString()} sid_hex=${sidHex}`,
     )
   }
+  // 打印发送帧日志（受 CHAT_DEBUG_FRAME 开关控制，默认开启）
+  if (String(process.env.CHAT_DEBUG_FRAME ?? '1').trim() === '1') {
+    console.log(
+      `[tcp-frame] SEND seq=${buf.readUInt32BE(8)} type=${frameTypeName(type)} sid=${wireSid} payload_len=${payloadByteLength}`,
+    )
+  }
   return buf
 }
 
@@ -480,6 +579,69 @@ function parseHeader(buf) {
     payloadLen: buf.readUInt32BE(12),
     sessionId: buf.readBigUInt64BE(16),
     timestampMs: buf.readBigUInt64BE(24),
+  }
+}
+
+// ── 帧类型名称映射（用于日志打印，覆盖所有 MsgType） ──
+const TYPE_NAMES = {
+  [MsgType.Unknown]: 'Unknown',
+  [MsgType.ShutdownRequest]: 'ShutdownRequest',
+  [MsgType.ShutdownConfirm]: 'ShutdownConfirm',
+  [MsgType.ShutdownWithdraw]: 'ShutdownWithdraw',
+  [MsgType.Session_failed]: 'Session_failed',
+  [MsgType.Session_verify]: 'Session_verify',
+  [MsgType.ConnectTcp]: 'ConnectTcp',
+  [MsgType.ConnectTls]: 'ConnectTls',
+  [MsgType.Test]: 'Test',
+  [MsgType.Ping]: 'Ping',
+  [MsgType.Pong]: 'Pong',
+  [MsgType.Data]: 'Data',
+  [MsgType.Auth]: 'Auth',
+  [MsgType.TYPE_AUTH_REQ]: 'AuthReq',
+  [MsgType.TYPE_AUTH_RESP]: 'AuthResp',
+  [MsgType.TYPE_OTP_VERIFY_REQ]: 'OtpVerifyReq',
+  [MsgType.TYPE_OTP_VERIFY_RESP]: 'OtpVerifyResp',
+  [MsgType.OtpRequest]: 'OtpRequest',
+  [MsgType.OtpResponse]: 'OtpResponse',
+  [MsgType.TYPE_OTP_SEND_REQ]: 'OtpSendReq',
+  [MsgType.TYPE_OTP_SEND_RESP]: 'OtpSendResp',
+  [MsgType.AuthRequest]: 'AuthRequest',
+  [MsgType.AuthResponse]: 'AuthResponse',
+  [MsgType.LoginSms]: 'LoginSms',
+  [MsgType.LoginSmsResponse]: 'LoginSmsResponse',
+  [MsgType.PhoneOtpSend]: 'PhoneOtpSend',
+  [MsgType.PhoneOtpVerify]: 'PhoneOtpVerify',
+  [MsgType.PhoneOtpResponse]: 'PhoneOtpResponse',
+  [MsgType.SupabaseQuery]: 'SupabaseQuery',
+  [MsgType.SupabaseInsert]: 'SupabaseInsert',
+  [MsgType.SupabaseDelete]: 'SupabaseDelete',
+  [MsgType.SupabaseUpdate]: 'SupabaseUpdate',
+  [MsgType.SupabaseResult]: 'SupabaseResult',
+  [MsgType.CosUpload]: 'CosUpload',
+  [MsgType.CosDownload]: 'CosDownload',
+  [MsgType.CosDelete]: 'CosDelete',
+  [MsgType.CosList]: 'CosList',
+  [MsgType.CosResult]: 'CosResult',
+  [MsgType.IrcMessageReq]: 'IrcMessageReq',
+  [MsgType.IrcMessageResp]: 'IrcMessageResp',
+  [MsgType.CommandReq]: 'CommandReq',
+  [MsgType.CommandResp]: 'CommandResp',
+}
+
+/** 将帧 type 数值转为可读名称，如 221 → "221(IrcMessageReq)" */
+function frameTypeName(type) {
+  return TYPE_NAMES[type] ? `${type}(${TYPE_NAMES[type]})` : `${type}(Unknown)`
+}
+
+/** 打印 TCP 帧日志（发送/接收统一格式），受 CHAT_DEBUG_FRAME 开关控制 */
+function logFrame(direction, header, body) {
+  const bodyText = body ? body.toString('utf8') : ''
+  let bodyDisplay = bodyText
+  try { bodyDisplay = JSON.stringify(JSON.parse(bodyText)) } catch { /* 非 JSON 保持原文 */ }
+  const logLine = `[tcp-frame] ${direction} seq=${header.seq} type=${frameTypeName(header.type)} sid=${header.sessionId} payload_len=${header.payloadLen} body=${bodyDisplay}`
+  console.log(logLine)
+  if (String(process.env.CHAT_DEBUG_FRAME ?? '1').trim() === '1') {
+    sendToMfc(logLine)
   }
 }
 
@@ -647,6 +809,7 @@ async function readFrame(stream) {
     throw new Error('invalid payload_len')
   }
   const body = h.payloadLen ? await readExactly(stream, h.payloadLen) : Buffer.alloc(0)
+  logFrame('RECV', h, body)
   return { header: h, body }
 }
 
