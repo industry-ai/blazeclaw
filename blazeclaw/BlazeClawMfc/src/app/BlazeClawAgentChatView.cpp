@@ -2,6 +2,8 @@
 #include "framework.h"
 #include "BlazeClawAgentChatView.h"
 #include "BlazeClawMfcApp.h"
+#include "TcpReceiverWnd.h"
+#include "MainFrame.h"
 
 #include <Shlwapi.h>
 #include <nlohmann/json.hpp>
@@ -1010,13 +1012,60 @@ bool CBlazeClawAgentChatView::StartNodeScript(
 	const std::wstring& scriptName,
 	PROCESS_INFORMATION& processInfo)
 {
-		std::wstring psCommand =
-			L"Set-Location -Path \"" + serverPath +
-			L"\"; npm run " + scriptName;
-		std::wstring cmdLine =
-			L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" +
-			psCommand +
-			L"\"";
+	std::wstring psCommand =
+		L"Set-Location -Path \"" + serverPath +
+		L"\"; npm run " + scriptName;
+	std::wstring cmdLine =
+		L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" +
+		psCommand +
+		L"\"";
+
+	// chat-bridge 进程传入 CTcpReceiverWnd 的 HWND 环境变量
+	// 必须用 Set-Item Env: 而不是 $env:=，这样才能被子进程继承
+	if (scriptName == L"chat-bridge")
+	{
+		CMainFrame* pMain = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (pMain && pMain->GetTcpReceiverWnd())
+		{
+			HWND hTarget = pMain->GetTcpReceiverWnd()->GetSafeHwnd();
+			if (hTarget)
+			{
+				WCHAR hwndHex[32];
+				swprintf_s(hwndHex, L"0x%p", hTarget);
+				TRACE("CBlazeClawAgentChatView: CHAT_BRIDGE_HWND = %ls\n", hwndHex);
+
+				// 组合完整命令
+				std::wstring fullCommand =
+					L"Set-Item -Path Env:CHAT_BRIDGE_HWND -Value '" + std::wstring(hwndHex) +
+					L"'; Set-Location -Path \"" + serverPath +
+					L"\"; npm run " + scriptName;
+
+				// 使用 -EncodedCommand：将命令转为 UTF-16LE 后 Base64 编码
+				std::vector<BYTE> utf16Bytes;
+				for (wchar_t ch : fullCommand)
+				{
+					utf16Bytes.push_back(static_cast<BYTE>(ch & 0xFF));
+					utf16Bytes.push_back(static_cast<BYTE>((ch >> 8) & 0xFF));
+				}
+
+				// Base64 编码
+				static const char base64Table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+				std::string base64;
+				for (size_t i = 0; i < utf16Bytes.size(); i += 3)
+				{
+					int n = (utf16Bytes[i] << 16);
+					if (i + 1 < utf16Bytes.size()) n += utf16Bytes[i + 1] << 8;
+					if (i + 2 < utf16Bytes.size()) n += utf16Bytes[i + 2];
+					base64 += base64Table[(n >> 18) & 0x3F];
+					base64 += base64Table[(n >> 12) & 0x3F];
+					base64 += (i + 1 < utf16Bytes.size()) ? base64Table[(n >> 6) & 0x3F] : '=';
+					base64 += (i + 2 < utf16Bytes.size()) ? base64Table[n & 0x3F] : '=';
+				}
+
+				cmdLine = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand " + std::wstring(base64.begin(), base64.end());
+			}
+		}
+	}
 
 	TRACE("CBlazeClawAgentChatView: Executing %ls: %ls\n",
 		scriptName.c_str(),
@@ -1047,6 +1096,21 @@ bool CBlazeClawAgentChatView::StartNodeScript(
 		return false;
 	}
 
+	// 将新进程加入 Job Object，关闭 Job 句柄时 Windows 关闭整棵进程树
+	if (m_hNodeJsJobObject == nullptr)
+	{
+		m_hNodeJsJobObject = CreateJobObjectW(nullptr, nullptr);
+		if (m_hNodeJsJobObject)
+		{
+			JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
+			jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+			SetInformationJobObject(m_hNodeJsJobObject,
+				JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+		}
+	}
+	if (m_hNodeJsJobObject)
+		AssignProcessToJobObject(m_hNodeJsJobObject, processInfo.hProcess);
+
 	TRACE("CBlazeClawAgentChatView: Started %ls. PID: %lu\n",
 		scriptName.c_str(),
 		processInfo.dwProcessId);
@@ -1055,56 +1119,17 @@ bool CBlazeClawAgentChatView::StartNodeScript(
 
 void CBlazeClawAgentChatView::StopNodeProcess(PROCESS_INFORMATION& processInfo)
 {
-	if (!processInfo.hProcess)
+	if (processInfo.hProcess)
 	{
-		return;
-	}
-
-	// check if the process is still running
-	DWORD exitCode = 0;
-	if (!GetExitCodeProcess(processInfo.hProcess, &exitCode) || exitCode != STILL_ACTIVE)
-	{
-		TRACE(L"CBlazeClawAgentChatView: Process already exited\n");
 		CloseHandle(processInfo.hProcess);
 		processInfo.hProcess = nullptr;
-		if (processInfo.hThread)
-		{
-			CloseHandle(processInfo.hThread);
-			processInfo.hThread = nullptr;
-		}
-		return;
 	}
-
-	// use taskkill /T to terminate the entire process tree
-	wchar_t cmd[MAX_PATH];
-	_snwprintf_s(cmd, _TRUNCATE, L"taskkill /F /T /PID %lu", GetProcessId(processInfo.hProcess));
-
-	TRACE(L"CBlazeClawAgentChatView: Stopping process tree: %ls\n", cmd);
-	int result = _wsystem(cmd);
-
-	if (result != 0)
-	{
-		TRACE(L"CBlazeClawAgentChatView: taskkill returned %d, trying TerminateProcess\n", result);
-		// taskkill faled, fallback to TerminateProcess
-		TerminateProcess(processInfo.hProcess, 0);
-	}
-
-	// wait for the process to exit
-	DWORD waitResult = WaitForSingleObject(processInfo.hProcess, 2000);
-	if (waitResult == WAIT_TIMEOUT)
-	{
-		TRACE(L"CBlazeClawAgentChatView: Process did not exit in time, force terminating\n");
-		TerminateProcess(processInfo.hProcess, 1);
-	}
-
-	CloseHandle(processInfo.hProcess);
-	processInfo.hProcess = nullptr;
-
 	if (processInfo.hThread)
 	{
 		CloseHandle(processInfo.hThread);
 		processInfo.hThread = nullptr;
 	}
+	ZeroMemory(&processInfo, sizeof(processInfo));
 }
 
 /*
@@ -1118,7 +1143,6 @@ void CBlazeClawAgentChatView::StopNodeProcess(PROCESS_INFORMATION& processInfo)
 void CBlazeClawAgentChatView::StartNodeServer()
 {
 	TRACE("CBlazeClawAgentChatView: Starting AgentChat Node.js services...\n");
-	TRACE("CBlazeClawAgentChatView: Node.js AgentChat bridge startup will be retired in native cutover mode\n");
 
 	std::wstring serverPath = GetServerPath();
 	if (serverPath.empty())
@@ -1131,15 +1155,6 @@ void CBlazeClawAgentChatView::StartNodeServer()
 
 	m_hNodeStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	// Create a job object so all child processes are terminated on close
-	m_hNodeJobObject = CreateJobObjectW(nullptr, nullptr);
-	if (m_hNodeJobObject) {
-		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
-		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-		SetInformationJobObject(m_hNodeJobObject, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
-	}
-
-	// launches two Node.js processes 
 	const bool chatBridgeStarted = StartNodeScript(
 		serverPath,
 		L"chat-bridge",
@@ -1148,16 +1163,6 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		serverPath,
 		L"blazeclaw-agent-bridge",
 		m_agentBridgeProcessInfo);
-
-	// Assign processes to job for guaranteed cleanup
-	if (m_hNodeJobObject) {
-		if (m_nodeProcessInfo.hProcess) {
-			AssignProcessToJobObject(m_hNodeJobObject, m_nodeProcessInfo.hProcess);
-		}
-		if (m_agentBridgeProcessInfo.hProcess) {
-			AssignProcessToJobObject(m_hNodeJobObject, m_agentBridgeProcessInfo.hProcess);
-		}
-	}
 
 	if (!chatBridgeStarted || !agentBridgeStarted)
 	{
@@ -1180,7 +1185,6 @@ void CBlazeClawAgentChatView::StartNodeServer()
 		if (IsProcessStillActive(m_nodeProcessInfo) &&
 			IsProcessStillActive(m_agentBridgeProcessInfo))
 		{
-			// marks the view as “server started” for downstream logic
 			serverReady = true;
 			m_bNodeServerStarted = true;
 			if (m_hNodeStartedEvent)
@@ -1208,18 +1212,17 @@ void CBlazeClawAgentChatView::StopNodeServer()
 {
 	TRACE("CBlazeClawAgentChatView: Stopping Node.js server...\n");
 
+	// 关闭 Job Object，Windows 自动杀整棵进程树
+	if (m_hNodeJsJobObject)
+	{
+		CloseHandle(m_hNodeJsJobObject);
+		m_hNodeJsJobObject = nullptr;
+	}
+
 	if (m_hNodeStartedEvent)
 	{
 		CloseHandle(m_hNodeStartedEvent);
 		m_hNodeStartedEvent = nullptr;
-	}
-
-	// Terminate the job object to kill all child processes (PowerShell -> npm -> node)
-	if (m_hNodeJobObject)
-	{
-		TerminateJobObject(m_hNodeJobObject, 0);
-		CloseHandle(m_hNodeJobObject);
-		m_hNodeJobObject = nullptr;
 	}
 
 	StopNodeProcess(m_agentBridgeProcessInfo);
@@ -1241,20 +1244,16 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 		Callback<ICoreWebView2WebMessageReceivedEventHandler>(
 			[this](ICoreWebView2* sender, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
 			{
-				LPWSTR rawMessageJson = nullptr;
-				if (SUCCEEDED(args->get_WebMessageAsJson(&rawMessageJson)) && rawMessageJson != nullptr)
+				LPWSTR rawMessage = nullptr;
+				if (SUCCEEDED(args->TryGetWebMessageAsString(&rawMessage)) && rawMessage != nullptr)
 				{
-					std::wstring message(rawMessageJson);
+					std::wstring message(rawMessage);
 					if (m_messageHandler)
 					{
 						m_messageHandler(message);
 					}
-					{
-						std::lock_guard<std::mutex> lock(m_webBridgeMutex);
-						m_pendingWebMessageJson = message;
-					}
 					PostMessage(WM_AGENTCHAT_WEBMESSAGE_RECEIVED);
-					CoTaskMemFree(rawMessageJson);
+					CoTaskMemFree(rawMessage);
 				}
 
 				return S_OK;
@@ -1329,6 +1328,7 @@ CBlazeClawAgentChatView::CBlazeClawAgentChatView() noexcept
 
 CBlazeClawAgentChatView::~CBlazeClawAgentChatView()
 {
+	StopNodeServer();
 }
 
 #ifdef _DEBUG

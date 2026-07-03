@@ -141,6 +141,7 @@
     <ClInclude Include="src\app\DashboardBridgeHost.h" />
     <ClInclude Include="src\app\DashboardWnd.h" />
     <ClInclude Include="src\app\FloatPaneTracker.h" />
+    <ClInclude Include="src\app\TcpReceiverWnd.h" />
     <ClInclude Include="src\app\WebViewBridgeSupport.h" />
     <ClInclude Include="src\app\WebView2Availability.h" />
     <ClInclude Include="src\app\WebViewStartupConfigBridge.h" />
@@ -385,6 +386,7 @@
     <ClCompile Include="src\app\DashboardBridgeHost.cpp" />
     <ClCompile Include="src\app\DashboardWnd.cpp" />
     <ClCompile Include="src\app\FloatPaneTracker.cpp" />
+    <ClCompile Include="src\app\TcpReceiverWnd.cpp" />
     <ClCompile Include="src\app\WebViewBridgeSupport.cpp" />
     <ClCompile Include="src\app\WebViewStartupConfigBridge.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />

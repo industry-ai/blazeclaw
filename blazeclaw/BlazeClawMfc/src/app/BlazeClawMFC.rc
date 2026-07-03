@@ -1253,6 +1253,7 @@ BEGIN
     IDS_DASHBOARD_INSTANCES_WND "Instances dashboard"
     IDS_DASHBOARD_USAGE_WND "Usage dashboard"
     IDS_DASHBOARD_DEVICES_WND "Devices dashboard"
+    IDS_TCP_RECEIVER_WND "TCP Receiver"
 END
 
 #endif    // English (United States) resources
