@@ -60,7 +60,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
-	enum : int { MAX_LOG_ITEMS = 5000 };
+	enum : int { MAX_LOG_ITEMS = 500 };
 
 	CRichEditCtrl m_logEdit;
 	CButton m_clearBtn;
@@ -75,10 +75,11 @@ private:
 	bool m_highlightSearch;
 
 	BOOL CreateControls();
-	void AppendLogLine(const CString& line, bool isHighlight);
+	void AppendLogLine(const CString& line, bool isHighlight, bool scrollToBottom = true);
 	void AddItemToRichEdit(const CString& data);
 	void AddStatusLog(const CString& line);
 	void RebuildLogDisplay();
 	void FindNext(const CString& searchText);
 	void FindPrev(const CString& searchText);
+	void TrimRichEditToMaxLines();
 };
