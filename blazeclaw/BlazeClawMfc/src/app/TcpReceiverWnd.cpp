@@ -181,10 +181,10 @@ void CTcpReceiverWnd::AddItemToRichEdit(const CString& data)
 			isHighlight = true;
 	}
 
-	AppendLogLine(displayLine, isHighlight);
+	AppendLogLine(displayLine, isHighlight, true);
 }
 
-void CTcpReceiverWnd::AppendLogLine(const CString& line, bool isHighlight)
+void CTcpReceiverWnd::AppendLogLine(const CString& line, bool isHighlight, bool scrollToBottom)
 {
 	if (!m_logEdit.m_hWnd) return;
 
@@ -212,19 +212,44 @@ void CTcpReceiverWnd::AppendLogLine(const CString& line, bool isHighlight)
 	m_logEdit.SetSelectionCharFormat(cf);
 	m_logEdit.ReplaceSel(line);
 
-	// 如果文本太长，删除旧内容（保留最后 MAX_LOG_ITEMS 条）
-	if (newLen > 500000)  // 约 50 万字符
-	{
-		m_logEdit.SetSel(0, newLen - 400000);
-		m_logEdit.Clear();
-	}
+	// 如果行数超过限制，删除顶部旧内容（保留最后 MAX_LOG_ITEMS 条）
+	TrimRichEditToMaxLines();
 
 	// 自动滚动到底部
-	m_logEdit.LineScroll(m_logEdit.GetLineCount());
+	if (scrollToBottom)
+		m_logEdit.LineScroll(m_logEdit.GetLineCount());
 
 //#ifdef _DEBUG
 //	OutputDebugString(CString(_T("[TcpRcv] Append line len=")) + std::to_wstring(line.GetLength()).c_str() + _T("\n"));
 //#endif
+}
+
+void CTcpReceiverWnd::TrimRichEditToMaxLines()
+{
+	if (!m_logEdit.m_hWnd)
+		return;
+
+	int lineCount = m_logEdit.GetLineCount();
+	if (lineCount <= MAX_LOG_ITEMS)
+		return;
+
+	int excessLines = lineCount - MAX_LOG_ITEMS;
+	int firstVisibleLine = m_logEdit.GetFirstVisibleLine();
+	int lastChar = m_logEdit.LineIndex(excessLines);
+	if (lastChar <= 0)
+		return;
+
+	m_logEdit.SetRedraw(FALSE);
+	::SendMessage(m_logEdit.m_hWnd, EM_SETSEL, 0, lastChar);
+	::SendMessage(m_logEdit.m_hWnd, EM_REPLACESEL, FALSE, (LPARAM)_T(""));
+
+	int newFirstVisible = firstVisibleLine - excessLines;
+	if (newFirstVisible < 0)
+		newFirstVisible = 0;
+	m_logEdit.LineScroll(newFirstVisible - m_logEdit.GetFirstVisibleLine());
+
+	m_logEdit.SetRedraw(TRUE);
+	m_logEdit.Invalidate(FALSE);
 }
 
 LRESULT CTcpReceiverWnd::OnTcpDataReceived(WPARAM wParam, LPARAM lParam)
@@ -265,7 +290,7 @@ void CTcpReceiverWnd::AddStatusLog(const CString& line)
 	if (!m_logEdit.m_hWnd) return;
 
 	// 添加状态日志行
-	AppendLogLine(line + _T("\r\n"), false);
+	AppendLogLine(line + _T("\r\n"), false, true);
 }
 
 void CTcpReceiverWnd::OnClear()
@@ -301,14 +326,14 @@ void CTcpReceiverWnd::RebuildLogDisplay()
 {
 	if (!m_logEdit.m_hWnd) return;
 
-	// 清空富文本
-	m_logEdit.SetWindowText(_T(""));
-
-	// 重新显示所有日志
 	std::lock_guard<std::mutex> lock(m_bufferMutex);
 
 	m_matchedLines.clear();
 	m_currentMatchIndex = -1;
+
+	m_logEdit.SetRedraw(FALSE);
+	m_logEdit.LockWindowUpdate();
+	m_logEdit.SetWindowText(_T(""));
 
 	for (const auto& item : m_dataBuffer)
 	{
@@ -325,8 +350,12 @@ void CTcpReceiverWnd::RebuildLogDisplay()
 
 		CString displayLine;
 		displayLine.Format(_T("[%s] %s\r\n"), item.timestamp.GetString(), item.data.GetString());
-		AppendLogLine(displayLine, isHighlight);
+		AppendLogLine(displayLine, isHighlight, false);
 	}
+
+	m_logEdit.UnlockWindowUpdate();
+	m_logEdit.SetRedraw(TRUE);
+	m_logEdit.Invalidate(FALSE);
 
 	// 滚动到底部
 	if (!m_matchedLines.empty())
