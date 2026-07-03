@@ -12,7 +12,6 @@
     <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp" />
     <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp" />
     <ClCompile Include="src\app\config_bridge\EmailConfigHandler.cpp" />
-    <ClCompile Include="src\app\calendarbar.cpp" />
     <ClCompile Include="src\app\CBridge.cpp" />
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
@@ -47,14 +46,6 @@
     <ClCompile Include="src\core\diagnostics\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="src\core\diagnostics\DiagnosticsRegressionComparator.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
-    <ClCompile Include="src\core\AgentsCatalogService.cpp" />
-    <ClCompile Include="src\core\AgentsAuthProfileService.cpp" />
-    <ClCompile Include="src\core\AgentsModelRoutingService.cpp" />
-    <ClCompile Include="src\core\AgentsSandboxService.cpp" />
-    <ClCompile Include="src\core\AgentsShellRuntimeService.cpp" />
-    <ClCompile Include="src\core\AgentsTranscriptSafetyService.cpp" />
-    <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
-    <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
@@ -73,16 +64,6 @@
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
-    <ClCompile Include="src\cron\CronHygiene.cpp" />
-    <ClCompile Include="src\cron\CronCliGatewayShim.cpp" />
-    <ClCompile Include="src\cron\CronJsonCompat.cpp" />
-    <ClCompile Include="src\cron\CronModels.cpp" />
-    <ClCompile Include="src\cron\CronNormalize.cpp" />
-    <ClCompile Include="src\cron\CronOpsService.cpp" />
-    <ClCompile Include="src\cron\CronRuntimeOutcomeAdapter.cpp" />
-    <ClCompile Include="src\cron\CronStoreService.cpp" />
-    <ClCompile Include="src\cron\CronTimerService.cpp" />
-    <ClCompile Include="src\cron\CronTimerServiceTestHooks.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
@@ -226,7 +207,6 @@
     <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
-    <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
@@ -284,7 +264,6 @@
     <ClCompile Include="src\app\BlazeClawMFCViewTextHelpers.cpp">
       <Filter>app</Filter>
     </ClCompile>
-    <ClCompile Include="src\app\CronTasksDialog.cpp" />
     <ClCompile Include="src\app\SkillView.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -387,10 +366,72 @@
     <ClCompile Include="src\app\CNetwork_c.cpp">
       <Filter>network</Filter>
     </ClCompile>
+    <ClCompile Include="src\cron\CronCliGatewayShim.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronHygiene.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronJsonCompat.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronModels.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronNormalize.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronOpsService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\CronParityContractTests.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronRuntimeOutcomeAdapter.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronStoreService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CronTasksDialog.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronTimerService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronTimerServiceTestHooks.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsAuthProfileService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsCatalogService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsModelRoutingService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsSandboxService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsShellRuntimeService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsToolPolicyService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsTranscriptSafetyService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsWorkspaceService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\calendarbar.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
-    <ClInclude Include="src\app\calendarbar.h" />
     <ClInclude Include="src\app\CBridge.h" />
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatUiStartupResolver.h" />
@@ -434,14 +475,6 @@
     <ClInclude Include="src\core\diagnostics\CDiagnosticsReportBuilder.h" />
     <ClInclude Include="src\core\diagnostics\DiagnosticsSnapshot.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
-    <ClInclude Include="src\core\AgentsCatalogService.h" />
-    <ClInclude Include="src\core\AgentsAuthProfileService.h" />
-    <ClInclude Include="src\core\AgentsModelRoutingService.h" />
-    <ClInclude Include="src\core\AgentsSandboxService.h" />
-    <ClInclude Include="src\core\AgentsShellRuntimeService.h" />
-    <ClInclude Include="src\core\AgentsTranscriptSafetyService.h" />
-    <ClInclude Include="src\core\AgentsToolPolicyService.h" />
-    <ClInclude Include="src\core\AgentsWorkspaceService.h" />
     <ClInclude Include="src\core\AcpSpawnService.h" />
     <ClInclude Include="src\core\EmbeddingsService.h" />
     <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
@@ -455,13 +488,6 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
-    <ClInclude Include="src\cron\CronHygiene.h" />
-    <ClInclude Include="src\cron\CronJsonCompat.h" />
-    <ClInclude Include="src\cron\CronModels.h" />
-    <ClInclude Include="src\cron\CronNormalize.h" />
-    <ClInclude Include="src\cron\CronOpsService.h" />
-    <ClInclude Include="src\cron\CronStoreService.h" />
-    <ClInclude Include="src\cron\CronTimerService.h" />
     <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h" />
     <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
@@ -636,7 +662,6 @@
     <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
-    <ClInclude Include="src\app\CronTasksDialog.h" />
     <ClInclude Include="src\app\SkillView.h">
       <Filter>app</Filter>
     </ClInclude>
@@ -718,6 +743,57 @@
     <ClInclude Include="src\app\CNetwork_c.h">
       <Filter>network</Filter>
     </ClInclude>
+    <ClInclude Include="src\cron\CronHygiene.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronJsonCompat.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronModels.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronNormalize.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronOpsService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronStoreService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CronTasksDialog.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronTimerService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsAuthProfileService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsCatalogService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsModelRoutingService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsSandboxService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsShellRuntimeService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsToolPolicyService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsTranscriptSafetyService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsWorkspaceService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\calendarbar.h">
+      <Filter>app</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\classview.bmp" />
@@ -791,7 +867,6 @@
     <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime.dll" />
     <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime_providers_shared.dll" />
     <None Include="..\docs\readme.md" />
-    <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="tools\compare_sherpa_baseline.py" />
     <None Include="tools\freeze_sherpa_no_output_baseline.py" />
@@ -812,7 +887,6 @@
     <None Include="VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md" />
     <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat-controller.js" />
-    <None Include="web\chat\cron-controller.js" />
     <None Include="web\chat\devices-controller.js" />
     <None Include="web\chat\files-controller.js" />
     <None Include="web\chat\index.css" />
@@ -875,6 +949,12 @@
     <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md">
       <Filter>STT</Filter>
     </None>
+    <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md">
+      <Filter>cron</Filter>
+    </None>
+    <None Include="web\chat\cron-controller.js">
+      <Filter>cron</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">
@@ -906,6 +986,12 @@
     </Filter>
     <Filter Include="network">
       <UniqueIdentifier>{b12c692f-664c-4d1a-80ce-21e05dd6565c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="cron">
+      <UniqueIdentifier>{b531b7ce-f837-41af-8d5b-6cf5e0f49c9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="agents">
+      <UniqueIdentifier>{e6c3d0bf-8c0c-43ae-84df-33df17280b7a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
