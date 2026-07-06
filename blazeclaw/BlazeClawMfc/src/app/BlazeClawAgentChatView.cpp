@@ -474,6 +474,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 	if (pendingJson.empty())
 	{
+		TRACE("CBlazeClawAgentChatView: native bridge web message dropped (empty pending payload)\n");
 		return 0;
 	}
 
@@ -483,12 +484,18 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		false);
 	if (frame.is_discarded() || !frame.is_object())
 	{
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge web message dropped (invalid json, size=%u)\n",
+			static_cast<unsigned int>(pendingJson.size()));
 		return 0;
 	}
 
 	const std::string channel = frame.value("channel", std::string());
 	if (channel != "agentchat.bridge.request")
 	{
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge web message ignored channel=%s\n",
+			channel.c_str());
 		return 0;
 	}
 
@@ -496,6 +503,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 	const std::string kind = frame.value("kind", std::string());
 	if (requestId.empty() || kind.empty())
 	{
+		TRACE(
+			"CBlazeClawAgentChatView: native bridge web message dropped (missing requestId/kind) channel=%s\n",
+			channel.c_str());
 		return 0;
 	}
 	TRACE(
@@ -1244,17 +1254,46 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 		Callback<ICoreWebView2WebMessageReceivedEventHandler>(
 			[this](ICoreWebView2* sender, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
 			{
+				std::wstring message;
+				bool hasMessage = false;
+
 				LPWSTR rawMessage = nullptr;
 				if (SUCCEEDED(args->TryGetWebMessageAsString(&rawMessage)) && rawMessage != nullptr)
 				{
-					std::wstring message(rawMessage);
-					if (m_messageHandler)
-					{
-						m_messageHandler(message);
-					}
-					PostMessage(WM_AGENTCHAT_WEBMESSAGE_RECEIVED);
+					message.assign(rawMessage);
+					hasMessage = true;
 					CoTaskMemFree(rawMessage);
+					rawMessage = nullptr;
 				}
+				else if (SUCCEEDED(args->get_WebMessageAsJson(&rawMessage)) && rawMessage != nullptr)
+				{
+					message.assign(rawMessage);
+					hasMessage = true;
+					CoTaskMemFree(rawMessage);
+					rawMessage = nullptr;
+				}
+
+				if (!hasMessage)
+				{
+					TRACE("CBlazeClawAgentChatView: native bridge web message dropped (no payload)\n");
+					return S_OK;
+				}
+
+				TRACE(
+					"CBlazeClawAgentChatView: native bridge web message received (size=%u)\n",
+					static_cast<unsigned int>(message.size()));
+
+				{
+					std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+					m_pendingWebMessageJson = message;
+				}
+
+				if (m_messageHandler)
+				{
+					m_messageHandler(message);
+				}
+
+				PostMessage(WM_AGENTCHAT_WEBMESSAGE_RECEIVED);
 
 				return S_OK;
 			}).Get(),

@@ -88,6 +88,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatWebViewBridgeSmokeContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeDegradedStartupContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatBridgeTransportFallbackContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatWebMessageIntakeDispatchContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatListenerFallbackDiagnosticsContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeRequestTimeObservabilityContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
