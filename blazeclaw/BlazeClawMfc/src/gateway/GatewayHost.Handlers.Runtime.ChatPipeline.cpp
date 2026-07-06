@@ -405,9 +405,9 @@ namespace blazeclaw::gateway {
 				"chat.send",
 				[&host](const protocol::RequestFrame& request) {
 					ChatRunStageContext stageContext{
-						   .requestId = request.id,
-						   .method = request.method,
-					 .paramsJson = request.paramsJson,
+						.requestId = request.id,
+						.method = request.method,
+						.paramsJson = request.paramsJson,
 						.validateAttachments = [&host](
 							const std::optional<std::string>& paramsJson,
 							bool& hasAttachments,
@@ -432,7 +432,7 @@ namespace blazeclaw::gateway {
 
 							return dedupeIt->second;
 						},
-					  .extractAttachmentMimeTypes = [&host](
+						.extractAttachmentMimeTypes = [&host](
 							const std::optional<std::string>& paramsJson) {
 							return ExtractAttachmentMimeTypes(paramsJson);
 						},
@@ -596,11 +596,11 @@ namespace blazeclaw::gateway {
 								.routeChannel = stageContext.routeChannel,
 								.routeTo = stageContext.routeTo,
 								.clientMode = stageContext.clientMode,
-							  .hasConnectedClient = stageContext.hasConnectedClient,
+								.hasConnectedClient = stageContext.hasConnectedClient,
 								.mainKey = stageContext.mainKey,
 								.clientCaps = stageContext.clientCaps,
 								.runId = runId,
-							 .hasRegisteredRecipient = hasRegisteredRecipient,
+								.hasRegisteredRecipient = hasRegisteredRecipient,
 								.lateJoinRequested = lateJoinRequested,
 							});
 					if (sendControlDecision.toolEvents.wantsToolEvents &&
@@ -710,7 +710,7 @@ namespace blazeclaw::gateway {
 							{"orchestrationSurface", JsonString("chat.send")},
 							{"originatingChannel", JsonString(sendControlDecision.route.originatingChannel)},
 							{"explicitDeliverRoute", JsonBool(sendControlDecision.route.explicitDeliverRoute)},
-						}));
+							}));
 
 					const std::vector<std::string> attachmentMimeTypes =
 						stageContext.attachmentMimeTypes;
@@ -1730,7 +1730,7 @@ namespace blazeclaw::gateway {
 											runStateIt->second.pushLifecycleRequested) {
 											EmitPushLifecycleEvent(
 												*host.RuntimeContext().transport,
-								 *host.RuntimeContext().eventFanout,
+												*host.RuntimeContext().eventFanout,
 												GatewayEventFanoutService::ChatLifecycleEvent{
 													.runId = runId,
 													.sessionKey = sessionKey,

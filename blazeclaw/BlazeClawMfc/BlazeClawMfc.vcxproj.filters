@@ -64,8 +64,6 @@
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
@@ -77,8 +75,6 @@
     <ClCompile Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\StartupPolicyResolver.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\StartupFixtureValidator.cpp" />
-    <ClCompile Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.cpp" />
-    <ClCompile Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.cpp" />
     <ClCompile Include="src\core\filesystem\SafeOpenSync.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\HookCatalogService.cpp" />
@@ -92,7 +88,6 @@
     <ClCompile Include="src\core\OpenClawOriginalImportService.cpp" />
     <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
     <ClCompile Include="src\core\ChatRuntimeOrchestrationCoordinator.cpp" />
-    <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />
     <ClCompile Include="src\core\startup\ServiceStartupPhaseModule.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
@@ -100,36 +95,6 @@
     <ClCompile Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\TokenizerBridge.cpp" />
-    <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
-    <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.cpp" />
-    <ClCompile Include="src\gateway\GatewayMethodSurfaceAudit.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostModelHelpers.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostProtocolHelpers.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostProtocolIngressPipeline.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolsShared.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.RegistryIntrospection.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentSessionMutation.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentToolSurface.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.ConfigDiagnostics.cpp" />
-    <ClCompile Include="src\gateway\GatewayHost.Handlers.SupplementaryCatalog.cpp" />
     <ClCompile Include="src\gateway\ChatRunStages.cpp" />
     <ClCompile Include="src\gateway\ChatRunPipelineOrchestrator.cpp" />
     <ClCompile Include="src\gateway\executors\EmailScheduleExecutor.cpp" />
@@ -138,27 +103,6 @@
     <ClCompile Include="src\gateway\executors\WeatherLookupExecutor.cpp" />
     <ClCompile Include="src\gateway\PluginHostAdapter.cpp" />
     <ClCompile Include="src\gateway\PluginRuntimeStateService.cpp" />
-    <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
-    <ClCompile Include="src\gateway\GatewayStaticRegistration.cpp" />
-    <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolJson.cpp" />
-    <ClCompile Include="src\gateway\GatewayJsonUtils.cpp" />
-    <ClCompile Include="src\gateway\GatewayJsonSerializers.cpp" />
-    <ClCompile Include="src\gateway\GatewayJsonBuilder.cpp" />
-    <ClCompile Include="src\gateway\GatewaySessionUtilsService.cpp" />
-    <ClCompile Include="src\gateway\GatewayRequestParams.cpp" />
-    <ClCompile Include="src\gateway\GatewayHttpAuthService.cpp" />
-    <ClCompile Include="src\gateway\GatewayNodePairingService.cpp" />
-    <ClCompile Include="src\gateway\GatewayNodeCatalogService.cpp" />
-    <ClCompile Include="src\gateway\GatewayNodeCanvasCapabilityService.cpp" />
-    <ClCompile Include="src\gateway\GatewayNodePendingActionQueue.cpp" />
-    <ClCompile Include="src\gateway\GatewayNodeWakeService.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
     <ClCompile Include="src\gateway\TaskDeltaSchemaValidator.cpp" />
     <ClCompile Include="src\gateway\TaskDeltaLegacyAdapter.cpp" />
     <ClCompile Include="src\gateway\TaskDeltaRepository.cpp" />
@@ -180,14 +124,8 @@
     <ClCompile Include="src\gateway\AuthProfilePolicyService.cpp" />
     <ClCompile Include="src\gateway\ContextEnginePolicySelector.cpp" />
     <ClCompile Include="src\gateway\RecoveryPolicyEngine.cpp" />
-    <ClCompile Include="src\gateway\GatewayLifecycleEventEmitter.cpp" />
     <ClCompile Include="src\gateway\RunSummaryBuilder.cpp" />
     <ClCompile Include="src\gateway\BranchDecisionDiagnostics.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostRouter.cpp" />
-    <ClCompile Include="src\gateway\GatewayHostEx.cpp" />
-    <ClCompile Include="src\gateway\GatewayHandshakePolicy.cpp" />
-    <ClCompile Include="src\gateway\GatewayRequestPolicyGuard.cpp" />
-    <ClCompile Include="src\gateway\GatewayEventFanoutService.cpp" />
     <ClCompile Include="src\gateway\SendPolicyResolver.cpp" />
     <ClCompile Include="src\gateway\ToolPolicyPipeline.cpp" />
     <ClCompile Include="src\gateway\TranscriptPolicyResolver.cpp" />
@@ -195,19 +133,10 @@
     <ClCompile Include="src\gateway\python\ExternalPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\PythonRuntimeDispatcher.cpp" />
     <ClCompile Include="src\gateway\python\PythonRuntimeSelector.cpp" />
-    <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
-    <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
-    <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
-    <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="src\gateway\ExtensionLifecycleManager.cpp" />
-    <ClCompile Include="src\gateway\GatewayUtf8CloseReason.cpp" />
-    <ClCompile Include="src\gateway\GatewayTestHooks.cpp" />
-    <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
-    <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
-    <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp" />
     <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp" />
@@ -429,6 +358,220 @@
     <ClCompile Include="src\app\calendarbar.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\TcpReceiverWnd.cpp" />
+    <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayEventFanoutService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHandshakePolicy.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentSessionMutation.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentToolSurface.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ConfigDiagnostics.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.RegistryIntrospection.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.SupplementaryCatalog.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolsShared.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostEx.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostModelHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostProtocolHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostProtocolIngressPipeline.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRouter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeLocalHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHttpAuthService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonBuilder.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonSerializers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonUtils.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayLifecycleEventEmitter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayMethodSurfaceAudit.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNetPolicy.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeCanvasCapabilityService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeCatalogService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodePairingService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodePendingActionQueue.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeWakeService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolContract.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolJson.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayRequestParams.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayRequestPolicyGuard.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewaySessionUtilsService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayStaticRegistration.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayTestHooks.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayToolRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayUtf8CloseReason.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
@@ -488,9 +631,6 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h" />
-    <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h" />
-    <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
@@ -503,8 +643,6 @@
     <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
     <ClInclude Include="src\\core\\bootstrap\\StartupPolicyResolver.h" />
     <ClInclude Include="src\\core\\bootstrap\\StartupFixtureValidator.h" />
-    <ClInclude Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.h" />
-    <ClInclude Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.h" />
     <ClInclude Include="src\core\filesystem\SafeOpenSync.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\HookCatalogService.h" />
@@ -514,7 +652,6 @@
     <ClInclude Include="src\core\MarkdownFrontmatterCompat.h" />
     <ClInclude Include="src\core\OpenClawOriginalImportService.h" />
     <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
-    <ClInclude Include="src\core\GatewayHostBindingCoordinator.h" />
     <ClInclude Include="src\core\ServiceLifecycleStartupCoordinator.h" />
     <ClInclude Include="src\core\startup\ServiceStartupPhaseModule.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
@@ -522,51 +659,10 @@
     <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
-    <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayHost.h" />
-    <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h" />
-    <ClInclude Include="src\gateway\GatewayRuntimeContext.h" />
-    <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h" />
-    <ClInclude Include="src\gateway\GatewayHostModelHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostProtocolHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersRegistryIntrospection.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersAgentSessionMutation.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersAgentToolSurface.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h" />
-    <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.h" />
-    <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
     <ClInclude Include="src\gateway\ChatRunStages.h" />
     <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h" />
-    <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
-    <ClInclude Include="src\gateway\GatewayStaticRegistration.h" />
-    <ClInclude Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h" />
-    <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolCodec.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolJson.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolModels.h" />
-    <ClInclude Include="src\gateway\GatewayJsonUtils.h" />
-    <ClInclude Include="src\gateway\GatewayJsonSerializers.h" />
-    <ClInclude Include="src\gateway\GatewayJsonBuilder.h" />
-    <ClInclude Include="src\gateway\GatewaySessionUtilsService.h" />
-    <ClInclude Include="src\gateway\GatewayRequestParams.h" />
-    <ClInclude Include="src\gateway\GatewayHttpAuthService.h" />
-    <ClInclude Include="src\gateway\GatewayNodePairingService.h" />
-    <ClInclude Include="src\gateway\GatewayNodeCatalogService.h" />
-    <ClInclude Include="src\gateway\GatewayNodeCanvasCapabilityService.h" />
-    <ClInclude Include="src\gateway\GatewayNodePendingActionQueue.h" />
-    <ClInclude Include="src\gateway\GatewayNodeWakeService.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
-    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\TaskDeltaSchemaValidator.h" />
     <ClInclude Include="src\gateway\TaskDeltaLegacyAdapter.h" />
     <ClInclude Include="src\gateway\TaskDeltaRepository.h" />
@@ -587,15 +683,9 @@
     <ClInclude Include="src\gateway\AuthProfilePolicyService.h" />
     <ClInclude Include="src\gateway\ContextEnginePolicySelector.h" />
     <ClInclude Include="src\gateway\RecoveryPolicyEngine.h" />
-    <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h" />
     <ClInclude Include="src\gateway\RunSummaryBuilder.h" />
     <ClInclude Include="src\gateway\BranchDecisionDiagnostics.h" />
     <ClInclude Include="src\gateway\IGatewayHostRuntime.h" />
-    <ClInclude Include="src\gateway\GatewayHostRouter.h" />
-    <ClInclude Include="src\gateway\GatewayHostEx.h" />
-    <ClInclude Include="src\gateway\GatewayHandshakePolicy.h" />
-    <ClInclude Include="src\gateway\GatewayRequestPolicyGuard.h" />
-    <ClInclude Include="src\gateway\GatewayEventFanoutService.h" />
     <ClInclude Include="src\gateway\SendPolicyResolver.h" />
     <ClInclude Include="src\gateway\ToolPolicyPipeline.h" />
     <ClInclude Include="src\gateway\TranscriptPolicyResolver.h" />
@@ -608,15 +698,7 @@
     <ClInclude Include="src\gateway\python\PythonRuntimeSelector.h" />
     <ClInclude Include="src\gateway\PluginHostAdapter.h" />
     <ClInclude Include="src\gateway\PluginRuntimeStateService.h" />
-    <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
-    <ClInclude Include="src\gateway\GatewayUtf8CloseReason.h" />
-    <ClInclude Include="src\gateway\GatewayTestHooks.h" />
-    <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
-    <ClInclude Include="src\gateway\GatewayNetPolicy.h" />
     <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
-    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
-    <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
     <ClInclude Include="src\agentchat\AgentChatBridgeConfig.h">
       <Filter>agent-chat-bridge</Filter>
     </ClInclude>
@@ -793,6 +875,190 @@
     </ClInclude>
     <ClInclude Include="src\app\calendarbar.h">
       <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TcpReceiverWnd.h" />
+    <ClInclude Include="src\gateway\GatewayAgentRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayEventFanoutService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHandshakePolicy.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHost.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\GatewayHostBindingCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostEx.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersAgentSessionMutation.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersAgentToolSurface.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersRegistryIntrospection.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostModelHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostProtocolHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRouter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHttpAuthService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonBuilder.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonSerializers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonUtils.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayMethodDispatcher.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNetPolicy.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeCanvasCapabilityService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeCatalogService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodePairingService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodePendingActionQueue.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeWakeService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayPersistencePaths.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolCodec.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolContract.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolJson.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolModels.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRequestParams.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRequestPolicyGuard.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRuntimeContext.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySessionRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySessionUtilsService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySkillRootResolver.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayStaticRegistration.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayTestHooks.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayToolRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayUtf8CloseReason.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayWebSocketTransport.h">
+      <Filter>gateway</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -992,6 +1258,9 @@
     </Filter>
     <Filter Include="agents">
       <UniqueIdentifier>{e6c3d0bf-8c0c-43ae-84df-33df17280b7a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gateway">
+      <UniqueIdentifier>{05aafd43-9306-4c74-9a9d-1d287727c3ab}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
