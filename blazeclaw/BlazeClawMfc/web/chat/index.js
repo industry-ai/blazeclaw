@@ -692,6 +692,37 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function normalizeMessageMeta(meta) {
+        const source = meta && typeof meta === "object"
+            ? meta
+            : {};
+        const modelLabel = typeof source.modelLabel === "string"
+            ? source.modelLabel.trim()
+            : "";
+        return {
+            modelLabel,
+        };
+    }
+
+    function buildMessageNode(text, kind, meta) {
+        const messageMeta = normalizeMessageMeta(meta);
+        const div = document.createElement("div");
+        div.className = `msg ${kind}`;
+
+        if (messageMeta.modelLabel && kind === "peer") {
+            const label = document.createElement("div");
+            label.className = "msg-model-label";
+            label.textContent = messageMeta.modelLabel;
+            div.appendChild(label);
+        }
+
+        const content = document.createElement("div");
+        content.className = "msg-content";
+        content.textContent = text;
+        div.appendChild(content);
+        return div;
+    }
+
     function renderMessagesFromStructuredTranscript(streamTextOverride) {
         if (!structuredTranscriptRenderEnabled || !controller) {
             return;
@@ -724,7 +755,16 @@
             }
             const div = document.createElement("div");
             div.className = `msg ${kind}`;
-            div.textContent = text;
+            if (entry.modelLabel && kind === "peer") {
+                const label = document.createElement("div");
+                label.className = "msg-model-label";
+                label.textContent = String(entry.modelLabel);
+                div.appendChild(label);
+            }
+            const content = document.createElement("div");
+            content.className = "msg-content";
+            content.textContent = text;
+            div.appendChild(content);
             messagesEl.appendChild(div);
             if (kind === "peer") {
                 scanApprovalTokenFromText(text);
@@ -736,22 +776,29 @@
             const streamDiv = document.createElement("div");
             streamDiv.id = "stream-msg";
             streamDiv.className = "msg peer";
-            streamDiv.textContent = streamText;
+            if (state.streamResponderLabel) {
+                const label = document.createElement("div");
+                label.className = "msg-model-label";
+                label.textContent = state.streamResponderLabel;
+                streamDiv.appendChild(label);
+            }
+            const content = document.createElement("div");
+            content.className = "msg-content";
+            content.textContent = streamText;
+            streamDiv.appendChild(content);
             messagesEl.appendChild(streamDiv);
         }
 
         scrollBottom();
     }
 
-    function addMessage(text, kind) {
+    function addMessage(text, kind, meta) {
         if (structuredTranscriptRenderEnabled) {
             const stream = String(state.streamText || "").trim();
             renderMessagesFromStructuredTranscript(stream);
             return;
         }
-        const div = document.createElement("div");
-        div.className = `msg ${kind}`;
-        div.textContent = text;
+        const div = buildMessageNode(text, kind, meta);
         messagesEl.appendChild(div);
         if (kind === "peer") {
             scanApprovalTokenFromText(text);
@@ -943,10 +990,12 @@
         state.toolTimelineByRequest.set(requestId, true);
     }
 
-    function addOrReplaceStream(text) {
+    function addOrReplaceStream(text, meta) {
         if (!text || controller.isSilentReplyText(text)) {
             return;
         }
+        const messageMeta = normalizeMessageMeta(meta);
+        state.streamResponderLabel = messageMeta.modelLabel;
         scanApprovalTokenFromText(text);
         harvestApprovalTokensFromText(text);
 
@@ -957,19 +1006,53 @@
 
         const existing = document.getElementById("stream-msg");
         if (existing) {
-            existing.textContent = text;
+            let content = existing.querySelector(".msg-content");
+            if (!content) {
+                existing.textContent = "";
+                if (messageMeta.modelLabel) {
+                    const label = document.createElement("div");
+                    label.className = "msg-model-label";
+                    label.textContent = messageMeta.modelLabel;
+                    existing.appendChild(label);
+                }
+                content = document.createElement("div");
+                content.className = "msg-content";
+                existing.appendChild(content);
+            }
+            const existingLabel = existing.querySelector(".msg-model-label");
+            if (messageMeta.modelLabel) {
+                if (existingLabel) {
+                    existingLabel.textContent = messageMeta.modelLabel;
+                } else {
+                    const label = document.createElement("div");
+                    label.className = "msg-model-label";
+                    label.textContent = messageMeta.modelLabel;
+                    existing.insertBefore(label, content);
+                }
+            }
+            content.textContent = text;
             scrollBottom();
             return;
         }
         const div = document.createElement("div");
         div.id = "stream-msg";
         div.className = "msg peer";
-        div.textContent = text;
+        if (messageMeta.modelLabel) {
+            const label = document.createElement("div");
+            label.className = "msg-model-label";
+            label.textContent = messageMeta.modelLabel;
+            div.appendChild(label);
+        }
+        const content = document.createElement("div");
+        content.className = "msg-content";
+        content.textContent = text;
+        div.appendChild(content);
         messagesEl.appendChild(div);
         scrollBottom();
     }
 
     function finalizeStream() {
+        state.streamResponderLabel = "";
         if (structuredTranscriptRenderEnabled) {
             renderMessagesFromStructuredTranscript("");
             return;

@@ -226,6 +226,17 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
     word-break: break-word;
 }
 
+.msg-model-label {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-bottom: 4px;
+}
+
+.msg-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .self {
     align-self: flex-end;
     background: #2d5f2f;

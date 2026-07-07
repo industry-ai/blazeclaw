@@ -186,6 +186,49 @@
             return trimmed || "main";
         }
 
+        function resolveResponderLabel(event) {
+            const source = event && typeof event === "object"
+                ? event
+                : {};
+            const runId = String(source.runId || "").trim();
+            if (runId && state.runResponderLabels instanceof Map) {
+                const known = state.runResponderLabels.get(runId);
+                if (known) {
+                    return known;
+                }
+            }
+            const provider = String(
+                source.provider ||
+                state.gatewayLifecycleProvider ||
+                "").trim().toLowerCase();
+            let model = String(
+                source.model ||
+                state.gatewayLifecycleModel ||
+                state.selectedModel ||
+                "").trim();
+            const runtimeKind = String(
+                source.runtimeKind ||
+                state.gatewayLifecycleRuntimeKind ||
+                "").trim().toLowerCase();
+
+            if (provider === "deepseek" && model) {
+                if (model.rfind("deepseek/", 0) !== 0) {
+                    model = model.replace(/^deepseek[-_]/i, "");
+                    model = `deepseek/${model}`;
+                }
+            }
+
+            const resolvedRuntime = runtimeKind || (provider === "deepseek" ? "remote" : "local");
+            const modelPart = model || "(unknown-model)";
+            if (!provider && !model) {
+                return "Responder: unknown";
+            }
+            if (!provider) {
+                return `Responder: ${resolvedRuntime} ${modelPart}`;
+            }
+            return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
+        }
+
         function handleChatEvents(events) {
             if (!Array.isArray(events)) {
                 return;
@@ -213,6 +256,9 @@
                             state.seenChatTerminalRuns.delete(first.value);
                         }
                     }
+                    if (state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                    }
                 }
 
                 if (runId && controller.hasTerminalRun(runId) && eventState === "delta") {
@@ -234,7 +280,9 @@
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
                         if (otherFinal && text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         } else {
                             shouldReconcile = true;
                         }
@@ -244,7 +292,9 @@
                         const approvalMessage = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(approvalMessage || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         } else {
                             const approvalToken = String(event.approvalToken || "").trim();
                             const nextAction = String(event.approvalNextAction || "").trim();
@@ -255,13 +305,17 @@
                             if (nextAction) {
                                 fallback += ` nextAction=${nextAction}`;
                             }
-                            addMessage(fallback, "peer");
+                            addMessage(fallback, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         }
                     } else if (event.state === "aborted") {
                         const otherAborted = normalizeAbortedAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherAborted || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         } else {
                             shouldReconcile = true;
                         }
@@ -283,6 +337,7 @@
 
                 if (event.state === "delta") {
                     const next = controller.parseTextFromMessage(event.message);
+                    state.streamResponderLabel = resolveResponderLabel(event);
                     controller.applyDeltaText(next);
                     continue;
                 }
@@ -304,10 +359,14 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurn) {
-                            addOrReplaceStream(text);
+                            addOrReplaceStream(text, {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         }
                     } else {
                         finalizeStream();
@@ -483,6 +542,9 @@
                         deepseekDetails.push(`configured=${configuredModels.join(",")}`);
                     }
 
+                    // added by jicheng, not working well, so comment out for now
+                    //status += "\n";
+
                     status += ` | deepseek: ${deepseekDetails.join(" ; ")}`;
                 }
             }
@@ -495,6 +557,15 @@
                 });
             }
             if (state.connected) {
+                state.gatewayLifecycleProvider = typeof message.provider === "string"
+                    ? String(message.provider).trim()
+                    : state.gatewayLifecycleProvider;
+                state.gatewayLifecycleModel = typeof message.model === "string"
+                    ? String(message.model).trim()
+                    : state.gatewayLifecycleModel;
+                state.gatewayLifecycleRuntimeKind = typeof message.runtimeKind === "string"
+                    ? String(message.runtimeKind).trim()
+                    : state.gatewayLifecycleRuntimeKind;
                 void controller.getControlUiBootstrapConfig({
                     refreshIdentity: true,
                     sessionKey: state.sessionKey,

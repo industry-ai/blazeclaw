@@ -436,6 +436,9 @@
             if (runId) {
                 entry.runId = runId;
             }
+            if (typeof source.modelLabel === "string" && source.modelLabel.trim()) {
+                entry.modelLabel = source.modelLabel.trim();
+            }
             if (typeof source.terminalState === "string" && source.terminalState.trim()) {
                 entry.terminalState = source.terminalState.trim();
             }
@@ -457,20 +460,26 @@
             return true;
         }
 
-        function addMessage(text, kind) {
+        function addMessage(text, kind, meta) {
+            const sourceMeta = meta && typeof meta === "object"
+                ? meta
+                : {};
             recordStructuredTranscript({
                 role: bubbleKindToTranscriptRole(kind),
                 text,
                 source: "ui",
+                modelLabel: typeof sourceMeta.modelLabel === "string"
+                    ? sourceMeta.modelLabel
+                    : "",
             });
-            rawAddMessage(text, kind);
+            rawAddMessage(text, kind, sourceMeta);
         }
 
         // Must be used for bridge / chat.event driven bubbles. The view's raw addMessage
         // (index.js) re-renders from structuredTranscript when that mode is on and does not
         // record new rows by itself, so calling it directly would drop assistant text.
-        function appendChatBubble(text, kind) {
-            addMessage(text, kind);
+        function appendChatBubble(text, kind, meta) {
+            addMessage(text, kind, meta);
         }
 
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
@@ -510,6 +519,9 @@
             : [];
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
+        state.runResponderLabels = state.runResponderLabels instanceof Map
+            ? state.runResponderLabels
+            : new Map();
         state.reconcileTimer = state.reconcileTimer || null;
         state.reconcileFollowupTimers = Array.isArray(state.reconcileFollowupTimers)
             ? state.reconcileFollowupTimers
@@ -1933,17 +1945,70 @@
                 attachments,
                 forceError,
                 detached: sendOptions.detached === true,
+                modelOverride: typeof sendOptions.modelOverride === "string"
+                    ? sendOptions.modelOverride.trim()
+                    : "",
             });
-            addMessage(
-                `waiting for terminal event; queued message (${state.sendQueue.length})`,
-                "peer");
-            if (sendOptions.detached === true) {
-                onDetachedNotice({
-                    kind: "queued",
-                    text: String(message || "").trim(),
-                    sessionKey: state.sessionKey,
-                });
+            if (sendOptions.silentQueue !== true) {
+                addMessage(
+                    `waiting for terminal event; queued message (${state.sendQueue.length})`,
+                    "peer");
             }
+            if (sendOptions.detached === true) {
+                if (sendOptions.silentQueue !== true) {
+                    onDetachedNotice({
+                        kind: "queued",
+                        text: String(message || "").trim(),
+                        sessionKey: state.sessionKey,
+                    });
+                }
+            }
+        }
+
+        function isDeepSeekModelId(modelId) {
+            const normalized = String(modelId || "").trim().toLowerCase();
+            return normalized.includes("deepseek");
+        }
+
+        function formatResponderLabelFromModel(modelId) {
+            const normalized = String(modelId || "").trim();
+            if (!normalized) {
+                return "Responder: unknown";
+            }
+
+            if (isDeepSeekModelId(normalized)) {
+                const rendered = normalized.startsWith("deepseek/")
+                    ? normalized
+                    : `deepseek/${normalized.replace(/^deepseek[-_]?/i, "")}`;
+                return `Responder: remote ${rendered}`;
+            }
+
+            return `Responder: local local/${normalized}`;
+        }
+
+        function resolveCompanionModel(primaryModelId) {
+            const primary = String(primaryModelId || "").trim();
+            const modelIds = Array.isArray(state.modelOptions)
+                ? state.modelOptions
+                    .map((item) => String(item && item.id || "").trim())
+                    .filter((id) => id)
+                : [];
+            if (modelIds.length === 0) {
+                return "";
+            }
+
+            const deepSeekModels = modelIds.filter((id) => isDeepSeekModelId(id));
+            const localModels = modelIds.filter((id) => !isDeepSeekModelId(id));
+            if (deepSeekModels.length === 0 || localModels.length === 0) {
+                return "";
+            }
+
+            if (isDeepSeekModelId(primary)) {
+                const preferred = localModels.find((id) => id.startsWith("llama/"));
+                return preferred || localModels[0];
+            }
+
+            return deepSeekModels[0];
         }
 
         function stopRunWatchdog() {
@@ -2144,6 +2209,9 @@
                 ? options
                 : {};
             const detached = sendOptions.detached === true;
+            const modelOverride = typeof sendOptions.modelOverride === "string"
+                ? sendOptions.modelOverride.trim()
+                : "";
             const requestOverride = typeof sendOptions.requestOverride === "function"
                 ? sendOptions.requestOverride
                 : null;
@@ -2196,7 +2264,7 @@
                     detached,
                     idempotencyKey: state.runId,
                     forceError: Boolean(forceError),
-                    model: state.selectedModel,
+                    model: modelOverride || state.selectedModel,
                     thinkingLevel: state.thinkingLevel,
                     bodyForCommands: userMessage,
                     bodyForAgent: userMessage,
@@ -2246,6 +2314,33 @@
                         });
                     }
                     startRunWatchdog();
+                    const responderModelId = String(chatParams.model || "").trim();
+                    if (responderModelId) {
+                        state.runResponderLabels.set(
+                            serverRunId,
+                            formatResponderLabelFromModel(responderModelId));
+                        if (state.runResponderLabels.size > 256) {
+                            const first = state.runResponderLabels.keys().next();
+                            if (!first.done) {
+                                state.runResponderLabels.delete(first.value);
+                            }
+                        }
+                    }
+                }
+
+                const canFanout =
+                    detached !== true &&
+                    sendOptions.skipDualResponderFanout !== true &&
+                    !forceError;
+                if (canFanout) {
+                    const companionModel = resolveCompanionModel(chatParams.model);
+                    if (companionModel && companionModel !== chatParams.model) {
+                        await sendDetachedMessage(userMessage, {
+                            modelOverride: companionModel,
+                            skipDualResponderFanout: true,
+                            silentQueue: true,
+                        });
+                    }
                 }
             } catch (error) {
                 addMessage(`send error: ${String(error)}`, "error");
@@ -3141,6 +3236,8 @@
 
             await sendPayload(next.message, next.attachments, next.forceError, {
                 detached: next.detached === true,
+                modelOverride: next.modelOverride,
+                skipDualResponderFanout: true,
             });
         }
 
@@ -3154,20 +3251,32 @@
                 ? options
                 : {};
             if (state.runId) {
-                queuePendingSend(detachedMessage, [], false, { detached: true });
+                queuePendingSend(detachedMessage, [], false, {
+                    detached: true,
+                    modelOverride: typeof opts.modelOverride === "string"
+                        ? opts.modelOverride
+                        : "",
+                    silentQueue: opts.silentQueue === true,
+                });
                 updateComposerState();
                 return true;
             }
 
             await sendPayload(detachedMessage, [], false, {
                 detached: true,
+                modelOverride: typeof opts.modelOverride === "string"
+                    ? opts.modelOverride
+                    : "",
+                skipDualResponderFanout: opts.skipDualResponderFanout === true,
                 requestOverride: opts.requestOverride,
             });
-            onDetachedNotice({
-                kind: "sent",
-                text: detachedMessage,
-                sessionKey: state.sessionKey,
-            });
+            if (opts.silentQueue !== true) {
+                onDetachedNotice({
+                    kind: "sent",
+                    text: detachedMessage,
+                    sessionKey: state.sessionKey,
+                });
+            }
             return true;
         }
 
