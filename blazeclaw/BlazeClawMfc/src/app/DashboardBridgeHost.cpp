@@ -169,6 +169,12 @@ void CDashboardBridgeHost::Initialize(
 			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 			return app != nullptr ? app->Services().ActiveChatModel() : std::string();
 		};
+	bridgeDeps.hasDeepSeekCredential =
+		[]()
+		{
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			return app != nullptr && app->Services().HasDeepSeekCredential();
+		};
 	bridgeDeps.sessionIdProvider =
 		[this]()
 		{
@@ -217,9 +223,20 @@ void CDashboardBridgeHost::Initialize(
 			const wchar_t* reason,
 			const std::string& provider,
 			const std::string& model,
-			const std::string& runtimeKind)
+			const std::string& runtimeKind,
+			const bool deepSeekCredentialReady,
+			const std::vector<std::string>& deepSeekEnabledModels,
+			const std::vector<std::string>& deepSeekConfiguredModels)
 		{
-			PostBridgeLifecycleEvent(state, reason, provider, model, runtimeKind);
+			PostBridgeLifecycleEvent(
+				state,
+				reason,
+				provider,
+				model,
+				runtimeKind,
+				deepSeekCredentialReady,
+				deepSeekEnabledModels,
+				deepSeekConfiguredModels);
 		};
 	bridgeDeps.emitWsClose =
 		[this](const std::uint16_t code, const char* reason)
@@ -486,8 +503,31 @@ void CDashboardBridgeHost::PostBridgeLifecycleEvent(
 	const wchar_t* reason,
 	const std::string& provider,
 	const std::string& model,
-	const std::string& runtimeKind)
+	const std::string& runtimeKind,
+	const bool deepSeekCredentialReady,
+	const std::vector<std::string>& deepSeekEnabledModels,
+	const std::vector<std::string>& deepSeekConfiguredModels)
 {
+	auto appendJsonStringArray = [](
+		std::string& json,
+		const char* key,
+		const std::vector<std::string>& values)
+		{
+			json += ",\"";
+			json += key;
+			json += "\":[";
+			for (size_t i = 0; i < values.size(); ++i)
+			{
+				if (i > 0)
+				{
+					json += ",";
+				}
+
+				json += blazeclaw::app::webview_bridge::JsonString(values[i]);
+			}
+			json += "]";
+		};
+
 	std::string payload =
 		"{\"channel\":\"blazeclaw.gateway.lifecycle\",\"sessionId\":" +
 		blazeclaw::app::webview_bridge::JsonString(m_bridgeSessionId) +
@@ -518,6 +558,13 @@ void CDashboardBridgeHost::PostBridgeLifecycleEvent(
 	{
 		payload += ",\"runtimeKind\":" + blazeclaw::app::webview_bridge::JsonString(runtimeKind);
 	}
+
+	payload += ",\"deepseek\":{";
+	payload += "\"credentialReady\":";
+	payload += deepSeekCredentialReady ? "true" : "false";
+	appendJsonStringArray(payload, "enabledModels", deepSeekEnabledModels);
+	appendJsonStringArray(payload, "configuredModels", deepSeekConfiguredModels);
+	payload += "}";
 
 	payload += "}";
 	m_eventTransport.EmitTopic(BridgeEventTopic::Lifecycle, payload);

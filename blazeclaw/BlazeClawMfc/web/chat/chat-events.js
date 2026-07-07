@@ -451,6 +451,40 @@
                 if (details.length > 0) {
                     status += ` (${details.join(" / ")})`;
                 }
+
+                const deepseek = message && typeof message.deepseek === "object"
+                    ? message.deepseek
+                    : null;
+                if (deepseek) {
+                    const deepseekDetails = [];
+                    deepseekDetails.push(
+                        deepseek.credentialReady === true
+                            ? "credential=ready"
+                            : "credential=missing");
+
+                    const enabledModels = Array.isArray(deepseek.enabledModels)
+                        ? deepseek.enabledModels
+                            .map((value) => String(value || "").trim())
+                            .filter((value) => value)
+                        : [];
+                    const configuredModels = Array.isArray(deepseek.configuredModels)
+                        ? deepseek.configuredModels
+                            .map((value) => String(value || "").trim())
+                            .filter((value) => value)
+                        : [];
+
+                    if (enabledModels.length > 0) {
+                        deepseekDetails.push(`enabled=${enabledModels.join(",")}`);
+                    } else {
+                        deepseekDetails.push("enabled=none");
+                    }
+
+                    if (configuredModels.length > 0) {
+                        deepseekDetails.push(`configured=${configuredModels.join(",")}`);
+                    }
+
+                    status += ` | deepseek: ${deepseekDetails.join(" ; ")}`;
+                }
             }
 
             setStatus(status);

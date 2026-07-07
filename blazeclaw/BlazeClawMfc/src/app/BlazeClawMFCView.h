@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "WebView2Availability.h"
 
@@ -144,7 +145,12 @@ protected:
 		const wchar_t* reason = nullptr,
 		const std::string& provider = std::string(),
 		const std::string& model = std::string(),
-		const std::string& runtimeKind = std::string());
+		const std::string& runtimeKind = std::string(),
+		bool deepSeekCredentialReady = false,
+		const std::vector<std::string>& deepSeekEnabledModels =
+			std::vector<std::string>(),
+		const std::vector<std::string>& deepSeekConfiguredModels =
+			std::vector<std::string>());
 	void PumpBridgeLifecycle();
 	void StartBridgeEventsPollAsync();
 	void HandleBridgePollResponse(

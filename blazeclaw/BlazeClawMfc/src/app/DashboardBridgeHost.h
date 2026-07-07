@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 class CDashboardWnd;
 
@@ -41,7 +42,12 @@ private:
 		const wchar_t* reason = nullptr,
 		const std::string& provider = std::string(),
 		const std::string& model = std::string(),
-		const std::string& runtimeKind = std::string());
+		const std::string& runtimeKind = std::string(),
+		bool deepSeekCredentialReady = false,
+		const std::vector<std::string>& deepSeekEnabledModels =
+			std::vector<std::string>(),
+		const std::vector<std::string>& deepSeekConfiguredModels =
+			std::vector<std::string>());
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void AppendDashboardStatus(const wchar_t* stage, const std::string& detail = std::string());

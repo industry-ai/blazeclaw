@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 struct CBridgePollCompletionPayload
 {
@@ -41,6 +42,7 @@ public:
 		std::function<bool()> isGatewayRunning;
 		std::function<std::string()> activeProvider;
 		std::function<std::string()> activeModel;
+		std::function<bool()> hasDeepSeekCredential;
 		std::function<std::string()> sessionIdProvider;
 		std::function<HWND()> getTargetHwnd;
 		std::function<blazeclaw::gateway::protocol::ResponseFrame(
@@ -52,7 +54,10 @@ public:
 			const wchar_t* reason,
 			const std::string& provider,
 			const std::string& model,
-			const std::string& runtimeKind)> emitLifecycle;
+			const std::string& runtimeKind,
+			bool deepSeekCredentialReady,
+			const std::vector<std::string>& deepSeekEnabledModels,
+			const std::vector<std::string>& deepSeekConfiguredModels)> emitLifecycle;
 		std::function<void(std::uint16_t code, const char* reason)> emitWsClose;
 		std::function<void(
 			const std::string& state,
@@ -130,6 +135,9 @@ private:
 	std::string m_lastProvider;
 	std::string m_lastModel;
 	std::string m_lastRuntimeKind;
+	bool m_lastDeepSeekCredentialReady = false;
+	std::string m_lastDeepSeekEnabledModelsKey;
+	std::string m_lastDeepSeekConfiguredModelsKey;
 
 	bool m_pollInFlight = false;
 	std::uint32_t m_pollIntervalMs = 1000;

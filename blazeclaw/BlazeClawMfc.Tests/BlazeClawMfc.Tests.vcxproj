@@ -66,6 +66,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\TelemetryTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\OpenClawOriginalTelemetryContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekSseParserTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekWebViewStatusContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ToolRuntimeRegistryIntegrationTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />

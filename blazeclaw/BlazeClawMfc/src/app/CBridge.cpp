@@ -5,6 +5,8 @@
 #include "../gateway/GatewayJsonUtils.h"
 
 #include <algorithm>
+#include <cctype>
+#include <fstream>
 #include <thread>
 #include <utility>
 #include <nlohmann/json.hpp>
@@ -66,6 +68,120 @@ namespace {
 		return parsed.size();
 	}
 
+	std::string TrimAsciiWhitespace(std::string value)
+	{
+		const auto isSpace = [](const unsigned char ch)
+			{
+				return std::isspace(ch) != 0;
+			};
+
+		value.erase(
+			value.begin(),
+			std::find_if(
+				value.begin(),
+				value.end(),
+				[&](const char ch)
+				{
+					return !isSpace(static_cast<unsigned char>(ch));
+				}));
+		value.erase(
+			std::find_if(
+				value.rbegin(),
+				value.rend(),
+				[&](const char ch)
+				{
+					return !isSpace(static_cast<unsigned char>(ch));
+				}).base(),
+			value.end());
+		return value;
+	}
+
+	bool ParseAsciiBool(const std::string& raw)
+	{
+		std::string normalized = TrimAsciiWhitespace(raw);
+		std::transform(
+			normalized.begin(),
+			normalized.end(),
+			normalized.begin(),
+			[](const unsigned char ch)
+			{
+				return static_cast<char>(std::tolower(ch));
+			});
+		return normalized == "true" ||
+			normalized == "1" ||
+			normalized == "yes";
+	}
+
+	std::vector<std::string> ParseDeepSeekEnabledModelsFromConfig()
+	{
+		const std::string prefix = "chat.model.enabled.deepseek/";
+		std::ifstream in("blazeclaw.conf");
+		if (!in.is_open())
+		{
+			return {};
+		}
+
+		std::vector<std::string> enabledModels;
+		std::string line;
+		while (std::getline(in, line))
+		{
+			const std::string trimmed = TrimAsciiWhitespace(line);
+			if (trimmed.empty() || trimmed[0] == '#')
+			{
+				continue;
+			}
+
+			const auto equalsPos = trimmed.find('=');
+			if (equalsPos == std::string::npos)
+			{
+				continue;
+			}
+
+			const std::string key = TrimAsciiWhitespace(trimmed.substr(0, equalsPos));
+			if (key.rfind(prefix, 0) != 0)
+			{
+				continue;
+			}
+
+			const std::string modelId = key.substr(prefix.size());
+			if (modelId.empty())
+			{
+				continue;
+			}
+
+			if (!ParseAsciiBool(trimmed.substr(equalsPos + 1)))
+			{
+				continue;
+			}
+
+			enabledModels.push_back(modelId);
+		}
+
+		return enabledModels;
+	}
+
+	std::vector<std::string> BuildDeepSeekConfiguredModels()
+	{
+		return {
+			"deepseek-chat",
+			"deepseek-reasoner",
+		};
+	}
+
+	std::string BuildVectorStateKey(const std::vector<std::string>& values)
+	{
+		std::string key;
+		for (const std::string& value : values)
+		{
+			if (!key.empty())
+			{
+				key += "|";
+			}
+			key += value;
+		}
+		return key;
+	}
+
 } // namespace
 
 void CBridge::Initialize(Dependencies deps, Config cfg)
@@ -122,9 +238,20 @@ void CBridge::PumpLifecycle()
 	const std::string model = connected && m_deps.activeModel
 		? m_deps.activeModel()
 		: std::string();
+	const bool deepSeekCredentialReady =
+		m_deps.hasDeepSeekCredential && m_deps.hasDeepSeekCredential();
+	const std::vector<std::string> deepSeekEnabledModels =
+		ParseDeepSeekEnabledModelsFromConfig();
+	const std::vector<std::string> deepSeekConfiguredModels =
+		BuildDeepSeekConfiguredModels();
 	const std::string runtimeKind = provider == "deepseek"
 		? "remote"
 		: (provider.empty() ? std::string() : "local");
+
+	const std::string deepSeekEnabledModelsKey =
+		BuildVectorStateKey(deepSeekEnabledModels);
+	const std::string deepSeekConfiguredModelsKey =
+		BuildVectorStateKey(deepSeekConfiguredModels);
 
 	if (!m_lifecycleSent)
 	{
@@ -140,13 +267,19 @@ void CBridge::PumpLifecycle()
 				connected ? L"service-ready" : L"service-not-running",
 				provider,
 				model,
-				runtimeKind);
+				runtimeKind,
+				deepSeekCredentialReady,
+				deepSeekEnabledModels,
+				deepSeekConfiguredModels);
 		}
 		m_lifecycleSent = true;
 		m_lastConnected = connected;
 		m_lastProvider = provider;
 		m_lastModel = model;
 		m_lastRuntimeKind = runtimeKind;
+		m_lastDeepSeekCredentialReady = deepSeekCredentialReady;
+		m_lastDeepSeekEnabledModelsKey = deepSeekEnabledModelsKey;
+		m_lastDeepSeekConfiguredModelsKey = deepSeekConfiguredModelsKey;
 	}
 	else if (connected != m_lastConnected)
 	{
@@ -163,7 +296,10 @@ void CBridge::PumpLifecycle()
 					L"service-ready",
 					provider,
 					model,
-					runtimeKind);
+					runtimeKind,
+					deepSeekCredentialReady,
+					deepSeekEnabledModels,
+					deepSeekConfiguredModels);
 			}
 		}
 		else
@@ -179,7 +315,10 @@ void CBridge::PumpLifecycle()
 					L"service-stopped",
 					std::string(),
 					std::string(),
-					std::string());
+					std::string(),
+					deepSeekCredentialReady,
+					deepSeekEnabledModels,
+					deepSeekConfiguredModels);
 			}
 			if (m_deps.emitWsClose)
 			{
@@ -191,13 +330,19 @@ void CBridge::PumpLifecycle()
 		m_lastProvider = connected ? provider : std::string();
 		m_lastModel = connected ? model : std::string();
 		m_lastRuntimeKind = connected ? runtimeKind : std::string();
+		m_lastDeepSeekCredentialReady = deepSeekCredentialReady;
+		m_lastDeepSeekEnabledModelsKey = deepSeekEnabledModelsKey;
+		m_lastDeepSeekConfiguredModelsKey = deepSeekConfiguredModelsKey;
 	}
 
 	if (connected &&
 		m_lifecycleSent &&
 		(provider != m_lastProvider ||
 			model != m_lastModel ||
-			runtimeKind != m_lastRuntimeKind))
+			runtimeKind != m_lastRuntimeKind ||
+			deepSeekCredentialReady != m_lastDeepSeekCredentialReady ||
+			deepSeekEnabledModelsKey != m_lastDeepSeekEnabledModelsKey ||
+			deepSeekConfiguredModelsKey != m_lastDeepSeekConfiguredModelsKey))
 	{
 		if (m_deps.appendChatStatusStage)
 		{
@@ -210,11 +355,17 @@ void CBridge::PumpLifecycle()
 				L"runtime-updated",
 				provider,
 				model,
-				runtimeKind);
+				runtimeKind,
+				deepSeekCredentialReady,
+				deepSeekEnabledModels,
+				deepSeekConfiguredModels);
 		}
 		m_lastProvider = provider;
 		m_lastModel = model;
 		m_lastRuntimeKind = runtimeKind;
+		m_lastDeepSeekCredentialReady = deepSeekCredentialReady;
+		m_lastDeepSeekEnabledModelsKey = deepSeekEnabledModelsKey;
+		m_lastDeepSeekConfiguredModelsKey = deepSeekConfiguredModelsKey;
 	}
 
 	if (!connected)

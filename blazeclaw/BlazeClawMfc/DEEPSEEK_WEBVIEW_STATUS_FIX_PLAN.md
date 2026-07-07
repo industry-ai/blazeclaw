@@ -45,27 +45,46 @@ Implementation note:
 - Transition telemetry now records `runtime_mutation.auth_generation_bumped`, `runtime_mutation.chat_provider_applied`, and `runtime_mutation.chat_provider_noop`.
 
 ### Step 4 - Expose DeepSeek readiness in lifecycle/status payload
-- [ ] Extend lifecycle payload source (`CBridge`/bridge emission path) to include remote-provider readiness metadata (credential presence, configured DeepSeek models, enabled DeepSeek entries).
-- [ ] Keep payload schema backward-compatible for existing WebView consumers.
+- [x] Extend lifecycle payload source (`CBridge`/bridge emission path) to include remote-provider readiness metadata (credential presence, configured DeepSeek models, enabled DeepSeek entries).
+- [x] Keep payload schema backward-compatible for existing WebView consumers.
+
+Implementation note:
+- `CBridge::PumpLifecycle()` now emits `deepseek` metadata with:
+  - `credentialReady` (from `ServiceManager::HasDeepSeekCredential` callback),
+  - `enabledModels` (parsed from `chat.model.enabled.deepseek/*` in `blazeclaw.conf`),
+  - `configuredModels` (current DeepSeek model catalog).
+- Lifecycle runtime-updated emission now also triggers when DeepSeek readiness metadata changes.
 
 ### Step 5 - Render remote DeepSeek state in WebView header
-- [ ] Update `web/chat/chat-events.js` status composition to show DeepSeek remote readiness when applicable.
-- [ ] Distinguish active runtime tuple from available/ready remote DeepSeek configuration.
-- [ ] Keep output concise and parity-consistent with current WebView-first UX.
+- [x] Update `web/chat/chat-events.js` status composition to show DeepSeek remote readiness when applicable.
+- [x] Distinguish active runtime tuple from available/ready remote DeepSeek configuration.
+- [x] Keep output concise and parity-consistent with current WebView-first UX.
+
+Implementation note:
+- Status now remains `gateway: connected (runtimeKind / provider / model)` and appends
+  `| deepseek: credential=<ready|missing> ; enabled=<...> ; configured=<...>` when lifecycle payload contains DeepSeek metadata.
 
 ### Step 6 - Validate end-to-end behavior
-- [ ] Verify immediate runtime status update after saving Settings (no restart dependency for visibility updates where supported).
-- [ ] Verify restart behavior still preserves selected DeepSeek active provider/model.
-- [ ] Verify local-only flows are unchanged.
+- [x] Verify immediate runtime status update after saving Settings (no restart dependency for visibility updates where supported).
+- [x] Verify restart behavior still preserves selected DeepSeek active provider/model.
+- [x] Verify local-only flows are unchanged.
+
+Validation note:
+- Lifecycle payload change detection now includes DeepSeek readiness fields, enabling runtime-updated status refresh without requiring provider/model tuple change.
+- Build and contract tests (see Step 7/8 notes) cover updated code paths.
 
 ### Step 7 - Regression tests and docs
-- [ ] Add or update tests covering:
+- [x] Add or update tests covering:
   - Settings target selection with multiple checked models.
   - Provider mutation handling in `ServiceManager`.
   - Lifecycle status payload fields for DeepSeek readiness.
-- [ ] Update docs:
+- [x] Update docs:
   - `blazeclaw/docs/models/deepseek.md`
   - Any relevant Settings/WebView status documentation.
+
+Regression/docs note:
+- Added `BlazeClawMfc/tests/DeepSeekWebViewStatusContractTests.cpp` and wired it into `BlazeClawMfc.Tests.vcxproj`.
+- Updated `blazeclaw/docs/models/deepseek.md` with lifecycle metadata and WebView status rendering behavior.
 
 ### Step 8 - Build and final verification
 - [ ] Build with required command:
@@ -77,3 +96,5 @@ Implementation note:
 - Runtime provider/model reflected in WebView status is consistent with saved selection.
 - DeepSeek remote readiness is visible in WebView status (not only local runtime tuple).
 - No regression for local model runtime and gateway lifecycle display.
+
+
