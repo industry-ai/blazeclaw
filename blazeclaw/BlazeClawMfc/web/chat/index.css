@@ -2,6 +2,21 @@
     color-scheme: dark;
 }
 
+.run-label-debug {
+    border-top: 1px solid #2f2f2f;
+    border-bottom: 1px solid #2f2f2f;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #c8d3e6;
+    background: #1a1f2a;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+    .run-label-debug[hidden] {
+        display: none;
+    }
+
 body {
     margin: 0;
     font-family: "Segoe UI", sans-serif;
@@ -407,10 +422,24 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
 
 .composer-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr auto;
     gap: 8px;
     padding: 0 10px 10px 10px;
     border-top: 1px solid #2b2b2b;
+}
+
+.composer-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #b9d8ff;
+    white-space: nowrap;
+}
+
+.composer-toggle input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
 }
 
 .session-controls {

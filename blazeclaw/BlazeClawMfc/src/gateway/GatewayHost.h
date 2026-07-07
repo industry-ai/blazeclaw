@@ -715,6 +715,8 @@ namespace blazeclaw::gateway {
 			std::string errorContextJson;
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
+			bool detached = false;
+			bool suppressHistory = false;
 			bool terminalEventEnqueued = false;
 			bool pushLifecycleRequested = false;
 			bool toolEventsAllowed = false;

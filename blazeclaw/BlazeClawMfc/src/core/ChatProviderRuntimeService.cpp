@@ -10,8 +10,11 @@
 
 #include <windows.h>
 
+#include <array>
 #include <cctype>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace blazeclaw::core {
 
@@ -195,6 +198,126 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		bool HasPromptLeakage(
+			const std::string& userMessage,
+			const std::string& assistantText) {
+			if (assistantText.empty()) {
+				return false;
+			}
+
+			if (assistantText.find("[user_message]") != std::string::npos ||
+				assistantText.find("assistant_response") != std::string::npos) {
+				return true;
+			}
+
+			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
+			const std::string normalizedAssistant = NormalizeForEchoCheck(assistantText);
+			if (normalizedUser.empty() || normalizedAssistant.empty()) {
+				return false;
+			}
+
+			return normalizedAssistant.find(normalizedUser) != std::string::npos;
+		}
+
+		std::string SanitizeLocalAssistantText(
+			const std::string& userMessage,
+			std::string value) {
+			for (;;) {
+				const auto markerStart = value.find("<|");
+				if (markerStart == std::string::npos) {
+					break;
+				}
+				const auto markerEnd = value.find("|>", markerStart + 2);
+				if (markerEnd == std::string::npos) {
+					value.erase(markerStart);
+					break;
+				}
+				value.erase(markerStart, markerEnd - markerStart + 2);
+			}
+
+			const std::array<std::string, 7> scrubPhrases = {
+				"[assistant_response]",
+				"assistant_response",
+				"[user_message]",
+				"\nuser\n",
+				"\nassistant\n",
+				"\rim_start",
+				"<|im_start|>",
+			};
+			for (const auto& phrase : scrubPhrases) {
+				std::size_t offset = 0;
+				while ((offset = value.find(phrase, offset)) != std::string::npos) {
+					value.erase(offset, phrase.size());
+				}
+			}
+
+			const std::array<std::string, 4> terminalCutMarkers = {
+				"\n[user_message]",
+				"\nuser\n",
+				"\nassistant\n",
+				"<|im_start|>",
+			};
+			std::size_t cutPos = std::string::npos;
+			for (const auto& marker : terminalCutMarkers) {
+				const auto pos = value.find(marker);
+				if (pos != std::string::npos) {
+					cutPos = cutPos == std::string::npos ? pos : (std::min)(cutPos, pos);
+				}
+			}
+			if (cutPos != std::string::npos) {
+				value.erase(cutPos);
+			}
+
+			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
+			std::vector<std::string> keptLines;
+			std::istringstream input(value);
+			std::string line;
+			while (std::getline(input, line)) {
+				const std::string trimmedLine = TrimAsciiWhitespace(line);
+				if (trimmedLine.empty()) {
+					continue;
+				}
+
+				if (!normalizedUser.empty()) {
+					const std::string normalizedLine = NormalizeForEchoCheck(trimmedLine);
+					if (!normalizedLine.empty() && normalizedLine == normalizedUser) {
+						continue;
+					}
+
+					if (normalizedLine.find(normalizedUser) != std::string::npos) {
+						continue;
+					}
+				}
+
+				if (!keptLines.empty()) {
+					const std::string previousNormalized =
+						NormalizeForEchoCheck(keptLines.back());
+					const std::string currentNormalized =
+						NormalizeForEchoCheck(trimmedLine);
+					if (!previousNormalized.empty() &&
+						!currentNormalized.empty() &&
+						previousNormalized == currentNormalized) {
+						continue;
+					}
+				}
+
+				keptLines.push_back(trimmedLine);
+			}
+
+			if (!keptLines.empty()) {
+				std::string rebuilt;
+				for (std::size_t i = 0; i < keptLines.size(); ++i) {
+					if (i > 0) {
+						rebuilt += "\n";
+					}
+					rebuilt += keptLines[i];
+				}
+				value = std::move(rebuilt);
+			}
+
+			return TrimAsciiWhitespace(value);
+		}
+
 	} // namespace
 
 	blazeclaw::gateway::GatewayHost::ChatRuntimeResult
@@ -259,6 +382,10 @@ namespace blazeclaw::core {
 		if (bindings.localModelActivationEnabled && bindings.localModelRuntime != nullptr &&
 			bindings.localModelRuntimeSnapshot != nullptr) {
 			const std::string prompt = BuildLocalModelPrompt(providerRequest);
+			double runtimeTemperature = bindings.config->localModel.temperature;
+			if (!(runtimeTemperature > 0.0)) {
+				runtimeTemperature = 0.7;
+			}
 			std::string streamedLocalText;
 			std::vector<std::string> streamedLocalSnapshots;
 			TRACE(
@@ -276,7 +403,7 @@ namespace blazeclaw::core {
 					.runId = providerRequest.runId,
 					.prompt = prompt,
 					.maxTokens = std::nullopt,
-					.temperature = std::nullopt,
+					.temperature = runtimeTemperature,
 				},
 				[&](const std::string& delta) {
 					if (delta.empty()) {
@@ -325,13 +452,14 @@ namespace blazeclaw::core {
 			std::string assistantText = !localResult.text.empty()
 				? localResult.text
 				: streamedLocalText;
+			assistantText = SanitizeLocalAssistantText(request.message, std::move(assistantText));
 			std::string modelId = localResult.modelId;
 			std::uint32_t latencyMs = localResult.latencyMs;
 			std::uint32_t generatedTokens = localResult.generatedTokens;
-			if (streamedLocalSnapshots.empty() &&
+			if (HasPromptLeakage(request.message, assistantText) ||
 				IsLikelyEchoResponse(request.message, assistantText)) {
 				TRACE(
-					"[LocalModel] request.retry runId=%s reason=echo_detected\n",
+					"[LocalModel] request.retry runId=%s reason=prompt_leak_or_echo_detected\n",
 					providerRequest.runId.c_str());
 				const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
 				const auto retryResult = bindings.localModelRuntime->GenerateStream(
@@ -339,17 +467,21 @@ namespace blazeclaw::core {
 						.runId = providerRequest.runId + "-retry",
 						.prompt = retryPrompt,
 						.maxTokens = std::nullopt,
-						.temperature = std::nullopt,
+						.temperature = runtimeTemperature,
 					},
 					nullptr);
 				*bindings.localModelRuntimeSnapshot = bindings.localModelRuntime->Snapshot();
 
-				if (retryResult.ok &&
-					!IsLikelyEchoResponse(request.message, retryResult.text)) {
-					assistantText = retryResult.text;
+				if (retryResult.ok) {
+					const std::string sanitizedRetryText =
+						SanitizeLocalAssistantText(request.message, retryResult.text);
+					if (!HasPromptLeakage(request.message, sanitizedRetryText) &&
+						!IsLikelyEchoResponse(request.message, sanitizedRetryText)) {
+						assistantText = sanitizedRetryText;
 					modelId = retryResult.modelId;
 					latencyMs = retryResult.latencyMs;
 					generatedTokens = retryResult.generatedTokens;
+					}
 				}
 			}
 

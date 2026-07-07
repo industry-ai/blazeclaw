@@ -20,6 +20,7 @@
             <div id="agentsTabs" class="agents-tabs"></div>
             <div id="agentsSurface" class="agents-surface"></div>
         </div>
+        <div id="runLabelDebug" class="run-label-debug" hidden></div>
         <div id="approvalQueue" class="approval-queue" hidden></div>
         <div id="messages" class="messages"></div>
         <div id="detachedNotices" class="detached-notices" hidden></div>
@@ -40,6 +41,10 @@
             <select id="sessionSelect" title="Session"></select>
             <select id="modelSelect" title="Model"></select>
             <select id="thinkingSelect" title="Thinking Level"></select>
+            <label class="composer-toggle" title="Show runId to model label debug marker">
+                <input id="runLabelDebugToggle" type="checkbox" />
+                <span>Run label debug</span>
+            </label>
         </div>
         <div class="session-controls">
             <button id="sessionSubscribeBtn">Subscribe</button>

@@ -26,6 +26,7 @@
     const speechStatusEl = document.getElementById("speechStatus");
     const assistantIdentityEl = document.getElementById("assistantIdentity");
     const approvalQueueEl = document.getElementById("approvalQueue");
+    const runLabelDebugEl = document.getElementById("runLabelDebug");
     const messagesEl = document.getElementById("messages");
     const detachedNoticesEl = document.getElementById("detachedNotices");
     const speechLivePreviewEl = document.getElementById("speechLivePreview");
@@ -46,6 +47,7 @@
     state.sessionSelect = document.getElementById("sessionSelect");
     state.modelSelect = document.getElementById("modelSelect");
     state.thinkingSelect = document.getElementById("thinkingSelect");
+    state.runLabelDebugToggle = document.getElementById("runLabelDebugToggle");
     state.sessionSubscribeBtn = document.getElementById("sessionSubscribeBtn");
     state.sessionUnsubscribeBtn = document.getElementById("sessionUnsubscribeBtn");
     state.sessionCompactionRefreshBtn = document.getElementById("sessionCompactionRefreshBtn");
@@ -64,6 +66,89 @@
         }
 
         statusEl.textContent = text;
+    }
+
+    function resolveRunLabelDebugEnabled() {
+        const search = new URLSearchParams(window.location.search || "");
+        const queryToggle = search.get("runLabelDebug");
+        if (queryToggle === "0") {
+            return false;
+        }
+        if (queryToggle === "1") {
+            return true;
+        }
+
+        try {
+            if (window.localStorage) {
+                return window.localStorage.getItem("blazeclaw.chat.runLabelDebug") === "1";
+            }
+        } catch (_) {
+        }
+
+        return false;
+    }
+
+    function setRunLabelDebugEnabled(enabled) {
+        const resolved = enabled === true;
+        try {
+            if (window.localStorage) {
+                window.localStorage.setItem(
+                    "blazeclaw.chat.runLabelDebug",
+                    resolved ? "1" : "0");
+                if (resolved &&
+                    window.localStorage.getItem("blazeclaw.chat.structuredTranscript") !== "1") {
+                    window.localStorage.setItem("blazeclaw.chat.structuredTranscript", "1");
+                }
+            }
+        } catch (_) {
+        }
+
+        state.runLabelDebugEnabled = resolved;
+        if (state.runLabelDebugToggle) {
+            state.runLabelDebugToggle.checked = resolved;
+        }
+        if (!resolved && runLabelDebugEl) {
+            runLabelDebugEl.hidden = true;
+            runLabelDebugEl.textContent = "";
+        }
+    }
+
+    function renderRunLabelDebug(snapshot) {
+        if (!runLabelDebugEl) {
+            return;
+        }
+
+        const source = snapshot && typeof snapshot === "object"
+            ? snapshot
+            : {};
+        if (source.enabled !== true) {
+            runLabelDebugEl.hidden = true;
+            runLabelDebugEl.textContent = "";
+            return;
+        }
+
+        try {
+            if (window.localStorage &&
+                window.localStorage.getItem("blazeclaw.chat.structuredTranscript") !== "1") {
+                window.localStorage.setItem("blazeclaw.chat.structuredTranscript", "1");
+            }
+        } catch (_) {
+        }
+
+        const reason = String(source.reason || "snapshot").trim();
+        const activeRunId = String(source.activeRunId || "").trim();
+        const selectedModel = String(source.selectedModel || "").trim();
+        const rows = Array.isArray(source.rows)
+            ? source.rows.map((row) => String(row || "").trim()).filter((row) => row)
+            : [];
+
+        const lines = [
+            `run-label-debug reason=${reason} selected=${selectedModel || "(none)"} activeRunId=${activeRunId || "(none)"}`,
+            rows.length > 0 ? rows.join("\n") : "(no run label mappings)",
+        ];
+
+        runLabelDebugEl.textContent = lines.join("\n");
+        runLabelDebugEl.hidden = false;
     }
 
     function renderSpeechStatus() {
@@ -2501,6 +2586,14 @@
                                 return String(state.agentsPanel || "") !== "observability";
                             },
                         });
+
+    state.runLabelDebugEnabled = resolveRunLabelDebugEnabled();
+    if (state.runLabelDebugToggle) {
+        state.runLabelDebugToggle.checked = state.runLabelDebugEnabled === true;
+        state.runLabelDebugToggle.addEventListener("change", () => {
+            setRunLabelDebugEnabled(Boolean(state.runLabelDebugToggle.checked));
+        });
+    }
                     }
                     return;
                 }
@@ -4124,12 +4217,12 @@
         ? chatEventsApi.createEventsModule({
             state,
             controller,
-            addMessage(text, kind) {
+            addMessage(text, kind, meta) {
                 if (typeof controller.appendChatBubble === "function") {
-                    controller.appendChatBubble(text, kind);
+                    controller.appendChatBubble(text, kind, meta);
                     return;
                 }
-                addMessage(text, kind);
+                addMessage(text, kind, meta);
             },
             appendToolLifecycleRow,
             setStatus,
@@ -4165,6 +4258,7 @@
         };
 
     composerModule.bind();
+    setRunLabelDebugEnabled(state.runLabelDebugEnabled === true);
     void controller.loadSessionCompactions();
     syncSessionControlsPolling();
     if (agentsController) {

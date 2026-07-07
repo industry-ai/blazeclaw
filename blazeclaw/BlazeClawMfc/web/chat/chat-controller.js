@@ -493,6 +493,9 @@
         const onSessionControlStateChanged = typeof opts.onSessionControlStateChanged === "function"
             ? opts.onSessionControlStateChanged
             : function () { };
+        const onRunLabelDebugSnapshot = typeof opts.onRunLabelDebugSnapshot === "function"
+            ? opts.onRunLabelDebugSnapshot
+            : function () { };
         const onCronSlashCommand = typeof opts.onCronSlashCommand === "function"
             ? opts.onCronSlashCommand
             : null;
@@ -522,6 +525,7 @@
         state.runResponderLabels = state.runResponderLabels instanceof Map
             ? state.runResponderLabels
             : new Map();
+        state.runLabelDebugEnabled = resolveRunLabelDebugEnabled();
         state.reconcileTimer = state.reconcileTimer || null;
         state.reconcileFollowupTimers = Array.isArray(state.reconcileFollowupTimers)
             ? state.reconcileFollowupTimers
@@ -1983,7 +1987,84 @@
                 return `Responder: remote ${rendered}`;
             }
 
-            return `Responder: local local/${normalized}`;
+            return `Responder: local ${normalized}`;
+        }
+
+        function resolveRunLabelDebugEnabled() {
+            try {
+                const search = new URLSearchParams(window.location.search || "");
+                const queryToggle = String(search.get("runLabelDebug") || "").trim();
+                if (queryToggle === "0") {
+                    return false;
+                }
+                if (queryToggle === "1") {
+                    return true;
+                }
+
+                if (window.localStorage) {
+                    const storedToggle = String(
+                        window.localStorage.getItem("blazeclaw.chat.runLabelDebug") || "").trim();
+                    if (storedToggle === "0") {
+                        return false;
+                    }
+                    if (storedToggle === "1") {
+                        return true;
+                    }
+                }
+            } catch (_) {
+            }
+
+            return false;
+        }
+
+        function publishRunLabelDebugSnapshot(reason) {
+            if (state.runLabelDebugEnabled !== true) {
+                return;
+            }
+
+            const rows = [];
+            if (state.runResponderLabels instanceof Map) {
+                for (const [runId, label] of state.runResponderLabels.entries()) {
+                    const normalizedRunId = String(runId || "").trim();
+                    const normalizedLabel = String(label || "").trim();
+                    if (!normalizedRunId) {
+                        continue;
+                    }
+                    rows.push(`${normalizedRunId} => ${normalizedLabel || "(empty-label)"}`);
+                }
+            }
+
+            const payload = {
+                enabled: true,
+                reason: String(reason || "snapshot"),
+                selectedModel: String(state.selectedModel || "").trim(),
+                activeRunId: String(state.runId || "").trim(),
+                size: rows.length,
+                rows,
+            };
+
+            if (typeof state.onRunLabelDebugSnapshot === "function") {
+                state.onRunLabelDebugSnapshot(payload);
+            }
+            onRunLabelDebugSnapshot(payload);
+        }
+
+        function noteRunLabelMapChanged(reason) {
+            publishRunLabelDebugSnapshot(reason);
+        }
+
+        function noteRunResponderLabelMapChanged(reason) {
+            noteRunLabelMapChanged(reason);
+        }
+
+        function resolveProviderOverrideFromModel(modelId) {
+            const normalized = String(modelId || "").trim();
+            if (!normalized) {
+                return "";
+            }
+            return isDeepSeekModelId(normalized)
+                ? "deepseek"
+                : "local";
         }
 
         function resolveCompanionModel(primaryModelId) {
@@ -2011,6 +2092,22 @@
             return deepSeekModels[0];
         }
 
+        async function applyRuntimeModelOverride(modelId) {
+            const nextModel = String(modelId || "").trim();
+            if (!nextModel) {
+                return;
+            }
+
+            const payload = {
+                model: nextModel,
+            };
+            const shouldCoercePayload = Boolean(state.configCoerceEnabled);
+            const params = shouldCoercePayload
+                ? coerceConfigMutationPayload(payload, MODEL_SELECTION_SCHEMA)
+                : stableJsonNormalize(payload);
+            await requestWithOverride("config.set", params, null);
+        }
+
         function stopRunWatchdog() {
             if (state.runWatchdogTimer) {
                 clearInterval(state.runWatchdogTimer);
@@ -2032,6 +2129,7 @@
             if (normalizedState === "delta" || normalizedState === "queued" || normalizedState === "started") {
                 state.runWatchdogLastWarningMs = 0;
             }
+                    noteRunLabelMapChanged("optimistic-send");
         }
 
         function startRunWatchdog() {
@@ -2209,6 +2307,7 @@
                 ? options
                 : {};
             const detached = sendOptions.detached === true;
+            const suppressUserEcho = sendOptions.suppressUserEcho === true;
             const modelOverride = typeof sendOptions.modelOverride === "string"
                 ? sendOptions.modelOverride.trim()
                 : "";
@@ -2225,7 +2324,7 @@
                 return;
             }
 
-            if (userMessage && !detached) {
+            if (userMessage && !detached && !suppressUserEcho) {
                 pushInputHistory(userMessage);
                 addMessage(userMessage, "self");
             }
@@ -2262,9 +2361,11 @@
                     message: userMessage,
                     deliver: detached,
                     detached,
+                    suppressHistory: sendOptions.suppressHistory === true,
                     idempotencyKey: state.runId,
                     forceError: Boolean(forceError),
                     model: modelOverride || state.selectedModel,
+                    providerOverride: resolveProviderOverrideFromModel(modelOverride || state.selectedModel),
                     thinkingLevel: state.thinkingLevel,
                     bodyForCommands: userMessage,
                     bodyForAgent: userMessage,
@@ -2297,6 +2398,20 @@
                         chatParams.source = speechContext.source.trim();
                     }
                 }
+                const optimisticRunId = String(state.runId || "").trim();
+                const optimisticModelId = String(chatParams.model || "").trim();
+                if (optimisticRunId && optimisticModelId) {
+                    state.runResponderLabels.set(
+                        optimisticRunId,
+                        formatResponderLabelFromModel(optimisticModelId));
+                    if (state.runResponderLabels.size > 256) {
+                        const first = state.runResponderLabels.keys().next();
+                        if (!first.done) {
+                            state.runResponderLabels.delete(first.value);
+                        }
+                    }
+                }
+
                 const sendResult = await requestWithOverride("chat.send", chatParams, requestOverride);
 
                 const serverRunId = extractRunIdFromSendResult(sendResult);
@@ -2305,6 +2420,12 @@
                     const previousRunId = String(state.runId || "").trim();
                     state.runId = serverRunId;
                     if (previousRunId && previousRunId !== serverRunId) {
+                        const previousLabel = state.runResponderLabels.get(previousRunId);
+                        if (previousLabel) {
+                            state.runResponderLabels.set(serverRunId, previousLabel);
+                            state.runResponderLabels.delete(previousRunId);
+                        }
+                        noteRunLabelMapChanged("run-id-remap");
                         emitOperatorDiagnostic("chat.queue.run_id_remapped", {
                             previousRunId,
                             serverRunId,
@@ -2325,6 +2446,7 @@
                                 state.runResponderLabels.delete(first.value);
                             }
                         }
+                        noteRunLabelMapChanged("server-run-label");
                     }
                 }
 
@@ -2335,10 +2457,12 @@
                 if (canFanout) {
                     const companionModel = resolveCompanionModel(chatParams.model);
                     if (companionModel && companionModel !== chatParams.model) {
-                        await sendDetachedMessage(userMessage, {
+                        await sendPayload(userMessage, [], false, {
+                            detached: false,
+                            suppressHistory: true,
+                            suppressUserEcho: true,
                             modelOverride: companionModel,
                             skipDualResponderFanout: true,
-                            silentQueue: true,
                         });
                     }
                 }
@@ -3250,7 +3374,8 @@
             const opts = options && typeof options === "object"
                 ? options
                 : {};
-            if (state.runId) {
+            const forceImmediate = opts.forceImmediate === true;
+            if (state.runId && !forceImmediate) {
                 queuePendingSend(detachedMessage, [], false, {
                     detached: true,
                     modelOverride: typeof opts.modelOverride === "string"
@@ -3808,6 +3933,7 @@
                     lastEmitMs: { ...(state.operatorDiagnosticsLastEmitMs || {}) },
                 };
             },
+            noteRunResponderLabelMapChanged,
         };
     }
 

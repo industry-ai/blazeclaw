@@ -256,9 +256,6 @@
                             state.seenChatTerminalRuns.delete(first.value);
                         }
                     }
-                    if (state.runResponderLabels instanceof Map) {
-                        state.runResponderLabels.delete(runId);
-                    }
                 }
 
                 if (runId && controller.hasTerminalRun(runId) && eventState === "delta") {
@@ -328,6 +325,12 @@
                     if (shouldReconcile) {
                         controller.scheduleHistoryReconcile();
                     }
+                    if (runId && state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                        if (typeof controller.noteRunResponderLabelMapChanged === "function") {
+                            controller.noteRunResponderLabelMapChanged("terminal-mismatch-cleanup");
+                        }
+                    }
                     continue;
                 }
 
@@ -380,6 +383,12 @@
                     if (shouldReconcile) {
                         controller.scheduleHistoryReconcile();
                     }
+                    if (runId && state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                        if (typeof controller.noteRunResponderLabelMapChanged === "function") {
+                            controller.noteRunResponderLabelMapChanged("terminal-final-cleanup");
+                        }
+                    }
                     continue;
                 }
 
@@ -412,10 +421,14 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnApproval) {
-                            addOrReplaceStream(text);
+                            addOrReplaceStream(text, {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         }
                     } else {
                         finalizeStream();
@@ -426,6 +439,12 @@
                         controller.markTerminalRun(runId, "needs_approval");
                     }
                     controller.clearRunState();
+                    if (runId && state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                        if (typeof controller.noteRunResponderLabelMapChanged === "function") {
+                            controller.noteRunResponderLabelMapChanged("terminal-approval-cleanup");
+                        }
+                    }
                     continue;
                 }
 
@@ -444,10 +463,14 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnAborted) {
-                            addOrReplaceStream(text);
+                            addOrReplaceStream(text, {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                            });
                         }
                     } else {
                         shouldReconcile = true;
@@ -460,6 +483,12 @@
                     if (shouldReconcile) {
                         controller.scheduleHistoryReconcile();
                     }
+                    if (runId && state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                        if (typeof controller.noteRunResponderLabelMapChanged === "function") {
+                            controller.noteRunResponderLabelMapChanged("terminal-aborted-cleanup");
+                        }
+                    }
                     continue;
                 }
 
@@ -469,6 +498,12 @@
                         controller.markTerminalRun(runId, "error");
                     }
                     controller.clearRunState();
+                    if (runId && state.runResponderLabels instanceof Map) {
+                        state.runResponderLabels.delete(runId);
+                        if (typeof controller.noteRunResponderLabelMapChanged === "function") {
+                            controller.noteRunResponderLabelMapChanged("terminal-error-cleanup");
+                        }
+                    }
                 }
             }
 

@@ -3,6 +3,7 @@
 #include "GatewayHostHandlersRuntime.h"
 #include "GatewayHostRuntimeLocalHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
+#include "GatewayHostModelHelpers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayJsonUtils.h"
 #include "GatewayRequestParams.h"
@@ -510,6 +511,26 @@ namespace blazeclaw::gateway {
 					const bool forceError = stageContext.forceError;
 					const bool hasAttachments = stageContext.hasAttachmentPayload;
 					const RequestParamsView sendParams(request.paramsJson);
+					const std::string requestedModelRaw =
+						sendParams.GetString("model");
+					const std::string requestedModelOverride =
+						requestedModelRaw.empty()
+						? std::string()
+						: GatewayModel::NormalizeModelId(requestedModelRaw);
+					std::string requestedProviderOverride =
+						sendParams.GetString("providerOverride");
+					bool suppressHistory = false;
+					if (!json::FindBoolField(
+						request.paramsJson.value_or(std::string()),
+						"suppressHistory",
+						suppressHistory)) {
+						suppressHistory = false;
+					}
+					if (requestedProviderOverride.empty() &&
+						!requestedModelOverride.empty()) {
+						requestedProviderOverride =
+							GatewayModel::ResolveModelProvider(requestedModelOverride);
+					}
 					std::string transcriptInjectionRaw;
 					const bool hasTranscriptInjection =
 						json::FindRawField(request.paramsJson.value_or(std::string()), "transcriptInjection", transcriptInjectionRaw);
@@ -546,7 +567,9 @@ namespace blazeclaw::gateway {
 							return;
 						}
 
-						if (!detachedSend && (!normalizedMessage.empty() || hasAttachments)) {
+						if (!detachedSend &&
+							!suppressHistory &&
+							(!normalizedMessage.empty() || hasAttachments)) {
 							const auto userPersisted = transcriptStore.AppendUserMessage(
 								ChatTranscriptStore::AppendParams{
 									.sessionKey = sessionKey,
@@ -566,7 +589,7 @@ namespace blazeclaw::gateway {
 							}
 						}
 
-						if (!detachedSend) {
+						if (!detachedSend && !suppressHistory) {
 							PushHistoryMessageIfNew(
 								host.m_chatHistoryBySession[sessionKey],
 								BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
@@ -1640,6 +1663,7 @@ namespace blazeclaw::gateway {
 								.errorContextJson = {},
 								.startedAtMs = nowMs,
 								.active = true,
+							.detached = detachedSend,
 								.terminalEventEnqueued = false,
 								.pushLifecycleRequested = pushLifecycleEnabled,
 								.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
@@ -1664,6 +1688,8 @@ namespace blazeclaw::gateway {
 								.bodyForAgent = stageContext.bodyForAgent.empty()
 									? runtimeMessage
 									: stageContext.bodyForAgent,
+								.modelIdOverride = requestedModelOverride,
+								.providerOverride = requestedProviderOverride,
 								.slashCommandName = stageContext.slashCommandName,
 								.shouldLoadInlineSkillCommands =
 									stageContext.shouldLoadInlineSkillCommands,
@@ -1981,7 +2007,9 @@ namespace blazeclaw::gateway {
 
 					const bool silentAssistantReply =
 						RuntimeTranscriptGuard::IsSilentReplyText(assistantText);
-					if (!assistantText.empty() && !silentAssistantReply) {
+					if (!assistantText.empty() &&
+						!silentAssistantReply &&
+						!suppressHistory) {
 						const auto assistantPersisted = transcriptStore.AppendAssistantMessage(
 							ChatTranscriptStore::AppendParams{
 								.sessionKey = sessionKey,
@@ -2265,7 +2293,9 @@ namespace blazeclaw::gateway {
 								.errorMessage = backendErrorMessage,
 								.errorContextJson = backendErrorContextJson,
 								.startedAtMs = nowMs,
-							 .active = true,
+							.active = true,
+							.detached = detachedSend,
+							.suppressHistory = suppressHistory,
 							 .terminalEventEnqueued = false,
 								.pushLifecycleRequested = pushLifecycleEnabled,
 								.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
@@ -3048,13 +3078,22 @@ namespace blazeclaw::gateway {
 									eventState.timestampMs);
 								++emitted;
 
-								if ((eventState.state == "final" ||
+							if ((eventState.state == "final" ||
 									eventState.state == "aborted") &&
 									eventState.messageJson.has_value() &&
-									!IsSilentAssistantMessageJson(eventState.messageJson.value())) {
+								!IsSilentAssistantMessageJson(eventState.messageJson.value())) {
+									bool isDetachedRun = false;
+									bool isHistorySuppressedRun = false;
+									const auto runContextIt = host.m_chatRunsById.find(eventState.runId);
+									if (runContextIt != host.m_chatRunsById.end()) {
+										isDetachedRun = runContextIt->second.detached;
+										isHistorySuppressedRun = runContextIt->second.suppressHistory;
+									}
+									if (!isDetachedRun && !isHistorySuppressedRun) {
 									PushHistoryMessageIfNew(
 										host.m_chatHistoryBySession[sessionKey],
 										eventState.messageJson.value());
+									}
 								}
 
 								if (IsTerminalChatState(eventState.state)) {
