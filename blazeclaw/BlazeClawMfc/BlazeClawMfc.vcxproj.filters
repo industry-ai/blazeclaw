@@ -32,7 +32,6 @@
     <ClCompile Include="src\app\LoginDlg.cpp" />
     <ClCompile Include="src\app\LogSinks.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
-    <ClCompile Include="src\app\SettingsDialog.cpp" />
     <ClCompile Include="src\app\NewTabDialog.cpp" />
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp" />
@@ -66,7 +65,6 @@
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
-    <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
     <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="src\\core\\tools\\ToolProcessRunner.cpp" />
     <ClCompile Include="src\\core\\tools\\ToolArgumentValidators.cpp" />
@@ -572,6 +570,12 @@
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp">
       <Filter>gateway</Filter>
     </ClCompile>
+    <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp">
+      <Filter>deepseek</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SettingsDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
@@ -590,7 +594,6 @@
     <ClInclude Include="src\app\Client.h" />
     <ClInclude Include="src\app\Connection_c.h" />
     <ClInclude Include="src\app\FileView.h" />
-    <ClInclude Include="src\app\SettingsDialog.h" />
     <ClInclude Include="src\app\WebViewOnlyChildFrame.h" />
     <ClInclude Include="src\app\SharedTabsDocTemplate.h" />
     <ClInclude Include="src\app\SharedDocWebViewChildFrame.h" />
@@ -634,7 +637,6 @@
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
-    <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h" />
     <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
     <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
     <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
@@ -1060,6 +1062,12 @@
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h">
       <Filter>gateway</Filter>
     </ClInclude>
+    <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h">
+      <Filter>deepseek</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SettingsDialog.h">
+      <Filter>app</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\classview.bmp" />
@@ -1221,6 +1229,7 @@
     <None Include="web\chat\cron-controller.js">
       <Filter>cron</Filter>
     </None>
+    <None Include="DEEPSEEK_WEBVIEW_STATUS_FIX_PLAN.md" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">
@@ -1261,6 +1270,9 @@
     </Filter>
     <Filter Include="gateway">
       <UniqueIdentifier>{05aafd43-9306-4c74-9a9d-1d287727c3ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deepseek">
+      <UniqueIdentifier>{a097378e-3b78-4d0b-b7d8-527b0dc33127}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

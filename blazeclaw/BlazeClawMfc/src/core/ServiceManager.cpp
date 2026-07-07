@@ -4894,18 +4894,30 @@ namespace blazeclaw::core {
 		const std::string& provider,
 		const std::string& model) {
 		const std::string nextProvider = provider.empty() ? "local" : provider;
-		if (nextProvider != m_activeChatProvider) {
-			m_state.gatewayLifecycle.authSessionGenerationRequired =
-				(m_state.gatewayLifecycle.authSessionGenerationCurrent + 1);
-			++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
-			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"active chat provider mutation requires managed auth session generation bump.");
-			RecordGatewayLifecycleTransition("runtime_mutation.auth_generation_reject");
+		const std::string nextModel = model.empty() ? "default" : model;
+		const bool providerChanged = (nextProvider != m_activeChatProvider);
+		const bool modelChanged = (nextModel != m_activeChatModel);
+
+		if (providerChanged) {
+			const std::uint64_t nextGeneration =
+				(std::max)(
+					m_state.gatewayLifecycle.authSessionGenerationCurrent,
+					m_state.gatewayLifecycle.authSessionGenerationRequired) + 1;
+			m_state.gatewayLifecycle.authSessionGenerationCurrent = nextGeneration;
+			m_state.gatewayLifecycle.authSessionGenerationRequired = nextGeneration;
+			RecordGatewayLifecycleTransition("runtime_mutation.auth_generation_bumped");
+		}
+
+		m_activeConfig.chat.activeProvider = ToWide(nextProvider);
+		m_activeConfig.chat.activeModel = ToWide(nextModel);
+		m_activeChatProvider = nextProvider;
+		m_activeChatModel = nextModel;
+
+		if (!providerChanged && !modelChanged) {
+			RecordGatewayLifecycleTransition("runtime_mutation.chat_provider_noop");
 			return;
 		}
 
-		m_activeChatProvider = provider.empty() ? "local" : provider;
-		m_activeChatModel = model.empty() ? "default" : model;
 		RecordGatewayLifecycleTransition("runtime_mutation.chat_provider_applied");
 	}
 

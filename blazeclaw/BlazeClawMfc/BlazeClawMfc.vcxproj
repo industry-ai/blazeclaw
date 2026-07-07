@@ -692,6 +692,7 @@
     <None Include="..\docs\readme.md" />
     <None Include="blazeclaw.conf" />
     <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md" />
+    <None Include="DEEPSEEK_WEBVIEW_STATUS_FIX_PLAN.md" />
     <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />

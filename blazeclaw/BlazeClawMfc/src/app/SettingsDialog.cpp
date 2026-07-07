@@ -243,6 +243,11 @@ namespace {
 		return modelId.rfind("llama/", 0) == 0;
 	}
 
+	bool IsDeepSeekModelId(const std::string& modelId)
+	{
+		return modelId.rfind("deepseek/", 0) == 0;
+	}
+
 	bool MatchesActiveSelection(
 		const CSettingsDialog::ModelItem& item,
 		const std::string& activeProvider,
@@ -768,7 +773,9 @@ void CSettingsDialog::OnOK()
 			if (!m_models[i].enabled) {
 				continue;
 			}
-			if (i < previousEnabled.size() && !previousEnabled[i]) {
+			if (i < previousEnabled.size() &&
+				!previousEnabled[i] &&
+				IsDeepSeekModelId(m_models[i].id)) {
 				targetIndex = i;
 				break;
 			}
@@ -780,6 +787,18 @@ void CSettingsDialog::OnOK()
 					continue;
 				}
 				if (MatchesActiveSelection(m_models[i], activeProvider, activeModel)) {
+					targetIndex = i;
+					break;
+				}
+			}
+		}
+
+		if (!targetIndex.has_value()) {
+			for (size_t i = 0; i < m_models.size(); ++i) {
+				if (!m_models[i].enabled) {
+					continue;
+				}
+				if (i < previousEnabled.size() && !previousEnabled[i]) {
 					targetIndex = i;
 					break;
 				}
