@@ -10,9 +10,38 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 	$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 }
 
-$mainProjectPath = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc\BlazeClawMfc.vcxproj"
-$testsProjectPath = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\BlazeClawMfc.Tests.vcxproj"
-$configLoaderPath = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc\src\config\ConfigLoader.cpp"
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+
+$candidateRoots = @(
+	(Join-Path $RepoRoot "blazeclaw"),
+	$RepoRoot
+)
+
+$resolvedProjectRoot = $null
+foreach ($candidate in $candidateRoots) {
+	if (-not (Test-Path -LiteralPath $candidate)) {
+		continue
+	}
+
+	$mainCandidate = Join-Path $candidate "BlazeClawMfc\BlazeClawMfc.vcxproj"
+	$testsCandidate = Join-Path $candidate "BlazeClawMfc.Tests\BlazeClawMfc.Tests.vcxproj"
+	$configCandidate = Join-Path $candidate "BlazeClawMfc\src\config\ConfigLoader.cpp"
+
+	if ((Test-Path -LiteralPath $mainCandidate) -and
+		(Test-Path -LiteralPath $testsCandidate) -and
+		(Test-Path -LiteralPath $configCandidate)) {
+		$resolvedProjectRoot = $candidate
+		break
+	}
+}
+
+if ($null -eq $resolvedProjectRoot) {
+	throw "Unable to resolve BlazeClaw project root from RepoRoot: $RepoRoot"
+}
+
+$mainProjectPath = Join-Path $resolvedProjectRoot "BlazeClawMfc\BlazeClawMfc.vcxproj"
+$testsProjectPath = Join-Path $resolvedProjectRoot "BlazeClawMfc.Tests\BlazeClawMfc.Tests.vcxproj"
+$configLoaderPath = Join-Path $resolvedProjectRoot "BlazeClawMfc\src\config\ConfigLoader.cpp"
 
 foreach ($path in @($mainProjectPath, $testsProjectPath, $configLoaderPath)) {
 	if (-not (Test-Path -LiteralPath $path)) {

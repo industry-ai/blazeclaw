@@ -9,6 +9,7 @@
 #include "GatewayHostCatalogHelpers.h"
 #include "GatewayHostModelHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
+#include "GatewayHostSearchHelpers.h"
 #include "GatewaySkillRootResolver.h"
 #include "GatewayHostHandlersToolsShared.h"
 #include "GatewayPersistencePaths.h"
@@ -220,41 +221,6 @@ namespace blazeclaw::gateway {
 				: 0;
 
 			return normalized;
-		}
-
-		std::string ToLowerCopy(std::string value) {
-			std::transform(
-				value.begin(),
-				value.end(),
-				value.begin(),
-				[](unsigned char ch) {
-					return static_cast<char>(std::tolower(ch));
-				});
-			return value;
-		}
-
-		std::string TruncateForMatch(const std::string& text, std::size_t maxChars) {
-			if (text.size() <= maxChars) {
-				return text;
-			}
-
-			return text.substr(0, maxChars) + "...";
-		}
-
-		std::string BuildMemorySearchEnvelope(
-			const std::string& sessionKey,
-			const std::vector<std::string>& matches) {
-			std::vector<std::string> rows;
-			rows.reserve(matches.size());
-			for (const auto& text : matches) {
-				rows.push_back(JsonObject({ {"text", JsonString(text)} }));
-			}
-
-			return JsonObject({
-				{"sessionKey", JsonString(sessionKey)},
-				{"matches", JsonArray(rows)},
-				{"count", JsonNumber(static_cast<std::uint64_t>(matches.size()))},
-				});
 		}
 
 	} // namespace
@@ -729,18 +695,18 @@ namespace blazeclaw::gateway {
 
 					const std::string normalizedSession =
 						json::Trim(sessionKey).empty() ? "main" : json::Trim(sessionKey);
-					const std::string loweredQuery = ToLowerCopy(query);
+					const std::string loweredQuery = host_search_helpers::ToLowerCopy(query);
 
 					std::vector<std::string> matches;
 					const auto historyIt = m_chatHistoryBySession.find(normalizedSession);
 					if (historyIt != m_chatHistoryBySession.end()) {
 						for (const auto& messageJson : historyIt->second) {
-							if (ToLowerCopy(messageJson).find(loweredQuery) ==
+						if (host_search_helpers::ToLowerCopy(messageJson).find(loweredQuery) ==
 								std::string::npos) {
 								continue;
 							}
 
-							matches.push_back(TruncateForMatch(messageJson, 180));
+						matches.push_back(host_search_helpers::TruncateForMatch(messageJson, 180));
 							if (matches.size() >= limit) {
 								break;
 							}
@@ -751,7 +717,7 @@ namespace blazeclaw::gateway {
 						.tool = requestedTool,
 						.executed = true,
 						.status = "ok",
-						.output = BuildMemorySearchEnvelope(normalizedSession, matches),
+						.output = host_search_helpers::BuildMemorySearchEnvelope(normalizedSession, matches),
 					};
 			});
 
@@ -960,7 +926,7 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::SetEmbeddedOrchestrationPath(
 		const std::string& path) {
-		const std::string normalized = ToLowerCopy(json::Trim(path));
+		const std::string normalized = host_search_helpers::ToLowerCopy(json::Trim(path));
 		m_stagePipelineFeatureEnabled = true;
 		m_stagePipelineRolloutCohort = "stage_pipeline_full";
 		if (normalized == "runtime_orchestration") {

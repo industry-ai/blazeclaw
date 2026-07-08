@@ -199,6 +199,7 @@
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h" />
+    <ClInclude Include="src\core\ServiceManagerBaiduEnvHelpers.h" />
     <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
     <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
@@ -218,6 +219,7 @@
     <ClInclude Include="src\cron\CronTimerService.h" />
     <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h" />
     <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h" />
+    <ClInclude Include="src\gateway\GatewayHostSearchHelpers.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
@@ -457,6 +459,7 @@
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\ServiceManagerBaiduEnvHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
@@ -510,6 +513,7 @@
     <ClCompile Include="src\cron\CronTimerServiceTestHooks.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostSearchHelpers.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
