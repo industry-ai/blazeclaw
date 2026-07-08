@@ -9,6 +9,7 @@ on:
     paths:
       - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
       - "blazeclaw/docs/diagnostics/trackA_failure_list_normalized.csv"
+      - "blazeclaw/docs/diagnostics/README.md"
       - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
@@ -16,6 +17,7 @@ on:
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-Catch2CiWithSummary.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Update-ParityDriftDashboardFromTrackA.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Evaluate-FixedMonitoringEscalation.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
@@ -28,6 +30,7 @@ on:
     paths:
       - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
       - "blazeclaw/docs/diagnostics/trackA_failure_list_normalized.csv"
+      - "blazeclaw/docs/diagnostics/README.md"
       - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
@@ -35,6 +38,7 @@ on:
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-Catch2CiWithSummary.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Update-ParityDriftDashboardFromTrackA.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Evaluate-FixedMonitoringEscalation.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
@@ -118,6 +122,20 @@ jobs:
 
             & $runner -RepoRoot $root -Configuration Debug -Seed $seed -Filters $filter -OutputDir $outputDir
           }
+
+      - name: Evaluate fixed-monitoring escalation thresholds
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $script = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Evaluate-FixedMonitoringEscalation.ps1"
+          $summaryDir = Join-Path $root "blazeclaw/artifacts/catch2/pd-monitoring"
+
+          Write-Host "=== Monitoring Escalation Threshold Evaluation ===" -ForegroundColor Cyan
+          Write-Host "RepoRoot: $root"
+          Write-Host "SummaryDir: $summaryDir"
+
+          & $script -RepoRoot $root -SummaryDir $summaryDir -FailOnLevel L2
 
       - name: Run S6 lifecycle parity gate + full Catch2 suite
         shell: pwsh

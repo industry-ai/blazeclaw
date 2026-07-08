@@ -1,0 +1,96 @@
+﻿{
+    "repoRoot":  "E:\\gitRepo\\blazeClaw",
+    "dashboardPath":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\docs\\diagnostics\\PARITY_DRIFT_DASHBOARD.md",
+    "summaryDir":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\artifacts\\catch2\\pd-monitoring",
+    "generatedAt":  "2026-07-08T10:30:05.8686771+08:00",
+    "policy":  {
+                   "S0":  {
+                              "blockThreshold":  1,
+                              "incidentThreshold":  2
+                          },
+                   "S1":  {
+                              "blockThreshold":  1,
+                              "incidentThreshold":  2
+                          },
+                   "S3":  {
+                              "blockThreshold":  2,
+                              "incidentThreshold":  3
+                          },
+                   "S2":  {
+                              "blockThreshold":  2,
+                              "incidentThreshold":  3
+                          }
+               },
+    "results":  [
+                    {
+                        "CaseId":  "PD-001",
+                        "Severity":  "S2",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S2 / Priority P1)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-002",
+                        "Severity":  "S2",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S2 / Priority P1)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-003",
+                        "Severity":  "S2",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S2 / Priority P1)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-004",
+                        "Severity":  "S2",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S2 / Priority P1)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-005",
+                        "Severity":  "S3",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S3 / Priority P1)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-006",
+                        "Severity":  "S0",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S0 / Priority P0)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    },
+                    {
+                        "CaseId":  "PD-007",
+                        "Severity":  "S0",
+                        "CurrentStatus":  "fixed (monitoring) (Severity S0 / Priority P0)",
+                        "Filter":  "",
+                        "TotalRuns":  0,
+                        "FailingRuns":  0,
+                        "Level":  "L0",
+                        "Action":  "Keep monitoring cadence"
+                    }
+                ]
+}
