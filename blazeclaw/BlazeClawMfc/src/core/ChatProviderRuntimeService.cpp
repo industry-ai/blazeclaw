@@ -14,6 +14,7 @@
 #include <cctype>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace blazeclaw::core {
@@ -270,6 +271,7 @@ namespace blazeclaw::core {
 
 			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
 			std::vector<std::string> keptLines;
+			std::unordered_set<std::string> seenNormalizedLines;
 			std::istringstream input(value);
 			std::string line;
 			while (std::getline(input, line)) {
@@ -278,8 +280,12 @@ namespace blazeclaw::core {
 					continue;
 				}
 
+				const std::string normalizedLine = NormalizeForEchoCheck(trimmedLine);
+				if (normalizedLine == "assistant" || normalizedLine == "user") {
+					break;
+				}
+
 				if (!normalizedUser.empty()) {
-					const std::string normalizedLine = NormalizeForEchoCheck(trimmedLine);
 					if (!normalizedLine.empty() && normalizedLine == normalizedUser) {
 						continue;
 					}
@@ -287,18 +293,18 @@ namespace blazeclaw::core {
 					if (normalizedLine.find(normalizedUser) != std::string::npos) {
 						continue;
 					}
-				}
 
-				if (!keptLines.empty()) {
-					const std::string previousNormalized =
-						NormalizeForEchoCheck(keptLines.back());
-					const std::string currentNormalized =
-						NormalizeForEchoCheck(trimmedLine);
-					if (!previousNormalized.empty() &&
-						!currentNormalized.empty() &&
-						previousNormalized == currentNormalized) {
+					if (normalizedUser.find(normalizedLine) != std::string::npos &&
+						normalizedLine.size() >= 10) {
 						continue;
 					}
+				}
+
+				if (!normalizedLine.empty()) {
+					if (seenNormalizedLines.find(normalizedLine) != seenNormalizedLines.end()) {
+						break;
+					}
+					seenNormalizedLines.insert(normalizedLine);
 				}
 
 				keptLines.push_back(trimmedLine);

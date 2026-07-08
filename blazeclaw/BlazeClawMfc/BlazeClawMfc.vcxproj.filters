@@ -80,7 +80,6 @@
     <ClCompile Include="src\core\HookExecutionService.cpp" />
     <ClCompile Include="src\core\SharedFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
-    <ClCompile Include="src\core\ChatProviderRuntimeService.cpp" />
     <ClCompile Include="src\core\OperatorDiagnosticsAssembler.cpp" />
     <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
     <ClCompile Include="src\core\OpenClawOriginalImportService.cpp" />
@@ -578,6 +577,9 @@
     </ClCompile>
     <ClCompile Include="src\gateway\GatewayHostSearchHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerBaiduEnvHelpers.cpp" />
+    <ClCompile Include="src\core\ChatProviderRuntimeService.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\AudioRingBuffer.h" />
@@ -1277,6 +1279,9 @@
     </Filter>
     <Filter Include="deepseek">
       <UniqueIdentifier>{a097378e-3b78-4d0b-b7d8-527b0dc33127}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core-chat">
+      <UniqueIdentifier>{04828cb5-e9df-47d1-9f7b-1abad949276b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
