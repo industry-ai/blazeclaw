@@ -7,11 +7,15 @@ on:
       - controlplane
       - opt
     paths:
+      - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
+      - "blazeclaw/docs/diagnostics/trackA_failure_list_normalized.csv"
       - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Invoke-Catch2CiWithSummary.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Update-ParityDriftDashboardFromTrackA.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
@@ -22,11 +26,15 @@ on:
       - controlplane
       - opt
     paths:
+      - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
+      - "blazeclaw/docs/diagnostics/trackA_failure_list_normalized.csv"
       - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Invoke-Catch2CiWithSummary.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Update-ParityDriftDashboardFromTrackA.ps1"
       - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
@@ -60,6 +68,56 @@ jobs:
           $ErrorActionPreference = "Stop"
           Write-Host "=== Baseline Build Gate ===" -ForegroundColor Cyan
           msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001 /m
+
+      - name: Validate parity dashboard seed coverage
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          Write-Host "=== Dashboard Seed Coverage Validation ===" -ForegroundColor Cyan
+          Write-Host "RepoRoot: $root"
+          $script = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Update-ParityDriftDashboardFromTrackA.ps1"
+          Write-Host "Script: $script"
+          & $script -RepoRoot $root -ValidateOnly
+
+      - name: Run deterministic seeded regressions for PD-001..PD-007
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $runner = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Invoke-Catch2CiWithSummary.ps1"
+          $outputDir = Join-Path $root "blazeclaw/artifacts/catch2/pd-monitoring"
+
+          $matrix = @(
+            @{ CaseId = "PD-001"; Seed = 2862792625; Filter = "[gateway][parity][batch34]" },
+            @{ CaseId = "PD-001"; Seed = 2862792626; Filter = "[gateway][parity][batch34]" },
+            @{ CaseId = "PD-002"; Seed = 2862792625; Filter = "GatewayWeatherEmailRegressionTests" },
+            @{ CaseId = "PD-002"; Seed = 2862792626; Filter = "GatewayWeatherEmailRegressionTests" },
+            @{ CaseId = "PD-003"; Seed = 2862792625; Filter = "SkillsFrontmatterCompatParityTests" },
+            @{ CaseId = "PD-003"; Seed = 2862792626; Filter = "SkillsFrontmatterCompatParityTests" },
+            @{ CaseId = "PD-004"; Seed = 2862792625; Filter = "[config][priority1]" },
+            @{ CaseId = "PD-004"; Seed = 2862792626; Filter = "[config][priority1]" },
+            @{ CaseId = "PD-005"; Seed = 2862792625; Filter = "ParityCoverageTests" },
+            @{ CaseId = "PD-005"; Seed = 2862792626; Filter = "ParityCoverageTests" },
+            @{ CaseId = "PD-006"; Seed = 2862792625; Filter = "[gateway][parity][p2][regression][pd006]" },
+            @{ CaseId = "PD-007"; Seed = 2862792626; Filter = "[gateway][parity][p2][cron][mutation][regression][pd007]" }
+          )
+
+          foreach ($entry in $matrix) {
+            $caseId = $entry.CaseId
+            $seed = $entry.Seed
+            $filter = $entry.Filter
+
+            Write-Host ""
+            Write-Host "=== Seeded Monitor $caseId ===" -ForegroundColor Yellow
+            Write-Host "Seed: $seed"
+            Write-Host "Filter: $filter"
+
+            $repro = ".\blazeclaw\BlazeClawMfc\tools\Invoke-Catch2CiWithSummary.ps1 -RepoRoot . -Configuration Debug -Seed $seed -Filters \"$filter\""
+            Write-Host "ReproCommand: $repro"
+
+            & $runner -RepoRoot $root -Configuration Debug -Seed $seed -Filters $filter -OutputDir $outputDir
+          }
 
       - name: Run S6 lifecycle parity gate + full Catch2 suite
         shell: pwsh
