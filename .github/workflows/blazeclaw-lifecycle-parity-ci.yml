@@ -7,10 +7,12 @@ on:
       - controlplane
       - opt
     paths:
+      - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
       - "docs/compare/server.impl.ts/**"
@@ -20,10 +22,12 @@ on:
       - controlplane
       - opt
     paths:
+      - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
       - "docs/compare/server.impl.ts/**"
@@ -39,9 +43,22 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Verify ConfigLoader linkage parity guard
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          Write-Host "=== Linkage Guard ===" -ForegroundColor Cyan
+          Write-Host "RepoRoot: $root"
+          $guardScript = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
+          Write-Host "GuardScript: $guardScript"
+          & $guardScript -RepoRoot $root
+
       - name: Build BlazeClaw.sln (Debug x64, UTF-8)
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "=== Baseline Build Gate ===" -ForegroundColor Cyan
           msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001 /m
 
       - name: Run S6 lifecycle parity gate + full Catch2 suite

@@ -13,13 +13,32 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 	$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 }
 
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+
 if ([string]::IsNullOrWhiteSpace($DashboardPath)) {
-	$DashboardPath = Join-Path $RepoRoot "blazeclaw\docs\diagnostics\PARITY_DRIFT_DASHBOARD.md"
+	$candidateDashboardPaths = @(
+		(Join-Path $RepoRoot "docs\diagnostics\PARITY_DRIFT_DASHBOARD.md"),
+		(Join-Path $RepoRoot "blazeclaw\docs\diagnostics\PARITY_DRIFT_DASHBOARD.md")
+	)
+
+	$DashboardPath = $candidateDashboardPaths |
+		Where-Object { Test-Path -LiteralPath $_ } |
+		Select-Object -First 1
+}
+else {
+	if (-not [System.IO.Path]::IsPathRooted($DashboardPath)) {
+		$repoRelativePath = Join-Path $RepoRoot $DashboardPath
+		if (Test-Path -LiteralPath $repoRelativePath) {
+			$DashboardPath = $repoRelativePath
+		}
+	}
 }
 
 if (-not (Test-Path -LiteralPath $DashboardPath)) {
 	throw "Parity drift dashboard not found: $DashboardPath"
 }
+
+$DashboardPath = (Resolve-Path -LiteralPath $DashboardPath).Path
 
 $lines = [System.IO.File]::ReadAllLines($DashboardPath, [System.Text.Encoding]::UTF8)
 $caseRows = $lines | Where-Object { $_ -match '^\|\s*PD-\d+\s*\|' }
