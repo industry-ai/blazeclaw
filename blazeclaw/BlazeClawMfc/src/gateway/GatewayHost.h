@@ -316,6 +316,7 @@ namespace blazeclaw::gateway {
 			std::string errorCode;
 			std::string errorMessage;
 			std::optional<std::int64_t> retryAfterMs;
+			std::optional<bool> finalTextReplaced;
 			// Phase DI Step 3: optional transport metadata from production runtime adapters.
 			std::optional<std::int64_t> deliveryHttpStatus;
 			std::optional<std::int64_t> failureDestinationHttpStatus;
@@ -729,6 +730,7 @@ namespace blazeclaw::gateway {
 			std::string transcriptRunId;
 			std::string transcriptInjectionJson;
 			std::string speechArtifactJson;
+			bool finalTextReplaced = false;
 		};
 
 		struct OrchestrationPathSelectionState {

@@ -663,13 +663,16 @@ std::uint64_t CurrentEpochMsLocal() {
 
 std::string BuildAssistantFinalMessageJson(
 	const std::string& text,
-	const std::uint64_t timestampMs) {
+	const std::uint64_t timestampMs,
+	const bool finalTextReplaced) {
 	return "{\"role\":\"assistant\",\"text\":\"" +
 		EscapeJsonLocal(text) +
 		"\",\"content\":[{\"type\":\"text\",\"text\":\"" +
 		EscapeJsonLocal(text) +
 		"\"}],\"timestamp\":" +
 		std::to_string(timestampMs) +
+		",\"finalTextReplaced\":" +
+		std::string(finalTextReplaced ? "true" : "false") +
 		"}";
 }
 

@@ -88,7 +88,8 @@ namespace blazeclaw::gateway {
 		std::uint64_t CurrentEpochMsLocal();
 		std::string BuildAssistantFinalMessageJson(
 			const std::string& text,
-			const std::uint64_t timestampMs);
+			const std::uint64_t timestampMs,
+			const bool finalTextReplaced = false);
 		std::string BuildAssistantDeltaMessageJson(const std::string& text);
 		std::string BuildUserMessageJson(
 			const std::string& text,

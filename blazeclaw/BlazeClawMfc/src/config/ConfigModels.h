@@ -457,6 +457,23 @@ namespace blazeclaw::config {
 	};
 
 	struct LocalModelConfig {
+		struct SanitizationConfig {
+			bool enabled = true;
+			bool utf8EchoNormalization = true;
+			bool stripOnlyAllowlistedMarkers = true;
+			bool scrubCaseInsensitive = true;
+			std::wstring scrubProfile = L"default";
+			std::vector<std::wstring> extraScrubPhrases;
+			std::vector<std::wstring> extraTerminalCutMarkers;
+			std::uint32_t repeatedLineAllowance = 2;
+			bool roleTokenStopRequiresContext = true;
+			std::uint32_t minSubstringEchoChars = 10;
+			double echoTokenOverlapThreshold = 0.88;
+			double echoSimilarityThreshold = 0.92;
+			bool enforceNonEmptyAfterSanitize = true;
+			bool emitFinalTextReplacementSignal = true;
+		};
+
 		struct LlamaRuntimeConfig {
 			std::int32_t gpuLayers = 999;
 			std::uint32_t contextLength = 8192;
@@ -482,6 +499,7 @@ namespace blazeclaw::config {
 		std::wstring executionMode = L"sequential";	// "parallel" or "sequential"
 		bool verboseMetrics = false;
 		LlamaRuntimeConfig llama;
+		SanitizationConfig sanitize;
 	};
 
 	struct SpeechRecognitionConfig {

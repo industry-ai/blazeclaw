@@ -37,6 +37,24 @@ namespace blazeclaw::config {
 			return speech_normalization::SplitCsvValues(raw);
 		}
 
+		std::vector<std::wstring> ParseTrimmedCsvValues(const std::wstring& raw) {
+			auto values = SplitCsvValues(raw);
+			for (auto& value : values) {
+				value = Trim(value);
+			}
+			values.erase(
+				std::remove_if(
+					values.begin(),
+					values.end(),
+					[](const std::wstring& entry) {
+						return entry.empty();
+					}),
+				values.end());
+			std::sort(values.begin(), values.end());
+			values.erase(std::unique(values.begin(), values.end()), values.end());
+			return values;
+		}
+
 		std::wstring NormalizeSpeechStreamingLatencyProfile(const std::wstring& raw) {
 			return speech_normalization::NormalizeSpeechStreamingLatencyProfile(raw);
 		}
@@ -788,6 +806,105 @@ namespace blazeclaw::config {
 			if (trimmedLine.rfind(L"chat.localModel.llama.verboseMetrics=", 0) == 0) {
 				outConfig.localModel.llama.verboseMetrics = ParseBool(
 					trimmedLine.substr(37),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.enabled=", 0) == 0) {
+				outConfig.localModel.sanitize.enabled = ParseBool(
+					trimmedLine.substr(31),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.utf8EchoNormalization=", 0) == 0) {
+				outConfig.localModel.sanitize.utf8EchoNormalization = ParseBool(
+					trimmedLine.substr(45),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.stripOnlyAllowlistedMarkers=", 0) == 0) {
+				outConfig.localModel.sanitize.stripOnlyAllowlistedMarkers = ParseBool(
+					trimmedLine.substr(51),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.scrubCaseInsensitive=", 0) == 0) {
+				outConfig.localModel.sanitize.scrubCaseInsensitive = ParseBool(
+					trimmedLine.substr(44),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.scrubProfile=", 0) == 0) {
+				outConfig.localModel.sanitize.scrubProfile = ToLowerTrim(
+					trimmedLine.substr(36));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.extraScrubPhrases=", 0) == 0) {
+				outConfig.localModel.sanitize.extraScrubPhrases = ParseTrimmedCsvValues(
+					trimmedLine.substr(42));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.extraTerminalCutMarkers=", 0) == 0) {
+				outConfig.localModel.sanitize.extraTerminalCutMarkers = ParseTrimmedCsvValues(
+					trimmedLine.substr(47));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.repeatedLineAllowance=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(46), value)) {
+					outConfig.localModel.sanitize.repeatedLineAllowance = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.roleTokenStopRequiresContext=", 0) == 0) {
+				outConfig.localModel.sanitize.roleTokenStopRequiresContext = ParseBool(
+					trimmedLine.substr(53),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.minSubstringEchoChars=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(46), value)) {
+					outConfig.localModel.sanitize.minSubstringEchoChars = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.echoTokenOverlapThreshold=", 0) == 0) {
+				double value = 0.0;
+				if (TryParseDouble(trimmedLine.substr(50), value)) {
+					outConfig.localModel.sanitize.echoTokenOverlapThreshold = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.echoSimilarityThreshold=", 0) == 0) {
+				double value = 0.0;
+				if (TryParseDouble(trimmedLine.substr(48), value)) {
+					outConfig.localModel.sanitize.echoSimilarityThreshold = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.enforceNonEmptyAfterSanitize=", 0) == 0) {
+				outConfig.localModel.sanitize.enforceNonEmptyAfterSanitize = ParseBool(
+					trimmedLine.substr(52),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.sanitize.emitFinalTextReplacementSignal=", 0) == 0) {
+				outConfig.localModel.sanitize.emitFinalTextReplacementSignal = ParseBool(
+					trimmedLine.substr(54),
 					true);
 				continue;
 			}
@@ -2294,6 +2411,52 @@ namespace blazeclaw::config {
 				outConfig.localModel.llama.threads,
 				std::uint32_t{ 1 },
 				std::uint32_t{ 256 });
+
+		if (outConfig.localModel.sanitize.scrubProfile.empty()) {
+			outConfig.localModel.sanitize.scrubProfile = L"default";
+		}
+		outConfig.localModel.sanitize.repeatedLineAllowance =
+			(std::clamp)(
+				outConfig.localModel.sanitize.repeatedLineAllowance,
+				std::uint32_t{ 0 },
+				std::uint32_t{ 8 });
+		outConfig.localModel.sanitize.minSubstringEchoChars =
+			(std::clamp)(
+				outConfig.localModel.sanitize.minSubstringEchoChars,
+				std::uint32_t{ 0 },
+				std::uint32_t{ 256 });
+		outConfig.localModel.sanitize.echoTokenOverlapThreshold =
+			(std::clamp)(
+				outConfig.localModel.sanitize.echoTokenOverlapThreshold,
+				0.0,
+				1.0);
+		outConfig.localModel.sanitize.echoSimilarityThreshold =
+			(std::clamp)(
+				outConfig.localModel.sanitize.echoSimilarityThreshold,
+				0.0,
+				1.0);
+		for (auto& rule : outConfig.localModel.sanitize.extraScrubPhrases) {
+			rule = Trim(rule);
+		}
+		outConfig.localModel.sanitize.extraScrubPhrases.erase(
+			std::remove_if(
+				outConfig.localModel.sanitize.extraScrubPhrases.begin(),
+				outConfig.localModel.sanitize.extraScrubPhrases.end(),
+				[](const std::wstring& value) {
+					return value.empty();
+				}),
+			outConfig.localModel.sanitize.extraScrubPhrases.end());
+		for (auto& rule : outConfig.localModel.sanitize.extraTerminalCutMarkers) {
+			rule = Trim(rule);
+		}
+		outConfig.localModel.sanitize.extraTerminalCutMarkers.erase(
+			std::remove_if(
+				outConfig.localModel.sanitize.extraTerminalCutMarkers.begin(),
+				outConfig.localModel.sanitize.extraTerminalCutMarkers.end(),
+				[](const std::wstring& value) {
+					return value.empty();
+				}),
+			outConfig.localModel.sanitize.extraTerminalCutMarkers.end());
 
 		const auto sanitizePolicyProfile = [](
 			EmailFallbackPolicyProfileConfig& profile,

@@ -895,6 +895,7 @@ namespace blazeclaw::gateway {
 					std::string approvalNextAction;
 					std::string terminalReason;
 					bool failed = false;
+					bool finalTextReplaced = false;
 					bool orchestrationHandled = false;
 					bool lifecycleEventsEnqueued = false;
 					bool providerStreamed = false;
@@ -1780,6 +1781,7 @@ namespace blazeclaw::gateway {
 									}
 							});
 						providerStreamed = streamedDeltaCount > 0;
+						finalTextReplaced = runtimeResult.finalTextReplaced.value_or(false);
 
 						if (runtimeResult.ok) {
 							if (!runtimeResult.assistantText.empty()) {
@@ -1825,6 +1827,7 @@ namespace blazeclaw::gateway {
 									existingRunIt->second.errorCode = backendErrorCode;
 									existingRunIt->second.errorMessage = backendErrorMessage;
 									existingRunIt->second.errorContextJson = backendErrorContextJson;
+									existingRunIt->second.finalTextReplaced = finalTextReplaced;
 									existingRunIt->second.active = true;
 								}
 							}
@@ -1871,6 +1874,7 @@ namespace blazeclaw::gateway {
 							existingRunIt->second.errorCode = backendErrorCode;
 							existingRunIt->second.errorMessage = backendErrorMessage;
 							existingRunIt->second.errorContextJson = backendErrorContextJson;
+							existingRunIt->second.finalTextReplaced = finalTextReplaced;
 							existingRunIt->second.active = true;
 						}
 
@@ -2308,6 +2312,7 @@ namespace blazeclaw::gateway {
 								.transcriptRunId = transcriptRunId,
 								.transcriptInjectionJson = hasTranscriptInjection ? transcriptInjectionRaw : std::string(),
 								.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
+								.finalTextReplaced = finalTextReplaced,
 							});
 					}
 					auto insertedRunIt = host.m_chatRunsById.find(runId);
@@ -2322,7 +2327,10 @@ namespace blazeclaw::gateway {
 							: insertedRunIt->second.terminalState;
 						const std::optional<std::string> terminalMessage =
 							std::optional<std::string>(
-								BuildAssistantFinalMessageJson(insertedRunIt->second.assistantText, nowMs));
+								BuildAssistantFinalMessageJson(
+									insertedRunIt->second.assistantText,
+									nowMs,
+									insertedRunIt->second.finalTextReplaced));
 						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
 							.runId = insertedRunIt->second.runId,
 							.sessionKey = insertedRunIt->second.sessionKey,
@@ -2587,7 +2595,8 @@ namespace blazeclaw::gateway {
 							   : std::optional<std::string>(
 								   BuildAssistantFinalMessageJson(
 									   runIt->second.assistantText,
-									   nowMs)),
+									   nowMs,
+									   runIt->second.finalTextReplaced)),
 						   .errorMessage = std::nullopt,
 						   .approvalRequired = false,
 						   .approvalToken = std::nullopt,
@@ -2921,11 +2930,17 @@ namespace blazeclaw::gateway {
 									? (run.assistantText.empty() || silentAssistantReply
 										? std::nullopt
 										: std::optional<std::string>(
-											BuildAssistantFinalMessageJson(run.assistantText, nowMs)))
+											BuildAssistantFinalMessageJson(
+												run.assistantText,
+												nowMs,
+												run.finalTextReplaced)))
 									: (silentAssistantReply
 										? std::nullopt
 										: std::optional<std::string>(
-											BuildAssistantFinalMessageJson(run.assistantText, nowMs)));
+											BuildAssistantFinalMessageJson(
+												run.assistantText,
+												nowMs,
+												run.finalTextReplaced)));
 								const std::optional<std::string> terminalError =
 									run.failed
 									? std::optional<std::string>(run.errorMessage.empty()

@@ -11,9 +11,11 @@
 #include <windows.h>
 
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -46,6 +48,123 @@ namespace blazeclaw::core {
 				output.data(),
 				needed);
 			return output;
+		}
+
+		std::string WideToUtf8(const std::wstring& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int needed = WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0,
+				nullptr,
+				nullptr);
+			if (needed <= 0) {
+				return {};
+			}
+
+			std::string output(static_cast<std::size_t>(needed), '\0');
+			WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				needed,
+				nullptr,
+				nullptr);
+			return output;
+		}
+
+		std::string ToLowerAscii(const std::string& value) {
+			std::string lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return lowered;
+		}
+
+		std::size_t FindCaseInsensitive(
+			const std::string& haystack,
+			const std::string& needle,
+			const std::size_t startPos = 0) {
+			if (needle.empty()) {
+				return std::string::npos;
+			}
+
+			if (startPos >= haystack.size()) {
+				return std::string::npos;
+			}
+
+			const std::string loweredHaystack = ToLowerAscii(haystack);
+			const std::string loweredNeedle = ToLowerAscii(needle);
+			return loweredHaystack.find(loweredNeedle, startPos);
+		}
+
+		bool IsAllowlistedPromptMarker(const std::string& markerPayload) {
+			const std::size_t first = markerPayload.find_first_not_of(" \t\r\n");
+			if (first == std::string::npos) {
+				return false;
+			}
+			const std::size_t last = markerPayload.find_last_not_of(" \t\r\n");
+			const std::string marker = ToLowerAscii(
+				markerPayload.substr(first, last - first + 1));
+			return marker == "im_start" ||
+				marker == "im_end" ||
+				marker == "redacted_im_end" ||
+				marker == "assistant" ||
+				marker == "user" ||
+				marker == "system";
+		}
+
+		std::vector<std::string> BuildScrubPhrases(
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy) {
+			std::vector<std::string> phrases = {
+				"[assistant_response]",
+				"assistant_response",
+				"[user_message]",
+				"\nuser\n",
+				"\nassistant\n",
+				"\rim_start",
+				"<|im_start|>",
+			};
+
+			for (const auto& extraPhraseWide : sanitizePolicy.extraScrubPhrases) {
+				const std::string extraPhrase = WideToUtf8(extraPhraseWide);
+				if (!extraPhrase.empty()) {
+					phrases.push_back(extraPhrase);
+				}
+			}
+
+			return phrases;
+		}
+
+		std::vector<std::string> BuildTerminalCutMarkers(
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy) {
+			std::vector<std::string> markers = {
+				"\n[user_message]",
+				"\nuser\n",
+				"\nassistant\n",
+				"<|im_start|>",
+			};
+
+			for (const auto& extraMarkerWide : sanitizePolicy.extraTerminalCutMarkers) {
+				const std::string extraMarker = WideToUtf8(extraMarkerWide);
+				if (!extraMarker.empty()) {
+					markers.push_back(extraMarker);
+				}
+			}
+
+			return markers;
 		}
 
 		std::string NormalizeDeepSeekApiModelId(const std::string& modelId) {
@@ -145,14 +264,15 @@ namespace blazeclaw::core {
 			return value.substr(first, last - first + 1);
 		}
 
-		std::string NormalizeForEchoCheck(const std::string& value) {
+		std::string NormalizeForEchoCheck(
+			const std::string& value,
+			const bool utf8EchoNormalization) {
 			const std::string trimmed = TrimAsciiWhitespace(value);
 			std::string normalized;
 			normalized.reserve(trimmed.size());
 
 			bool previousWasSpace = false;
-			for (const char ch : trimmed) {
-				const unsigned char code = static_cast<unsigned char>(ch);
+			for (const unsigned char code : trimmed) {
 				if (std::isspace(code) != 0) {
 					if (!previousWasSpace) {
 						normalized.push_back(' ');
@@ -161,26 +281,131 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				if (std::ispunct(code) != 0) {
+				if (code < 0x80 && std::ispunct(code) != 0) {
 					continue;
 				}
 
-				normalized.push_back(static_cast<char>(std::tolower(code)));
+				if (code < 0x80) {
+					normalized.push_back(static_cast<char>(std::tolower(code)));
+				}
+				else if (utf8EchoNormalization) {
+					normalized.push_back(static_cast<char>(code));
+				}
+				else {
+					normalized.push_back(static_cast<char>(code));
+				}
 				previousWasSpace = false;
 			}
 
 			return TrimAsciiWhitespace(normalized);
 		}
 
+		std::vector<std::string> TokenizeNormalizedText(const std::string& normalized) {
+			std::vector<std::string> tokens;
+			std::istringstream input(normalized);
+			std::string token;
+			while (input >> token) {
+				tokens.push_back(token);
+			}
+			return tokens;
+		}
+
+		double ComputeTokenOverlapRatio(
+			const std::vector<std::string>& a,
+			const std::vector<std::string>& b) {
+			if (a.empty() || b.empty()) {
+				return 0.0;
+			}
+
+			std::unordered_map<std::string, std::uint32_t> frequencies;
+			for (const auto& token : a) {
+				++frequencies[token];
+			}
+
+			std::uint32_t matches = 0;
+			for (const auto& token : b) {
+				auto it = frequencies.find(token);
+				if (it == frequencies.end() || it->second == 0) {
+					continue;
+				}
+
+				--it->second;
+				++matches;
+			}
+
+			const auto denominator = static_cast<double>((std::max)(a.size(), b.size()));
+			if (!(denominator > 0.0)) {
+				return 0.0;
+			}
+
+			return static_cast<double>(matches) / denominator;
+		}
+
+		double ComputeTextSimilarity(
+			const std::string& left,
+			const std::string& right) {
+			if (left.empty() || right.empty()) {
+				return 0.0;
+			}
+
+			const std::size_t maxChars = 512;
+			const std::string a = left.substr(0, maxChars);
+			const std::string b = right.substr(0, maxChars);
+
+			std::vector<std::size_t> previous(b.size() + 1);
+			std::vector<std::size_t> current(b.size() + 1);
+			for (std::size_t j = 0; j <= b.size(); ++j) {
+				previous[j] = j;
+			}
+
+			for (std::size_t i = 1; i <= a.size(); ++i) {
+				current[0] = i;
+				for (std::size_t j = 1; j <= b.size(); ++j) {
+					const std::size_t substitutionCost = a[i - 1] == b[j - 1] ? 0 : 1;
+					current[j] = (std::min)({
+						previous[j] + 1,
+						current[j - 1] + 1,
+						previous[j - 1] + substitutionCost,
+					});
+				}
+				previous.swap(current);
+			}
+
+			const std::size_t distance = previous[b.size()];
+			const double maxLen = static_cast<double>((std::max)(a.size(), b.size()));
+			if (!(maxLen > 0.0)) {
+				return 0.0;
+			}
+
+			return 1.0 - (static_cast<double>(distance) / maxLen);
+		}
+
+		bool ShouldStopOnRoleTokenLine(
+			const std::string& trimmedLine,
+			const std::string& normalizedLine,
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy) {
+			if (!sanitizePolicy.roleTokenStopRequiresContext) {
+				return normalizedLine == "assistant" || normalizedLine == "user";
+			}
+
+			const std::string loweredTrimmed = ToLowerAscii(TrimAsciiWhitespace(trimmedLine));
+			return loweredTrimmed == "assistant" || loweredTrimmed == "user";
+		}
+
 		bool IsLikelyEchoResponse(
 			const std::string& userMessage,
-			const std::string& assistantText) {
+			const std::string& assistantText,
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy) {
 			if (userMessage.empty() || assistantText.empty()) {
 				return false;
 			}
 
-			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
-			const std::string normalizedAssistant = NormalizeForEchoCheck(assistantText);
+			const std::string normalizedUser = NormalizeForEchoCheck(
+				userMessage,
+				sanitizePolicy.utf8EchoNormalization);
+			const std::string normalizedAssistant = NormalizeForEchoCheck(
+				assistantText,
+				sanitizePolicy.utf8EchoNormalization);
 			if (normalizedUser.empty() || normalizedAssistant.empty()) {
 				return false;
 			}
@@ -196,12 +421,22 @@ namespace blazeclaw::core {
 				return trailing.empty();
 			}
 
+			const auto userTokens = TokenizeNormalizedText(normalizedUser);
+			const auto assistantTokens = TokenizeNormalizedText(normalizedAssistant);
+			const double overlapRatio = ComputeTokenOverlapRatio(userTokens, assistantTokens);
+			const double similarity = ComputeTextSimilarity(normalizedUser, normalizedAssistant);
+			if (overlapRatio >= sanitizePolicy.echoTokenOverlapThreshold &&
+				similarity >= sanitizePolicy.echoSimilarityThreshold) {
+				return true;
+			}
+
 			return false;
 		}
 
 		bool HasPromptLeakage(
 			const std::string& userMessage,
-			const std::string& assistantText) {
+			const std::string& assistantText,
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy) {
 			if (assistantText.empty()) {
 				return false;
 			}
@@ -211,8 +446,12 @@ namespace blazeclaw::core {
 				return true;
 			}
 
-			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
-			const std::string normalizedAssistant = NormalizeForEchoCheck(assistantText);
+			const std::string normalizedUser = NormalizeForEchoCheck(
+				userMessage,
+				sanitizePolicy.utf8EchoNormalization);
+			const std::string normalizedAssistant = NormalizeForEchoCheck(
+				assistantText,
+				sanitizePolicy.utf8EchoNormalization);
 			if (normalizedUser.empty() || normalizedAssistant.empty()) {
 				return false;
 			}
@@ -222,7 +461,12 @@ namespace blazeclaw::core {
 
 		std::string SanitizeLocalAssistantText(
 			const std::string& userMessage,
+			const blazeclaw::config::LocalModelConfig::SanitizationConfig& sanitizePolicy,
 			std::string value) {
+			if (!sanitizePolicy.enabled) {
+				return TrimAsciiWhitespace(value);
+			}
+
 			for (;;) {
 				const auto markerStart = value.find("<|");
 				if (markerStart == std::string::npos) {
@@ -230,37 +474,43 @@ namespace blazeclaw::core {
 				}
 				const auto markerEnd = value.find("|>", markerStart + 2);
 				if (markerEnd == std::string::npos) {
-					value.erase(markerStart);
+					if (!sanitizePolicy.stripOnlyAllowlistedMarkers) {
+						value.erase(markerStart);
+					}
 					break;
 				}
+
+				const std::string markerPayload =
+					value.substr(markerStart + 2, markerEnd - markerStart - 2);
+				const bool shouldStrip = !sanitizePolicy.stripOnlyAllowlistedMarkers ||
+					IsAllowlistedPromptMarker(markerPayload);
+				if (!shouldStrip) {
+					break;
+				}
+
 				value.erase(markerStart, markerEnd - markerStart + 2);
 			}
 
-			const std::array<std::string, 7> scrubPhrases = {
-				"[assistant_response]",
-				"assistant_response",
-				"[user_message]",
-				"\nuser\n",
-				"\nassistant\n",
-				"\rim_start",
-				"<|im_start|>",
-			};
+			const auto scrubPhrases = BuildScrubPhrases(sanitizePolicy);
 			for (const auto& phrase : scrubPhrases) {
 				std::size_t offset = 0;
-				while ((offset = value.find(phrase, offset)) != std::string::npos) {
+				for (;;) {
+					offset = sanitizePolicy.scrubCaseInsensitive
+						? FindCaseInsensitive(value, phrase, offset)
+						: value.find(phrase, offset);
+					if (offset == std::string::npos) {
+						break;
+					}
 					value.erase(offset, phrase.size());
 				}
 			}
 
-			const std::array<std::string, 4> terminalCutMarkers = {
-				"\n[user_message]",
-				"\nuser\n",
-				"\nassistant\n",
-				"<|im_start|>",
-			};
+			const auto terminalCutMarkers = BuildTerminalCutMarkers(sanitizePolicy);
 			std::size_t cutPos = std::string::npos;
 			for (const auto& marker : terminalCutMarkers) {
-				const auto pos = value.find(marker);
+				const auto pos = sanitizePolicy.scrubCaseInsensitive
+					? FindCaseInsensitive(value, marker)
+					: value.find(marker);
 				if (pos != std::string::npos) {
 					cutPos = cutPos == std::string::npos ? pos : (std::min)(cutPos, pos);
 				}
@@ -269,9 +519,11 @@ namespace blazeclaw::core {
 				value.erase(cutPos);
 			}
 
-			const std::string normalizedUser = NormalizeForEchoCheck(userMessage);
+			const std::string normalizedUser = NormalizeForEchoCheck(
+				userMessage,
+				sanitizePolicy.utf8EchoNormalization);
 			std::vector<std::string> keptLines;
-			std::unordered_set<std::string> seenNormalizedLines;
+			std::unordered_map<std::string, std::uint32_t> normalizedLineCounts;
 			std::istringstream input(value);
 			std::string line;
 			while (std::getline(input, line)) {
@@ -280,8 +532,10 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				const std::string normalizedLine = NormalizeForEchoCheck(trimmedLine);
-				if (normalizedLine == "assistant" || normalizedLine == "user") {
+				const std::string normalizedLine = NormalizeForEchoCheck(
+					trimmedLine,
+					sanitizePolicy.utf8EchoNormalization);
+				if (ShouldStopOnRoleTokenLine(trimmedLine, normalizedLine, sanitizePolicy)) {
 					break;
 				}
 
@@ -295,16 +549,17 @@ namespace blazeclaw::core {
 					}
 
 					if (normalizedUser.find(normalizedLine) != std::string::npos &&
-						normalizedLine.size() >= 10) {
+						normalizedLine.size() >= sanitizePolicy.minSubstringEchoChars) {
 						continue;
 					}
 				}
 
 				if (!normalizedLine.empty()) {
-					if (seenNormalizedLines.find(normalizedLine) != seenNormalizedLines.end()) {
+					auto& count = normalizedLineCounts[normalizedLine];
+					if (count >= sanitizePolicy.repeatedLineAllowance + 1) {
 						break;
 					}
-					seenNormalizedLines.insert(normalizedLine);
+					++count;
 				}
 
 				keptLines.push_back(trimmedLine);
@@ -387,6 +642,7 @@ namespace blazeclaw::core {
 
 		if (bindings.localModelActivationEnabled && bindings.localModelRuntime != nullptr &&
 			bindings.localModelRuntimeSnapshot != nullptr) {
+			const auto& sanitizePolicy = bindings.config->localModel.sanitize;
 			const std::string prompt = BuildLocalModelPrompt(providerRequest);
 			double runtimeTemperature = bindings.config->localModel.temperature;
 			if (!(runtimeTemperature > 0.0)) {
@@ -458,15 +714,28 @@ namespace blazeclaw::core {
 			std::string assistantText = !localResult.text.empty()
 				? localResult.text
 				: streamedLocalText;
-			assistantText = SanitizeLocalAssistantText(request.message, std::move(assistantText));
+			assistantText = SanitizeLocalAssistantText(
+				request.message,
+				sanitizePolicy,
+				std::move(assistantText));
 			std::string modelId = localResult.modelId;
 			std::uint32_t latencyMs = localResult.latencyMs;
 			std::uint32_t generatedTokens = localResult.generatedTokens;
-			if (HasPromptLeakage(request.message, assistantText) ||
-				IsLikelyEchoResponse(request.message, assistantText)) {
+			const bool finalTextReplacementSignaled =
+				sanitizePolicy.emitFinalTextReplacementSignal &&
+				!streamedLocalSnapshots.empty() &&
+				streamedLocalSnapshots.back() != assistantText;
+			const bool emptyAfterSanitize =
+				sanitizePolicy.enforceNonEmptyAfterSanitize && assistantText.empty();
+			if (HasPromptLeakage(request.message, assistantText, sanitizePolicy) ||
+				IsLikelyEchoResponse(request.message, assistantText, sanitizePolicy) ||
+				emptyAfterSanitize) {
 				TRACE(
-					"[LocalModel] request.retry runId=%s reason=prompt_leak_or_echo_detected\n",
-					providerRequest.runId.c_str());
+					"[LocalModel] request.retry runId=%s reason=%s\n",
+					providerRequest.runId.c_str(),
+					emptyAfterSanitize
+					? "empty_after_sanitize"
+					: "prompt_leak_or_echo_detected");
 				const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
 				const auto retryResult = bindings.localModelRuntime->GenerateStream(
 					localmodel::TextGenerationRequest{
@@ -480,18 +749,43 @@ namespace blazeclaw::core {
 
 				if (retryResult.ok) {
 					const std::string sanitizedRetryText =
-						SanitizeLocalAssistantText(request.message, retryResult.text);
-					if (!HasPromptLeakage(request.message, sanitizedRetryText) &&
-						!IsLikelyEchoResponse(request.message, sanitizedRetryText)) {
+						SanitizeLocalAssistantText(
+							request.message,
+							sanitizePolicy,
+							retryResult.text);
+					const bool retryEmptyAfterSanitize =
+						sanitizePolicy.enforceNonEmptyAfterSanitize &&
+						sanitizedRetryText.empty();
+					if (!retryEmptyAfterSanitize &&
+						!HasPromptLeakage(request.message, sanitizedRetryText, sanitizePolicy) &&
+						!IsLikelyEchoResponse(request.message, sanitizedRetryText, sanitizePolicy)) {
 						assistantText = sanitizedRetryText;
-					modelId = retryResult.modelId;
-					latencyMs = retryResult.latencyMs;
-					generatedTokens = retryResult.generatedTokens;
+						modelId = retryResult.modelId;
+						latencyMs = retryResult.latencyMs;
+						generatedTokens = retryResult.generatedTokens;
+					}
+					else if (retryEmptyAfterSanitize) {
+						assistantText.clear();
 					}
 				}
 			}
 
-			if (IsLikelyEchoResponse(request.message, assistantText)) {
+			if (sanitizePolicy.enforceNonEmptyAfterSanitize && assistantText.empty()) {
+				TRACE(
+					"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=empty_after_sanitize\n",
+					providerRequest.runId.c_str(),
+					latencyMs,
+					generatedTokens);
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = modelId,
+					.errorCode = "local_model_empty_after_sanitize",
+					.errorMessage = "local model produced empty output after sanitization",
+				};
+			}
+
+			if (IsLikelyEchoResponse(request.message, assistantText, sanitizePolicy)) {
 				TRACE(
 					"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
 					providerRequest.runId.c_str(),
@@ -519,6 +813,7 @@ namespace blazeclaw::core {
 				.modelId = modelId,
 				.errorCode = {},
 				.errorMessage = {},
+				.finalTextReplaced = finalTextReplacementSignaled,
 			};
 		}
 
