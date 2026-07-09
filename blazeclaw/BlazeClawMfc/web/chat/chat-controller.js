@@ -457,20 +457,27 @@
             return true;
         }
 
-        function addMessage(text, kind) {
+        function addMessage(text, kind, meta) {
+            const sourceMeta = meta && typeof meta === "object"
+                ? meta
+                : {};
+
             recordStructuredTranscript({
                 role: bubbleKindToTranscriptRole(kind),
                 text,
                 source: "ui",
+                modelLabel: typeof sourceMeta.modelLabel === "string"
+                    ? sourceMeta.modelLabel
+                    : "",
             });
-            rawAddMessage(text, kind);
+            rawAddMessage(text, kind, sourceMeta);
         }
 
         // Must be used for bridge / chat.event driven bubbles. The view's raw addMessage
         // (index.js) re-renders from structuredTranscript when that mode is on and does not
         // record new rows by itself, so calling it directly would drop assistant text.
-        function appendChatBubble(text, kind) {
-            addMessage(text, kind);
+        function appendChatBubble(text, kind, meta) {
+            addMessage(text, kind, meta);
         }
 
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
@@ -1343,7 +1350,7 @@
                     rawAddMessage(text, role === "user" ? "self" : "peer");
                 }
             } catch (error) {
-                addMessage(`history error: ${String(error)}`, "error");
+                addMessage(`history error: ${String(error)}`, "error", { source: "history" });
             }
         }
 
@@ -1714,7 +1721,7 @@
                     : stableJsonNormalize(payload);
                 await requestWithOverride("config.set", params, opts.requestOverride);
             } catch (error) {
-                addMessage(`model update error: ${String(error)}`, "error");
+                addMessage(`model update error: ${String(error)}`, "error", { source: "model" });
                 return false;
             }
 
@@ -1813,9 +1820,9 @@
                         : requestedId || `session-${Date.now()}`;
                 await loadSessionOptions();
                 await switchSession(nextId);
-                addMessage(`session switched: ${nextId}`, "peer");
+                addMessage(`session switched: ${nextId}`, "peer", { source: "session" });
             } catch (error) {
-                addMessage(`session create error: ${String(error)}`, "error");
+                addMessage(`session create error: ${String(error)}`, "error", { source: "session" });
             }
         }
 
@@ -1832,14 +1839,14 @@
             if (command === "help") {
                 await ensureSlashCommandsLoaded();
                 const names = state.slashCommands.map((item) => `/${item.name}`).join(", ");
-                addMessage(`slash commands: ${names}`, "peer");
+                addMessage(`slash commands: ${names}`, "peer", { source: "help" });
                 return { handled: true };
             }
 
             if (command === "clear") {
                 clearMessages();
                 finalizeStream();
-                addMessage("chat cleared", "peer");
+                addMessage("chat cleared", "peer", { source: "clear" });
                 return { handled: true };
             }
 
@@ -1851,23 +1858,23 @@
             if (command === "session") {
                 const target = args[0] || "";
                 if (!target) {
-                    addMessage("usage: /session <sessionId>", "error");
+                    addMessage("usage: /session <sessionId>", "error", { source: "session" });
                     return { handled: true };
                 }
                 await switchSession(target);
-                addMessage(`session switched: ${normalizeSessionKey(target)}`, "peer");
+                addMessage(`session switched: ${normalizeSessionKey(target)}`, "peer", { source: "session" });
                 return { handled: true };
             }
 
             if (command === "model") {
                 const target = args[0] || "";
                 if (!target) {
-                    addMessage("usage: /model <modelId>", "error");
+                    addMessage("usage: /model <modelId>", "error", { source: "model" });
                     return { handled: true };
                 }
                 const ok = await applyModelSelection(target);
                 if (ok) {
-                    addMessage(`model set: ${target}`, "peer");
+                    addMessage(`model set: ${target}`, "peer", { source: "model" });
                 }
                 return { handled: true };
             }
@@ -1875,13 +1882,13 @@
             if (command === "thinking") {
                 const target = args[0] || "";
                 if (!target) {
-                    addMessage("usage: /thinking <low|normal|high>", "error");
+                    addMessage("usage: /thinking <low|normal|high>", "error", { source: "thinking" });
                     return { handled: true };
                 }
                 if (!applyThinkingLevel(target)) {
-                    addMessage("invalid thinking level", "error");
+                    addMessage("invalid thinking level", "error", { source: "thinking" });
                 } else {
-                    addMessage(`thinking level set: ${state.thinkingLevel}`, "peer");
+                    addMessage(`thinking level set: ${state.thinkingLevel}`, "peer", { source: "thinking" });
                 }
                 return { handled: true };
             }
@@ -1889,7 +1896,7 @@
             if (command === "btw") {
                 const detachedMessage = args.join(" ").trim();
                 if (!detachedMessage) {
-                    addMessage("usage: /btw <message>", "error");
+                    addMessage("usage: /btw <message>", "error", { source: "btw" });
                     return { handled: true };
                 }
                 await sendDetachedMessage(detachedMessage);
@@ -1903,7 +1910,7 @@
 
             if (command === "cron") {
                 if (typeof onCronSlashCommand !== "function") {
-                    addMessage("/cron is unavailable in this session.", "error");
+                    addMessage("/cron is unavailable in this session.", "error", { source: "cron" });
                     return { handled: true };
                 }
 
@@ -1913,7 +1920,7 @@
                     : {};
                 const messageText = String(result.message || "").trim();
                 if (messageText) {
-                    addMessage(messageText, result.kind === "error" ? "error" : "peer");
+                    addMessage(messageText, result.kind === "error" ? "error" : "peer", { source: "cron" });
                 }
                 return {
                     handled: true,
@@ -1936,7 +1943,7 @@
             });
             addMessage(
                 `waiting for terminal event; queued message (${state.sendQueue.length})`,
-                "peer");
+                "peer", { source: "queue" });
             if (sendOptions.detached === true) {
                 onDetachedNotice({
                     kind: "queued",
@@ -2030,7 +2037,7 @@
                     state.runWatchdogLastWarningMs = now;
                     addMessage(
                         `waiting for terminal event; reconciling stalled run (${state.sendQueue.length} queued)`,
-                        "peer");
+                        "peer", { source: "queue" });
                 }
             }, tickMs);
         }
@@ -2159,13 +2166,13 @@
 
             if (userMessage && !detached) {
                 pushInputHistory(userMessage);
-                addMessage(userMessage, "self");
+                addMessage(userMessage, "self", { source: "user" });
             }
 
             if (payloadAttachments.length > 0 && !detached) {
                 addMessage(
                     `[Attachment] ${payloadAttachments.map((item) => item.name).join(", ")}`,
-                    "self");
+                    "self", { source: "user" });
             }
 
             state.runId = nextId();
@@ -2248,7 +2255,7 @@
                     startRunWatchdog();
                 }
             } catch (error) {
-                addMessage(`send error: ${String(error)}`, "error");
+                addMessage(`send error: ${String(error)}`, "error", { source: "user" });
                 state.runId = null;
                 stopRunWatchdog();
                 void processSendQueue();
@@ -2875,7 +2882,7 @@
                             segmentText: "",
                             updatedAtMs: Date.now(),
                         };
-                        addMessage(`speech transcript blocked: ${quality.reason}`, "error");
+                        addMessage(`speech transcript blocked: ${quality.reason}`, "error", { source: "speech" });
                         updateComposerState();
                         return;
                     }
@@ -3079,9 +3086,9 @@
                     if (classified.behaviorClass === "status") {
                         state.speechSessionState.errorMessage = msg;
                     } else if (classified.behaviorClass === "toast") {
-                        addMessage(msg, "error");
+                        addMessage(msg, "error", { source: "speech" });
                     } else {
-                        addMessage(`speech blocking error: ${msg}`, "error");
+                        addMessage(`speech blocking error: ${msg}`, "error", { source: "speech" });
                     }
                 }
                 updateComposerState();
@@ -3120,7 +3127,7 @@
                     retryGuidance: "Retry after checking microphone/audio input and runtime readiness.",
                     updatedAtMs: Date.now(),
                 };
-                addMessage(`speech transcribe error: ${errorMessage}`, "error");
+                addMessage(`speech transcribe error: ${errorMessage}`, "error", { source: "speech" });
                 updateComposerState();
             } finally {
                 if (transcriptionTimeoutId !== null) {
@@ -3194,14 +3201,14 @@
                 });
                 abortOutcome = extractAbortOutcome(abortResult);
             } catch (error) {
-                addMessage(`abort error: ${String(error)}`, "error");
+                addMessage(`abort error: ${String(error)}`, "error", { source: "chat" });
                 updateComposerState();
                 return;
             }
 
             if (abortOutcome.aborted) {
                 const resolvedRunId = abortOutcome.runId || targetRunId;
-                addMessage(`abort requested for run ${resolvedRunId}; awaiting terminal event`, "peer");
+                addMessage(`abort requested for run ${resolvedRunId}; awaiting terminal event`, "peer", { source: "chat" });
                 updateComposerState();
                 return;
             }
@@ -3242,11 +3249,11 @@
                 });
                 addMessage(
                     `abort fallback reconciled stale run state (target=${targetRunId})`,
-                    "peer");
+                    "peer", { source: "chat" });
             } else {
                 addMessage(
                     `abort diagnostic: target=${targetRunId}; no confirmed terminal event yet; queue remains guarded`,
-                    "error");
+                    "error", { source: "chat" });
             }
             updateComposerState();
         }
@@ -3478,7 +3485,7 @@
 
             for (const file of fileList) {
                 if (!file || !String(file.type || "").startsWith("image/")) {
-                    addMessage(`attachment skipped: ${file ? file.name : "unknown"}`, "error");
+                    addMessage(`attachment skipped: ${file ? file.name : "unknown"}`, "error", { source: "attachment" });
                     continue;
                 }
 
@@ -3490,7 +3497,7 @@
                         dataUrl,
                     });
                 } catch (_) {
-                    addMessage(`attachment read error: ${file.name}`, "error");
+                    addMessage(`attachment read error: ${file.name}`, "error", { source: "attachment" });
                 }
             }
 
