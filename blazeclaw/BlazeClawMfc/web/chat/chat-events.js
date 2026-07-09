@@ -186,6 +186,52 @@
             return trimmed || "main";
         }
 
+        function resolveResponderLabel(event) {
+            const source = event && typeof event === "object"
+                ? event
+                : {};
+            const runId = String(source.runId || "").trim();
+            const runLabels = state.runResponderLabels; 
+
+            if (runId && runLabels instanceof Map) { 
+                const known = runLabels.get(runId);  // get the cached label for this runId if available
+                if (known)  return known;
+            }
+
+            const provider = String(
+                source.provider ||
+                state.gatewayLifecycleProvider ||
+                "").trim().toLowerCase();
+
+            let model = String(
+                source.model ||
+                state.gatewayLifecycleModel ||
+                state.selectedModel ||
+                "").trim();
+
+            const runtimeKind = String(
+                source.runtimeKind ||
+                state.gatewayLifecycleRuntimeKind ||
+                "").trim().toLowerCase();
+
+            if (provider === "deepseek" && model) {
+                if (!model.startsWith("deepseek/")) {
+                    model = model.replace(/^deepseek[-_]/i, "");    // remove any leading "deepseek-" or "deepseek_" prefix
+                    model = `deepseek/${model}`; // prepend "deepseek/" to the model name
+                }
+            }
+
+            // Determine the runtime kind based on the provider if not explicitly provided
+            const resolvedRuntime = runtimeKind || (provider === "deepseek" ? "remote" : "local");
+            const modelPart = model || "(unknown-model)";
+
+            if (!provider && !model)    return "Responder: unknown";
+
+            if (!provider)  return `Responder: ${resolvedRuntime} ${modelPart}`;
+
+            return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
+        }
+
         function handleChatEvents(events) {
             if (!Array.isArray(events)) {
                 return;
