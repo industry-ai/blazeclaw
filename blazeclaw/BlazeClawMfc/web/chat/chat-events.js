@@ -280,7 +280,7 @@
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
                         if (otherFinal && text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             shouldReconcile = true;
                         }
@@ -290,7 +290,7 @@
                         const approvalMessage = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(approvalMessage || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             const approvalToken = String(event.approvalToken || "").trim();
                             const nextAction = String(event.approvalNextAction || "").trim();
@@ -307,7 +307,7 @@
                         const otherAborted = normalizeAbortedAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherAborted || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             shouldReconcile = true;
                         }
@@ -329,6 +329,7 @@
 
                 if (event.state === "delta") {
                     const next = controller.parseTextFromMessage(event.message);
+                    state.streamResponderLabel = resolveResponderLabel(event);
                     controller.applyDeltaText(next);
                     continue;
                 }
@@ -353,7 +354,7 @@
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
                         finalizeStream();
@@ -402,7 +403,7 @@
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
                         finalizeStream();
@@ -434,7 +435,7 @@
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
                         shouldReconcile = true;
@@ -451,7 +452,7 @@
                 }
 
                 if (event.state === "error") {
-                    addMessage(event.errorMessage || "chat error", "error");
+                    addMessage(event.errorMessage || "chat error", "error", {modelLabel: resolveResponderLabel(event)});
                     if (runId) {
                         controller.markTerminalRun(runId, "error");
                     }
