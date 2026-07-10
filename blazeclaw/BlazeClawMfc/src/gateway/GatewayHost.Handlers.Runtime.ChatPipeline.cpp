@@ -2277,8 +2277,9 @@ namespace blazeclaw::gateway {
 								.errorMessage = backendErrorMessage,
 								.errorContextJson = backendErrorContextJson,
 								.startedAtMs = nowMs,
-							 .active = true,
-							 .terminalEventEnqueued = false,
+								.active = true,
+								.detached = detachedSend,
+								.terminalEventEnqueued = false,
 								.pushLifecycleRequested = pushLifecycleEnabled,
 								.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
 								.originatingChannel = sendControlDecision.route.originatingChannel,
@@ -3063,10 +3064,19 @@ namespace blazeclaw::gateway {
 								if ((eventState.state == "final" ||
 									eventState.state == "aborted") &&
 									eventState.messageJson.has_value() &&
-									!IsSilentAssistantMessageJson(eventState.messageJson.value())) {
-									PushHistoryMessageIfNew(
-										host.m_chatHistoryBySession[sessionKey],
-										eventState.messageJson.value());
+									!IsSilentAssistantMessageJson(eventState.messageJson.value()))
+								{
+									bool isDetachedRun = false;
+									const auto runContextIt = host.m_chatRunsById.find(eventState.runId);
+									if (runContextIt != host.m_chatRunsById.end()) {
+										isDetachedRun = runContextIt->second.detached;
+									}
+
+									if (!isDetachedRun) {
+										PushHistoryMessageIfNew(
+											host.m_chatHistoryBySession[sessionKey],
+											eventState.messageJson.value());
+									}
 								}
 
 								if (IsTerminalChatState(eventState.state)) {
