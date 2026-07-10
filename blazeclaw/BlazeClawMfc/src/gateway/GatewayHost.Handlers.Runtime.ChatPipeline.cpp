@@ -3,6 +3,7 @@
 #include "GatewayHostHandlersRuntime.h"
 #include "GatewayHostRuntimeLocalHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
+#include "GatewayHostModelHelpers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayJsonUtils.h"
 #include "GatewayRequestParams.h"
@@ -510,6 +511,14 @@ namespace blazeclaw::gateway {
 					const bool forceError = stageContext.forceError;
 					const bool hasAttachments = stageContext.hasAttachmentPayload;
 					const RequestParamsView sendParams(request.paramsJson);
+					const std::string requestedModelRaw =
+						sendParams.GetString("model");
+					const std::string requestedModelOverride =
+						requestedModelRaw.empty()
+						? std::string()
+						: GatewayModel::NormalizeModelId(requestedModelRaw);
+					std::string requestedProviderOverride =
+						sendParams.GetString("providerOverride");
 					std::string transcriptInjectionRaw;
 					const bool hasTranscriptInjection =
 						json::FindRawField(request.paramsJson.value_or(std::string()), "transcriptInjection", transcriptInjectionRaw);
@@ -1640,6 +1649,7 @@ namespace blazeclaw::gateway {
 								.errorContextJson = {},
 								.startedAtMs = nowMs,
 								.active = true,
+								.detached = detachedSend,
 								.terminalEventEnqueued = false,
 								.pushLifecycleRequested = pushLifecycleEnabled,
 								.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
@@ -1664,6 +1674,8 @@ namespace blazeclaw::gateway {
 								.bodyForAgent = stageContext.bodyForAgent.empty()
 									? runtimeMessage
 									: stageContext.bodyForAgent,
+								.modelIdOverride = requestedModelOverride,
+								.providerOverride = requestedProviderOverride,
 								.slashCommandName = stageContext.slashCommandName,
 								.shouldLoadInlineSkillCommands =
 									stageContext.shouldLoadInlineSkillCommands,
