@@ -159,4 +159,38 @@ namespace blazeclaw::app::chatcontroller {
 		return TimePointToDuration(m_snapshot.resetAt);
 	}
 
+	uint64_t NativeChatControllerLifecycle::GetTimeSinceInitializedMs() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		const auto tp = m_snapshot.initializedAt;
+		if (tp == std::chrono::steady_clock::time_point{})
+		{
+			return 0;
+		}
+		const auto now = m_timeProvider->Now();
+		if (now <= tp)
+		{
+			return 0;
+		}
+		return static_cast<uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(now - tp).count());
+	}
+
+	uint64_t NativeChatControllerLifecycle::GetTimeSinceResetMs() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		const auto tp = m_snapshot.resetAt;
+		if (tp == std::chrono::steady_clock::time_point{})
+		{
+			return 0;
+		}
+		const auto now = m_timeProvider->Now();
+		if (now <= tp)
+		{
+			return 0;
+		}
+		return static_cast<uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(now - tp).count());
+	}
+
 } // namespace blazeclaw::app::chatcontroller

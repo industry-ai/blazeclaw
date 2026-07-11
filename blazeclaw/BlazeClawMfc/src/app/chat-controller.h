@@ -69,6 +69,11 @@ namespace blazeclaw::app::chatcontroller {
 		std::chrono::milliseconds GetInitializedAtDuration() const;
 		std::chrono::milliseconds GetResetAtDuration() const;
 
+		// Convenience: milliseconds since the timestamp to "now" as provided by the time provider.
+		// Returns 0 if the underlying timestamp is not set (default time_point) or if Now() is earlier.
+		uint64_t GetTimeSinceInitializedMs() const;
+		uint64_t GetTimeSinceResetMs() const;
+
 		// Replace the time provider at runtime. Thread-unsafe; call during setup in tests.
 		void SetTimeProvider(std::shared_ptr<const ITimeProvider> timeProvider);
 
