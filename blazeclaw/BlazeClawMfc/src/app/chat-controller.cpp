@@ -51,7 +51,7 @@ namespace blazeclaw::app::chatcontroller {
 
 		m_snapshot.initialized = true;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.initializedAtMs = std::chrono::steady_clock::now();
+		m_snapshot.initializedAt = std::chrono::steady_clock::now();
 		m_snapshot.sessionKey = NormalizeSessionKey(params.sessionKey);
 		m_snapshot.contractName = NormalizeVersionOrDefault(
 			params.contractName,
@@ -79,8 +79,8 @@ namespace blazeclaw::app::chatcontroller {
 
 		m_snapshot.initialized = false;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.resetAtMs = std::chrono::steady_clock::now();
-		m_snapshot.initializedAtMs = std::chrono::steady_clock::time_point{};
+		m_snapshot.resetAt = std::chrono::steady_clock::now();
+		m_snapshot.initializedAt = std::chrono::steady_clock::time_point{};
 		m_snapshot.sessionKey = "main";
 		m_snapshot.contractName = "blazeclaw.chat.controller.bridge";
 		m_snapshot.contractVersion = "1.0.0";
