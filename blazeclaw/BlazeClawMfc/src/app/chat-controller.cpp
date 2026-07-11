@@ -1,14 +1,23 @@
 #include "pch.h"
 #include "chat-controller.h"
+#include "../gateway/GatewayProtocolModels.h"
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <memory>
 
+#include <nlohmann/json.hpp>
+
 namespace blazeclaw::app::chatcontroller {
 
 	namespace {
+
+		NativeChatControllerLifecycle& LifecycleInstance()
+		{
+			static NativeChatControllerLifecycle instance;
+			return instance;
+		}
 
 
 		std::string TrimCopy(const std::string& value)
@@ -37,6 +46,78 @@ namespace blazeclaw::app::chatcontroller {
 			}
 
 			return std::string(fallback != nullptr ? fallback : "");
+		}
+
+		nlohmann::json BuildLifecyclePayload(
+			const NativeControllerLifecycleSnapshot& snapshot,
+			const NativeChatControllerLifecycle& lifecycle,
+			const char* operation)
+		{
+			nlohmann::json payload = {
+				{"statePatch", {
+					{"controllerLifecycle", {
+						{"initialized", snapshot.initialized},
+						{"lifecycleGeneration", snapshot.lifecycleGeneration},
+						{"initializedAtMs", lifecycle.GetInitializedAtMs()},
+						{"resetAtMs", lifecycle.GetResetAtMs()},
+						{"sessionKey", snapshot.sessionKey},
+						{"contractName", snapshot.contractName},
+						{"contractVersion", snapshot.contractVersion},
+						{"schemaName", snapshot.schemaName},
+						{"schemaVersion", snapshot.schemaVersion},
+					}},
+				}},
+				{"uiOps", nlohmann::json::array()},
+				{"diagnostics", {
+					{"counters", nlohmann::json::object()},
+					{"events", nlohmann::json::array()},
+				}},
+				{"warnings", nlohmann::json::array()},
+			};
+
+			if (operation != nullptr && operation[0] != '\0')
+			{
+				payload["operation"] = operation;
+			}
+
+			return payload;
+		}
+
+		NativeControllerInitializeParams ParseInitializeParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			NativeControllerInitializeParams params;
+
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return params;
+			}
+
+			auto applyIfString = [&parsed](const char* key, std::string& target)
+				{
+					if (key == nullptr)
+					{
+						return;
+					}
+					const auto it = parsed.find(key);
+					if (it == parsed.end() || !it->is_string())
+					{
+						return;
+					}
+					target = it->get<std::string>();
+				};
+
+			applyIfString("sessionKey", params.sessionKey);
+			applyIfString("contractName", params.contractName);
+			applyIfString("contractVersion", params.contractVersion);
+			applyIfString("schemaName", params.schemaName);
+			applyIfString("schemaVersion", params.schemaVersion);
+
+			return params;
 		}
 
 	} // namespace
@@ -191,6 +272,51 @@ namespace blazeclaw::app::chatcontroller {
 		}
 		return static_cast<uint64_t>(
 			std::chrono::duration_cast<std::chrono::milliseconds>(now - tp).count());
+	}
+
+	bool IsNativeChatControllerBridgeMethod(const std::string& method)
+	{
+		return method == "chat.controller.initialize" ||
+			method == "chat.controller.getStateSnapshot" ||
+			method == "chat.controller.reset";
+	}
+
+	blazeclaw::gateway::protocol::ResponseFrame DispatchNativeChatControllerBridgeRequest(
+		const blazeclaw::gateway::protocol::RequestFrame& request)
+	{
+		auto& lifecycle = LifecycleInstance();
+
+		if (request.method == "chat.controller.initialize")
+		{
+			const NativeControllerInitializeParams params = ParseInitializeParams(request);
+			lifecycle.Initialize(params);
+			const auto snapshot = lifecycle.GetSnapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(snapshot, lifecycle, "initialize").dump());
+		}
+
+		if (request.method == "chat.controller.getStateSnapshot")
+		{
+			const auto snapshot = lifecycle.GetSnapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(snapshot, lifecycle, "snapshot").dump());
+		}
+
+		if (request.method == "chat.controller.reset")
+		{
+			lifecycle.Reset();
+			const auto snapshot = lifecycle.GetSnapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(snapshot, lifecycle, "reset").dump());
+		}
+
+		return blazeclaw::gateway::protocol::ErrorResponse(
+			request,
+			"method_not_supported",
+			"native chat-controller bridge method is not supported");
 	}
 
 } // namespace blazeclaw::app::chatcontroller

@@ -6,6 +6,15 @@
 #include <memory>
 #include <string>
 
+namespace blazeclaw {
+	namespace gateway {
+		namespace protocol {
+			struct RequestFrame;
+			struct ResponseFrame;
+		}
+	}
+}
+
 namespace blazeclaw::app::chatcontroller {
 
 	struct NativeControllerBuildMarker {
@@ -86,5 +95,10 @@ namespace blazeclaw::app::chatcontroller {
 		// Time provider used to obtain Now() time points. Defaults to SteadyTimeProvider.
 		std::shared_ptr<const ITimeProvider> m_timeProvider;
 	};
+
+	bool IsNativeChatControllerBridgeMethod(const std::string& method);
+
+	blazeclaw::gateway::protocol::ResponseFrame DispatchNativeChatControllerBridgeRequest(
+		const blazeclaw::gateway::protocol::RequestFrame& request);
 
 } // namespace blazeclaw::app::chatcontroller
