@@ -10,14 +10,6 @@ namespace blazeclaw::app::chatcontroller {
 	namespace {
 
 
-		static std::uint64_t MonotonicMs()
-		{
-			return static_cast<std::uint64_t>(
-				std::chrono::duration_cast<std::chrono::milliseconds>(
-					std::chrono::steady_clock::now().time_since_epoch())
-				.count());
-		}
-
 		std::string TrimCopy(const std::string& value)
 		{
 			std::size_t start = 0;
@@ -59,7 +51,7 @@ namespace blazeclaw::app::chatcontroller {
 
 		m_snapshot.initialized = true;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.initializedAtMs = MonotonicMs();
+		m_snapshot.initializedAtMs = std::chrono::steady_clock::now();
 		m_snapshot.sessionKey = NormalizeSessionKey(params.sessionKey);
 		m_snapshot.contractName = NormalizeVersionOrDefault(
 			params.contractName,
@@ -87,8 +79,8 @@ namespace blazeclaw::app::chatcontroller {
 
 		m_snapshot.initialized = false;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.resetAtMs = MonotonicMs();
-		m_snapshot.initializedAtMs = 0;
+		m_snapshot.resetAtMs = std::chrono::steady_clock::now();
+		m_snapshot.initializedAtMs = std::chrono::steady_clock::time_point{};
 		m_snapshot.sessionKey = "main";
 		m_snapshot.contractName = "blazeclaw.chat.controller.bridge";
 		m_snapshot.contractVersion = "1.0.0";

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <chrono>
 #include <mutex>
 #include <string>
 
@@ -23,8 +24,8 @@ namespace blazeclaw::app::chatcontroller {
 	struct NativeControllerLifecycleSnapshot {
 		bool initialized = false;
 		std::uint64_t lifecycleGeneration = 0;
-		std::uint64_t initializedAtMs = 0;
-		std::uint64_t resetAtMs = 0;
+	std::chrono::steady_clock::time_point initializedAtMs = std::chrono::steady_clock::time_point{};
+	std::chrono::steady_clock::time_point resetAtMs = std::chrono::steady_clock::time_point{};
 		std::string sessionKey = "main";
 		std::string contractName = "blazeclaw.chat.controller.bridge";
 		std::string contractVersion = "1.0.0";
