@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <memory>
 
 namespace blazeclaw::app::chatcontroller {
 
@@ -45,13 +46,31 @@ namespace blazeclaw::app::chatcontroller {
 		return NativeControllerBuildMarker{};
 	}
 
+	NativeChatControllerLifecycle::NativeChatControllerLifecycle(std::shared_ptr<const ITimeProvider> timeProvider)
+		: m_timeProvider(std::move(timeProvider))
+	{
+		if (!m_timeProvider)
+		{
+			m_timeProvider = std::make_shared<SteadyTimeProvider>();
+		}
+	}
+
+	void NativeChatControllerLifecycle::SetTimeProvider(std::shared_ptr<const ITimeProvider> timeProvider)
+	{
+		// Not synchronized; intended for test setup before concurrent use.
+		if (timeProvider)
+		{
+			m_timeProvider = std::move(timeProvider);
+		}
+	}
+
 	void NativeChatControllerLifecycle::Initialize(const NativeControllerInitializeParams& params)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 
 		m_snapshot.initialized = true;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.initializedAt = std::chrono::steady_clock::now();
+		m_snapshot.initializedAt = m_timeProvider->Now();
 		m_snapshot.sessionKey = NormalizeSessionKey(params.sessionKey);
 		m_snapshot.contractName = NormalizeVersionOrDefault(
 			params.contractName,
@@ -79,7 +98,7 @@ namespace blazeclaw::app::chatcontroller {
 
 		m_snapshot.initialized = false;
 		m_snapshot.lifecycleGeneration += 1;
-		m_snapshot.resetAt = std::chrono::steady_clock::now();
+		m_snapshot.resetAt = m_timeProvider->Now();
 		m_snapshot.initializedAt = std::chrono::steady_clock::time_point{};
 		m_snapshot.sessionKey = "main";
 		m_snapshot.contractName = "blazeclaw.chat.controller.bridge";
