@@ -58,6 +58,17 @@ namespace blazeclaw::app::chatcontroller {
 		void Reset();
 		bool IsInitialized() const;
 
+		// Helper accessors for timestamps. These avoid repeated conversions from
+		// std::chrono::steady_clock::time_point to millisecond counts or durations.
+		// All accessors are thread-safe.
+		static uint64_t TimePointToMs(std::chrono::steady_clock::time_point tp);
+		static std::chrono::milliseconds TimePointToDuration(std::chrono::steady_clock::time_point tp);
+
+		uint64_t GetInitializedAtMs() const;
+		uint64_t GetResetAtMs() const;
+		std::chrono::milliseconds GetInitializedAtDuration() const;
+		std::chrono::milliseconds GetResetAtDuration() const;
+
 		// Replace the time provider at runtime. Thread-unsafe; call during setup in tests.
 		void SetTimeProvider(std::shared_ptr<const ITimeProvider> timeProvider);
 

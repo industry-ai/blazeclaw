@@ -124,4 +124,39 @@ namespace blazeclaw::app::chatcontroller {
 		return "main";
 	}
 
+	uint64_t NativeChatControllerLifecycle::TimePointToMs(std::chrono::steady_clock::time_point tp)
+	{
+		return static_cast<uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count());
+	}
+
+	std::chrono::milliseconds NativeChatControllerLifecycle::TimePointToDuration(std::chrono::steady_clock::time_point tp)
+	{
+		return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch());
+	}
+
+	uint64_t NativeChatControllerLifecycle::GetInitializedAtMs() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return TimePointToMs(m_snapshot.initializedAt);
+	}
+
+	uint64_t NativeChatControllerLifecycle::GetResetAtMs() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return TimePointToMs(m_snapshot.resetAt);
+	}
+
+	std::chrono::milliseconds NativeChatControllerLifecycle::GetInitializedAtDuration() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return TimePointToDuration(m_snapshot.initializedAt);
+	}
+
+	std::chrono::milliseconds NativeChatControllerLifecycle::GetResetAtDuration() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return TimePointToDuration(m_snapshot.resetAt);
+	}
+
 } // namespace blazeclaw::app::chatcontroller
