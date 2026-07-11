@@ -586,6 +586,9 @@
     <ClCompile Include="src\app\ChatView.cpp">
       <Filter>chat</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\chat-controller.cpp">
+      <Filter>chat</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp">
       <Filter>STT</Filter>
     </ClCompile>
@@ -1139,6 +1142,9 @@
       <Filter>chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ChatView.h">
+      <Filter>chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\chat-controller.h">
       <Filter>chat</Filter>
     </ClInclude>
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h">
