@@ -1126,13 +1126,27 @@ namespace blazeclaw::app::chatcontroller {
 					}},
 					{"session", {
 						{"sessionKey", sessionSettings.activeSessionKey},
+						{"activeSessionKey", sessionSettings.activeSessionKey},
 						{"options", sessionOptions},
+						{"sessionOptions", sessionOptions},
 						{"switchGeneration", sessionSettings.switchGeneration},
 						{"switched", sessionSettings.switched},
 					}},
 					{"models", {
 						{"selectedModel", modelSettings.selectedModel},
+						{"activeModel", modelSettings.selectedModel},
 						{"options", [&modelSettings]() {
+							nlohmann::json rows = nlohmann::json::array();
+							for (const auto& row : modelSettings.modelOptions)
+							{
+								rows.push_back({
+									{"id", row.id},
+									{"label", row.label},
+								});
+							}
+							return rows;
+						}()},
+						{"modelOptions", [&modelSettings]() {
 							nlohmann::json rows = nlohmann::json::array();
 							for (const auto& row : modelSettings.modelOptions)
 							{
@@ -1146,6 +1160,7 @@ namespace blazeclaw::app::chatcontroller {
 						{"modelSelectionGeneration", modelSettings.modelSelectionGeneration},
 						{"modelSelectionChanged", modelSettings.modelSelectionChanged},
 						{"thinkingLevel", modelSettings.thinkingLevel},
+						{"thinking", modelSettings.thinkingLevel},
 						{"thinkingOptions", modelSettings.thinkingOptions},
 						{"thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
 						{"thinkingLevelChanged", modelSettings.thinkingLevelChanged},
@@ -1683,6 +1698,7 @@ namespace blazeclaw::app::chatcontroller {
 				{"target", "session"},
 				{"data", {
 					{"sessionKey", sessionSnapshot.activeSessionKey},
+					{"activeSessionKey", sessionSnapshot.activeSessionKey},
 					{"switchGeneration", sessionSnapshot.switchGeneration},
 				}},
 			});
@@ -1716,6 +1732,7 @@ namespace blazeclaw::app::chatcontroller {
 				{"target", "session"},
 				{"data", {
 					{"sessionKey", sessionSnapshot.activeSessionKey},
+					{"activeSessionKey", sessionSnapshot.activeSessionKey},
 					{"switchGeneration", sessionSnapshot.switchGeneration},
 				}},
 			});
@@ -1759,7 +1776,9 @@ namespace blazeclaw::app::chatcontroller {
 				{"target", "model"},
 				{"data", {
 					{"selectedModel", modelSnapshot.selectedModel},
+					{"activeModel", modelSnapshot.selectedModel},
 					{"thinkingLevel", modelSnapshot.thinkingLevel},
+					{"thinking", modelSnapshot.thinkingLevel},
 				}},
 			});
 
@@ -1785,9 +1804,15 @@ namespace blazeclaw::app::chatcontroller {
 		if (request.method == "chat.controller.applyModelSelection")
 		{
 			const auto params = ParseJsonObjectParams(request);
-			const std::string modelId = params.contains("modelId") && params["modelId"].is_string()
-				? params["modelId"].get<std::string>()
-				: std::string{};
+			std::string modelId;
+			if (params.contains("modelId") && params["modelId"].is_string())
+			{
+				modelId = params["modelId"].get<std::string>();
+			}
+			else if (params.contains("model") && params["model"].is_string())
+			{
+				modelId = params["model"].get<std::string>();
+			}
 			const auto modelSnapshot = modelSettings.ApplyModelSelection(modelId);
 			nlohmann::json uiOps = nlohmann::json::array();
 			if (modelSnapshot.modelSelectionChanged)
@@ -1797,7 +1822,9 @@ namespace blazeclaw::app::chatcontroller {
 					{"target", "model"},
 					{"data", {
 						{"selectedModel", modelSnapshot.selectedModel},
+						{"activeModel", modelSnapshot.selectedModel},
 						{"generation", modelSnapshot.modelSelectionGeneration},
+						{"modelSelectionGeneration", modelSnapshot.modelSelectionGeneration},
 					}},
 				});
 			}
@@ -1824,9 +1851,15 @@ namespace blazeclaw::app::chatcontroller {
 		if (request.method == "chat.controller.applyThinkingLevel")
 		{
 			const auto params = ParseJsonObjectParams(request);
-			const std::string level = params.contains("level") && params["level"].is_string()
-				? params["level"].get<std::string>()
-				: std::string{};
+			std::string level;
+			if (params.contains("level") && params["level"].is_string())
+			{
+				level = params["level"].get<std::string>();
+			}
+			else if (params.contains("thinkingLevel") && params["thinkingLevel"].is_string())
+			{
+				level = params["thinkingLevel"].get<std::string>();
+			}
 			const auto modelSnapshot = modelSettings.ApplyThinkingLevel(level);
 			nlohmann::json uiOps = nlohmann::json::array();
 			if (modelSnapshot.thinkingLevelChanged)
@@ -1836,7 +1869,9 @@ namespace blazeclaw::app::chatcontroller {
 					{"target", "model"},
 					{"data", {
 						{"thinkingLevel", modelSnapshot.thinkingLevel},
+						{"thinking", modelSnapshot.thinkingLevel},
 						{"generation", modelSnapshot.thinkingLevelGeneration},
+						{"thinkingLevelGeneration", modelSnapshot.thinkingLevelGeneration},
 					}},
 				});
 			}
