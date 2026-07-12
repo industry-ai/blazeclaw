@@ -274,7 +274,7 @@ blazeclaw::config::AgentChatRuntimeMode CBlazeClawAgentChatView::ResolveRuntimeM
 }
 
 /*
- *	start the native agent chat bridge + agent chat native runner 
+ *	start the native agent chat bridge + agent chat native runner
  */
 bool CBlazeClawAgentChatView::StartNativeRuntime()
 {
@@ -1351,126 +1351,7 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 		}).Get(), nullptr);
 }
 
-#else
-
-IMPLEMENT_DYNCREATE(CBlazeClawAgentChatView, CView)
-
-BEGIN_MESSAGE_MAP(CBlazeClawAgentChatView, CView)
-	ON_WM_CREATE()
-	ON_WM_SIZE()
-	ON_WM_DESTROY()
-END_MESSAGE_MAP()
-
-CBlazeClawAgentChatView::CBlazeClawAgentChatView() noexcept
-{
-}
-
-CBlazeClawAgentChatView::~CBlazeClawAgentChatView()
-{
-	StopNodeServer();
-}
-
-#ifdef _DEBUG
-void CBlazeClawAgentChatView::AssertValid() const
-{
-	CView::AssertValid();
-}
-
-void CBlazeClawAgentChatView::Dump(CDumpContext& dc) const
-{
-	CView::Dump(dc);
-}
-#endif
-
-BOOL CBlazeClawAgentChatView::PreCreateWindow(CREATESTRUCT& cs)
-{
-	return CView::PreCreateWindow(cs);
-}
-
-int CBlazeClawAgentChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
-{
-	if (CView::OnCreate(lpCreateStruct) == -1)
-	{
-		return -1;
-	}
-
-	TRACE0("CBlazeClawAgentChatView: WebView2 is not available. Please install WebView2 runtime.\n");
-	return 0;
-}
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// 2026/06/28, jicheng, add dual mode support for agent chat bridge
-blazeclaw::config::AgentChatRuntimeMode CBlazeClawAgentChatView::ResolveRuntimeMode() const
-{
-	return blazeclaw::config::AgentChatRuntimeMode::Auto;
-}
-
-bool CBlazeClawAgentChatView::StartNativeRuntime()
-{
-	return false;
-}
-
-void CBlazeClawAgentChatView::StopNativeRuntime()
-{
-}
-
-void CBlazeClawAgentChatView::StartConfiguredRuntime()
-{
-}
-//-------------------------------------------------------------------
-
-void CBlazeClawAgentChatView::OnSize(UINT nType, int cx, int cy)
-{
-	CView::OnSize(nType, cx, cy);
-}
-
-void CBlazeClawAgentChatView::OnDraw(CDC* pDC)
-{
-	CRect rc;
-	GetClientRect(&rc);
-	pDC->DrawText(_T("WebView2 is not available.\nPlease install WebView2 runtime."), rc, DT_CENTER | DT_VCENTER);
-}
-
-void CBlazeClawAgentChatView::OnDestroy()
-{
-	CView::OnDestroy();
-}
-
-LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
-{
-	return 0;
-}
-
-std::wstring CBlazeClawAgentChatView::GetWebAssetsPath() const
-{
-	return std::wstring();
-}
-
-bool CBlazeClawAgentChatView::InitWebView()
-{
-	return false;
-}
-
-std::wstring CBlazeClawAgentChatView::GetServerPath() const
-{
-	return std::wstring();
-}
-
-bool CBlazeClawAgentChatView::WaitForNodeServer(int /*timeoutMs*/)
-{
-	return false;
-}
-
-void CBlazeClawAgentChatView::StartNodeServer()
-{
-}
-
-void CBlazeClawAgentChatView::StopNodeServer()
-{
-}
-
-#endif
-
+#endif	// BLAZECLAW_AGENTCHATVIEW_WEBVIEW2
 
 void CBlazeClawAgentChatView::InjectRuntimeBridgeConfig()
 {
