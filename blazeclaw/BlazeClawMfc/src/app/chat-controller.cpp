@@ -7,6 +7,7 @@
 #include <chrono>
 #include <deque>
 #include <memory>
+#include <regex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -95,6 +96,16 @@ namespace blazeclaw::app::chatcontroller {
 			uint64_t thinkingLevelGeneration = 0;
 			bool modelSelectionChanged = false;
 			bool thinkingLevelChanged = false;
+		};
+
+		struct NativeApprovalValidationSnapshot {
+			std::string approvalToken;
+			bool valid = false;
+			bool tokenPresent = false;
+			uint64_t expiresAtEpochMs = 0;
+			std::string errorCode;
+			std::string source;
+			uint64_t validationGeneration = 0;
 		};
 
 		class NativeChatSendState final {
@@ -628,6 +639,134 @@ namespace blazeclaw::app::chatcontroller {
 			return instance;
 		}
 
+		class NativeApprovalValidationState final {
+		public:
+			NativeApprovalValidationSnapshot ParseTokenFromText(const std::string& text)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.validationGeneration += 1;
+				m_snapshot.source = "text";
+				m_snapshot.approvalToken.clear();
+				m_snapshot.expiresAtEpochMs = 0;
+
+				const std::string raw = text;
+				if (raw.empty())
+				{
+					m_snapshot.valid = false;
+					m_snapshot.tokenPresent = false;
+					m_snapshot.errorCode = "approval_token_missing";
+					return m_snapshot;
+				}
+
+				std::smatch match;
+				const std::regex preferred(
+					R"(approvalToken=([A-Za-z0-9:_\-]+)(?=\s|[，。！？；,.!?;]|$))");
+				const std::regex fallback(R"(approvalToken=([A-Za-z0-9:_\-]+))");
+				bool found = std::regex_search(raw, match, preferred);
+				if (!found)
+				{
+					found = std::regex_search(raw, match, fallback);
+				}
+
+				if (!found || match.size() < 2)
+				{
+					m_snapshot.valid = false;
+					m_snapshot.tokenPresent = false;
+					m_snapshot.errorCode = "approval_token_missing";
+					return m_snapshot;
+				}
+
+				const std::string token = TrimCopy(match[1].str());
+				m_snapshot.approvalToken = token;
+				m_snapshot.tokenPresent = !token.empty();
+				m_snapshot.valid = IsValidToken(token);
+				m_snapshot.errorCode = m_snapshot.valid ? "" : "approval_token_invalid";
+
+				std::smatch expiresMatch;
+				const std::regex expiresPattern(R"(expiresAtEpochMs=(\d{8,}))");
+				if (std::regex_search(raw, expiresMatch, expiresPattern) && expiresMatch.size() >= 2)
+				{
+					try
+					{
+						m_snapshot.expiresAtEpochMs = static_cast<uint64_t>(
+							std::stoull(expiresMatch[1].str()));
+					}
+					catch (...)
+					{
+						m_snapshot.expiresAtEpochMs = 0;
+					}
+				}
+
+				return m_snapshot;
+			}
+
+			NativeApprovalValidationSnapshot ValidateToken(const std::string& token)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.validationGeneration += 1;
+				m_snapshot.source = "token";
+				m_snapshot.approvalToken = TrimCopy(token);
+				m_snapshot.expiresAtEpochMs = 0;
+
+				if (m_snapshot.approvalToken.empty())
+				{
+					m_snapshot.valid = false;
+					m_snapshot.tokenPresent = false;
+					m_snapshot.errorCode = "approval_token_missing";
+					return m_snapshot;
+				}
+
+				m_snapshot.tokenPresent = true;
+				m_snapshot.valid = IsValidToken(m_snapshot.approvalToken);
+				m_snapshot.errorCode = m_snapshot.valid ? "" : "approval_token_invalid";
+				return m_snapshot;
+			}
+
+			NativeApprovalValidationSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeApprovalValidationSnapshot{};
+			}
+
+		private:
+			static bool IsValidToken(const std::string& token)
+			{
+				if (token.empty())
+				{
+					return false;
+				}
+
+				const std::regex allowedPattern(R"(^[A-Za-z0-9:_\-]+$)");
+				if (!std::regex_match(token, allowedPattern))
+				{
+					return false;
+				}
+
+				const std::regex emailApprovalPattern(R"(^email-approval-\d{10,}-\d+$)");
+				if (std::regex_match(token, emailApprovalPattern))
+				{
+					return true;
+				}
+
+				return token.size() >= 24;
+			}
+
+			mutable std::mutex m_mutex;
+			NativeApprovalValidationSnapshot m_snapshot;
+		};
+
+		NativeApprovalValidationState& ApprovalValidationInstance()
+		{
+			static NativeApprovalValidationState instance;
+			return instance;
+		}
+
 		class NativeChatStreamState final {
 		public:
 			NativeProcessEventsResult ApplyEvents(
@@ -1070,6 +1209,7 @@ namespace blazeclaw::app::chatcontroller {
 			const NativeReconcileWatchdogSnapshot& reconcileWatchdog,
 			const NativeSessionSettingsSnapshot& sessionSettings,
 			const NativeModelSettingsSnapshot& modelSettings,
+			const NativeApprovalValidationSnapshot& approvalValidation,
 			const nlohmann::json& uiOps,
 			const char* operation)
 		{
@@ -1165,6 +1305,15 @@ namespace blazeclaw::app::chatcontroller {
 						{"thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
 						{"thinkingLevelChanged", modelSettings.thinkingLevelChanged},
 					}},
+					{"approval", {
+						{"approvalToken", approvalValidation.approvalToken},
+						{"valid", approvalValidation.valid},
+						{"tokenPresent", approvalValidation.tokenPresent},
+						{"expiresAtEpochMs", approvalValidation.expiresAtEpochMs},
+						{"errorCode", approvalValidation.errorCode},
+						{"source", approvalValidation.source},
+						{"validationGeneration", approvalValidation.validationGeneration},
+					}},
 				}},
 				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
 				{"diagnostics", {
@@ -1178,6 +1327,7 @@ namespace blazeclaw::app::chatcontroller {
 						{"models.optionsCount", modelSettings.modelOptions.size()},
 						{"models.modelSelectionGeneration", modelSettings.modelSelectionGeneration},
 						{"models.thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
+						{"approval.validationGeneration", approvalValidation.validationGeneration},
 					}},
 					{"events", nlohmann::json::array()},
 				}},
@@ -1591,6 +1741,8 @@ namespace blazeclaw::app::chatcontroller {
 			method == "chat.controller.loadModelOptions" ||
 			method == "chat.controller.applyModelSelection" ||
 			method == "chat.controller.applyThinkingLevel" ||
+			method == "chat.controller.parseApprovalToken" ||
+			method == "chat.controller.validateApprovalToken" ||
 			method == "chat.controller.startReconcileWatchdog" ||
 			method == "chat.controller.stopReconcileWatchdog" ||
 			method == "chat.controller.noteInboundChatEvent" ||
@@ -1609,6 +1761,7 @@ namespace blazeclaw::app::chatcontroller {
 		auto& reconcileWatchdog = ReconcileWatchdogInstance();
 		auto& sessionSettings = SessionSettingsInstance();
 		auto& modelSettings = ModelSettingsInstance();
+		auto& approvalValidation = ApprovalValidationInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
@@ -1620,6 +1773,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1630,6 +1784,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"initialize").dump());
 		}
@@ -1643,6 +1798,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1653,6 +1809,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"send").dump());
 		}
@@ -1674,6 +1831,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1684,6 +1842,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					processResult.uiOps,
 					"processEvents").dump());
 		}
@@ -1708,6 +1867,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1718,6 +1878,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					uiOps,
 					"loadSessionOptions").dump());
 		}
@@ -1752,6 +1913,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1762,6 +1924,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					uiOps,
 					"switchSession").dump());
 		}
@@ -1787,6 +1950,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1797,6 +1961,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					uiOps,
 					"loadModelOptions").dump());
 		}
@@ -1834,6 +1999,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1844,6 +2010,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					uiOps,
 					"applyModelSelection").dump());
 		}
@@ -1881,6 +2048,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1891,8 +2059,92 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					uiOps,
 					"applyThinkingLevel").dump());
+		}
+
+		if (request.method == "chat.controller.parseApprovalToken")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const std::string text = params.contains("text") && params["text"].is_string()
+				? params["text"].get<std::string>()
+				: std::string{};
+			const auto approvalSnapshot = approvalValidation.ParseTokenFromText(text);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "approval.queue_update"},
+				{"target", "approval"},
+				{"data", {
+					{"approvalToken", approvalSnapshot.approvalToken},
+					{"valid", approvalSnapshot.valid},
+					{"tokenPresent", approvalSnapshot.tokenPresent},
+					{"errorCode", approvalSnapshot.errorCode},
+					{"source", "parse"},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"parseApprovalToken").dump());
+		}
+
+		if (request.method == "chat.controller.validateApprovalToken")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const std::string approvalToken =
+				params.contains("approvalToken") && params["approvalToken"].is_string()
+				? params["approvalToken"].get<std::string>()
+				: std::string{};
+			const auto approvalSnapshot = approvalValidation.ValidateToken(approvalToken);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "approval.queue_update"},
+				{"target", "approval"},
+				{"data", {
+					{"approvalToken", approvalSnapshot.approvalToken},
+					{"valid", approvalSnapshot.valid},
+					{"tokenPresent", approvalSnapshot.tokenPresent},
+					{"errorCode", approvalSnapshot.errorCode},
+					{"source", "validate"},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"validateApprovalToken").dump());
 		}
 
 		if (request.method == "chat.controller.startReconcileWatchdog")
@@ -1906,6 +2158,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1916,6 +2169,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"startReconcileWatchdog").dump());
 		}
@@ -1929,6 +2183,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1939,6 +2194,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"stopReconcileWatchdog").dump());
 		}
@@ -1954,6 +2210,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1964,6 +2221,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"noteInboundChatEvent").dump());
 		}
@@ -1985,6 +2243,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1995,6 +2254,7 @@ namespace blazeclaw::app::chatcontroller {
 					tickResult.snapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					tickResult.uiOps,
 					"reconcileWatchdogTick").dump());
 		}
@@ -2007,6 +2267,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -2017,6 +2278,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"handleRpcResult").dump());
 		}
@@ -2029,6 +2291,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -2039,6 +2302,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"snapshot").dump());
 		}
@@ -2051,12 +2315,14 @@ namespace blazeclaw::app::chatcontroller {
 			reconcileWatchdog.Reset();
 			sessionSettings.Reset();
 			modelSettings.Reset();
+			approvalValidation.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
 			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -2067,6 +2333,7 @@ namespace blazeclaw::app::chatcontroller {
 					reconcileSnapshot,
 					sessionSnapshot,
 					modelSnapshot,
+					approvalSnapshot,
 					nlohmann::json::array(),
 					"reset").dump());
 		}
