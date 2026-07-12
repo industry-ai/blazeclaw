@@ -1603,6 +1603,7 @@
     <None Include="web\chat\index.html">
       <Filter>res</Filter>
     </None>
+    <None Include="web\chat\chat-controller-gui.js" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">

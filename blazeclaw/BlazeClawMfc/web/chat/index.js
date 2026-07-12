@@ -58,7 +58,22 @@
     state.agentsTabsEl = document.getElementById("agentsTabs");
     state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
+    const guiApi = window.BlazeClawChatControllerGui || {};
+    const guiModule = typeof guiApi.createGuiModule === "function"
+        ? guiApi.createGuiModule({
+            state,
+            scanApprovalTokenFromText,
+            harvestApprovalTokensFromText,
+            resolveApprovalToken,
+            controllerProvider: () => controller,
+        })
+        : null;
+
     function setStatus(text) {
+        if (guiModule && typeof guiModule.setStatus === "function") {
+            guiModule.setStatus(text);
+            return;
+        }
         if (!statusEl) {
             return;
         }
@@ -67,6 +82,10 @@
     }
 
     function renderSpeechStatus() {
+        if (guiModule && typeof guiModule.renderSpeechStatus === "function") {
+            guiModule.renderSpeechStatus();
+            return;
+        }
         if (!speechStatusEl) {
             return;
         }
@@ -184,6 +203,10 @@
     }
 
     function renderSpeechLivePreview() {
+        if (guiModule && typeof guiModule.renderSpeechLivePreview === "function") {
+            guiModule.renderSpeechLivePreview();
+            return;
+        }
         if (!speechLivePreviewEl || !speechLivePreviewLabelEl || !speechLivePreviewTextEl) {
             return;
         }
@@ -289,6 +312,10 @@
     }
 
     function renderApprovalQueue() {
+        if (guiModule && typeof guiModule.renderApprovalQueue === "function") {
+            guiModule.renderApprovalQueue();
+            return;
+        }
         if (!approvalQueueEl) {
             return;
         }
@@ -600,6 +627,10 @@
     }
 
     function renderDetachedNotices() {
+        if (guiModule && typeof guiModule.renderDetachedNotices === "function") {
+            guiModule.renderDetachedNotices();
+            return;
+        }
         if (!detachedNoticesEl) {
             return;
         }
@@ -672,6 +703,10 @@
     }
 
     function renderAssistantIdentity() {
+        if (guiModule && typeof guiModule.renderAssistantIdentity === "function") {
+            guiModule.renderAssistantIdentity();
+            return;
+        }
         if (!assistantIdentityEl) {
             return;
         }
@@ -689,10 +724,18 @@
     }
 
     function scrollBottom() {
+        if (guiModule && typeof guiModule.scrollBottom === "function") {
+            guiModule.scrollBottom();
+            return;
+        }
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     function renderMessagesFromStructuredTranscript(streamTextOverride) {
+        if (guiModule && typeof guiModule.renderMessagesFromStructuredTranscript === "function") {
+            guiModule.renderMessagesFromStructuredTranscript(streamTextOverride);
+            return;
+        }
         if (!structuredTranscriptRenderEnabled || !controller) {
             return;
         }
@@ -744,6 +787,10 @@
     }
 
     function addMessage(text, kind) {
+        if (guiModule && typeof guiModule.addMessage === "function") {
+            guiModule.addMessage(text, kind);
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             const stream = String(state.streamText || "").trim();
             renderMessagesFromStructuredTranscript(stream);
@@ -761,6 +808,10 @@
     }
 
     function clearMessages() {
+        if (guiModule && typeof guiModule.clearMessages === "function") {
+            guiModule.clearMessages();
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             renderMessagesFromStructuredTranscript("");
             return;
@@ -778,6 +829,10 @@
     }
 
     function setInputValue(text) {
+        if (guiModule && typeof guiModule.setInputValue === "function") {
+            guiModule.setInputValue(text);
+            return;
+        }
         if (state.inputEl) {
             state.inputEl.value = String(text || "");
         }
@@ -944,6 +999,10 @@
     }
 
     function addOrReplaceStream(text) {
+        if (guiModule && typeof guiModule.addOrReplaceStream === "function") {
+            guiModule.addOrReplaceStream(text);
+            return;
+        }
         if (!text || controller.isSilentReplyText(text)) {
             return;
         }
@@ -970,6 +1029,10 @@
     }
 
     function finalizeStream() {
+        if (guiModule && typeof guiModule.finalizeStream === "function") {
+            guiModule.finalizeStream();
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             renderMessagesFromStructuredTranscript("");
             return;
