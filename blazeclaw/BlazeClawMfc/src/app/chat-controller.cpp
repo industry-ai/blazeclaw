@@ -388,6 +388,207 @@ namespace blazeclaw::app::chatcontroller {
 			return instance;
 		}
 
+		uint64_t CurrentSteadyClockMs()
+		{
+			return static_cast<uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count());
+		}
+
+		struct NativeReconcileWatchdogSnapshot {
+			bool active = false;
+			std::string runId;
+			uint64_t startedAtMs = 0;
+			uint64_t lastInboundEventMs = 0;
+			uint64_t lastReconcileMs = 0;
+			uint64_t lastWarningMs = 0;
+			uint64_t staleThresholdMs = 4000;
+			uint64_t reconcileCooldownMs = 2000;
+			uint64_t warningCooldownMs = 10000;
+			uint64_t tickMs = 1000;
+		};
+
+		struct NativeReconcileWatchdogTickParams {
+			std::string sessionKey;
+			std::string runId;
+			bool bridgeAvailable = true;
+			uint64_t nowMs = 0;
+			std::size_t queuedMessages = 0;
+		};
+
+		struct NativeReconcileWatchdogTickResult {
+			NativeReconcileWatchdogSnapshot snapshot;
+			nlohmann::json uiOps = nlohmann::json::array();
+			uint64_t staleForMs = 0;
+		};
+
+		struct NativeReconcileWatchdogParams {
+			std::string sessionKey;
+			std::string runId;
+			bool bridgeAvailable = true;
+			std::size_t queuedMessages = 0;
+			uint64_t nowMs = 0;
+		};
+
+		class NativeReconcileWatchdogState final {
+		public:
+			void Start(const std::string& runId, uint64_t nowMs)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const std::string normalizedRunId = TrimCopy(runId);
+				if (normalizedRunId.empty())
+				{
+					StopUnsafe();
+					return;
+				}
+
+				m_snapshot.active = true;
+				m_snapshot.runId = normalizedRunId;
+				m_snapshot.startedAtMs = nowMs;
+				m_snapshot.lastInboundEventMs = nowMs;
+			}
+
+			void Stop()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				StopUnsafe();
+			}
+
+			void NoteInboundEvent(const std::string& eventState, uint64_t nowMs)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				if (!m_snapshot.active)
+				{
+					return;
+				}
+
+				m_snapshot.lastInboundEventMs = nowMs;
+				const std::string normalized = NormalizeState(eventState);
+				if (normalized == "delta" || normalized == "queued" || normalized == "started")
+				{
+					m_snapshot.lastWarningMs = 0;
+				}
+			}
+
+			NativeReconcileWatchdogTickResult EvaluateTick(const NativeReconcileWatchdogTickParams& params)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				NativeReconcileWatchdogTickResult result;
+
+				const std::string normalizedRunId = TrimCopy(params.runId);
+				if (normalizedRunId.empty() || !params.bridgeAvailable)
+				{
+					StopUnsafe();
+					result.snapshot = m_snapshot;
+					return result;
+				}
+
+				if (!m_snapshot.active || m_snapshot.runId != normalizedRunId)
+				{
+					m_snapshot.active = true;
+					m_snapshot.runId = normalizedRunId;
+					m_snapshot.startedAtMs = params.nowMs;
+					m_snapshot.lastInboundEventMs = params.nowMs;
+				}
+
+				const uint64_t lastInbound = m_snapshot.lastInboundEventMs > 0
+					? m_snapshot.lastInboundEventMs
+					: m_snapshot.startedAtMs;
+				if (params.nowMs <= lastInbound)
+				{
+					result.snapshot = m_snapshot;
+					return result;
+				}
+
+				const uint64_t staleForMs = params.nowMs - lastInbound;
+				result.staleForMs = staleForMs;
+				if (staleForMs >= m_snapshot.staleThresholdMs)
+				{
+					if (params.nowMs - m_snapshot.lastReconcileMs >= m_snapshot.reconcileCooldownMs)
+					{
+						m_snapshot.lastReconcileMs = params.nowMs;
+						result.uiOps.push_back({
+							{"op", "chat.request_poll"},
+							{"target", "chat.events"},
+							{"data", {
+								{"sessionKey", NormalizeSessionKey(params.sessionKey)},
+								{"limit", 50},
+								{"reason", "stale_run_watchdog"},
+								{"staleForMs", staleForMs},
+							}},
+						});
+					}
+
+					if (params.queuedMessages > 0 &&
+						params.nowMs - m_snapshot.lastWarningMs >= m_snapshot.warningCooldownMs)
+					{
+						m_snapshot.lastWarningMs = params.nowMs;
+						result.uiOps.push_back({
+							{"op", "chat.set_status"},
+							{"target", "chat"},
+							{"data", {
+								{"message", "waiting for terminal event; reconciling stalled run"},
+								{"queuedMessages", params.queuedMessages},
+								{"reason", "stale_run_queue_warning"},
+							}},
+						});
+					}
+				}
+
+				result.snapshot = m_snapshot;
+				return result;
+			}
+
+			NativeReconcileWatchdogSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeReconcileWatchdogSnapshot{};
+			}
+
+		private:
+			static std::string NormalizeState(const std::string& value)
+			{
+				std::string normalized = TrimCopy(value);
+				std::transform(
+					normalized.begin(),
+					normalized.end(),
+					normalized.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return normalized;
+			}
+
+			static std::string NormalizeSessionKey(const std::string& value)
+			{
+				const std::string normalized = TrimCopy(value);
+				return normalized.empty() ? std::string("main") : normalized;
+			}
+
+			void StopUnsafe()
+			{
+				m_snapshot.active = false;
+				m_snapshot.runId.clear();
+				m_snapshot.startedAtMs = 0;
+				m_snapshot.lastInboundEventMs = 0;
+				m_snapshot.lastReconcileMs = 0;
+				m_snapshot.lastWarningMs = 0;
+			}
+
+			mutable std::mutex m_mutex;
+			NativeReconcileWatchdogSnapshot m_snapshot;
+		};
+
+		NativeReconcileWatchdogState& ReconcileWatchdogInstance()
+		{
+			static NativeReconcileWatchdogState instance;
+			return instance;
+		}
+
 
 		std::string TrimCopy(const std::string& value)
 		{
@@ -422,6 +623,7 @@ namespace blazeclaw::app::chatcontroller {
 			const NativeChatControllerLifecycle& lifecycle,
 			const NativeSendCorrelationSnapshot& sendState,
 			const NativeStreamStateSnapshot& streamState,
+			const NativeReconcileWatchdogSnapshot& reconcileWatchdog,
 			const nlohmann::json& uiOps,
 			const char* operation)
 		{
@@ -454,6 +656,18 @@ namespace blazeclaw::app::chatcontroller {
 						{"deltaCount", streamState.deltaCount},
 						{"terminalCount", streamState.terminalCount},
 					}},
+					{"chatReconcile", {
+						{"watchdogActive", reconcileWatchdog.active},
+						{"runId", reconcileWatchdog.runId},
+						{"startedAtMs", reconcileWatchdog.startedAtMs},
+						{"lastInboundEventMs", reconcileWatchdog.lastInboundEventMs},
+						{"lastReconcileMs", reconcileWatchdog.lastReconcileMs},
+						{"lastWarningMs", reconcileWatchdog.lastWarningMs},
+						{"staleThresholdMs", reconcileWatchdog.staleThresholdMs},
+						{"reconcileCooldownMs", reconcileWatchdog.reconcileCooldownMs},
+						{"warningCooldownMs", reconcileWatchdog.warningCooldownMs},
+						{"tickMs", reconcileWatchdog.tickMs},
+					}},
 				}},
 				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
 				{"diagnostics", {
@@ -474,6 +688,44 @@ namespace blazeclaw::app::chatcontroller {
 			}
 
 			return payload;
+		}
+
+		NativeReconcileWatchdogParams ParseWatchdogParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			NativeReconcileWatchdogParams params;
+
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return params;
+			}
+
+			if (parsed.contains("sessionKey") && parsed["sessionKey"].is_string())
+			{
+				params.sessionKey = parsed["sessionKey"].get<std::string>();
+			}
+			if (parsed.contains("runId") && parsed["runId"].is_string())
+			{
+				params.runId = parsed["runId"].get<std::string>();
+			}
+			if (parsed.contains("bridgeAvailable") && parsed["bridgeAvailable"].is_boolean())
+			{
+				params.bridgeAvailable = parsed["bridgeAvailable"].get<bool>();
+			}
+			if (parsed.contains("queuedMessages") && parsed["queuedMessages"].is_number_integer())
+			{
+				params.queuedMessages = static_cast<std::size_t>(parsed["queuedMessages"].get<std::int64_t>());
+			}
+			if (parsed.contains("nowMs") && parsed["nowMs"].is_number_unsigned())
+			{
+				params.nowMs = parsed["nowMs"].get<uint64_t>();
+			}
+
+			return params;
 		}
 
 		NativeControllerInitializeParams ParseInitializeParams(
@@ -790,6 +1042,10 @@ namespace blazeclaw::app::chatcontroller {
 		return method == "chat.controller.initialize" ||
 			method == "chat.controller.send" ||
 			method == "chat.controller.processEvents" ||
+			method == "chat.controller.startReconcileWatchdog" ||
+			method == "chat.controller.stopReconcileWatchdog" ||
+			method == "chat.controller.noteInboundChatEvent" ||
+			method == "chat.controller.reconcileWatchdogTick" ||
 			method == "chat.controller.handleRpcResult" ||
 			method == "chat.controller.getStateSnapshot" ||
 			method == "chat.controller.reset";
@@ -801,6 +1057,7 @@ namespace blazeclaw::app::chatcontroller {
 		auto& lifecycle = LifecycleInstance();
 		auto& sendState = SendStateInstance();
 		auto& streamState = StreamStateInstance();
+		auto& reconcileWatchdog = ReconcileWatchdogInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
@@ -809,6 +1066,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -816,6 +1074,7 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					streamSnapshot,
+					reconcileSnapshot,
 					nlohmann::json::array(),
 					"initialize").dump());
 		}
@@ -826,6 +1085,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.RegisterSend(request, params);
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -833,6 +1093,7 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					streamSnapshot,
+					reconcileSnapshot,
 					nlohmann::json::array(),
 					"send").dump());
 		}
@@ -841,8 +1102,17 @@ namespace blazeclaw::app::chatcontroller {
 		{
 			const NativeProcessEventsParams params = ParseProcessEventsParams(request);
 			const auto processResult = streamState.ApplyEvents(params, sendState);
+			if (processResult.streamSnapshot.activeRunId.empty())
+			{
+				reconcileWatchdog.Stop();
+			}
+			else
+			{
+				reconcileWatchdog.NoteInboundEvent("delta", CurrentSteadyClockMs());
+			}
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -850,14 +1120,86 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					processResult.streamSnapshot,
+					reconcileSnapshot,
 					processResult.uiOps,
 					"processEvents").dump());
 		}
 
-		if (request.method == "chat.controller.handleRpcResult")
+		if (request.method == "chat.controller.startReconcileWatchdog")
 		{
-			const auto sendSnapshot = HandleRpcCorrelationResult(request);
+			const auto params = ParseWatchdogParams(request);
+			const uint64_t nowMs = params.nowMs > 0 ? params.nowMs : CurrentSteadyClockMs();
+			reconcileWatchdog.Start(params.runId, nowMs);
 			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					nlohmann::json::array(),
+					"startReconcileWatchdog").dump());
+		}
+
+		if (request.method == "chat.controller.stopReconcileWatchdog")
+		{
+			reconcileWatchdog.Stop();
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					nlohmann::json::array(),
+					"stopReconcileWatchdog").dump());
+		}
+
+		if (request.method == "chat.controller.noteInboundChatEvent")
+		{
+			const auto params = ParseWatchdogParams(request);
+			const uint64_t nowMs = params.nowMs > 0 ? params.nowMs : CurrentSteadyClockMs();
+			reconcileWatchdog.NoteInboundEvent("delta", nowMs);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					nlohmann::json::array(),
+					"noteInboundChatEvent").dump());
+		}
+
+		if (request.method == "chat.controller.reconcileWatchdogTick")
+		{
+			const auto params = ParseWatchdogParams(request);
+			const uint64_t nowMs = params.nowMs > 0 ? params.nowMs : CurrentSteadyClockMs();
+			const auto tickResult = reconcileWatchdog.EvaluateTick(NativeReconcileWatchdogTickParams{
+				.sessionKey = params.sessionKey,
+				.runId = params.runId,
+				.bridgeAvailable = params.bridgeAvailable,
+				.nowMs = nowMs,
+				.queuedMessages = params.queuedMessages,
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
@@ -866,6 +1208,25 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					streamSnapshot,
+					tickResult.snapshot,
+					tickResult.uiOps,
+					"reconcileWatchdogTick").dump());
+		}
+
+		if (request.method == "chat.controller.handleRpcResult")
+		{
+			const auto sendSnapshot = HandleRpcCorrelationResult(request);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
 					nlohmann::json::array(),
 					"handleRpcResult").dump());
 		}
@@ -875,6 +1236,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -882,6 +1244,7 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					streamSnapshot,
+					reconcileSnapshot,
 					nlohmann::json::array(),
 					"snapshot").dump());
 		}
@@ -891,9 +1254,11 @@ namespace blazeclaw::app::chatcontroller {
 			lifecycle.Reset();
 			sendState.Reset();
 			streamState.Reset();
+			reconcileWatchdog.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -901,6 +1266,7 @@ namespace blazeclaw::app::chatcontroller {
 					lifecycle,
 					sendSnapshot,
 					streamSnapshot,
+					reconcileSnapshot,
 					nlohmann::json::array(),
 					"reset").dump());
 		}

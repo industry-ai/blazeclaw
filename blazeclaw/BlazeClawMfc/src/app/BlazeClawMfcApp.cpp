@@ -1246,6 +1246,7 @@ bool CBlazeClawMFCApp::EnsureServiceRunning(std::string* outError) {
 	return error.empty();
 }
 
+// This function is the app-level gateway request guard + recovery wrapper.
 blazeclaw::gateway::protocol::ResponseFrame CBlazeClawMFCApp::RouteGatewayRequest(
 	const blazeclaw::gateway::protocol::RequestFrame& request) {
 	std::string startupError;
