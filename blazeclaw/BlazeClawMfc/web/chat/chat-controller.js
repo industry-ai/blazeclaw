@@ -382,7 +382,7 @@
         return stableJsonNormalize(coerced);
     }
 
-    function createController(options) {
+    function createControllerLegacyImplementation(options) {
         const opts = options || {};
         const state = opts.state;
         if (!state) {
@@ -3707,6 +3707,104 @@
                 };
             },
         };
+    }
+
+    function createControllerCompatibilityFacade(implementation) {
+        const controllerImpl = implementation && typeof implementation === "object"
+            ? implementation
+            : {};
+
+        const legacyApiMethods = [
+            "nextId",
+            "post",
+            "flushQueue",
+            "request",
+            "loadHistory",
+            "send",
+            "abort",
+            "handleRpcResult",
+            "consumeTerminalText",
+            "applyDeltaText",
+            "commitStreamTranscriptFinal",
+            "clearRunState",
+            "parseTextFromMessage",
+            "isSilentReplyText",
+            "addAttachmentFiles",
+            "loadSessionOptions",
+            "subscribeSessionUpdates",
+            "unsubscribeSessionUpdates",
+            "loadSessionCompactions",
+            "refreshSessionControlState",
+            "selectSessionCompaction",
+            "branchSessionCompaction",
+            "restoreSessionCompaction",
+            "loadModelOptions",
+            "loadThinkingOptions",
+            "switchSession",
+            "applyModelSelection",
+            "applyThinkingLevel",
+            "loadAssistantIdentity",
+            "getControlUiBootstrapConfig",
+            "persistDraftForSession",
+            "restoreDraftForSession",
+            "recallInputHistory",
+            "getSlashCommandHints",
+            "processSendQueue",
+            "sendDetachedMessage",
+            "transcribeSpeech",
+            "applySpeechLifecycleUpdate",
+            "loadSpeechCapabilities",
+            "loadSpeechErrorPolicy",
+            "getSpeechCapabilitiesSnapshot",
+            "getSpeechSessionStateSnapshot",
+            "assessTranscriptQuality",
+            "parseApprovalTokenFromText",
+            "executeExecApprovalAction",
+            "noteInboundChatEvent",
+            "appendChatBubble",
+            "markTerminalRun",
+            "hasTerminalRun",
+            "hasBufferedAssistantStream",
+            "setPolledEventsHandler",
+            "scheduleHistoryReconcile",
+            "getStructuredTranscript",
+            "getOperatorDiagnosticsSnapshot",
+        ];
+
+        const facade = {
+            __compatFacade: true,
+            __compatFacadeVersion: "step8.1",
+        };
+
+        for (const methodName of legacyApiMethods) {
+            if (typeof controllerImpl[methodName] === "function") {
+                facade[methodName] = function (...args) {
+                    return controllerImpl[methodName](...args);
+                };
+            }
+        }
+
+        for (const key of Object.keys(controllerImpl)) {
+            if (Object.prototype.hasOwnProperty.call(facade, key)) {
+                continue;
+            }
+
+            const value = controllerImpl[key];
+            if (typeof value === "function") {
+                facade[key] = function (...args) {
+                    return controllerImpl[key](...args);
+                };
+            } else {
+                facade[key] = value;
+            }
+        }
+
+        return facade;
+    }
+
+    function createController(options) {
+        const legacyImplementation = createControllerLegacyImplementation(options);
+        return createControllerCompatibilityFacade(legacyImplementation);
     }
 
     function createRegressionState() {

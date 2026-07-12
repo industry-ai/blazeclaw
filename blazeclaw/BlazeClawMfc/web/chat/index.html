@@ -78,6 +78,37 @@
     <script src="./chat-events.js"></script>
     <script src="./chat-composer.js"></script>
 
+    <script>
+        (function verifyChatScriptOrderingCompatibility() {
+            const missing = [];
+            if (!window.BlazeClawChatController) {
+                missing.push("BlazeClawChatController");
+            }
+            if (!window.BlazeClawChatControllerGui) {
+                missing.push("BlazeClawChatControllerGui");
+            }
+            if (!window.BlazeClawChatEvents) {
+                missing.push("BlazeClawChatEvents");
+            }
+            if (!window.BlazeClawChatComposer) {
+                missing.push("BlazeClawChatComposer");
+            }
+
+            window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ = {
+                ok: missing.length === 0,
+                missing,
+            };
+
+            if (missing.length > 0 &&
+                window.console &&
+                typeof window.console.warn === "function") {
+                window.console.warn(
+                    "[chat-script-order] compatibility check missing modules:",
+                    missing.join(", "));
+            }
+        })();
+    </script>
+
     <script src="./index.js"></script>
 </body>
 </html>
