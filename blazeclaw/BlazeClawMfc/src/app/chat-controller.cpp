@@ -81,6 +81,22 @@ namespace blazeclaw::app::chatcontroller {
 			nlohmann::json sessions = nlohmann::json::array();
 		};
 
+		struct NativeModelOption {
+			std::string id;
+			std::string label;
+		};
+
+		struct NativeModelSettingsSnapshot {
+			std::vector<NativeModelOption> modelOptions;
+			std::vector<std::string> thinkingOptions;
+			std::string selectedModel = "default";
+			std::string thinkingLevel = "normal";
+			uint64_t modelSelectionGeneration = 0;
+			uint64_t thinkingLevelGeneration = 0;
+			bool modelSelectionChanged = false;
+			bool thinkingLevelChanged = false;
+		};
+
 		class NativeChatSendState final {
 		public:
 			NativeSendCorrelationSnapshot RegisterSend(
@@ -356,6 +372,259 @@ namespace blazeclaw::app::chatcontroller {
 		NativeSessionSettingsState& SessionSettingsInstance()
 		{
 			static NativeSessionSettingsState instance;
+			return instance;
+		}
+
+		class NativeModelSettingsState final {
+		public:
+			NativeModelSettingsSnapshot LoadModelOptions(const nlohmann::json& params)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.modelSelectionChanged = false;
+				m_snapshot.thinkingLevelChanged = false;
+
+				std::vector<NativeModelOption> normalized;
+				const auto models = params.contains("models") && params["models"].is_array()
+					? params["models"]
+					: nlohmann::json::array();
+				normalized.reserve(models.size());
+				for (const auto& item : models)
+				{
+					if (!item.is_object())
+					{
+						continue;
+					}
+					const std::string id = NormalizeModelId(item.value("id", std::string{}));
+					if (id.empty())
+					{
+						continue;
+					}
+					NativeModelOption row;
+					row.id = id;
+					row.label = NormalizeModelLabel(item.value("label", std::string{}), id);
+					normalized.push_back(std::move(row));
+				}
+
+				if (normalized.empty())
+				{
+					normalized.push_back(NativeModelOption{
+						.id = "default",
+						.label = "default",
+					});
+				}
+
+				std::unordered_set<std::string> seen;
+				std::vector<NativeModelOption> deduped;
+				deduped.reserve(normalized.size());
+				for (const auto& row : normalized)
+				{
+					if (!seen.insert(row.id).second)
+					{
+						continue;
+					}
+					deduped.push_back(row);
+				}
+				m_snapshot.modelOptions = std::move(deduped);
+
+				const std::string incomingSelectedModel =
+					params.contains("selectedModel") && params["selectedModel"].is_string()
+					? NormalizeModelId(params["selectedModel"].get<std::string>())
+					: std::string{};
+				if (!incomingSelectedModel.empty())
+				{
+					m_snapshot.selectedModel = incomingSelectedModel;
+				}
+
+				if (!ContainsModelUnsafe(m_snapshot.selectedModel))
+				{
+					m_snapshot.selectedModel = m_snapshot.modelOptions.front().id;
+				}
+
+				std::vector<std::string> thinking = {
+					"low",
+					"normal",
+					"high",
+				};
+				if (params.contains("thinkingOptions") && params["thinkingOptions"].is_array())
+				{
+					std::vector<std::string> custom;
+					for (const auto& item : params["thinkingOptions"])
+					{
+						if (!item.is_string())
+						{
+							continue;
+						}
+						const std::string level = NormalizeThinkingLevel(item.get<std::string>());
+						if (level.empty())
+						{
+							continue;
+						}
+						custom.push_back(level);
+					}
+					if (!custom.empty())
+					{
+						thinking = std::move(custom);
+					}
+				}
+				m_snapshot.thinkingOptions = std::move(thinking);
+
+				const std::string incomingThinking =
+					params.contains("thinkingLevel") && params["thinkingLevel"].is_string()
+					? NormalizeThinkingLevel(params["thinkingLevel"].get<std::string>())
+					: std::string{};
+				if (!incomingThinking.empty())
+				{
+					m_snapshot.thinkingLevel = incomingThinking;
+				}
+
+				if (!ContainsThinkingLevelUnsafe(m_snapshot.thinkingLevel))
+				{
+					m_snapshot.thinkingLevel = m_snapshot.thinkingOptions.front();
+				}
+
+				return m_snapshot;
+			}
+
+			NativeModelSettingsSnapshot ApplyModelSelection(const std::string& modelId)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const std::string nextModel = NormalizeModelId(modelId);
+				if (nextModel.empty())
+				{
+					m_snapshot.modelSelectionChanged = false;
+					return m_snapshot;
+				}
+
+				if (!ContainsModelUnsafe(nextModel))
+				{
+					m_snapshot.modelOptions.push_back(NativeModelOption{
+						.id = nextModel,
+						.label = nextModel,
+					});
+				}
+
+				if (nextModel == m_snapshot.selectedModel)
+				{
+					m_snapshot.modelSelectionChanged = false;
+					return m_snapshot;
+				}
+
+				m_snapshot.selectedModel = nextModel;
+				m_snapshot.modelSelectionGeneration += 1;
+				m_snapshot.modelSelectionChanged = true;
+				return m_snapshot;
+			}
+
+			NativeModelSettingsSnapshot ApplyThinkingLevel(const std::string& level)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const std::string nextLevel = NormalizeThinkingLevel(level);
+				if (nextLevel.empty())
+				{
+					m_snapshot.thinkingLevelChanged = false;
+					return m_snapshot;
+				}
+
+				if (!ContainsThinkingLevelUnsafe(nextLevel))
+				{
+					m_snapshot.thinkingOptions.push_back(nextLevel);
+				}
+
+				if (nextLevel == m_snapshot.thinkingLevel)
+				{
+					m_snapshot.thinkingLevelChanged = false;
+					return m_snapshot;
+				}
+
+				m_snapshot.thinkingLevel = nextLevel;
+				m_snapshot.thinkingLevelGeneration += 1;
+				m_snapshot.thinkingLevelChanged = true;
+				return m_snapshot;
+			}
+
+			NativeModelSettingsSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeModelSettingsSnapshot{};
+				m_snapshot.modelOptions = {
+					NativeModelOption{ .id = "default", .label = "default" }
+				};
+				m_snapshot.thinkingOptions = {
+					"low",
+					"normal",
+					"high",
+				};
+			}
+
+		private:
+			static std::string NormalizeModelId(const std::string& value)
+			{
+				return TrimCopy(value);
+			}
+
+			static std::string NormalizeModelLabel(const std::string& value, const std::string& fallback)
+			{
+				const std::string label = TrimCopy(value);
+				return label.empty() ? fallback : label;
+			}
+
+			static std::string NormalizeThinkingLevel(const std::string& value)
+			{
+				std::string normalized = TrimCopy(value);
+				std::transform(
+					normalized.begin(),
+					normalized.end(),
+					normalized.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return normalized;
+			}
+
+			bool ContainsModelUnsafe(const std::string& id) const
+			{
+				for (const auto& row : m_snapshot.modelOptions)
+				{
+					if (row.id == id)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
+			bool ContainsThinkingLevelUnsafe(const std::string& level) const
+			{
+				for (const auto& row : m_snapshot.thinkingOptions)
+				{
+					if (row == level)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
+			mutable std::mutex m_mutex;
+			NativeModelSettingsSnapshot m_snapshot{
+				.modelOptions = { NativeModelOption{ .id = "default", .label = "default" } },
+				.thinkingOptions = { "low", "normal", "high" },
+				.selectedModel = "default",
+				.thinkingLevel = "normal",
+				.modelSelectionGeneration = 0,
+				.thinkingLevelGeneration = 0,
+				.modelSelectionChanged = false,
+				.thinkingLevelChanged = false,
+			};
+		};
+
+		NativeModelSettingsState& ModelSettingsInstance()
+		{
+			static NativeModelSettingsState instance;
 			return instance;
 		}
 
@@ -800,6 +1069,7 @@ namespace blazeclaw::app::chatcontroller {
 			const NativeStreamStateSnapshot& streamState,
 			const NativeReconcileWatchdogSnapshot& reconcileWatchdog,
 			const NativeSessionSettingsSnapshot& sessionSettings,
+			const NativeModelSettingsSnapshot& modelSettings,
 			const nlohmann::json& uiOps,
 			const char* operation)
 		{
@@ -860,6 +1130,26 @@ namespace blazeclaw::app::chatcontroller {
 						{"switchGeneration", sessionSettings.switchGeneration},
 						{"switched", sessionSettings.switched},
 					}},
+					{"models", {
+						{"selectedModel", modelSettings.selectedModel},
+						{"options", [&modelSettings]() {
+							nlohmann::json rows = nlohmann::json::array();
+							for (const auto& row : modelSettings.modelOptions)
+							{
+								rows.push_back({
+									{"id", row.id},
+									{"label", row.label},
+								});
+							}
+							return rows;
+						}()},
+						{"modelSelectionGeneration", modelSettings.modelSelectionGeneration},
+						{"modelSelectionChanged", modelSettings.modelSelectionChanged},
+						{"thinkingLevel", modelSettings.thinkingLevel},
+						{"thinkingOptions", modelSettings.thinkingOptions},
+						{"thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
+						{"thinkingLevelChanged", modelSettings.thinkingLevelChanged},
+					}},
 				}},
 				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
 				{"diagnostics", {
@@ -870,6 +1160,9 @@ namespace blazeclaw::app::chatcontroller {
 						{"chatStream.terminalCount", streamState.terminalCount},
 						{"session.optionsCount", sessionSettings.options.size()},
 						{"session.switchGeneration", sessionSettings.switchGeneration},
+						{"models.optionsCount", modelSettings.modelOptions.size()},
+						{"models.modelSelectionGeneration", modelSettings.modelSelectionGeneration},
+						{"models.thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
 					}},
 					{"events", nlohmann::json::array()},
 				}},
@@ -1104,6 +1397,21 @@ namespace blazeclaw::app::chatcontroller {
 			return params;
 		}
 
+		nlohmann::json ParseJsonObjectParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return nlohmann::json::object();
+			}
+
+			return parsed;
+		}
+
 	} // namespace
 
 	NativeControllerBuildMarker CreateNativeControllerBuildMarker()
@@ -1265,6 +1573,9 @@ namespace blazeclaw::app::chatcontroller {
 			method == "chat.controller.processEvents" ||
 			method == "chat.controller.loadSessionOptions" ||
 			method == "chat.controller.switchSession" ||
+			method == "chat.controller.loadModelOptions" ||
+			method == "chat.controller.applyModelSelection" ||
+			method == "chat.controller.applyThinkingLevel" ||
 			method == "chat.controller.startReconcileWatchdog" ||
 			method == "chat.controller.stopReconcileWatchdog" ||
 			method == "chat.controller.noteInboundChatEvent" ||
@@ -1282,6 +1593,7 @@ namespace blazeclaw::app::chatcontroller {
 		auto& streamState = StreamStateInstance();
 		auto& reconcileWatchdog = ReconcileWatchdogInstance();
 		auto& sessionSettings = SessionSettingsInstance();
+		auto& modelSettings = ModelSettingsInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
@@ -1292,6 +1604,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1301,6 +1614,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"initialize").dump());
 		}
@@ -1313,6 +1627,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1322,6 +1637,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"send").dump());
 		}
@@ -1342,6 +1658,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1351,6 +1668,7 @@ namespace blazeclaw::app::chatcontroller {
 					processResult.streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					processResult.uiOps,
 					"processEvents").dump());
 		}
@@ -1373,6 +1691,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1382,6 +1701,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					uiOps,
 					"loadSessionOptions").dump());
 		}
@@ -1414,6 +1734,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1423,8 +1744,120 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					uiOps,
 					"switchSession").dump());
+		}
+
+		if (request.method == "chat.controller.loadModelOptions")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const auto modelSnapshot = modelSettings.LoadModelOptions(params);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "model.options_update"},
+				{"target", "model"},
+				{"data", {
+					{"selectedModel", modelSnapshot.selectedModel},
+					{"thinkingLevel", modelSnapshot.thinkingLevel},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					uiOps,
+					"loadModelOptions").dump());
+		}
+
+		if (request.method == "chat.controller.applyModelSelection")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const std::string modelId = params.contains("modelId") && params["modelId"].is_string()
+				? params["modelId"].get<std::string>()
+				: std::string{};
+			const auto modelSnapshot = modelSettings.ApplyModelSelection(modelId);
+			nlohmann::json uiOps = nlohmann::json::array();
+			if (modelSnapshot.modelSelectionChanged)
+			{
+				uiOps.push_back({
+					{"op", "model.selection_update"},
+					{"target", "model"},
+					{"data", {
+						{"selectedModel", modelSnapshot.selectedModel},
+						{"generation", modelSnapshot.modelSelectionGeneration},
+					}},
+				});
+			}
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					uiOps,
+					"applyModelSelection").dump());
+		}
+
+		if (request.method == "chat.controller.applyThinkingLevel")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const std::string level = params.contains("level") && params["level"].is_string()
+				? params["level"].get<std::string>()
+				: std::string{};
+			const auto modelSnapshot = modelSettings.ApplyThinkingLevel(level);
+			nlohmann::json uiOps = nlohmann::json::array();
+			if (modelSnapshot.thinkingLevelChanged)
+			{
+				uiOps.push_back({
+					{"op", "model.thinking_update"},
+					{"target", "model"},
+					{"data", {
+						{"thinkingLevel", modelSnapshot.thinkingLevel},
+						{"generation", modelSnapshot.thinkingLevelGeneration},
+					}},
+				});
+			}
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					uiOps,
+					"applyThinkingLevel").dump());
 		}
 
 		if (request.method == "chat.controller.startReconcileWatchdog")
@@ -1437,6 +1870,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1446,6 +1880,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"startReconcileWatchdog").dump());
 		}
@@ -1458,6 +1893,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1467,6 +1903,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"stopReconcileWatchdog").dump());
 		}
@@ -1481,6 +1918,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1490,6 +1928,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"noteInboundChatEvent").dump());
 		}
@@ -1510,6 +1949,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1519,6 +1959,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					tickResult.snapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					tickResult.uiOps,
 					"reconcileWatchdogTick").dump());
 		}
@@ -1530,6 +1971,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1539,6 +1981,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"handleRpcResult").dump());
 		}
@@ -1550,6 +1993,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1559,6 +2003,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"snapshot").dump());
 		}
@@ -1570,11 +2015,13 @@ namespace blazeclaw::app::chatcontroller {
 			streamState.Reset();
 			reconcileWatchdog.Reset();
 			sessionSettings.Reset();
+			modelSettings.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
 			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1584,6 +2031,7 @@ namespace blazeclaw::app::chatcontroller {
 					streamSnapshot,
 					reconcileSnapshot,
 					sessionSnapshot,
+					modelSnapshot,
 					nlohmann::json::array(),
 					"reset").dump());
 		}
