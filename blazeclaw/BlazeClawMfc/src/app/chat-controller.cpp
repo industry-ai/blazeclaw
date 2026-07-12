@@ -8,6 +8,7 @@
 #include <deque>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -60,6 +61,24 @@ namespace blazeclaw::app::chatcontroller {
 			NativeStreamStateSnapshot streamSnapshot;
 			nlohmann::json uiOps = nlohmann::json::array();
 			std::size_t processedEventCount = 0;
+		};
+
+		struct NativeSessionOption {
+			std::string id;
+			std::string scope;
+			bool active = false;
+		};
+
+		struct NativeSessionSettingsSnapshot {
+			std::string activeSessionKey = "main";
+			std::vector<NativeSessionOption> options;
+			uint64_t switchGeneration = 0;
+			bool switched = false;
+		};
+
+		struct NativeLoadSessionOptionsParams {
+			std::string sessionKey;
+			nlohmann::json sessions = nlohmann::json::array();
 		};
 
 		class NativeChatSendState final {
@@ -181,6 +200,162 @@ namespace blazeclaw::app::chatcontroller {
 		NativeChatSendState& SendStateInstance()
 		{
 			static NativeChatSendState instance;
+			return instance;
+		}
+
+		class NativeSessionSettingsState final {
+		public:
+			NativeSessionSettingsSnapshot LoadOptions(const NativeLoadSessionOptionsParams& params)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.switched = false;
+
+				std::vector<NativeSessionOption> normalized;
+				if (params.sessions.is_array())
+				{
+					normalized.reserve(params.sessions.size());
+					for (const auto& session : params.sessions)
+					{
+						if (!session.is_object())
+						{
+							continue;
+						}
+
+						NativeSessionOption row;
+						row.id = NormalizeSessionKey(session.value("id", std::string{}));
+						row.scope = NormalizeScope(session.value("scope", std::string{}));
+						row.active = session.value("active", false);
+						normalized.push_back(std::move(row));
+					}
+				}
+
+				if (normalized.empty())
+				{
+					normalized.push_back(NativeSessionOption{
+						.id = "main",
+						.scope = "chat",
+						.active = true,
+					});
+				}
+
+				std::unordered_set<std::string> seen;
+				std::vector<NativeSessionOption> deduped;
+				deduped.reserve(normalized.size());
+				for (const auto& row : normalized)
+				{
+					if (!seen.insert(row.id).second)
+					{
+						continue;
+					}
+					deduped.push_back(row);
+				}
+
+				m_snapshot.options = std::move(deduped);
+
+				const std::string requested = NormalizeSessionKey(params.sessionKey);
+				if (!requested.empty())
+				{
+					m_snapshot.activeSessionKey = requested;
+				}
+
+				if (!ContainsSessionUnsafe(m_snapshot.activeSessionKey))
+				{
+					m_snapshot.activeSessionKey = m_snapshot.options.front().id;
+				}
+
+				for (auto& row : m_snapshot.options)
+				{
+					row.active = row.id == m_snapshot.activeSessionKey;
+				}
+
+				return m_snapshot;
+			}
+
+			NativeSessionSettingsSnapshot SwitchSession(const std::string& sessionKey)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const std::string nextSession = NormalizeSessionKey(sessionKey);
+				if (nextSession == m_snapshot.activeSessionKey)
+				{
+					m_snapshot.switched = false;
+					return m_snapshot;
+				}
+
+				if (!ContainsSessionUnsafe(nextSession))
+				{
+					m_snapshot.options.push_back(NativeSessionOption{
+						.id = nextSession,
+						.scope = "chat",
+						.active = true,
+					});
+				}
+
+				m_snapshot.activeSessionKey = nextSession;
+				for (auto& row : m_snapshot.options)
+				{
+					row.active = row.id == m_snapshot.activeSessionKey;
+				}
+				m_snapshot.switchGeneration += 1;
+				m_snapshot.switched = true;
+				return m_snapshot;
+			}
+
+			NativeSessionSettingsSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeSessionSettingsSnapshot{};
+				m_snapshot.options = {
+					NativeSessionOption{
+						.id = "main",
+						.scope = "chat",
+						.active = true,
+					}
+				};
+			}
+
+		private:
+			static std::string NormalizeSessionKey(const std::string& value)
+			{
+				const std::string normalized = TrimCopy(value);
+				return normalized.empty() ? std::string("main") : normalized;
+			}
+
+			static std::string NormalizeScope(const std::string& value)
+			{
+				const std::string normalized = TrimCopy(value);
+				return normalized.empty() ? std::string("chat") : normalized;
+			}
+
+			bool ContainsSessionUnsafe(const std::string& key) const
+			{
+				for (const auto& row : m_snapshot.options)
+				{
+					if (row.id == key)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
+			mutable std::mutex m_mutex;
+			NativeSessionSettingsSnapshot m_snapshot{
+				.activeSessionKey = "main",
+				.options = { NativeSessionOption{ .id = "main", .scope = "chat", .active = true } },
+				.switchGeneration = 0,
+				.switched = false,
+			};
+		};
+
+		NativeSessionSettingsState& SessionSettingsInstance()
+		{
+			static NativeSessionSettingsState instance;
 			return instance;
 		}
 
@@ -624,9 +799,20 @@ namespace blazeclaw::app::chatcontroller {
 			const NativeSendCorrelationSnapshot& sendState,
 			const NativeStreamStateSnapshot& streamState,
 			const NativeReconcileWatchdogSnapshot& reconcileWatchdog,
+			const NativeSessionSettingsSnapshot& sessionSettings,
 			const nlohmann::json& uiOps,
 			const char* operation)
 		{
+			nlohmann::json sessionOptions = nlohmann::json::array();
+			for (const auto& row : sessionSettings.options)
+			{
+				sessionOptions.push_back({
+					{"id", row.id},
+					{"scope", row.scope},
+					{"active", row.active},
+				});
+			}
+
 			nlohmann::json payload = {
 				{"statePatch", {
 					{"controllerLifecycle", {
@@ -668,6 +854,12 @@ namespace blazeclaw::app::chatcontroller {
 						{"warningCooldownMs", reconcileWatchdog.warningCooldownMs},
 						{"tickMs", reconcileWatchdog.tickMs},
 					}},
+					{"session", {
+						{"sessionKey", sessionSettings.activeSessionKey},
+						{"options", sessionOptions},
+						{"switchGeneration", sessionSettings.switchGeneration},
+						{"switched", sessionSettings.switched},
+					}},
 				}},
 				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
 				{"diagnostics", {
@@ -676,6 +868,8 @@ namespace blazeclaw::app::chatcontroller {
 						{"chatSend.pendingCorrelations", sendState.pendingCorrelationCount},
 						{"chatStream.deltaCount", streamState.deltaCount},
 						{"chatStream.terminalCount", streamState.terminalCount},
+						{"session.optionsCount", sessionSettings.options.size()},
+						{"session.switchGeneration", sessionSettings.switchGeneration},
 					}},
 					{"events", nlohmann::json::array()},
 				}},
@@ -723,6 +917,33 @@ namespace blazeclaw::app::chatcontroller {
 			if (parsed.contains("nowMs") && parsed["nowMs"].is_number_unsigned())
 			{
 				params.nowMs = parsed["nowMs"].get<uint64_t>();
+			}
+
+			return params;
+		}
+
+		NativeLoadSessionOptionsParams ParseLoadSessionOptionsParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			NativeLoadSessionOptionsParams params;
+
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return params;
+			}
+
+			if (parsed.contains("sessionKey") && parsed["sessionKey"].is_string())
+			{
+				params.sessionKey = parsed["sessionKey"].get<std::string>();
+			}
+
+			if (parsed.contains("sessions") && parsed["sessions"].is_array())
+			{
+				params.sessions = parsed["sessions"];
 			}
 
 			return params;
@@ -1042,6 +1263,8 @@ namespace blazeclaw::app::chatcontroller {
 		return method == "chat.controller.initialize" ||
 			method == "chat.controller.send" ||
 			method == "chat.controller.processEvents" ||
+			method == "chat.controller.loadSessionOptions" ||
+			method == "chat.controller.switchSession" ||
 			method == "chat.controller.startReconcileWatchdog" ||
 			method == "chat.controller.stopReconcileWatchdog" ||
 			method == "chat.controller.noteInboundChatEvent" ||
@@ -1058,6 +1281,7 @@ namespace blazeclaw::app::chatcontroller {
 		auto& sendState = SendStateInstance();
 		auto& streamState = StreamStateInstance();
 		auto& reconcileWatchdog = ReconcileWatchdogInstance();
+		auto& sessionSettings = SessionSettingsInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
@@ -1067,6 +1291,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1075,6 +1300,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"initialize").dump());
 		}
@@ -1086,6 +1312,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1094,6 +1321,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"send").dump());
 		}
@@ -1113,6 +1341,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1121,8 +1350,81 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					processResult.streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					processResult.uiOps,
 					"processEvents").dump());
+		}
+
+		if (request.method == "chat.controller.loadSessionOptions")
+		{
+			const auto params = ParseLoadSessionOptionsParams(request);
+			const auto sessionSnapshot = sessionSettings.LoadOptions(params);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "session.options_update"},
+				{"target", "session"},
+				{"data", {
+					{"sessionKey", sessionSnapshot.activeSessionKey},
+					{"switchGeneration", sessionSnapshot.switchGeneration},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					uiOps,
+					"loadSessionOptions").dump());
+		}
+
+		if (request.method == "chat.controller.switchSession")
+		{
+			const auto params = ParseLoadSessionOptionsParams(request);
+			const auto sessionSnapshot = sessionSettings.SwitchSession(params.sessionKey);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "session.options_update"},
+				{"target", "session"},
+				{"data", {
+					{"sessionKey", sessionSnapshot.activeSessionKey},
+					{"switchGeneration", sessionSnapshot.switchGeneration},
+				}},
+			});
+			if (sessionSnapshot.switched)
+			{
+				uiOps.push_back({
+					{"op", "chat.set_status"},
+					{"target", "chat"},
+					{"data", {
+						{"message", std::string("session switched: ") + sessionSnapshot.activeSessionKey},
+					}},
+				});
+			}
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					uiOps,
+					"switchSession").dump());
 		}
 
 		if (request.method == "chat.controller.startReconcileWatchdog")
@@ -1134,6 +1436,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1142,6 +1445,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"startReconcileWatchdog").dump());
 		}
@@ -1153,6 +1457,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1161,6 +1466,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"stopReconcileWatchdog").dump());
 		}
@@ -1174,6 +1480,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1182,6 +1489,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"noteInboundChatEvent").dump());
 		}
@@ -1201,6 +1509,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1209,6 +1518,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					tickResult.snapshot,
+					sessionSnapshot,
 					tickResult.uiOps,
 					"reconcileWatchdogTick").dump());
 		}
@@ -1219,6 +1529,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1227,6 +1538,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"handleRpcResult").dump());
 		}
@@ -1237,6 +1549,7 @@ namespace blazeclaw::app::chatcontroller {
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1245,6 +1558,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"snapshot").dump());
 		}
@@ -1255,10 +1569,12 @@ namespace blazeclaw::app::chatcontroller {
 			sendState.Reset();
 			streamState.Reset();
 			reconcileWatchdog.Reset();
+			sessionSettings.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
 			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
 				BuildLifecyclePayload(
@@ -1267,6 +1583,7 @@ namespace blazeclaw::app::chatcontroller {
 					sendSnapshot,
 					streamSnapshot,
 					reconcileSnapshot,
+					sessionSnapshot,
 					nlohmann::json::array(),
 					"reset").dump());
 		}
