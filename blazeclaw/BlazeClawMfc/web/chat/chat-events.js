@@ -39,6 +39,8 @@
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
         const upsertApprovalToken = opts.upsertApprovalToken || function () { };
         const onNeedsApprovalEvent = opts.onNeedsApprovalEvent || function () { };
+        const applyStatePatch = opts.applyStatePatch || function () { };
+        const applyUiOps = opts.applyUiOps || function () { };
 
         state.seenChatTerminalRuns = state.seenChatTerminalRuns || new Set();
         state.seenToolLifecycleKeys = state.seenToolLifecycleKeys || new Set();
@@ -179,6 +181,32 @@
             }
 
             upsertApprovalToken(approvalToken, "Email scheduling approval required");
+        }
+
+        function applyNormalizedControllerEnvelope(message) {
+            if (!message || typeof message !== "object") {
+                return;
+            }
+
+            const responsePayload =
+                message.payload && typeof message.payload === "object"
+                    ? message.payload
+                    : message;
+            if (!responsePayload || typeof responsePayload !== "object") {
+                return;
+            }
+
+            const statePatch =
+                responsePayload.statePatch && typeof responsePayload.statePatch === "object"
+                    ? responsePayload.statePatch
+                    : null;
+            if (statePatch) {
+                applyStatePatch(statePatch);
+            }
+
+            if (Array.isArray(responsePayload.uiOps) && responsePayload.uiOps.length > 0) {
+                applyUiOps(responsePayload.uiOps);
+            }
         }
 
         function normalizeSessionKeyLocal(value) {
@@ -557,6 +585,8 @@
 
             if (message.channel === "blazeclaw.gateway.rpc.result") {
                 controller.handleRpcResult(message);
+                applyNormalizedControllerEnvelope(message);
+                updateComposerState();
                 return;
             }
 

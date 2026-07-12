@@ -21,6 +21,7 @@
     };
 
     const NEEDS_APPROVAL_QUEUE_TIMEOUT_MS = 1500;
+    const UI_OP_CHAT_REQUEST_SEND_DEDUP_WINDOW_MS = 1000;
 
     const statusEl = document.getElementById("status");
     const speechStatusEl = document.getElementById("speechStatus");
@@ -521,6 +522,244 @@
             state.approvalQueue.splice(0, state.approvalQueue.length - 20);
         }
         renderApprovalQueue();
+    }
+
+    function applyNormalizedStatePatch(statePatch) {
+        const patch = statePatch && typeof statePatch === "object"
+            ? statePatch
+            : null;
+        if (!patch) {
+            return;
+        }
+
+        const speechPatch = patch.speech && typeof patch.speech === "object"
+            ? patch.speech
+            : null;
+        if (speechPatch) {
+            if (speechPatch.capabilities && typeof speechPatch.capabilities === "object") {
+                state.speechCapabilities = {
+                    ...(state.speechCapabilities && typeof state.speechCapabilities === "object"
+                        ? state.speechCapabilities
+                        : {}),
+                    ...speechPatch.capabilities,
+                };
+            }
+
+            if (speechPatch.session && typeof speechPatch.session === "object") {
+                state.speechSessionState = {
+                    ...(state.speechSessionState && typeof state.speechSessionState === "object"
+                        ? state.speechSessionState
+                        : {}),
+                    ...speechPatch.session,
+                };
+            }
+        }
+
+        const approvalPatch = patch.approval && typeof patch.approval === "object"
+            ? patch.approval
+            : null;
+        if (approvalPatch) {
+            const token = String(approvalPatch.approvalToken || "").trim();
+            if (token) {
+                upsertApprovalToken(token, "Email scheduling approval required");
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                const item = queue.find((entry) => String(entry && entry.token || "").trim() === token);
+                if (item) {
+                    item.errorMessage = String(approvalPatch.errorMessage || "").trim();
+                    item.remediation = String(approvalPatch.remediation || "").trim();
+                    item.missingDependency = String(approvalPatch.missingDependency || "").trim();
+                    item.installHint = String(approvalPatch.installHint || "").trim();
+                    item.configHint = String(approvalPatch.configHint || "").trim();
+                    item.failureBucket = String(approvalPatch.failureBucket || "").trim();
+                    item.readinessKnown = Boolean(approvalPatch.readinessKnown);
+                    item.readinessReady = Boolean(approvalPatch.readinessReady);
+                    item.readinessCode = String(approvalPatch.readinessCode || "").trim();
+                    item.readinessMessage = String(approvalPatch.readinessMessage || "").trim();
+                    item.readinessRemediation = String(approvalPatch.readinessRemediation || "").trim();
+                    item.readinessMissingDependency = String(approvalPatch.readinessMissingDependency || "").trim();
+                    item.readinessInstallHint = String(approvalPatch.readinessInstallHint || "").trim();
+                    item.readinessConfigHint = String(approvalPatch.readinessConfigHint || "").trim();
+                    item.readinessBucket = String(approvalPatch.readinessBucket || "").trim();
+                }
+            }
+        }
+
+        const sessionPatch = patch.session && typeof patch.session === "object"
+            ? patch.session
+            : null;
+        if (sessionPatch) {
+            if (Array.isArray(sessionPatch.options)) {
+                state.sessionOptions = sessionPatch.options.slice();
+            } else if (Array.isArray(sessionPatch.sessionOptions)) {
+                state.sessionOptions = sessionPatch.sessionOptions.slice();
+            }
+
+            const activeSessionKey = String(
+                sessionPatch.activeSessionKey ||
+                sessionPatch.sessionKey ||
+                "").trim();
+            if (activeSessionKey) {
+                state.sessionKey = activeSessionKey;
+            }
+        }
+
+        const modelPatch = patch.models && typeof patch.models === "object"
+            ? patch.models
+            : null;
+        if (modelPatch) {
+            if (Array.isArray(modelPatch.options)) {
+                state.modelOptions = modelPatch.options.slice();
+            } else if (Array.isArray(modelPatch.modelOptions)) {
+                state.modelOptions = modelPatch.modelOptions.slice();
+            }
+
+            const selectedModel = String(
+                modelPatch.selectedModel ||
+                modelPatch.activeModel ||
+                "").trim();
+            if (selectedModel) {
+                state.selectedModel = selectedModel;
+            }
+
+            const thinkingLevel = String(
+                modelPatch.thinkingLevel ||
+                modelPatch.thinking ||
+                "").trim();
+            if (thinkingLevel) {
+                state.thinkingLevel = thinkingLevel;
+            }
+
+            if (Array.isArray(modelPatch.thinkingOptions)) {
+                state.thinkingOptions = modelPatch.thinkingOptions.slice();
+            }
+        }
+
+        const chatStreamPatch = patch.chatStream && typeof patch.chatStream === "object"
+            ? patch.chatStream
+            : null;
+        if (chatStreamPatch) {
+            const activeRunId = String(chatStreamPatch.activeRunId || "").trim();
+            state.runId = activeRunId || state.runId;
+            if (typeof chatStreamPatch.streamText === "string") {
+                state.streamText = chatStreamPatch.streamText;
+            }
+        }
+    }
+
+    function applyNormalizedUiOps(uiOps) {
+        const operations = Array.isArray(uiOps) ? uiOps : [];
+        for (const item of operations) {
+            if (!item || typeof item !== "object") {
+                continue;
+            }
+
+            const op = String(item.op || "").trim();
+            const data = item.data && typeof item.data === "object"
+                ? item.data
+                : {};
+
+            if (op === "chat.set_status") {
+                const message = String(data.message || data.text || "").trim();
+                if (message) {
+                    setStatus(message);
+                }
+                continue;
+            }
+
+            if (op === "speech.set_status") {
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate(data);
+                }
+                continue;
+            }
+
+            if (op === "speech.set_preview") {
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate(data);
+                }
+                continue;
+            }
+
+            if (op === "approval.queue_update") {
+                const token = String(data.approvalToken || "").trim();
+                if (token) {
+                    upsertApprovalToken(token, "Email scheduling approval required");
+                }
+                continue;
+            }
+
+            if (op === "approval.status_update") {
+                const token = String(data.approvalToken || "").trim();
+                if (!token) {
+                    continue;
+                }
+
+                upsertApprovalToken(token, "Email scheduling approval required");
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                const entry = queue.find((row) => String(row && row.token || "").trim() === token);
+                if (!entry) {
+                    continue;
+                }
+
+                const ok = Boolean(data.ok);
+                const approve = Boolean(data.approve);
+                const status = String(data.status || "").trim();
+                const errorCode = String(data.errorCode || "").trim();
+                entry.status = ok
+                    ? (approve ? "approved" : "denied")
+                    : (approve ? "failed" : "denied");
+                if (status === "expired") {
+                    entry.status = "failed";
+                    entry.title = "Approval token expired";
+                } else {
+                    entry.title = ok
+                        ? (approve ? "Email approval executed" : "Email approval denied")
+                        : (approve
+                            ? (errorCode ? `Email approval failed (${errorCode})` : "Email approval failed")
+                            : "Email approval denied");
+                }
+
+                entry.errorMessage = String(data.errorMessage || "").trim();
+                entry.remediation = String(data.remediation || "").trim();
+                entry.missingDependency = String(data.missingDependency || "").trim();
+                entry.installHint = String(data.installHint || "").trim();
+                entry.configHint = String(data.configHint || "").trim();
+                entry.failureBucket = String(data.failureBucket || "").trim();
+                entry.readinessKnown = Boolean(data.readinessKnown);
+                entry.readinessReady = Boolean(data.readinessReady);
+                entry.readinessCode = String(data.readinessCode || "").trim();
+                entry.readinessMessage = String(data.readinessMessage || "").trim();
+                entry.readinessRemediation = String(data.readinessRemediation || "").trim();
+                entry.readinessMissingDependency = String(data.readinessMissingDependency || "").trim();
+                entry.readinessInstallHint = String(data.readinessInstallHint || "").trim();
+                entry.readinessConfigHint = String(data.readinessConfigHint || "").trim();
+                entry.readinessBucket = String(data.readinessBucket || "").trim();
+                continue;
+            }
+
+            if (op === "chat.request_send") {
+                const message = String(data.message || "").trim();
+                if (!message) {
+                    continue;
+                }
+
+                const dedupKey = `${String(data.runId || "").trim()}::${message}`;
+                const nowMs = Date.now();
+                if (state.lastUiOpChatRequestSend &&
+                    state.lastUiOpChatRequestSend.key === dedupKey &&
+                    Number.isFinite(Number(state.lastUiOpChatRequestSend.atMs)) &&
+                    (nowMs - Number(state.lastUiOpChatRequestSend.atMs)) <= UI_OP_CHAT_REQUEST_SEND_DEDUP_WINDOW_MS) {
+                    continue;
+                }
+
+                state.lastUiOpChatRequestSend = {
+                    key: dedupKey,
+                    atMs: nowMs,
+                };
+                setInputValue(message);
+                void controller.send(false);
+            }
+        }
     }
 
     function scanApprovalTokenFromText(text) {
@@ -4118,6 +4357,8 @@
             addOrReplaceStream,
             upsertApprovalToken,
             onNeedsApprovalEvent: scheduleNeedsApprovalQueueWatch,
+            applyStatePatch: applyNormalizedStatePatch,
+            applyUiOps: applyNormalizedUiOps,
         })
         : {
             handleChatEvents() {
