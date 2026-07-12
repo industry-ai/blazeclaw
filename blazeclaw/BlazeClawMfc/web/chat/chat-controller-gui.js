@@ -387,9 +387,6 @@
             addOrReplaceStream,
             finalizeStream,
             setInputValue,
-            isSpeechPreviewRunId,
-            hasSpeechFinalAuthority,
-            isRecordingSpeechStage,
         };
     }
 
