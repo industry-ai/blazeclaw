@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <deque>
+#include <cmath>
 #include <memory>
 #include <regex>
 #include <unordered_map>
@@ -19,6 +20,9 @@ namespace blazeclaw::app::chatcontroller {
 	namespace {
 
 		std::string TrimCopy(const std::string& value);
+		uint64_t CurrentSteadyClockMs();
+		class NativeSpeechState;
+		NativeSpeechState& SpeechStateInstance();
 
 		NativeChatControllerLifecycle& LifecycleInstance()
 		{
@@ -105,7 +109,95 @@ namespace blazeclaw::app::chatcontroller {
 			uint64_t expiresAtEpochMs = 0;
 			std::string errorCode;
 			std::string source;
+			bool approve = false;
+			bool ok = false;
+			std::string status;
+			std::string message;
+			std::string output;
+			std::string remediation;
+			std::string missingDependency;
+			std::string installHint;
+			std::string configHint;
+			std::string failureBucket;
+			std::string errorMessage;
+			bool readinessKnown = false;
+			bool readinessReady = false;
+			std::string readinessCode;
+			std::string readinessMessage;
+			std::string readinessRemediation;
+			std::string readinessMissingDependency;
+			std::string readinessInstallHint;
+			std::string readinessConfigHint;
+			std::string readinessBucket;
 			uint64_t validationGeneration = 0;
+			uint64_t executionGeneration = 0;
+		};
+
+		struct NativeSpeechCapabilitiesSnapshot {
+			bool sttSupported = false;
+			bool sttReady = false;
+			std::string audioHandoffMode = "dual";
+			bool streamingSupported = false;
+			bool streamingPreviewEnabled = false;
+			bool livePreviewToggleEnabled = false;
+			std::string livePreviewToggleSource;
+			bool streamingConfigured = false;
+			bool modelNativeVad = false;
+			int64_t streamingChunkMs = 0;
+			int64_t streamingLookbackMs = 0;
+			std::string provider;
+			std::string effectiveExecutionProvider;
+			bool cudaExecutionProviderAvailable = false;
+			bool cudaExecutionProviderEnabled = false;
+			std::string cudaExecutionProviderReason;
+			bool transcriptSupportsSegments = false;
+			bool transcriptSupportsInterim = false;
+			bool transcriptSupportsFinal = true;
+			bool ttsSupported = false;
+			bool ttsReady = false;
+			std::vector<std::string> lifecycle;
+			bool loaded = false;
+			std::string error;
+		};
+
+		struct NativeSpeechErrorPolicySnapshot {
+			bool loaded = false;
+			std::string defaultClass = "status";
+			nlohmann::json map = nlohmann::json::object();
+			nlohmann::json retry = nlohmann::json::object();
+		};
+
+		struct NativeSpeechSessionSnapshot {
+			std::string stage = "idle";
+			std::string text;
+			std::string segmentText;
+			bool segmentFinal = false;
+			int64_t segmentSequence = 0;
+			std::string runId;
+			std::string finalRunId;
+			std::string sessionId;
+			std::string audioPath;
+			nlohmann::json audioArtifact = nullptr;
+			std::string language;
+			int64_t latencyMs = 0;
+			bool cancelled = false;
+			std::string errorCode;
+			std::string errorMessage;
+			std::string errorClass = "status";
+			bool retryable = false;
+			std::string retryStrategy = "immediate";
+			std::string retryGuidance;
+			nlohmann::json debugInfo = nullptr;
+			nlohmann::json preflight = nullptr;
+			nlohmann::json noSpeechTriage = nullptr;
+			uint64_t updatedAtMs = 0;
+			uint64_t generation = 0;
+		};
+
+		struct NativeSpeechStateSnapshot {
+			NativeSpeechCapabilitiesSnapshot capabilities;
+			NativeSpeechErrorPolicySnapshot errorPolicy;
+			NativeSpeechSessionSnapshot session;
 		};
 
 		class NativeChatSendState final {
@@ -641,6 +733,21 @@ namespace blazeclaw::app::chatcontroller {
 
 		class NativeApprovalValidationState final {
 		public:
+			struct NativeApprovalExecutionInput {
+				std::string approvalToken;
+				bool approve = false;
+				bool readinessKnown = false;
+				bool readinessReady = false;
+				std::string readinessCode;
+				std::string readinessMessage;
+				std::string readinessRemediation;
+				std::string readinessMissingDependency;
+				std::string readinessInstallHint;
+				std::string readinessConfigHint;
+				std::string readinessBucket;
+				nlohmann::json executePayload = nlohmann::json::object();
+			};
+
 			NativeApprovalValidationSnapshot ParseTokenFromText(const std::string& text)
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
@@ -722,6 +829,89 @@ namespace blazeclaw::app::chatcontroller {
 				return m_snapshot;
 			}
 
+			NativeApprovalValidationSnapshot ApplyExecutionResult(const NativeApprovalExecutionInput& input)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.executionGeneration += 1;
+				m_snapshot.source = "execute";
+				m_snapshot.approve = input.approve;
+				m_snapshot.approvalToken = TrimCopy(input.approvalToken);
+				m_snapshot.tokenPresent = !m_snapshot.approvalToken.empty();
+				m_snapshot.valid = IsValidToken(m_snapshot.approvalToken);
+				m_snapshot.status.clear();
+				m_snapshot.message.clear();
+				m_snapshot.output.clear();
+				m_snapshot.errorCode.clear();
+				m_snapshot.remediation.clear();
+				m_snapshot.missingDependency.clear();
+				m_snapshot.installHint.clear();
+				m_snapshot.configHint.clear();
+				m_snapshot.failureBucket.clear();
+				m_snapshot.errorMessage.clear();
+				m_snapshot.readinessKnown = input.readinessKnown;
+				m_snapshot.readinessReady = input.readinessReady;
+				m_snapshot.readinessCode = TrimCopy(input.readinessCode);
+				m_snapshot.readinessMessage = TrimCopy(input.readinessMessage);
+				m_snapshot.readinessRemediation = TrimCopy(input.readinessRemediation);
+				m_snapshot.readinessMissingDependency = TrimCopy(input.readinessMissingDependency);
+				m_snapshot.readinessInstallHint = TrimCopy(input.readinessInstallHint);
+				m_snapshot.readinessConfigHint = TrimCopy(input.readinessConfigHint);
+				m_snapshot.readinessBucket = TrimCopy(input.readinessBucket);
+
+				if (!m_snapshot.valid)
+				{
+					m_snapshot.ok = false;
+					m_snapshot.status = "invalid";
+					m_snapshot.message = "approval token is invalid";
+					m_snapshot.errorCode = "approval_token_invalid";
+					return m_snapshot;
+				}
+
+				const auto payload = input.executePayload;
+				const std::string rawStatus = payload.contains("status") && payload["status"].is_string()
+					? NormalizeLower(payload["status"].get<std::string>())
+					: std::string{};
+				const std::string output = payload.contains("output") && payload["output"].is_string()
+					? payload["output"].get<std::string>()
+					: std::string{};
+				m_snapshot.output = output;
+
+				nlohmann::json parsedHints = ParseExecutionHints(output);
+				m_snapshot.errorCode = ResolveNormalizedErrorCode(payload, parsedHints, output);
+				const bool expired = ContainsInsensitive(output, "expired") ||
+					m_snapshot.errorCode == "approval_token_expired";
+
+				bool resolvedOk = rawStatus == "cancelled" || rawStatus == "ok";
+				if (input.approve)
+				{
+					resolvedOk = rawStatus == "ok";
+				}
+
+				m_snapshot.status = rawStatus.empty() ? "unknown" : rawStatus;
+				if (expired)
+				{
+					m_snapshot.status = "expired";
+				}
+				m_snapshot.ok = resolvedOk && !expired;
+
+				if (parsedHints.is_object())
+				{
+					m_snapshot.remediation = ReadStringField(parsedHints, "remediation");
+					m_snapshot.missingDependency = ReadStringField(parsedHints, "missingDependency");
+					m_snapshot.installHint = ReadStringField(parsedHints, "installHint");
+					m_snapshot.configHint = ReadStringField(parsedHints, "configHint");
+					m_snapshot.failureBucket = ReadStringField(parsedHints, "bucket");
+					m_snapshot.errorMessage = ReadStringField(parsedHints, "message");
+				}
+
+				if (m_snapshot.status == "invalid")
+				{
+					m_snapshot.message = "approval token is invalid";
+				}
+
+				return m_snapshot;
+			}
+
 			NativeApprovalValidationSnapshot Snapshot() const
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
@@ -735,6 +925,90 @@ namespace blazeclaw::app::chatcontroller {
 			}
 
 		private:
+			static std::string NormalizeLower(const std::string& value)
+			{
+				std::string normalized = TrimCopy(value);
+				std::transform(
+					normalized.begin(),
+					normalized.end(),
+					normalized.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return normalized;
+			}
+
+			static bool ContainsInsensitive(const std::string& source, const std::string& needle)
+			{
+				if (needle.empty())
+				{
+					return false;
+				}
+				const std::string lhs = NormalizeLower(source);
+				const std::string rhs = NormalizeLower(needle);
+				return lhs.find(rhs) != std::string::npos;
+			}
+
+			static nlohmann::json ParseExecutionHints(const std::string& output)
+			{
+				if (output.empty())
+				{
+					return nlohmann::json::object();
+				}
+				const auto parsed = nlohmann::json::parse(output, nullptr, false);
+				if (parsed.is_discarded() || !parsed.is_object())
+				{
+					return nlohmann::json::object();
+				}
+				if (!parsed.contains("error") || !parsed["error"].is_object())
+				{
+					return nlohmann::json::object();
+				}
+				return parsed["error"];
+			}
+
+			static std::string ReadStringField(const nlohmann::json& obj, const char* key)
+			{
+				if (key == nullptr || !obj.is_object() || !obj.contains(key) || !obj[key].is_string())
+				{
+					return "";
+				}
+				return TrimCopy(obj[key].get<std::string>());
+			}
+
+			static std::string ResolveNormalizedErrorCode(
+				const nlohmann::json& executePayload,
+				const nlohmann::json& parsedHints,
+				const std::string& output)
+			{
+				const std::string topLevel = executePayload.contains("errorCode") && executePayload["errorCode"].is_string()
+					? TrimCopy(executePayload["errorCode"].get<std::string>())
+					: std::string{};
+				if (!topLevel.empty() && topLevel != "legacy_execution_failed")
+				{
+					return topLevel;
+				}
+
+				const std::string nested = ReadStringField(parsedHints, "code");
+				if (!nested.empty())
+				{
+					return nested;
+				}
+
+				if (!topLevel.empty())
+				{
+					return topLevel;
+				}
+
+				std::smatch match;
+				const std::regex codePattern(
+					R"regex("code"\s*:\s*"([^"]+)")regex");
+				if (std::regex_search(output, match, codePattern) && match.size() >= 2)
+				{
+					return TrimCopy(match[1].str());
+				}
+
+				return "";
+			}
+
 			static bool IsValidToken(const std::string& token)
 			{
 				if (token.empty())
@@ -764,6 +1038,553 @@ namespace blazeclaw::app::chatcontroller {
 		NativeApprovalValidationState& ApprovalValidationInstance()
 		{
 			static NativeApprovalValidationState instance;
+			return instance;
+		}
+
+		class NativeSpeechState final {
+		public:
+			NativeSpeechStateSnapshot LoadCapabilities(const nlohmann::json& payload)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.capabilities = NormalizeCapabilities(payload);
+				return m_snapshot;
+			}
+
+			NativeSpeechStateSnapshot LoadErrorPolicy(const nlohmann::json& payload)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot.errorPolicy = NormalizeErrorPolicy(payload);
+				return m_snapshot;
+			}
+
+			NativeSpeechStateSnapshot ApplyLifecycleUpdate(const nlohmann::json& payload)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				NativeSpeechSessionSnapshot next = NormalizeSession(payload);
+				const auto& previous = m_snapshot.session;
+
+				if (IsPreviewUpdateBlockedByFinalAuthority(next, previous))
+				{
+					return m_snapshot;
+				}
+				if (IsEmptyTerminalPreviewUpdate(next, previous))
+				{
+					return m_snapshot;
+				}
+				if (IsStaleSpeechPreviewUpdate(next, previous))
+				{
+					return m_snapshot;
+				}
+
+				if (IsPreviewTerminalUpdateWhileRecording(next, previous))
+				{
+					next.stage = "streaming";
+					next.segmentFinal = false;
+				}
+
+				const bool clearsPreviousTranscript =
+					next.stage == "failed" && next.errorCode == "missing_final_transcript";
+
+				if (next.segmentText.empty() && next.stage == "segment_finalized")
+				{
+					next.segmentText = next.text;
+				}
+
+				if (!clearsPreviousTranscript &&
+					next.segmentText.empty() &&
+					(next.stage == "queued" ||
+						next.stage == "stopped" ||
+						next.stage == "transcribing" ||
+						next.stage == "failed"))
+				{
+					next.segmentText = previous.segmentText;
+				}
+
+				if (!clearsPreviousTranscript &&
+					next.text.empty() &&
+					(next.stage == "streaming" ||
+						next.stage == "queued" ||
+						next.stage == "stopped" ||
+						next.stage == "transcribing" ||
+						next.stage == "failed"))
+				{
+					next.text = previous.text;
+				}
+
+				if (InferNoSpeechSignal(next))
+				{
+					next.errorCode = "no_speech_detected";
+					if (next.errorMessage.empty() ||
+						ContainsInsensitive(next.errorMessage, "inference_failed"))
+					{
+						next.errorMessage = "speech transcribe no_speech_detected: check selected recording device and retry";
+					}
+					next.errorClass = "status";
+					next.retryable = true;
+					if (next.retryStrategy.empty())
+					{
+						next.retryStrategy = "immediate";
+					}
+					if (next.retryGuidance.empty())
+					{
+						next.retryGuidance =
+							"No speech detected. Check microphone level/input channel and retry.";
+					}
+					next.stage = "failed";
+				}
+
+				next.generation = previous.generation + 1;
+				next.updatedAtMs = CurrentSteadyClockMs();
+				m_snapshot.session = next;
+				return m_snapshot;
+			}
+
+			NativeSpeechStateSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeSpeechStateSnapshot{};
+			}
+
+		private:
+			static bool ContainsInsensitive(const std::string& source, const std::string& needle)
+			{
+				if (needle.empty())
+				{
+					return false;
+				}
+				std::string lhs = source;
+				std::string rhs = needle;
+				std::transform(lhs.begin(), lhs.end(), lhs.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				std::transform(rhs.begin(), rhs.end(), rhs.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return lhs.find(rhs) != std::string::npos;
+			}
+
+			static std::string NormalizeSpeechErrorCode(const std::string& rawCode)
+			{
+				std::string code = TrimCopy(rawCode);
+				std::transform(code.begin(), code.end(), code.begin(),
+					[](const unsigned char c) {
+						if (std::isspace(c) != 0)
+						{
+							return static_cast<char>('_');
+						}
+						return static_cast<char>(std::tolower(c));
+					});
+				return code;
+			}
+
+			static bool IsSpeechPreviewRunId(const std::string& runId)
+			{
+				return TrimCopy(runId).rfind("speech-preview-", 0) == 0;
+			}
+
+			static bool IsSpeechFinalRunId(const std::string& runId)
+			{
+				return TrimCopy(runId).rfind("speech-final-", 0) == 0;
+			}
+
+			static bool IsActiveSpeechPreviewState(const NativeSpeechSessionSnapshot& session)
+			{
+				if (session.stage == "recording" ||
+					session.stage == "start_stream" ||
+					session.stage == "streaming")
+				{
+					return true;
+				}
+				return session.stage == "queued" && IsSpeechPreviewRunId(session.runId);
+			}
+
+			static bool IsSpeechPreviewUpdate(const NativeSpeechSessionSnapshot& session)
+			{
+				return IsSpeechPreviewRunId(session.runId);
+			}
+
+			static bool IsPreviewUpdateBlockedByFinalAuthority(
+				const NativeSpeechSessionSnapshot& next,
+				const NativeSpeechSessionSnapshot& previous)
+			{
+				if (!IsSpeechPreviewUpdate(next))
+				{
+					return false;
+				}
+				if (IsSpeechFinalRunId(previous.finalRunId) || IsSpeechFinalRunId(previous.runId))
+				{
+					return true;
+				}
+				return !IsActiveSpeechPreviewState(previous);
+			}
+
+			static bool IsStaleSpeechPreviewUpdate(
+				const NativeSpeechSessionSnapshot& next,
+				const NativeSpeechSessionSnapshot& previous)
+			{
+				if (next.stage != "streaming" || next.segmentFinal)
+				{
+					return false;
+				}
+				if (!previous.stage.empty() && !IsActiveSpeechPreviewState(previous))
+				{
+					return true;
+				}
+				if (IsSpeechPreviewRunId(next.runId) &&
+					IsSpeechPreviewRunId(previous.runId) &&
+					next.runId != previous.runId)
+				{
+					return true;
+				}
+				if (!next.sessionId.empty() &&
+					!previous.sessionId.empty() &&
+					next.sessionId != previous.sessionId)
+				{
+					return true;
+				}
+				if (next.segmentSequence > 0 &&
+					previous.segmentSequence > 0 &&
+					next.segmentSequence < previous.segmentSequence)
+				{
+					return true;
+				}
+				const std::string nextText = !next.segmentText.empty()
+					? next.segmentText
+					: next.text;
+				const std::string previousText = !previous.segmentText.empty()
+					? previous.segmentText
+					: previous.text;
+				return next.segmentSequence > 0 &&
+					previous.segmentSequence > 0 &&
+					next.segmentSequence == previous.segmentSequence &&
+					nextText.size() < previousText.size();
+			}
+
+			static bool IsEmptyTerminalPreviewUpdate(
+				const NativeSpeechSessionSnapshot& next,
+				const NativeSpeechSessionSnapshot& previous)
+			{
+				if (next.stage != "completed" && next.stage != "segment_finalized")
+				{
+					return false;
+				}
+				if (!IsSpeechPreviewRunId(next.runId))
+				{
+					return false;
+				}
+				if (!IsActiveSpeechPreviewState(previous))
+				{
+					return false;
+				}
+				return next.segmentText.empty() && next.text.empty() && next.errorCode.empty();
+			}
+
+			static bool IsPreviewTerminalUpdateWhileRecording(
+				const NativeSpeechSessionSnapshot& next,
+				const NativeSpeechSessionSnapshot& previous)
+			{
+				if (next.stage != "completed" && next.stage != "segment_finalized")
+				{
+					return false;
+				}
+				if (!IsSpeechPreviewRunId(next.runId))
+				{
+					return false;
+				}
+				return IsActiveSpeechPreviewState(previous);
+			}
+
+			static bool InferNoSpeechSignal(const NativeSpeechSessionSnapshot& session)
+			{
+				const std::string normalizedCode = NormalizeSpeechErrorCode(session.errorCode);
+				if (normalizedCode == "no_speech_detected")
+				{
+					return true;
+				}
+
+				if (ContainsInsensitive(session.errorMessage, "no_speech_detected"))
+				{
+					return true;
+				}
+
+				if (session.debugInfo.is_object())
+				{
+					const std::string sherpaFinalOutcome =
+						ReadString(session.debugInfo, "sherpaFinalOutcome");
+					if (TrimCopy(sherpaFinalOutcome) == "no_speech_detected")
+					{
+						return true;
+					}
+				}
+
+				if (session.preflight.is_object())
+				{
+					const double healthIndex = ReadNumber(session.preflight, "healthIndex");
+					if (std::isfinite(healthIndex) && healthIndex > 0 && healthIndex < 55)
+					{
+						if (normalizedCode == "inference_failed" ||
+							ContainsInsensitive(session.errorMessage, "final transcript unavailable"))
+						{
+							return true;
+						}
+					}
+				}
+
+				return false;
+			}
+
+			static std::string ReadString(const nlohmann::json& object, const char* key)
+			{
+				if (!object.is_object() || key == nullptr ||
+					!object.contains(key) || !object[key].is_string())
+				{
+					return "";
+				}
+				return TrimCopy(object[key].get<std::string>());
+			}
+
+			static bool ReadBool(const nlohmann::json& object, const char* key, bool fallback = false)
+			{
+				if (!object.is_object() || key == nullptr || !object.contains(key))
+				{
+					return fallback;
+				}
+				return object[key].is_boolean() ? object[key].get<bool>() : fallback;
+			}
+
+			static int64_t ReadInteger(const nlohmann::json& object, const char* key, int64_t fallback = 0)
+			{
+				if (!object.is_object() || key == nullptr || !object.contains(key))
+				{
+					return fallback;
+				}
+				if (object[key].is_number_integer())
+				{
+					return object[key].get<int64_t>();
+				}
+				if (object[key].is_number_unsigned())
+				{
+					return static_cast<int64_t>(object[key].get<uint64_t>());
+				}
+				return fallback;
+			}
+
+			static double ReadNumber(const nlohmann::json& object, const char* key, double fallback = 0.0)
+			{
+				if (!object.is_object() || key == nullptr || !object.contains(key) ||
+					!object[key].is_number())
+				{
+					return fallback;
+				}
+				return object[key].get<double>();
+			}
+
+			static nlohmann::json ReadObjectCopy(const nlohmann::json& object, const char* key)
+			{
+				if (!object.is_object() || key == nullptr || !object.contains(key) ||
+					!object[key].is_object())
+				{
+					return nullptr;
+				}
+				return object[key];
+			}
+
+			static NativeSpeechCapabilitiesSnapshot NormalizeCapabilities(const nlohmann::json& payload)
+			{
+				NativeSpeechCapabilitiesSnapshot snapshot;
+				const nlohmann::json source = payload.is_object() ? payload : nlohmann::json::object();
+				const nlohmann::json stt = ReadObjectCopy(source, "stt").is_object()
+					? ReadObjectCopy(source, "stt")
+					: nlohmann::json::object();
+				const nlohmann::json transcript = ReadObjectCopy(source, "transcript").is_object()
+					? ReadObjectCopy(source, "transcript")
+					: nlohmann::json::object();
+				const nlohmann::json tts = ReadObjectCopy(source, "tts").is_object()
+					? ReadObjectCopy(source, "tts")
+					: nlohmann::json::object();
+
+				snapshot.sttSupported = ReadBool(stt, "supported");
+				snapshot.sttReady = ReadBool(stt, "ready");
+				snapshot.audioHandoffMode = ReadString(stt, "audioHandoffMode");
+				if (snapshot.audioHandoffMode.empty())
+				{
+					snapshot.audioHandoffMode = "dual";
+				}
+				snapshot.streamingSupported = ReadBool(stt, "streamingSupported");
+				snapshot.streamingPreviewEnabled = ReadBool(stt, "streamingPreviewEnabled");
+				snapshot.livePreviewToggleEnabled = ReadBool(stt, "livePreviewToggleEnabled");
+				snapshot.livePreviewToggleSource = ReadString(stt, "livePreviewToggleSource");
+				snapshot.streamingConfigured = ReadBool(stt, "streamingConfigured");
+				snapshot.modelNativeVad = ReadBool(stt, "modelNativeVad");
+				snapshot.streamingChunkMs = ReadInteger(stt, "streamingChunkMs", 0);
+				snapshot.streamingLookbackMs = ReadInteger(stt, "streamingLookbackMs", 0);
+				snapshot.provider = ReadString(stt, "provider");
+				snapshot.effectiveExecutionProvider = ReadString(stt, "effectiveExecutionProvider");
+				snapshot.cudaExecutionProviderAvailable = ReadBool(stt, "cudaExecutionProviderAvailable");
+				snapshot.cudaExecutionProviderEnabled = ReadBool(stt, "cudaExecutionProviderEnabled");
+				snapshot.cudaExecutionProviderReason = ReadString(stt, "cudaExecutionProviderReason");
+				snapshot.transcriptSupportsSegments = ReadBool(transcript, "supportsSegments");
+				snapshot.transcriptSupportsInterim = ReadBool(transcript, "supportsInterim");
+				snapshot.transcriptSupportsFinal = !transcript.is_object() ||
+					!transcript.contains("supportsFinal")
+					? true
+					: ReadBool(transcript, "supportsFinal", true);
+				snapshot.ttsSupported = ReadBool(tts, "supported");
+				snapshot.ttsReady = ReadBool(tts, "ready");
+				snapshot.loaded = true;
+
+				if (source.contains("lifecycle") && source["lifecycle"].is_array())
+				{
+					for (const auto& row : source["lifecycle"])
+					{
+						if (!row.is_string())
+						{
+							continue;
+						}
+						const std::string value = TrimCopy(row.get<std::string>());
+						if (!value.empty())
+						{
+							snapshot.lifecycle.push_back(value);
+						}
+					}
+				}
+
+				return snapshot;
+			}
+
+			static NativeSpeechErrorPolicySnapshot NormalizeErrorPolicy(const nlohmann::json& payload)
+			{
+				NativeSpeechErrorPolicySnapshot snapshot;
+				const nlohmann::json source = payload.is_object() ? payload : nlohmann::json::object();
+				snapshot.loaded = true;
+				snapshot.defaultClass = ReadString(source, "defaultClass");
+				if (snapshot.defaultClass.empty())
+				{
+					snapshot.defaultClass = "status";
+				}
+				snapshot.map = ReadObjectCopy(source, "map").is_object()
+					? ReadObjectCopy(source, "map")
+					: nlohmann::json::object();
+				snapshot.retry = ReadObjectCopy(source, "retry").is_object()
+					? ReadObjectCopy(source, "retry")
+					: nlohmann::json::object();
+				return snapshot;
+			}
+
+			static NativeSpeechSessionSnapshot NormalizeSession(const nlohmann::json& payload)
+			{
+				NativeSpeechSessionSnapshot session;
+				const nlohmann::json source = payload.is_object() ? payload : nlohmann::json::object();
+				const nlohmann::json speechSession =
+					ReadObjectCopy(source, "speechSession").is_object()
+					? ReadObjectCopy(source, "speechSession")
+					: source;
+
+				const nlohmann::json segment = ReadObjectCopy(speechSession, "segment").is_object()
+					? ReadObjectCopy(speechSession, "segment")
+					: nlohmann::json::object();
+
+				session.stage = ReadString(speechSession, "stage");
+				if (session.stage.empty())
+				{
+					session.stage = "idle";
+				}
+				session.text = ReadString(speechSession, "text");
+				if (session.text.empty())
+				{
+					session.text = ReadString(source, "text");
+				}
+				if (session.text.empty())
+				{
+					session.text = ReadString(source, "transcript");
+				}
+				session.segmentText = segment.is_object()
+					? ReadString(segment, "text")
+					: "";
+				session.segmentSequence = segment.is_object()
+					? ReadInteger(segment, "sequence", 0)
+					: 0;
+
+				session.runId = ReadString(speechSession, "runId");
+				if (session.runId.empty())
+				{
+					session.runId = ReadString(source, "runId");
+				}
+				session.finalRunId = IsSpeechFinalRunId(session.runId)
+					? session.runId
+					: "";
+
+				session.sessionId = ReadString(speechSession, "sessionId");
+				if (session.sessionId.empty())
+				{
+					session.sessionId = ReadString(source, "sessionId");
+				}
+				session.audioPath = ReadString(speechSession, "audioPath");
+				if (session.audioPath.empty())
+				{
+					session.audioPath = ReadString(source, "audioPath");
+				}
+
+				session.audioArtifact = ReadObjectCopy(speechSession, "audioArtifact").is_object()
+					? ReadObjectCopy(speechSession, "audioArtifact")
+					: ReadObjectCopy(source, "audioArtifact");
+				session.language = ReadString(speechSession, "language");
+				if (session.language.empty())
+				{
+					session.language = ReadString(source, "language");
+				}
+				session.latencyMs = ReadInteger(speechSession, "latencyMs", 0);
+				if (session.latencyMs <= 0)
+				{
+					session.latencyMs = ReadInteger(source, "latencyMs", 0);
+				}
+				session.cancelled = ReadBool(speechSession, "cancelled") || ReadBool(source, "cancelled");
+
+				session.errorCode = ReadString(source, "errorCode");
+				session.errorMessage = ReadString(source, "errorMessage");
+				session.errorClass = ReadString(source, "errorClass");
+				if (session.errorClass.empty())
+				{
+					session.errorClass = "status";
+				}
+				session.retryable = ReadBool(source, "retryable");
+				session.retryStrategy = ReadString(source, "retryStrategy");
+				if (session.retryStrategy.empty())
+				{
+					session.retryStrategy = "immediate";
+				}
+				session.retryGuidance = ReadString(source, "retryGuidance");
+				session.debugInfo = ReadObjectCopy(source, "debugInfo");
+				session.preflight = ReadObjectCopy(source, "preflight");
+				session.noSpeechTriage = ReadObjectCopy(source, "noSpeechTriage");
+
+				const bool previewRunActive =
+					IsSpeechPreviewRunId(session.runId) && session.stage == "streaming";
+				const bool stageImpliesSegmentFinal =
+					!previewRunActive &&
+					(session.stage == "segment_finalized" ||
+						session.stage == "stopped" ||
+						session.stage == "completed" ||
+						session.stage == "failed" ||
+						session.stage == "cancelled");
+				session.segmentFinal = segment.is_object()
+					? ReadBool(segment, "final", stageImpliesSegmentFinal)
+					: stageImpliesSegmentFinal;
+
+				return session;
+			}
+
+			mutable std::mutex m_mutex;
+			NativeSpeechStateSnapshot m_snapshot;
+		};
+
+		NativeSpeechState& SpeechStateInstance()
+		{
+			static NativeSpeechState instance;
 			return instance;
 		}
 
@@ -1213,6 +2034,7 @@ namespace blazeclaw::app::chatcontroller {
 			const nlohmann::json& uiOps,
 			const char* operation)
 		{
+			const auto speechState = SpeechStateInstance().Snapshot();
 			nlohmann::json sessionOptions = nlohmann::json::array();
 			for (const auto& row : sessionSettings.options)
 			{
@@ -1310,9 +2132,90 @@ namespace blazeclaw::app::chatcontroller {
 						{"valid", approvalValidation.valid},
 						{"tokenPresent", approvalValidation.tokenPresent},
 						{"expiresAtEpochMs", approvalValidation.expiresAtEpochMs},
+						{"approve", approvalValidation.approve},
+						{"ok", approvalValidation.ok},
+						{"status", approvalValidation.status},
+						{"message", approvalValidation.message},
+						{"output", approvalValidation.output},
 						{"errorCode", approvalValidation.errorCode},
+						{"remediation", approvalValidation.remediation},
+						{"missingDependency", approvalValidation.missingDependency},
+						{"installHint", approvalValidation.installHint},
+						{"configHint", approvalValidation.configHint},
+						{"failureBucket", approvalValidation.failureBucket},
+						{"errorMessage", approvalValidation.errorMessage},
+						{"readinessKnown", approvalValidation.readinessKnown},
+						{"readinessReady", approvalValidation.readinessReady},
+						{"readinessCode", approvalValidation.readinessCode},
+						{"readinessMessage", approvalValidation.readinessMessage},
+						{"readinessRemediation", approvalValidation.readinessRemediation},
+						{"readinessMissingDependency", approvalValidation.readinessMissingDependency},
+						{"readinessInstallHint", approvalValidation.readinessInstallHint},
+						{"readinessConfigHint", approvalValidation.readinessConfigHint},
+						{"readinessBucket", approvalValidation.readinessBucket},
 						{"source", approvalValidation.source},
 						{"validationGeneration", approvalValidation.validationGeneration},
+						{"executionGeneration", approvalValidation.executionGeneration},
+					}},
+					{"speech", {
+						{"capabilities", {
+							{"sttSupported", speechState.capabilities.sttSupported},
+							{"sttReady", speechState.capabilities.sttReady},
+							{"audioHandoffMode", speechState.capabilities.audioHandoffMode},
+							{"streamingSupported", speechState.capabilities.streamingSupported},
+							{"streamingPreviewEnabled", speechState.capabilities.streamingPreviewEnabled},
+							{"livePreviewToggleEnabled", speechState.capabilities.livePreviewToggleEnabled},
+							{"livePreviewToggleSource", speechState.capabilities.livePreviewToggleSource},
+							{"streamingConfigured", speechState.capabilities.streamingConfigured},
+							{"modelNativeVad", speechState.capabilities.modelNativeVad},
+							{"streamingChunkMs", speechState.capabilities.streamingChunkMs},
+							{"streamingLookbackMs", speechState.capabilities.streamingLookbackMs},
+							{"provider", speechState.capabilities.provider},
+							{"effectiveExecutionProvider", speechState.capabilities.effectiveExecutionProvider},
+							{"cudaExecutionProviderAvailable", speechState.capabilities.cudaExecutionProviderAvailable},
+							{"cudaExecutionProviderEnabled", speechState.capabilities.cudaExecutionProviderEnabled},
+							{"cudaExecutionProviderReason", speechState.capabilities.cudaExecutionProviderReason},
+							{"transcriptSupportsSegments", speechState.capabilities.transcriptSupportsSegments},
+							{"transcriptSupportsInterim", speechState.capabilities.transcriptSupportsInterim},
+							{"transcriptSupportsFinal", speechState.capabilities.transcriptSupportsFinal},
+							{"ttsSupported", speechState.capabilities.ttsSupported},
+							{"ttsReady", speechState.capabilities.ttsReady},
+							{"lifecycle", speechState.capabilities.lifecycle},
+							{"loaded", speechState.capabilities.loaded},
+							{"error", speechState.capabilities.error},
+						}},
+						{"errorPolicy", {
+							{"loaded", speechState.errorPolicy.loaded},
+							{"defaultClass", speechState.errorPolicy.defaultClass},
+							{"map", speechState.errorPolicy.map.is_object() ? speechState.errorPolicy.map : nlohmann::json::object()},
+							{"retry", speechState.errorPolicy.retry.is_object() ? speechState.errorPolicy.retry : nlohmann::json::object()},
+						}},
+						{"speechSession", {
+							{"stage", speechState.session.stage},
+							{"text", speechState.session.text},
+							{"segmentText", speechState.session.segmentText},
+							{"segmentFinal", speechState.session.segmentFinal},
+							{"segmentSequence", speechState.session.segmentSequence},
+							{"runId", speechState.session.runId},
+							{"finalRunId", speechState.session.finalRunId},
+							{"sessionId", speechState.session.sessionId},
+							{"audioPath", speechState.session.audioPath},
+							{"audioArtifact", speechState.session.audioArtifact.is_object() ? speechState.session.audioArtifact : nullptr},
+							{"language", speechState.session.language},
+							{"latencyMs", speechState.session.latencyMs},
+							{"cancelled", speechState.session.cancelled},
+							{"errorCode", speechState.session.errorCode},
+							{"errorMessage", speechState.session.errorMessage},
+							{"errorClass", speechState.session.errorClass},
+							{"retryable", speechState.session.retryable},
+							{"retryStrategy", speechState.session.retryStrategy},
+							{"retryGuidance", speechState.session.retryGuidance},
+							{"debugInfo", speechState.session.debugInfo.is_object() ? speechState.session.debugInfo : nullptr},
+							{"preflight", speechState.session.preflight.is_object() ? speechState.session.preflight : nullptr},
+							{"noSpeechTriage", speechState.session.noSpeechTriage.is_object() ? speechState.session.noSpeechTriage : nullptr},
+							{"updatedAtMs", speechState.session.updatedAtMs},
+							{"generation", speechState.session.generation},
+						}},
 					}},
 				}},
 				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
@@ -1328,6 +2231,8 @@ namespace blazeclaw::app::chatcontroller {
 						{"models.modelSelectionGeneration", modelSettings.modelSelectionGeneration},
 						{"models.thinkingLevelGeneration", modelSettings.thinkingLevelGeneration},
 						{"approval.validationGeneration", approvalValidation.validationGeneration},
+						{"approval.executionGeneration", approvalValidation.executionGeneration},
+						{"speech.sessionGeneration", speechState.session.generation},
 					}},
 					{"events", nlohmann::json::array()},
 				}},
@@ -1736,11 +2641,16 @@ namespace blazeclaw::app::chatcontroller {
 		return method == "chat.controller.initialize" ||
 			method == "chat.controller.send" ||
 			method == "chat.controller.processEvents" ||
+			method == "chat.controller.loadSpeechCapabilities" ||
+			method == "chat.controller.loadSpeechErrorPolicy" ||
+			method == "chat.controller.transcribeSpeech" ||
+			method == "chat.controller.applySpeechLifecycleUpdate" ||
 			method == "chat.controller.loadSessionOptions" ||
 			method == "chat.controller.switchSession" ||
 			method == "chat.controller.loadModelOptions" ||
 			method == "chat.controller.applyModelSelection" ||
 			method == "chat.controller.applyThinkingLevel" ||
+			method == "chat.controller.executeApprovalAction" ||
 			method == "chat.controller.parseApprovalToken" ||
 			method == "chat.controller.validateApprovalToken" ||
 			method == "chat.controller.startReconcileWatchdog" ||
@@ -1762,6 +2672,7 @@ namespace blazeclaw::app::chatcontroller {
 		auto& sessionSettings = SessionSettingsInstance();
 		auto& modelSettings = ModelSettingsInstance();
 		auto& approvalValidation = ApprovalValidationInstance();
+		auto& speechState = SpeechStateInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
@@ -1845,6 +2756,201 @@ namespace blazeclaw::app::chatcontroller {
 					approvalSnapshot,
 					processResult.uiOps,
 					"processEvents").dump());
+		}
+
+		if (request.method == "chat.controller.loadSpeechCapabilities")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const nlohmann::json payload = params.contains("payload") && params["payload"].is_object()
+				? params["payload"]
+				: nlohmann::json::object();
+			const auto speechSnapshot = speechState.LoadCapabilities(payload);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "speech.set_status"},
+				{"target", "speech"},
+				{"data", {
+					{"loaded", speechSnapshot.capabilities.loaded},
+					{"sttReady", speechSnapshot.capabilities.sttReady},
+					{"streamingPreviewEnabled", speechSnapshot.capabilities.streamingPreviewEnabled},
+					{"provider", speechSnapshot.capabilities.provider},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"loadSpeechCapabilities").dump());
+		}
+
+		if (request.method == "chat.controller.loadSpeechErrorPolicy")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const nlohmann::json payload = params.contains("payload") && params["payload"].is_object()
+				? params["payload"]
+				: nlohmann::json::object();
+			speechState.LoadErrorPolicy(payload);
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					nlohmann::json::array(),
+					"loadSpeechErrorPolicy").dump());
+		}
+
+		if (request.method == "chat.controller.applySpeechLifecycleUpdate")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const nlohmann::json payload = params.contains("payload") && params["payload"].is_object()
+				? params["payload"]
+				: params;
+			const auto speechSnapshot = speechState.ApplyLifecycleUpdate(payload);
+
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "speech.set_preview"},
+				{"target", "speech"},
+				{"data", {
+					{"stage", speechSnapshot.session.stage},
+					{"runId", speechSnapshot.session.runId},
+					{"text", speechSnapshot.session.text},
+					{"segmentText", speechSnapshot.session.segmentText},
+					{"errorCode", speechSnapshot.session.errorCode},
+					{"errorMessage", speechSnapshot.session.errorMessage},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"applySpeechLifecycleUpdate").dump());
+		}
+
+		if (request.method == "chat.controller.transcribeSpeech")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			nlohmann::json payload = params.contains("payload") && params["payload"].is_object()
+				? params["payload"]
+				: nlohmann::json::object();
+
+			if (!payload.is_object())
+			{
+				payload = nlohmann::json::object();
+			}
+			if (!payload.contains("runId") && params.contains("runId") && params["runId"].is_string())
+			{
+				payload["runId"] = params["runId"];
+			}
+			if (!payload.contains("sessionId") && params.contains("sessionId") && params["sessionId"].is_string())
+			{
+				payload["sessionId"] = params["sessionId"];
+			}
+			if (!payload.contains("stage"))
+			{
+				payload["stage"] = "completed";
+			}
+			const auto speechSnapshot = speechState.ApplyLifecycleUpdate(payload);
+
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "speech.set_status"},
+				{"target", "speech"},
+				{"data", {
+					{"stage", speechSnapshot.session.stage},
+					{"runId", speechSnapshot.session.runId},
+					{"errorCode", speechSnapshot.session.errorCode},
+					{"errorClass", speechSnapshot.session.errorClass},
+					{"retryGuidance", speechSnapshot.session.retryGuidance},
+				}},
+			});
+
+			const bool livePreviewOnly =
+				params.contains("livePreviewOnly") && params["livePreviewOnly"].is_boolean()
+				? params["livePreviewOnly"].get<bool>()
+				: false;
+			if (!livePreviewOnly &&
+				speechSnapshot.session.stage == "completed" &&
+				!speechSnapshot.session.text.empty() &&
+				speechSnapshot.session.errorCode.empty())
+			{
+				uiOps.push_back({
+					{"op", "chat.request_send"},
+					{"target", "chat"},
+					{"data", {
+						{"message", speechSnapshot.session.text},
+						{"source", "speech"},
+						{"runId", speechSnapshot.session.runId},
+					}},
+				});
+			}
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"transcribeSpeech").dump());
 		}
 
 		if (request.method == "chat.controller.loadSessionOptions")
@@ -2147,6 +3253,115 @@ namespace blazeclaw::app::chatcontroller {
 					"validateApprovalToken").dump());
 		}
 
+		if (request.method == "chat.controller.executeApprovalAction")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			NativeApprovalValidationState::NativeApprovalExecutionInput input;
+			if (params.contains("approvalToken") && params["approvalToken"].is_string())
+			{
+				input.approvalToken = params["approvalToken"].get<std::string>();
+			}
+			input.approve = params.contains("approve") && params["approve"].is_boolean()
+				? params["approve"].get<bool>()
+				: false;
+
+			if (params.contains("readiness") && params["readiness"].is_object())
+			{
+				const auto& readiness = params["readiness"];
+				input.readinessKnown = true;
+				input.readinessReady = readiness.contains("ready") && readiness["ready"].is_boolean()
+					? readiness["ready"].get<bool>()
+					: false;
+				if (readiness.contains("errorCode") && readiness["errorCode"].is_string())
+				{
+					input.readinessCode = readiness["errorCode"].get<std::string>();
+				}
+				if (readiness.contains("message") && readiness["message"].is_string())
+				{
+					input.readinessMessage = readiness["message"].get<std::string>();
+				}
+				if (readiness.contains("remediation") && readiness["remediation"].is_string())
+				{
+					input.readinessRemediation = readiness["remediation"].get<std::string>();
+				}
+				if (readiness.contains("missingDependency") && readiness["missingDependency"].is_string())
+				{
+					input.readinessMissingDependency = readiness["missingDependency"].get<std::string>();
+				}
+				if (readiness.contains("installHint") && readiness["installHint"].is_string())
+				{
+					input.readinessInstallHint = readiness["installHint"].get<std::string>();
+				}
+				if (readiness.contains("configHint") && readiness["configHint"].is_string())
+				{
+					input.readinessConfigHint = readiness["configHint"].get<std::string>();
+				}
+				if (readiness.contains("bucket") && readiness["bucket"].is_string())
+				{
+					input.readinessBucket = readiness["bucket"].get<std::string>();
+				}
+			}
+
+			if (params.contains("executePayload") && params["executePayload"].is_object())
+			{
+				input.executePayload = params["executePayload"];
+			}
+			else if (params.contains("payload") && params["payload"].is_object())
+			{
+				input.executePayload = params["payload"];
+			}
+
+			const auto approvalSnapshot = approvalValidation.ApplyExecutionResult(input);
+			nlohmann::json uiOps = nlohmann::json::array();
+			uiOps.push_back({
+				{"op", "approval.status_update"},
+				{"target", "approval"},
+				{"data", {
+					{"approvalToken", approvalSnapshot.approvalToken},
+					{"approve", approvalSnapshot.approve},
+					{"ok", approvalSnapshot.ok},
+					{"status", approvalSnapshot.status},
+					{"message", approvalSnapshot.message},
+					{"errorCode", approvalSnapshot.errorCode},
+					{"errorMessage", approvalSnapshot.errorMessage},
+					{"remediation", approvalSnapshot.remediation},
+					{"missingDependency", approvalSnapshot.missingDependency},
+					{"installHint", approvalSnapshot.installHint},
+					{"configHint", approvalSnapshot.configHint},
+					{"failureBucket", approvalSnapshot.failureBucket},
+					{"readinessKnown", approvalSnapshot.readinessKnown},
+					{"readinessReady", approvalSnapshot.readinessReady},
+					{"readinessCode", approvalSnapshot.readinessCode},
+					{"readinessMessage", approvalSnapshot.readinessMessage},
+					{"readinessRemediation", approvalSnapshot.readinessRemediation},
+					{"readinessMissingDependency", approvalSnapshot.readinessMissingDependency},
+					{"readinessInstallHint", approvalSnapshot.readinessInstallHint},
+					{"readinessConfigHint", approvalSnapshot.readinessConfigHint},
+					{"readinessBucket", approvalSnapshot.readinessBucket},
+				}},
+			});
+
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"executeApprovalAction").dump());
+		}
+
 		if (request.method == "chat.controller.startReconcileWatchdog")
 		{
 			const auto params = ParseWatchdogParams(request);
@@ -2316,6 +3531,7 @@ namespace blazeclaw::app::chatcontroller {
 			sessionSettings.Reset();
 			modelSettings.Reset();
 			approvalValidation.Reset();
+			speechState.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
 			const auto sendSnapshot = sendState.Snapshot();
 			const auto streamSnapshot = streamState.Snapshot();
