@@ -7,8 +7,6 @@
     <ClCompile Include="src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
     <ClCompile Include="src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />
-    <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp" />
-    <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp" />
     <ClCompile Include="src\app\config_bridge\EmailConfigHandler.cpp" />
     <ClCompile Include="src\app\CBridge.cpp" />
     <ClCompile Include="src\app\VoiceRecorder.cpp" />
@@ -545,49 +543,49 @@
       <Filter>models</Filter>
     </ClCompile>
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatAbortCoordinator.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatControlPlaneService.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatHistoryPolicy.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ChatInputEdit.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatOrchestrationPolicy.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\core\ChatProviderRuntimeService.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatRoutePolicy.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatRunPipelineOrchestrator.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatRunStages.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\core\ChatRuntimeOrchestrationCoordinator.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\gateway\ChatTranscriptStore.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ChatView.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\app\chat-controller.cpp">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp">
       <Filter>STT</Filter>
@@ -636,6 +634,12 @@
     </ClCompile>
     <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp">
       <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp">
+      <Filter>core-chat\webview_routers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1103,49 +1107,49 @@
       <Filter>models</Filter>
     </ClInclude>
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatAbortCoordinator.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatControlPlaneService.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatHistoryPolicy.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ChatInputEdit.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatRoutePolicy.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatRunStageContext.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatRunStages.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\gateway\ChatTranscriptStore.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ChatUiStartupResolver.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ChatView.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\chat-controller.h">
-      <Filter>chat</Filter>
+      <Filter>core-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h">
       <Filter>STT</Filter>
@@ -1179,6 +1183,15 @@
     </ClInclude>
     <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h">
       <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewGatewayRpcRouter.h">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewSpeechRpcRouter.h">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewRouterContext.h">
+      <Filter>core-chat\webview_routers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1670,11 +1683,14 @@
     <Filter Include="models">
       <UniqueIdentifier>{d06842b2-0ade-417a-8e8a-f4115c2d863c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chat">
-      <UniqueIdentifier>{cee01b41-ca92-410d-a3aa-18a06826c8cd}</UniqueIdentifier>
-    </Filter>
     <Filter Include="res">
       <UniqueIdentifier>{0b35a48c-020b-4fd0-9067-2fe06ed4d6f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core-chat">
+      <UniqueIdentifier>{cee01b41-ca92-410d-a3aa-18a06826c8cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core-chat\webview_routers">
+      <UniqueIdentifier>{bf0087c2-b593-4643-8897-1005d5af85e1}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

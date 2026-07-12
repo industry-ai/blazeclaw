@@ -10,6 +10,10 @@
 
 namespace blazeclaw::webview_routers {
 
+	//  ## IMPORTANT NOTE :
+	//  In this code path, WebView host and gateway are in the same native process, so this is more precisely
+	//	intra-process communication (in-process message dispatch), not inter-process IPC or RPC.
+
 	bool WebViewGatewayRpcRouter::RouteMessage(
 		const WebViewRouterContext& context,
 		const std::string& channel,

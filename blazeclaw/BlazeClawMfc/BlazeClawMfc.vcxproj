@@ -181,6 +181,9 @@
     <ClInclude Include="src\app\TaskQueue.h" />
     <ClInclude Include="src\app\TlsAuthClient.h" />
     <ClInclude Include="src\app\ViewTree.h" />
+    <ClInclude Include="src\app\webview_routers\WebViewGatewayRpcRouter.h" />
+    <ClInclude Include="src\app\webview_routers\WebViewRouterContext.h" />
+    <ClInclude Include="src\app\webview_routers\WebViewSpeechRpcRouter.h" />
     <ClInclude Include="src\config\ConfigLoader.h" />
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\diagnostics\CDiagnosticsReportBuilder.h" />

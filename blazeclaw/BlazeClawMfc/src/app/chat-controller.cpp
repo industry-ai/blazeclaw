@@ -5,7 +5,10 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <deque>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -13,9 +16,375 @@ namespace blazeclaw::app::chatcontroller {
 
 	namespace {
 
+		std::string TrimCopy(const std::string& value);
+
 		NativeChatControllerLifecycle& LifecycleInstance()
 		{
 			static NativeChatControllerLifecycle instance;
+			return instance;
+		}
+
+		struct NativeSendParams {
+			std::string sessionKey;
+			std::string message;
+			std::string idempotencyKey;
+			bool detached = false;
+			bool forceError = false;
+			std::size_t attachmentCount = 0;
+		};
+
+		struct NativeSendCorrelationSnapshot {
+			std::string requestCorrelationId;
+			std::string status;
+			std::string activeRunId;
+			std::size_t queueDepth = 0;
+			std::size_t pendingCorrelationCount = 0;
+			bool queued = false;
+		};
+
+		struct NativeStreamStateSnapshot {
+			std::string activeRunId;
+			std::string streamText;
+			std::string terminalState;
+			bool hasStreamDraft = false;
+			std::size_t deltaCount = 0;
+			std::size_t terminalCount = 0;
+		};
+
+		struct NativeProcessEventsParams {
+			std::string sessionKey;
+			nlohmann::json events = nlohmann::json::array();
+		};
+
+		struct NativeProcessEventsResult {
+			NativeStreamStateSnapshot streamSnapshot;
+			nlohmann::json uiOps = nlohmann::json::array();
+			std::size_t processedEventCount = 0;
+		};
+
+		class NativeChatSendState final {
+		public:
+			NativeSendCorrelationSnapshot RegisterSend(
+				const blazeclaw::gateway::protocol::RequestFrame& request,
+				const NativeSendParams& params)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+
+				const std::string correlationId = TrimCopy(request.id);
+				const bool hasActiveRun = !m_activeRunId.empty();
+				if (hasActiveRun)
+				{
+					m_sendQueue.push_back(correlationId);
+				}
+				else
+				{
+					const std::string provisionalRunId = TrimCopy(params.idempotencyKey);
+					m_activeRunId = provisionalRunId.empty()
+						? std::string("native-") + correlationId
+						: provisionalRunId;
+				}
+
+				m_pendingCorrelations[correlationId] = CorrelationEntry{
+					.method = "chat.send",
+					.sessionKey = [&params]() {
+						const std::string key = TrimCopy(params.sessionKey);
+						return key.empty() ? std::string("main") : key;
+					}(),
+					.status = hasActiveRun ? "queued" : "dispatched",
+				};
+
+				return BuildSnapshot(correlationId, hasActiveRun);
+			}
+
+			NativeSendCorrelationSnapshot HandleRpcResult(
+				const std::string& correlationId,
+				bool ok,
+				const std::string& runId,
+				bool terminal)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+
+				const std::string normalizedCorrelationId = TrimCopy(correlationId);
+				auto it = m_pendingCorrelations.find(normalizedCorrelationId);
+				if (it != m_pendingCorrelations.end())
+				{
+					it->second.status = ok ? "acknowledged" : "failed";
+					m_pendingCorrelations.erase(it);
+				}
+
+				const std::string normalizedRunId = TrimCopy(runId);
+				if (!normalizedRunId.empty())
+				{
+					m_activeRunId = normalizedRunId;
+				}
+
+				if (terminal)
+				{
+					m_activeRunId.clear();
+					if (!m_sendQueue.empty())
+					{
+						m_sendQueue.pop_front();
+					}
+				}
+
+				return BuildSnapshot(normalizedCorrelationId, false);
+			}
+
+			NativeSendCorrelationSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return NativeSendCorrelationSnapshot{
+					.requestCorrelationId = "",
+					.status = "snapshot",
+					.activeRunId = m_activeRunId,
+					.queueDepth = m_sendQueue.size(),
+					.pendingCorrelationCount = m_pendingCorrelations.size(),
+					.queued = false,
+				};
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_sendQueue.clear();
+				m_pendingCorrelations.clear();
+				m_activeRunId.clear();
+			}
+
+		private:
+			struct CorrelationEntry {
+				std::string method;
+				std::string sessionKey;
+				std::string status;
+			};
+
+			NativeSendCorrelationSnapshot BuildSnapshot(
+				const std::string& correlationId,
+				bool queued) const
+			{
+				return NativeSendCorrelationSnapshot{
+					.requestCorrelationId = correlationId,
+					.status = queued ? "queued" : "dispatched",
+					.activeRunId = m_activeRunId,
+					.queueDepth = m_sendQueue.size(),
+					.pendingCorrelationCount = m_pendingCorrelations.size(),
+					.queued = queued,
+				};
+			}
+
+			mutable std::mutex m_mutex;
+			std::deque<std::string> m_sendQueue;
+			std::unordered_map<std::string, CorrelationEntry> m_pendingCorrelations;
+			std::string m_activeRunId;
+		};
+
+		NativeChatSendState& SendStateInstance()
+		{
+			static NativeChatSendState instance;
+			return instance;
+		}
+
+		class NativeChatStreamState final {
+		public:
+			NativeProcessEventsResult ApplyEvents(
+				const NativeProcessEventsParams& params,
+				NativeChatSendState& sendState)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				NativeProcessEventsResult result;
+				result.uiOps = nlohmann::json::array();
+
+				if (!params.events.is_array())
+				{
+					result.streamSnapshot = m_snapshot;
+					return result;
+				}
+
+				const std::string normalizedSession = NormalizeSessionKey(params.sessionKey);
+				for (const auto& event : params.events)
+				{
+					if (!event.is_object())
+					{
+						continue;
+					}
+
+					const std::string eventSession = NormalizeSessionKey(
+						event.value("sessionKey", std::string{}));
+					if (!normalizedSession.empty() && eventSession != normalizedSession)
+					{
+						continue;
+					}
+
+					const std::string runId = TrimCopy(event.value("runId", std::string{}));
+					const std::string state = NormalizeState(event.value("state", std::string{}));
+					const std::string text = ParseTextFromMessageField(event);
+
+					if (state == "delta")
+					{
+						if (!runId.empty())
+						{
+							m_snapshot.activeRunId = runId;
+						}
+						if (!text.empty() && !IsSilentReplyText(text) && text.size() >= m_snapshot.streamText.size())
+						{
+							m_snapshot.streamText = text;
+							m_snapshot.hasStreamDraft = true;
+							m_snapshot.terminalState = "delta";
+							result.uiOps.push_back({
+								{"op", "chat.update_stream"},
+								{"target", "messages"},
+								{"data", {
+									{"runId", m_snapshot.activeRunId},
+									{"text", m_snapshot.streamText},
+								}},
+							});
+						}
+						m_snapshot.deltaCount += 1;
+						result.processedEventCount += 1;
+						continue;
+					}
+
+					if (IsTerminalState(state))
+					{
+						const std::string terminalText = !text.empty()
+							? text
+							: m_snapshot.streamText;
+						const std::string effectiveRunId = !runId.empty()
+							? runId
+							: m_snapshot.activeRunId;
+
+						if (!terminalText.empty() && !IsSilentReplyText(terminalText))
+						{
+							result.uiOps.push_back({
+								{"op", "chat.finalize_stream"},
+								{"target", "messages"},
+								{"data", {
+									{"runId", effectiveRunId},
+									{"text", terminalText},
+									{"terminalState", state},
+								}},
+							});
+						}
+
+						sendState.HandleRpcResult("", true, effectiveRunId, true);
+						m_snapshot.activeRunId.clear();
+						m_snapshot.streamText.clear();
+						m_snapshot.hasStreamDraft = false;
+						m_snapshot.terminalState = state;
+						m_snapshot.terminalCount += 1;
+						result.processedEventCount += 1;
+					}
+				}
+
+				result.streamSnapshot = m_snapshot;
+				return result;
+			}
+
+			NativeStreamStateSnapshot Snapshot() const
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				return m_snapshot;
+			}
+
+			void Reset()
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_snapshot = NativeStreamStateSnapshot{};
+			}
+
+		private:
+			static std::string NormalizeSessionKey(const std::string& value)
+			{
+				const std::string key = TrimCopy(value);
+				return key.empty() ? std::string("main") : key;
+			}
+
+			static std::string NormalizeState(const std::string& value)
+			{
+				std::string normalized = TrimCopy(value);
+				std::transform(
+					normalized.begin(),
+					normalized.end(),
+					normalized.begin(),
+					[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return normalized;
+			}
+
+			static bool IsSilentReplyText(const std::string& value)
+			{
+				std::string normalized = NormalizeState(value);
+				return normalized == "no_reply";
+			}
+
+			static bool IsTerminalState(const std::string& value)
+			{
+				return value == "final" ||
+					value == "completed" ||
+					value == "aborted" ||
+					value == "error" ||
+					value == "needs_approval";
+			}
+
+			static std::string ParseTextFromMessageObject(const nlohmann::json& message)
+			{
+				if (!message.is_object())
+				{
+					return "";
+				}
+
+				if (message.contains("text") && message["text"].is_string())
+				{
+					return TrimCopy(message["text"].get<std::string>());
+				}
+
+				if (message.contains("content") && message["content"].is_array())
+				{
+					std::string joined;
+					for (const auto& item : message["content"])
+					{
+						if (!item.is_object())
+						{
+							continue;
+						}
+						const std::string type = NormalizeState(item.value("type", std::string{}));
+						if (type != "text" || !item.contains("text") || !item["text"].is_string())
+						{
+							continue;
+						}
+						if (!joined.empty())
+						{
+							joined += "\n";
+						}
+						joined += item["text"].get<std::string>();
+					}
+					return TrimCopy(joined);
+				}
+
+				return "";
+			}
+
+			static std::string ParseTextFromMessageField(const nlohmann::json& event)
+			{
+				if (!event.is_object() || !event.contains("message"))
+				{
+					return "";
+				}
+
+				const auto& message = event["message"];
+				if (message.is_string())
+				{
+					return TrimCopy(message.get<std::string>());
+				}
+				return ParseTextFromMessageObject(message);
+			}
+
+			mutable std::mutex m_mutex;
+			NativeStreamStateSnapshot m_snapshot;
+		};
+
+		NativeChatStreamState& StreamStateInstance()
+		{
+			static NativeChatStreamState instance;
 			return instance;
 		}
 
@@ -51,6 +420,9 @@ namespace blazeclaw::app::chatcontroller {
 		nlohmann::json BuildLifecyclePayload(
 			const NativeControllerLifecycleSnapshot& snapshot,
 			const NativeChatControllerLifecycle& lifecycle,
+			const NativeSendCorrelationSnapshot& sendState,
+			const NativeStreamStateSnapshot& streamState,
+			const nlohmann::json& uiOps,
 			const char* operation)
 		{
 			nlohmann::json payload = {
@@ -66,10 +438,31 @@ namespace blazeclaw::app::chatcontroller {
 						{"schemaName", snapshot.schemaName},
 						{"schemaVersion", snapshot.schemaVersion},
 					}},
+					{"chatSend", {
+						{"requestCorrelationId", sendState.requestCorrelationId},
+						{"status", sendState.status},
+						{"activeRunId", sendState.activeRunId},
+						{"queueDepth", sendState.queueDepth},
+						{"pendingCorrelationCount", sendState.pendingCorrelationCount},
+						{"queued", sendState.queued},
+					}},
+					{"chatStream", {
+						{"activeRunId", streamState.activeRunId},
+						{"streamText", streamState.streamText},
+						{"terminalState", streamState.terminalState},
+						{"hasStreamDraft", streamState.hasStreamDraft},
+						{"deltaCount", streamState.deltaCount},
+						{"terminalCount", streamState.terminalCount},
+					}},
 				}},
-				{"uiOps", nlohmann::json::array()},
+				{"uiOps", uiOps.is_array() ? uiOps : nlohmann::json::array()},
 				{"diagnostics", {
-					{"counters", nlohmann::json::object()},
+					{"counters", {
+						{"chatSend.queueDepth", sendState.queueDepth},
+						{"chatSend.pendingCorrelations", sendState.pendingCorrelationCount},
+						{"chatStream.deltaCount", streamState.deltaCount},
+						{"chatStream.terminalCount", streamState.terminalCount},
+					}},
 					{"events", nlohmann::json::array()},
 				}},
 				{"warnings", nlohmann::json::array()},
@@ -116,6 +509,124 @@ namespace blazeclaw::app::chatcontroller {
 			applyIfString("contractVersion", params.contractVersion);
 			applyIfString("schemaName", params.schemaName);
 			applyIfString("schemaVersion", params.schemaVersion);
+
+			return params;
+		}
+
+		NativeSendParams ParseSendParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			NativeSendParams params;
+
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return params;
+			}
+
+			auto readString = [&parsed](const char* key) -> std::string
+				{
+					if (key == nullptr)
+					{
+						return "";
+					}
+					const auto it = parsed.find(key);
+					if (it == parsed.end() || !it->is_string())
+					{
+						return "";
+					}
+					return it->get<std::string>();
+				};
+
+			params.sessionKey = readString("sessionKey");
+			params.message = readString("message");
+			params.idempotencyKey = readString("idempotencyKey");
+
+			const auto detachedIt = parsed.find("detached");
+			if (detachedIt != parsed.end() && detachedIt->is_boolean())
+			{
+				params.detached = detachedIt->get<bool>();
+			}
+
+			const auto forceErrorIt = parsed.find("forceError");
+			if (forceErrorIt != parsed.end() && forceErrorIt->is_boolean())
+			{
+				params.forceError = forceErrorIt->get<bool>();
+			}
+
+			const auto attachmentsIt = parsed.find("attachments");
+			if (attachmentsIt != parsed.end() && attachmentsIt->is_array())
+			{
+				params.attachmentCount = attachmentsIt->size();
+			}
+
+			return params;
+		}
+
+		nlohmann::json ParseObjectOrDefault(const nlohmann::json& root, const char* key)
+		{
+			if (!root.is_object() || key == nullptr)
+			{
+				return nlohmann::json::object();
+			}
+			const auto it = root.find(key);
+			if (it == root.end() || !it->is_object())
+			{
+				return nlohmann::json::object();
+			}
+			return *it;
+		}
+
+		NativeSendCorrelationSnapshot HandleRpcCorrelationResult(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return SendStateInstance().HandleRpcResult("", false, "", false);
+			}
+
+			const std::string correlationId = parsed.value("id", std::string{});
+			const bool ok = parsed.value("ok", false);
+			const auto payload = ParseObjectOrDefault(parsed, "payload");
+			const std::string runId = payload.value("runId", std::string{});
+			const std::string state = payload.value("state", std::string{});
+			const bool terminal = state == "completed" ||
+				state == "failed" ||
+				state == "aborted";
+
+			return SendStateInstance().HandleRpcResult(correlationId, ok, runId, terminal);
+		}
+
+		NativeProcessEventsParams ParseProcessEventsParams(
+			const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			NativeProcessEventsParams params;
+
+			const auto parsed = nlohmann::json::parse(
+				request.paramsJson.value_or("{}"),
+				nullptr,
+				false);
+			if (parsed.is_discarded() || !parsed.is_object())
+			{
+				return params;
+			}
+
+			if (parsed.contains("sessionKey") && parsed["sessionKey"].is_string())
+			{
+				params.sessionKey = parsed["sessionKey"].get<std::string>();
+			}
+
+			if (parsed.contains("events") && parsed["events"].is_array())
+			{
+				params.events = parsed["events"];
+			}
 
 			return params;
 		}
@@ -277,6 +788,9 @@ namespace blazeclaw::app::chatcontroller {
 	bool IsNativeChatControllerBridgeMethod(const std::string& method)
 	{
 		return method == "chat.controller.initialize" ||
+			method == "chat.controller.send" ||
+			method == "chat.controller.processEvents" ||
+			method == "chat.controller.handleRpcResult" ||
 			method == "chat.controller.getStateSnapshot" ||
 			method == "chat.controller.reset";
 	}
@@ -285,32 +799,110 @@ namespace blazeclaw::app::chatcontroller {
 		const blazeclaw::gateway::protocol::RequestFrame& request)
 	{
 		auto& lifecycle = LifecycleInstance();
+		auto& sendState = SendStateInstance();
+		auto& streamState = StreamStateInstance();
 
 		if (request.method == "chat.controller.initialize")
 		{
 			const NativeControllerInitializeParams params = ParseInitializeParams(request);
 			lifecycle.Initialize(params);
 			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
-				BuildLifecyclePayload(snapshot, lifecycle, "initialize").dump());
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					nlohmann::json::array(),
+					"initialize").dump());
+		}
+
+		if (request.method == "chat.controller.send")
+		{
+			const NativeSendParams params = ParseSendParams(request);
+			const auto sendSnapshot = sendState.RegisterSend(request, params);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					nlohmann::json::array(),
+					"send").dump());
+		}
+
+		if (request.method == "chat.controller.processEvents")
+		{
+			const NativeProcessEventsParams params = ParseProcessEventsParams(request);
+			const auto processResult = streamState.ApplyEvents(params, sendState);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					processResult.streamSnapshot,
+					processResult.uiOps,
+					"processEvents").dump());
+		}
+
+		if (request.method == "chat.controller.handleRpcResult")
+		{
+			const auto sendSnapshot = HandleRpcCorrelationResult(request);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					nlohmann::json::array(),
+					"handleRpcResult").dump());
 		}
 
 		if (request.method == "chat.controller.getStateSnapshot")
 		{
 			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
-				BuildLifecyclePayload(snapshot, lifecycle, "snapshot").dump());
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					nlohmann::json::array(),
+					"snapshot").dump());
 		}
 
 		if (request.method == "chat.controller.reset")
 		{
 			lifecycle.Reset();
+			sendState.Reset();
+			streamState.Reset();
 			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
 			return blazeclaw::gateway::protocol::OkResponse(
 				request,
-				BuildLifecyclePayload(snapshot, lifecycle, "reset").dump());
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					nlohmann::json::array(),
+					"reset").dump());
 		}
 
 		return blazeclaw::gateway::protocol::ErrorResponse(
