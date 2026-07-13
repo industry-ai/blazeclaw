@@ -32,6 +32,7 @@
 #include "ChatControlPlaneService.h"
 #include "GatewayEventFanoutService.h"
 #include "executors/EmailScheduleExecutor.h"
+#include "../app/BlazeClawMfcApp.h"
 
 #include <algorithm>
 #include <cctype>
@@ -486,7 +487,10 @@ namespace blazeclaw::gateway {
 
 							return protocol::OkResponse(request, "{\"runId\":\"" +
 								EscapeJsonLocal(stageContext.dedupedRunId) +
-								"\",\"queued\":false,\"deduped\":true}");
+								"\",\"queued\":false,\"deduped\":true"
+								",\"promptRunId\":\"" +
+								EscapeJsonLocal(stageContext.dedupedRunId) +
+								"\",\"responders\":[]}");
 						}
 
 						if (stageContext.responseError.has_value()) {
@@ -511,6 +515,44 @@ namespace blazeclaw::gateway {
 					const bool forceError = stageContext.forceError;
 					const bool hasAttachments = stageContext.hasAttachmentPayload;
 					const RequestParamsView sendParams(request.paramsJson);
+					auto ToLowerTrimmed = [](const std::string& raw) {
+						std::string normalized = json::Trim(raw);
+						std::transform(
+							normalized.begin(),
+							normalized.end(),
+							normalized.begin(),
+							[](const unsigned char ch) {
+								return static_cast<char>(std::tolower(ch));
+							});
+						return normalized;
+						};
+					const std::string responseMode =
+						ToLowerTrimmed(sendParams.GetString("responseMode"));
+					const bool multiActiveRequested = responseMode == "multi_active";
+					std::vector<std::string> requestedResponderTokens;
+					std::string requestedRespondersRaw;
+					if (json::FindRawField(
+						request.paramsJson.value_or(std::string()),
+						"requestedResponders",
+						requestedRespondersRaw)) {
+						try {
+							const auto parsed = nlohmann::json::parse(requestedRespondersRaw);
+							if (parsed.is_array()) {
+								for (const auto& item : parsed) {
+									if (!item.is_string()) {
+										continue;
+									}
+
+									const std::string token = ToLowerTrimmed(item.get<std::string>());
+									if (!token.empty()) {
+										requestedResponderTokens.push_back(token);
+									}
+								}
+							}
+						}
+						catch (...) {
+						}
+					}
 					const std::string requestedModelRaw =
 						sendParams.GetString("model");
 					const std::string requestedModelOverride =
@@ -519,6 +561,8 @@ namespace blazeclaw::gateway {
 						: GatewayModel::NormalizeModelId(requestedModelRaw);
 					std::string requestedProviderOverride =
 						sendParams.GetString("providerOverride");
+					const std::string requestedProviderOverrideNormalized =
+						ToLowerTrimmed(requestedProviderOverride);
 					std::string transcriptInjectionRaw;
 					const bool hasTranscriptInjection =
 						json::FindRawField(request.paramsJson.value_or(std::string()), "transcriptInjection", transcriptInjectionRaw);
@@ -548,6 +592,241 @@ namespace blazeclaw::gateway {
 							? request.id
 							: ("chat-run-" + std::to_string(nowMs) +
 								"-" + std::to_string(host.m_chatRunsById.size() + 1)));
+
+					struct ChatSendResponderManifestEntry {
+						std::string responderRunId;
+						std::string responderId;
+						std::string provider;
+						std::string model;
+						std::string runtimeKind;
+						std::string responderLabel;
+						std::uint32_t responderOrder = 0;
+					};
+					std::vector<ChatSendResponderManifestEntry> responderManifest;
+					std::unordered_set<std::string> responderIdSet;
+					bool localResponderEnabled = true;
+					std::uint32_t maxActiveResponders = 1;
+					if (const auto* appConfig =
+						dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+						appConfig != nullptr) {
+						localResponderEnabled = appConfig->Config().localModel.enabled;
+						maxActiveResponders =
+							std::max<std::uint32_t>(
+								1,
+								appConfig->Config().multiActive.maxActiveResponders);
+					}
+					if (!multiActiveRequested) {
+						maxActiveResponders = 1;
+					}
+					const bool remoteDeepSeekReady = !host.m_runtimeDeepSeekApiKey.empty();
+
+					auto normalizeLocalModelId = [](const std::string& rawModelId) {
+						if (rawModelId.empty() ||
+							GatewayModel::IsDeepSeekModelId(rawModelId)) {
+							return std::string(GatewayModel::kDefaultModelId);
+						}
+
+						return GatewayModel::NormalizeModelId(rawModelId);
+						};
+					auto normalizeDeepSeekModelId = [&](const std::string& rawModelId) {
+						const std::string configuredDefault =
+							host.m_runtimeDeepSeekDefaultModel.empty()
+							? std::string(GatewayModel::kDeepSeekChatModelId)
+							: host.m_runtimeDeepSeekDefaultModel;
+						if (rawModelId.empty()) {
+							return configuredDefault;
+						}
+
+						if (!GatewayModel::IsDeepSeekModelId(rawModelId)) {
+							return configuredDefault;
+						}
+
+						return GatewayModel::NormalizeModelId(rawModelId);
+						};
+					auto appendResponder = [&](const std::string& provider,
+						const std::string& model,
+						const std::string& runtimeKind) {
+						if (provider.empty() || model.empty() || runtimeKind.empty()) {
+							return;
+						}
+
+						const std::string responderId =
+							ToLowerTrimmed(provider) + ":" + ToLowerTrimmed(model);
+						if (!responderIdSet.insert(responderId).second) {
+							return;
+						}
+
+						const std::string labelSuffix = runtimeKind == "local"
+							? " (Local)"
+							: " (Remote)";
+						responderManifest.push_back(
+							ChatSendResponderManifestEntry{
+								.responderRunId = std::string(),
+								.responderId = responderId,
+								.provider = provider,
+								.model = model,
+								.runtimeKind = runtimeKind,
+								.responderLabel =
+									GatewayModel::ResolveModelDisplayName(model) + labelSuffix,
+								.responderOrder = 0,
+							});
+						};
+
+					auto maybeAppendLocal = [&](const std::string& modelHint) {
+						if (!localResponderEnabled) {
+							return;
+						}
+
+						appendResponder(
+							"local",
+							normalizeLocalModelId(modelHint),
+							"local");
+						};
+					auto maybeAppendDeepSeek = [&](const std::string& modelHint) {
+						if (!remoteDeepSeekReady) {
+							return;
+						}
+
+						appendResponder(
+							"deepseek",
+							normalizeDeepSeekModelId(modelHint),
+							"remote");
+						};
+
+					auto appendByToken = [&](const std::string& rawToken) {
+						const std::string token = ToLowerTrimmed(rawToken);
+						if (token.empty()) {
+							return;
+						}
+
+						if (token == "local" ||
+							token == "seed") {
+							maybeAppendLocal(std::string());
+							return;
+						}
+
+						if (token == "deepseek" ||
+							token == "remote") {
+							maybeAppendDeepSeek(std::string());
+							return;
+						}
+
+						const auto colonPos = token.find(':');
+						if (colonPos != std::string::npos && colonPos > 0) {
+							const std::string provider = token.substr(0, colonPos);
+							const std::string model = token.substr(colonPos + 1);
+							if (provider == "local" || provider == "seed") {
+								maybeAppendLocal(model);
+								return;
+							}
+							if (provider == "deepseek" || provider == "remote") {
+								maybeAppendDeepSeek(model);
+								return;
+							}
+						}
+
+						if (token.rfind("deepseek/", 0) == 0) {
+							maybeAppendDeepSeek(token);
+							return;
+						}
+
+						maybeAppendLocal(token);
+						};
+
+					if (!requestedResponderTokens.empty()) {
+						for (const auto& token : requestedResponderTokens) {
+							appendByToken(token);
+						}
+					}
+					else {
+						const bool requestedDeepSeekOnly =
+							requestedProviderOverrideNormalized == "deepseek" ||
+							GatewayModel::IsDeepSeekModelId(requestedModelOverride);
+						const bool requestedLocalOnly =
+							requestedProviderOverrideNormalized == "local" ||
+							requestedProviderOverrideNormalized == "seed";
+
+						if (requestedDeepSeekOnly) {
+							maybeAppendDeepSeek(requestedModelOverride);
+						}
+						else if (requestedLocalOnly) {
+							maybeAppendLocal(requestedModelOverride);
+						}
+						else {
+							maybeAppendLocal(requestedModelOverride);
+							if (multiActiveRequested) {
+								maybeAppendDeepSeek(std::string());
+							}
+						}
+					}
+
+					if (responderManifest.empty()) {
+						appendResponder(
+							"local",
+							std::string(GatewayModel::kDefaultModelId),
+							"local");
+					}
+
+					std::vector<ChatSendResponderManifestEntry> orderedResponders;
+					orderedResponders.reserve(responderManifest.size());
+					for (const auto& responder : responderManifest) {
+						if (responder.runtimeKind == "local") {
+							orderedResponders.push_back(responder);
+						}
+					}
+					for (const auto& responder : responderManifest) {
+						if (responder.runtimeKind != "local") {
+							orderedResponders.push_back(responder);
+						}
+					}
+					responderManifest = std::move(orderedResponders);
+
+					if (responderManifest.size() > maxActiveResponders) {
+						responderManifest.resize(maxActiveResponders);
+					}
+
+					for (std::size_t index = 0; index < responderManifest.size(); ++index) {
+						auto& responder = responderManifest[index];
+						responder.responderOrder =
+							static_cast<std::uint32_t>(index);
+						responder.responderRunId = index == 0
+							? runId
+							: runId + ".responder." + std::to_string(index + 1);
+					}
+
+					std::string effectiveRequestedModelOverride = requestedModelOverride;
+					std::string effectiveRequestedProviderOverride = requestedProviderOverride;
+					if (!responderManifest.empty() &&
+						responderManifest.front().runtimeKind == "remote") {
+						effectiveRequestedProviderOverride = responderManifest.front().provider;
+						effectiveRequestedModelOverride = responderManifest.front().model;
+					}
+					else if (!responderManifest.empty() &&
+						(!requestedResponderTokens.empty() ||
+							requestedProviderOverrideNormalized == "local" ||
+							requestedProviderOverrideNormalized == "seed")) {
+						effectiveRequestedProviderOverride.clear();
+						effectiveRequestedModelOverride = responderManifest.front().model;
+					}
+
+					std::string responderManifestJson = "[";
+					for (std::size_t index = 0; index < responderManifest.size(); ++index) {
+						if (index > 0) {
+							responderManifestJson += ",";
+						}
+
+						const auto& responder = responderManifest[index];
+						responderManifestJson += JsonObject({
+							{"responderRunId", JsonString(responder.responderRunId)},
+							{"responderId", JsonString(responder.responderId)},
+							{"provider", JsonString(responder.provider)},
+							{"model", JsonString(responder.model)},
+							{"runtimeKind", JsonString(responder.runtimeKind)},
+							{"responderLabel", JsonString(responder.responderLabel)},
+							{"responderOrder", JsonNumber(static_cast<std::uint64_t>(responder.responderOrder))},
+							});
+					}
+					responderManifestJson += "]";
 					const ChatTranscriptStore transcriptStore;
 					bool userTurnPersisted = false;
 					auto persistUserTurnIfNeeded = [&]() {
@@ -1674,8 +1953,8 @@ namespace blazeclaw::gateway {
 								.bodyForAgent = stageContext.bodyForAgent.empty()
 									? runtimeMessage
 									: stageContext.bodyForAgent,
-								.modelIdOverride = requestedModelOverride,
-								.providerOverride = requestedProviderOverride,
+								.modelIdOverride = effectiveRequestedModelOverride,
+								.providerOverride = effectiveRequestedProviderOverride,
 								.slashCommandName = stageContext.slashCommandName,
 								.shouldLoadInlineSkillCommands =
 									stageContext.shouldLoadInlineSkillCommands,
@@ -2378,7 +2657,11 @@ namespace blazeclaw::gateway {
 					std::string sendPayload =
 						"{\"runId\":\"" +
 						EscapeJsonLocal(runId) +
-						"\",\"backendErrorCode\":" +
+						"\",\"promptRunId\":" +
+						JsonString(runId) +
+						",\"responders\":" +
+						responderManifestJson +
+						",\"backendErrorCode\":" +
 						(backendErrorCode.empty()
 							? std::string("null")
 							: ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
