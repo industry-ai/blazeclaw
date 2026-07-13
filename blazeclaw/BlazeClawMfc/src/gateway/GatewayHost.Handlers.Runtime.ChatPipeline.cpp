@@ -2,6 +2,7 @@
 #include "GatewayHost.h"
 #include "GatewayHostHandlersRuntime.h"
 #include "GatewayHostChatPipelineRouteDeps.h"
+#include "ChatPipelineRequestNormalization.h"
 #include "GatewayHostRuntimeLocalHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
 #include "GatewayHostModelHelpers.h"
@@ -121,28 +122,14 @@ namespace blazeclaw::gateway {
 				std::uint64_t compactionSequence = 1;
 			};
 			auto sessionState = std::make_shared<SessionOperatorState>();
-			auto resolveSessionId = [sessionRegistry](const std::optional<std::string>& paramsJson) {
-				const RequestParamsView params(paramsJson);
-				const std::string requestedSessionId = params.GetString("sessionId");
-				return sessionRegistry->Resolve(requestedSessionId).id;
-				};
-			auto resolveConnectionId = [](const std::optional<std::string>& paramsJson) {
-				const RequestParamsView params(paramsJson);
-				std::string connectionId = params.GetString("connectionId");
-				if (connectionId.empty()) {
-					connectionId = params.GetString("clientConnectionId");
-				}
-				if (connectionId.empty()) {
-					connectionId = "local";
-				}
-				return connectionId;
-				};
+			ChatPipelineRequestNormalization requestNormalization(*sessionRegistry);
 
 			dispatcher->Register(
 				"sessions.subscribe",
-				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
-					const std::string sessionId = resolveSessionId(request.paramsJson);
-					const std::string connectionId = resolveConnectionId(request.paramsJson);
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
+					const auto route = requestNormalization.NormalizeSubscriberRoute(request.paramsJson);
+					const std::string& sessionId = route.sessionId;
+					const std::string& connectionId = route.connectionId;
 					auto& subscribers = sessionState->sessionSubscribers[sessionId];
 					subscribers.insert(connectionId);
 					return protocol::OkResponse(
@@ -156,9 +143,10 @@ namespace blazeclaw::gateway {
 				});
 			dispatcher->Register(
 				"sessions.unsubscribe",
-				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
-					const std::string sessionId = resolveSessionId(request.paramsJson);
-					const std::string connectionId = resolveConnectionId(request.paramsJson);
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
+					const auto route = requestNormalization.NormalizeSubscriberRoute(request.paramsJson);
+					const std::string& sessionId = route.sessionId;
+					const std::string& connectionId = route.connectionId;
 					auto it = sessionState->sessionSubscribers.find(sessionId);
 					if (it != sessionState->sessionSubscribers.end()) {
 						it->second.erase(connectionId);
@@ -178,9 +166,10 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"sessions.messages.subscribe",
-				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
-					const std::string sessionId = resolveSessionId(request.paramsJson);
-					const std::string connectionId = resolveConnectionId(request.paramsJson);
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
+					const auto route = requestNormalization.NormalizeSubscriberRoute(request.paramsJson);
+					const std::string& sessionId = route.sessionId;
+					const std::string& connectionId = route.connectionId;
 					auto& subscribers = sessionState->sessionMessageSubscribers[sessionId];
 					subscribers.insert(connectionId);
 					return protocol::OkResponse(
@@ -194,9 +183,10 @@ namespace blazeclaw::gateway {
 				});
 			dispatcher->Register(
 				"sessions.messages.unsubscribe",
-				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
-					const std::string sessionId = resolveSessionId(request.paramsJson);
-					const std::string connectionId = resolveConnectionId(request.paramsJson);
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
+					const auto route = requestNormalization.NormalizeSubscriberRoute(request.paramsJson);
+					const std::string& sessionId = route.sessionId;
+					const std::string& connectionId = route.connectionId;
 					auto it = sessionState->sessionMessageSubscribers.find(sessionId);
 					if (it != sessionState->sessionMessageSubscribers.end()) {
 						it->second.erase(connectionId);
@@ -216,14 +206,14 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"sessions.send",
-				[dispatcher, sessionRegistry](const protocol::RequestFrame& request) {
+				[dispatcher, requestNormalization](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "chat.send";
 					const protocol::ResponseFrame response = dispatcher->Dispatch(forwarded);
 					if (!response.ok) {
 						return response;
 					}
-					const std::string sessionId = sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+					const std::string sessionId = requestNormalization.ResolveSessionId(request.paramsJson);
 					EmitTelemetryEvent(
 						"gateway.event.session.message",
 						JsonObject({
@@ -248,7 +238,7 @@ namespace blazeclaw::gateway {
 				});
 			dispatcher->Register(
 				"sessions.steer",
-				[dispatcher, sessionRegistry](const protocol::RequestFrame& request) {
+				[dispatcher, requestNormalization](const protocol::RequestFrame& request) {
 					auto abortForwarded = request;
 					abortForwarded.method = "chat.abort";
 					const protocol::ResponseFrame abortResponse = dispatcher->Dispatch(abortForwarded);
@@ -267,7 +257,7 @@ namespace blazeclaw::gateway {
 						abortResponse.payloadJson.has_value() &&
 						abortResponse.payloadJson.value().find("\"aborted\":true") != std::string::npos;
 					const std::string sessionId =
-						sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+						requestNormalization.ResolveSessionId(request.paramsJson);
 					const std::string sendPayload = sendResponse.payloadJson.value_or(std::string("{}"));
 					const std::string trimmed = json::Trim(sendPayload);
 					if (!trimmed.empty() && trimmed.front() == '{' && trimmed.back() == '}') {
@@ -309,8 +299,8 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"sessions.compaction.list",
-				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
-					const std::string sessionId = resolveSessionId(request.paramsJson);
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
+					const std::string sessionId = requestNormalization.ResolveSessionId(request.paramsJson);
 					auto idsIt = sessionState->compactionBranchIdsBySession.find(sessionId);
 					std::vector<std::string> rows;
 					if (idsIt != sessionState->compactionBranchIdsBySession.end()) {
@@ -368,9 +358,9 @@ namespace blazeclaw::gateway {
 				});
 			dispatcher->Register(
 				"sessions.compaction.branch",
-				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
+				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
-					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string sessionId = requestNormalization.ResolveSessionId(request.paramsJson);
 					const std::string title = params.GetString("title").empty()
 						? "compaction-branch"
 						: params.GetString("title");
@@ -2716,14 +2706,11 @@ namespace blazeclaw::gateway {
 			dispatcher->Register(
 				"chat.inject",
 				[sessions](const protocol::RequestFrame& request) {
-					const std::string requestedSessionKey =
-						ExtractStringParam(request.paramsJson, "sessionKey");
-					const std::string sessionKey =
-						requestedSessionKey.empty() ? "main" : requestedSessionKey;
-					const std::string message =
-						ExtractStringParam(request.paramsJson, "message");
-					const std::string label =
-						ExtractStringParam(request.paramsJson, "label");
+					const auto route =
+						ChatPipelineRequestNormalization::NormalizeInjectRoute(request.paramsJson);
+					const std::string& sessionKey = route.session.sessionKey;
+					const std::string& message = route.message;
+					const std::string& label = route.label;
 
 					if (json::Trim(message).empty()) {
 						return protocol::ErrorResponse(
@@ -2807,12 +2794,10 @@ namespace blazeclaw::gateway {
 			dispatcher->Register(
 				"chat.abort",
 				[run, sessions, callbacks, runtime](const protocol::RequestFrame& request) {
-					const std::string requestedSessionKey =
-						ExtractStringParam(request.paramsJson, "sessionKey");
-					const std::string sessionKey =
-						requestedSessionKey.empty() ? "main" : requestedSessionKey;
-					const std::string requestedRunId =
-						ExtractStringParam(request.paramsJson, "runId");
+					const auto route =
+						ChatPipelineRequestNormalization::NormalizeAbortRoute(request.paramsJson);
+					const std::string& sessionKey = route.session.sessionKey;
+					const std::string& requestedRunId = route.requestedRunId;
 
 					auto runIt = run.runsById.end();
 					if (!requestedRunId.empty()) {
@@ -2931,14 +2916,10 @@ namespace blazeclaw::gateway {
 				"chat.events.poll",
 				[run, sessions, pollMetrics, runtime, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
 					const protocol::RequestFrame& request) {
-						const std::string requestedSessionKey =
-							ExtractStringParam(request.paramsJson, "sessionKey");
-						const std::string sessionKey =
-							requestedSessionKey.empty() ? "main" : requestedSessionKey;
-						const std::size_t requestedLimit =
-							ExtractSizeParam(request.paramsJson, "limit").value_or(20);
-						const std::size_t limit =
-							(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
+						const auto route =
+							ChatPipelineRequestNormalization::NormalizePollRoute(request.paramsJson);
+						const std::string& sessionKey = route.session.sessionKey;
+						const std::size_t limit = route.limit;
 
 						const std::uint64_t nowMs = CurrentEpochMsLocal();
 						auto& queue = sessions.eventsBySession[sessionKey];

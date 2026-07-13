@@ -45,6 +45,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\WebViewStartupConfigBridgeTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigSchemaServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ChatPipelineRequestNormalizationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />

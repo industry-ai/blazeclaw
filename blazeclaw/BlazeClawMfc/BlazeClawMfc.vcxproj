@@ -291,6 +291,7 @@
     <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h" />
     <ClInclude Include="src\gateway\GatewayHostChatPipelineRouteDeps.h" />
+    <ClInclude Include="src\gateway\ChatPipelineRequestNormalization.h" />
     <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h" />
     <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h" />
     <ClInclude Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.h" />
@@ -584,6 +585,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp" />
     <ClCompile Include="src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
+    <ClCompile Include="src\gateway\ChatPipelineRequestNormalization.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp" />
     <ClCompile Include="src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
