@@ -2024,6 +2024,34 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if ((HasFieldToken(payload, "promptRunId") && !IsFieldValueType(payload, "promptRunId", '"')) ||
+					(HasFieldToken(payload, "responders") && !IsFieldValueType(payload, "responders", '['))) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.send` multi-active fields require string `promptRunId` and array `responders` when present.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "responders") &&
+					!IsArrayFieldExplicitlyEmpty(payload, "responders") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{
+							"responderRunId",
+							"responderId",
+							"provider",
+							"model",
+							"runtimeKind",
+							"responderLabel"
+						})) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.send` responders entries require `responderRunId`, `responderId`, `provider`, `model`, `runtimeKind`, and `responderLabel` fields.");
+					return false;
+				}
+
 				return true;
 			} },
 			{ "chat.events.poll", [&]() {
