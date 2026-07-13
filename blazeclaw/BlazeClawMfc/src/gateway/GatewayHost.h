@@ -267,6 +267,7 @@ namespace blazeclaw::gateway {
 	namespace handlers::runtime {
 		struct RuntimeSurfaceHandlers;
 		struct ChatPipelineHandlers;
+		struct ChatPipelineRouteDeps;
 		struct RuntimeOrchestrationStreamingHandlers;
 	}
 
@@ -675,6 +676,7 @@ namespace blazeclaw::gateway {
 		friend struct handlers::supplementary_catalog::SupplementaryCatalogHandlers;
 		friend struct handlers::runtime::RuntimeSurfaceHandlers;
 		friend struct handlers::runtime::ChatPipelineHandlers;
+		friend struct handlers::runtime::ChatPipelineRouteDeps;
 		friend struct handlers::runtime::RuntimeOrchestrationStreamingHandlers;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayHost.h"
 #include "GatewayHostHandlersRuntime.h"
+#include "GatewayHostChatPipelineRouteDeps.h"
 #include "GatewayHostRuntimeLocalHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
 #include "GatewayHostModelHelpers.h"
@@ -77,19 +78,32 @@ namespace blazeclaw::gateway {
 				}();
 			const std::uint64_t syntheticRevealMaxDurationMs = 5000;
 
-			host.RuntimeContext().dispatcher->Register(
+			const ChatPipelineRouteDeps routeDeps = ChatPipelineRouteDeps::Bind(host);
+			GatewayMethodDispatcher* const dispatcher = routeDeps.dispatch.dispatcher;
+			GatewaySessionRegistry* const sessionRegistry = routeDeps.session.sessionRegistry;
+			const auto& runtime = routeDeps.runtime;
+			const auto& run = routeDeps.runTracking;
+			const auto& sessions = routeDeps.sessionQueues;
+			const auto& callbacks = routeDeps.callbacks;
+			const auto& taskDeltas = routeDeps.taskDeltas;
+			const auto& pollMetrics = routeDeps.pollMetrics;
+			const auto& model = routeDeps.modelRouting;
+			const auto& skills = routeDeps.skills;
+			const auto& configSchema = routeDeps.configSchema;
+
+			dispatcher->Register(
 				"agent",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "chat.send";
-					return host.RuntimeContext().dispatcher->Dispatch(forwarded);
+					return dispatcher->Dispatch(forwarded);
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"send",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "chat.send";
-					return host.RuntimeContext().dispatcher->Dispatch(forwarded);
+					return dispatcher->Dispatch(forwarded);
 				});
 			struct SessionCompactionBranchRecord {
 				std::string branchId;
@@ -107,10 +121,10 @@ namespace blazeclaw::gateway {
 				std::uint64_t compactionSequence = 1;
 			};
 			auto sessionState = std::make_shared<SessionOperatorState>();
-			auto resolveSessionId = [&host](const std::optional<std::string>& paramsJson) {
+			auto resolveSessionId = [sessionRegistry](const std::optional<std::string>& paramsJson) {
 				const RequestParamsView params(paramsJson);
 				const std::string requestedSessionId = params.GetString("sessionId");
-				return host.RuntimeContext().sessionRegistry->Resolve(requestedSessionId).id;
+				return sessionRegistry->Resolve(requestedSessionId).id;
 				};
 			auto resolveConnectionId = [](const std::optional<std::string>& paramsJson) {
 				const RequestParamsView params(paramsJson);
@@ -124,7 +138,7 @@ namespace blazeclaw::gateway {
 				return connectionId;
 				};
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.subscribe",
 				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
 					const std::string sessionId = resolveSessionId(request.paramsJson);
@@ -140,7 +154,7 @@ namespace blazeclaw::gateway {
 							{"subscriberCount", JsonNumber(static_cast<std::uint64_t>(subscribers.size()))},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.unsubscribe",
 				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
 					const std::string sessionId = resolveSessionId(request.paramsJson);
@@ -162,7 +176,7 @@ namespace blazeclaw::gateway {
 							}));
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.messages.subscribe",
 				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
 					const std::string sessionId = resolveSessionId(request.paramsJson);
@@ -178,7 +192,7 @@ namespace blazeclaw::gateway {
 							{"subscriberCount", JsonNumber(static_cast<std::uint64_t>(subscribers.size()))},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.messages.unsubscribe",
 				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
 					const std::string sessionId = resolveSessionId(request.paramsJson);
@@ -200,16 +214,16 @@ namespace blazeclaw::gateway {
 							}));
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.send",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher, sessionRegistry](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "chat.send";
-					const protocol::ResponseFrame response = host.RuntimeContext().dispatcher->Dispatch(forwarded);
+					const protocol::ResponseFrame response = dispatcher->Dispatch(forwarded);
 					if (!response.ok) {
 						return response;
 					}
-					const std::string sessionId = host.RuntimeContext().sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+					const std::string sessionId = sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
 					EmitTelemetryEvent(
 						"gateway.event.session.message",
 						JsonObject({
@@ -232,19 +246,19 @@ namespace blazeclaw::gateway {
 							{"response", response.payloadJson.value_or(std::string("{}"))},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.steer",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher, sessionRegistry](const protocol::RequestFrame& request) {
 					auto abortForwarded = request;
 					abortForwarded.method = "chat.abort";
-					const protocol::ResponseFrame abortResponse = host.RuntimeContext().dispatcher->Dispatch(abortForwarded);
+					const protocol::ResponseFrame abortResponse = dispatcher->Dispatch(abortForwarded);
 					if (!abortResponse.ok) {
 						return abortResponse;
 					}
 
 					auto sendForwarded = request;
 					sendForwarded.method = "chat.send";
-					const protocol::ResponseFrame sendResponse = host.RuntimeContext().dispatcher->Dispatch(sendForwarded);
+					const protocol::ResponseFrame sendResponse = dispatcher->Dispatch(sendForwarded);
 					if (!sendResponse.ok) {
 						return sendResponse;
 					}
@@ -253,7 +267,7 @@ namespace blazeclaw::gateway {
 						abortResponse.payloadJson.has_value() &&
 						abortResponse.payloadJson.value().find("\"aborted\":true") != std::string::npos;
 					const std::string sessionId =
-						host.RuntimeContext().sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+						sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
 					const std::string sendPayload = sendResponse.payloadJson.value_or(std::string("{}"));
 					const std::string trimmed = json::Trim(sendPayload);
 					if (!trimmed.empty() && trimmed.front() == '{' && trimmed.back() == '}') {
@@ -275,12 +289,12 @@ namespace blazeclaw::gateway {
 							{"response", sendPayload},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.abort",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "chat.abort";
-					const protocol::ResponseFrame response = host.RuntimeContext().dispatcher->Dispatch(forwarded);
+					const protocol::ResponseFrame response = dispatcher->Dispatch(forwarded);
 					if (!response.ok) {
 						return response;
 					}
@@ -293,7 +307,7 @@ namespace blazeclaw::gateway {
 							}));
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.compaction.list",
 				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
 					const std::string sessionId = resolveSessionId(request.paramsJson);
@@ -323,7 +337,7 @@ namespace blazeclaw::gateway {
 							{"count", JsonNumber(static_cast<std::uint64_t>(rows.size()))},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.compaction.get",
 				[sessionState](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
@@ -352,7 +366,7 @@ namespace blazeclaw::gateway {
 							{"found", JsonBool(true)},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.compaction.branch",
 				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
@@ -380,7 +394,7 @@ namespace blazeclaw::gateway {
 							{"createdAtMs", JsonNumber(record.createdAtMs)},
 							}));
 				});
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"sessions.compaction.restore",
 				[sessionState](const protocol::RequestFrame& request) {
 					const RequestParamsView params(request.paramsJson);
@@ -403,14 +417,14 @@ namespace blazeclaw::gateway {
 							}));
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"chat.send",
-				[&host](const protocol::RequestFrame& request) {
+				[runtime, run, sessions, callbacks, taskDeltas, model, skills](const protocol::RequestFrame& request) {
 					ChatRunStageContext stageContext{
 						.requestId = request.id,
 						.method = request.method,
 						.paramsJson = request.paramsJson,
-						.validateAttachments = [&host](
+						.validateAttachments = [](
 							const std::optional<std::string>& paramsJson,
 							bool& hasAttachments,
 							std::string& errorCode,
@@ -421,25 +435,25 @@ namespace blazeclaw::gateway {
 								errorCode,
 								errorMessage);
 						},
-						.findRunByIdempotency = [&host](const std::string& key)
+						.findRunByIdempotency = [&run](const std::string& key)
 							-> std::optional<std::string> {
 							if (key.empty()) {
 								return std::nullopt;
 							}
 
-							const auto dedupeIt = host.m_chatRunByIdempotency.find(key);
-							if (dedupeIt == host.m_chatRunByIdempotency.end()) {
+							const auto dedupeIt = run.runByIdempotency.find(key);
+							if (dedupeIt == run.runByIdempotency.end()) {
 								return std::nullopt;
 							}
 
 							return dedupeIt->second;
 						},
-						.extractAttachmentMimeTypes = [&host](
+						.extractAttachmentMimeTypes = [](
 							const std::optional<std::string>& paramsJson) {
 							return ExtractAttachmentMimeTypes(paramsJson);
 						},
 					};
-					auto pipelineResult = host.RuntimeContext().chatRunPipeline->Run(stageContext);
+					auto pipelineResult = runtime.chatRunPipeline->Run(stageContext);
 					EmitTelemetryEvent(
 						"gateway.chat.pipeline.stages",
 						std::string("{\"requestId\":") +
@@ -476,8 +490,8 @@ namespace blazeclaw::gateway {
 
 						if (stageContext.deduped) {
 							const auto replayIt =
-								host.m_chatReplayByIdempotency.find(stageContext.idempotencyKey);
-							if (replayIt != host.m_chatReplayByIdempotency.end()) {
+								run.replayByIdempotency.find(stageContext.idempotencyKey);
+							if (replayIt != run.replayByIdempotency.end()) {
 								return protocol::ReplayFromStored(
 									request,
 									replayIt->second.ok,
@@ -591,7 +605,7 @@ namespace blazeclaw::gateway {
 						: (!request.id.empty()
 							? request.id
 							: ("chat-run-" + std::to_string(nowMs) +
-								"-" + std::to_string(host.m_chatRunsById.size() + 1)));
+								"-" + std::to_string(run.runsById.size() + 1)));
 
 					struct ChatSendResponderManifestEntry {
 						std::string responderRunId;
@@ -618,7 +632,7 @@ namespace blazeclaw::gateway {
 					if (!multiActiveRequested) {
 						maxActiveResponders = 1;
 					}
-					const bool remoteDeepSeekReady = !host.m_runtimeDeepSeekApiKey.empty();
+					const bool remoteDeepSeekReady = !model.runtimeDeepSeekApiKey.empty();
 
 					auto normalizeLocalModelId = [](const std::string& rawModelId) {
 						if (rawModelId.empty() ||
@@ -630,9 +644,9 @@ namespace blazeclaw::gateway {
 						};
 					auto normalizeDeepSeekModelId = [&](const std::string& rawModelId) {
 						const std::string configuredDefault =
-							host.m_runtimeDeepSeekDefaultModel.empty()
+							model.runtimeDeepSeekDefaultModel.empty()
 							? std::string(GatewayModel::kDeepSeekChatModelId)
-							: host.m_runtimeDeepSeekDefaultModel;
+							: model.runtimeDeepSeekDefaultModel;
 						if (rawModelId.empty()) {
 							return configuredDefault;
 						}
@@ -856,7 +870,7 @@ namespace blazeclaw::gateway {
 
 						if (!detachedSend) {
 							PushHistoryMessageIfNew(
-								host.m_chatHistoryBySession[sessionKey],
+								sessions.historyBySession[sessionKey],
 								BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
 						}
 						userTurnPersisted = true;
@@ -864,7 +878,7 @@ namespace blazeclaw::gateway {
 
 					persistUserTurnIfNeeded();
 					const bool runAlreadyTracked =
-						host.m_chatRunsById.find(runId) != host.m_chatRunsById.end();
+						run.runsById.find(runId) != run.runsById.end();
 					const bool lateJoinRequested =
 						runAlreadyTracked &&
 						stageContext.hasConnectedClient &&
@@ -875,7 +889,7 @@ namespace blazeclaw::gateway {
 					ChatControlPlaneService controlPlaneService;
 					const bool hasRegisteredRecipient =
 						!clientConnectionId.empty() &&
-						host.RuntimeContext().transportRecipientRegistry->HasRecipients(runId);
+						runtime.transportRecipientRegistry->HasRecipients(runId);
 					const auto sendControlDecision =
 						controlPlaneService.EvaluateSendControl(
 							ChatControlPlaneService::SendControlInput{
@@ -893,33 +907,33 @@ namespace blazeclaw::gateway {
 							});
 					if (sendControlDecision.toolEvents.wantsToolEvents &&
 						!clientConnectionId.empty()) {
-						host.RuntimeContext().transportRecipientRegistry->RegisterRecipient(
+						runtime.transportRecipientRegistry->RegisterRecipient(
 							runId,
 							sessionKey,
 							clientConnectionId,
 							nowMs);
-						host.RuntimeContext().transportRecipientRegistry->RegisterLateJoin(
+						runtime.transportRecipientRegistry->RegisterLateJoin(
 							sessionKey,
 							clientConnectionId,
 							nowMs);
-						host.m_chatToolEventRecipientsByRun[runId].insert(clientConnectionId);
-						for (const auto& [activeRunId, activeRun] : host.m_chatRunsById) {
+						run.toolEventRecipientsByRun[runId].insert(clientConnectionId);
+						for (const auto& [activeRunId, activeRun] : run.runsById) {
 							if (activeRunId != runId &&
 								activeRun.sessionKey == sessionKey &&
 								activeRun.active) {
-								host.m_chatToolEventRecipientsByRun[activeRunId].insert(clientConnectionId);
+								run.toolEventRecipientsByRun[activeRunId].insert(clientConnectionId);
 							}
 						}
-						host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+						runtime.transportRecipientRegistry->PruneExpired(nowMs);
 					}
 
 					if (lateJoinRequested && !clientConnectionId.empty()) {
-						auto& replayQueue = host.m_chatEventsBySession[sessionKey];
+						auto& replayQueue = sessions.eventsBySession[sessionKey];
 						const auto activeRuns =
-							host.RuntimeContext().transportRecipientRegistry->ActiveRunsForSession(sessionKey);
+							runtime.transportRecipientRegistry->ActiveRunsForSession(sessionKey);
 						for (const auto& activeRunId : activeRuns) {
-							const auto activeRunIt = host.m_chatRunsById.find(activeRunId);
-							if (activeRunIt == host.m_chatRunsById.end()) {
+							const auto activeRunIt = run.runsById.find(activeRunId);
+							if (activeRunIt == run.runsById.end()) {
 								continue;
 							}
 
@@ -1030,19 +1044,19 @@ namespace blazeclaw::gateway {
 								sessionKey));
 					}
 					auto persistTaskDeltas =
-						[&host, &runId, &sessionKey](
-							const std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
+						[&taskDeltas, &runId, &sessionKey](
+							const std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& runtimeTaskDeltas,
 							const bool success) {
-								if (taskDeltas.empty()) {
+								if (runtimeTaskDeltas.empty()) {
 									return;
 								}
 
 								std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> normalizedTaskDeltas;
-								normalizedTaskDeltas.reserve(taskDeltas.size());
-								for (std::size_t index = 0; index < taskDeltas.size(); ++index) {
+								normalizedTaskDeltas.reserve(runtimeTaskDeltas.size());
+								for (std::size_t index = 0; index < runtimeTaskDeltas.size(); ++index) {
 									normalizedTaskDeltas.push_back(
 										TaskDeltaLegacyAdapter::AdaptEntry(
-											taskDeltas[index],
+											runtimeTaskDeltas[index],
 											runId,
 											sessionKey,
 											index));
@@ -1059,22 +1073,22 @@ namespace blazeclaw::gateway {
 								}
 
 								const bool upserted =
-									host.m_taskDeltaRepository.Upsert(runId, normalizedTaskDeltas);
+									taskDeltas.repository.Upsert(runId, normalizedTaskDeltas);
 								(void)upserted;
 								const std::size_t evictedFromChat =
-									host.m_taskDeltaRepository.EnforceRetentionLimit(
-										host.m_taskDeltasRetentionLimit);
+									taskDeltas.repository.EnforceRetentionLimit(
+										taskDeltas.retentionLimit);
 								if (evictedFromChat > 0) {
 									EmitTelemetryEvent(
 										"gateway.taskdelta.retention.evicted",
 										std::string("{\"evictedRuns\":") +
 										std::to_string(evictedFromChat) +
 										",\"remainingRuns\":" +
-										std::to_string(host.m_taskDeltaRepository.Size()) +
+										std::to_string(taskDeltas.repository.Size()) +
 										",\"reason\":\"chat_runtime_upsert\",\"runId\":" +
 										JsonString(runId) + "}");
 								}
-								host.PersistTaskDeltas();
+								taskDeltas.persist();
 								for (const auto& delta : normalizedTaskDeltas) {
 									EmitTelemetryEvent(
 										"gateway.taskdelta.transition",
@@ -1107,24 +1121,24 @@ namespace blazeclaw::gateway {
 								}
 
 								if (terminalStatus == "completed") {
-									++host.m_taskDeltaRunSuccessCount;
+									++taskDeltas.runSuccessCount;
 								}
 								else {
-									++host.m_taskDeltaRunFailureCount;
+									++taskDeltas.runFailureCount;
 								}
 
 								if (terminalErrorCode == "embedded_deadline_exceeded") {
-									++host.m_taskDeltaRunTimeoutCount;
+									++taskDeltas.runTimeoutCount;
 								}
 
 								if (terminalErrorCode == "embedded_run_cancelled" ||
 									terminalStatus == "skipped") {
-									++host.m_taskDeltaRunCancelledCount;
+									++taskDeltas.runCancelledCount;
 								}
 
 								if (terminalErrorCode.find("fallback") != std::string::npos ||
 									terminalStatus == "fallback") {
-									++host.m_taskDeltaRunFallbackCount;
+									++taskDeltas.runFallbackCount;
 								}
 
 								EmitTelemetryEvent(
@@ -1135,11 +1149,11 @@ namespace blazeclaw::gateway {
 									",\"success\":" + (success ? std::string("true") : std::string("false")) +
 									",\"terminalStatus\":" + JsonString(terminalStatus) +
 									",\"errorCode\":" + JsonString(terminalErrorCode) +
-									",\"totals\":{\"success\":" + std::to_string(host.m_taskDeltaRunSuccessCount) +
-									",\"failure\":" + std::to_string(host.m_taskDeltaRunFailureCount) +
-									",\"timeout\":" + std::to_string(host.m_taskDeltaRunTimeoutCount) +
-									",\"cancelled\":" + std::to_string(host.m_taskDeltaRunCancelledCount) +
-									",\"fallback\":" + std::to_string(host.m_taskDeltaRunFallbackCount) + "}" +
+									",\"totals\":{\"success\":" + std::to_string(taskDeltas.runSuccessCount) +
+									",\"failure\":" + std::to_string(taskDeltas.runFailureCount) +
+									",\"timeout\":" + std::to_string(taskDeltas.runTimeoutCount) +
+									",\"cancelled\":" + std::to_string(taskDeltas.runCancelledCount) +
+									",\"fallback\":" + std::to_string(taskDeltas.runFallbackCount) + "}" +
 									"}");
 						};
 
@@ -1166,7 +1180,7 @@ namespace blazeclaw::gateway {
 					const auto orchestrationPolicy =
 						ChatOrchestrationPolicy::Evaluate(
 							ChatOrchestrationPolicy::Input{
-								.orchestrationPath = host.m_embeddedOrchestrationPath,
+								.orchestrationPath = model.embeddedOrchestrationPath,
 								.message = normalizedMessage,
 								.forceError = forceError,
 								.hasAttachments = hasAttachments,
@@ -1179,25 +1193,25 @@ namespace blazeclaw::gateway {
 						orchestrationPolicy.intentDeterministicEnabled;
 					const bool allowDeterministicPromptOrchestration =
 						orchestrationPolicy.deterministicEnabled;
-					host.m_latestOrchestrationPathSelection.runId = runId;
-					host.m_latestOrchestrationPathSelection.path = orchestrationPath;
-					host.m_latestOrchestrationPathSelection.compatDeterministicEnabled =
+					model.latestOrchestrationPathSelection.runId = runId;
+					model.latestOrchestrationPathSelection.path = orchestrationPath;
+					model.latestOrchestrationPathSelection.compatDeterministicEnabled =
 						allowPromptOrchestration;
-					host.m_latestOrchestrationPathSelection.intentDeterministicEnabled =
+					model.latestOrchestrationPathSelection.intentDeterministicEnabled =
 						forceWeatherEmailDeterministicOrchestration;
-					host.m_latestOrchestrationPathSelection.deterministicEnabled =
+					model.latestOrchestrationPathSelection.deterministicEnabled =
 						allowDeterministicPromptOrchestration;
-					host.m_latestOrchestrationPathSelection.decisionReasonCode =
+					model.latestOrchestrationPathSelection.decisionReasonCode =
 						orchestrationPolicy.decisionReasonCode;
-					host.m_latestOrchestrationPathSelection.decompositionMetadataSource =
+					model.latestOrchestrationPathSelection.decompositionMetadataSource =
 						orchestrationPolicy.decompositionMetadataSource;
-					host.m_latestOrchestrationPathSelection.orderedPolicyMode =
+					model.latestOrchestrationPathSelection.orderedPolicyMode =
 						orchestrationPolicy.orderedPolicyMode;
-					host.m_latestOrchestrationPathSelection.orderedPolicyStrict =
+					model.latestOrchestrationPathSelection.orderedPolicyStrict =
 						orchestrationPolicy.orderedPolicyStrict;
-					host.m_latestOrchestrationPathSelection.fallbackPolicyProfile =
+					model.latestOrchestrationPathSelection.fallbackPolicyProfile =
 						orchestrationPolicy.fallbackPolicyProfile;
-					host.m_latestOrchestrationPathSelection.observedAtEpochMs = nowMs;
+					model.latestOrchestrationPathSelection.observedAtEpochMs = nowMs;
 					EmitTelemetryEvent(
 						"gateway.chat.orchestration.pathSelection",
 						std::string("{\"runId\":") +
@@ -1249,7 +1263,7 @@ namespace blazeclaw::gateway {
 						JsonString(orchestrationPolicy.orderedPolicyMode) +
 						",\"fallbackPolicyProfile\":" +
 						JsonString(orchestrationPolicy.fallbackPolicyProfile) + "}");
-					const auto runtimeToolsSnapshot = host.RuntimeContext().toolRegistry->List();
+					const auto runtimeToolsSnapshot = runtime.toolRegistry->List();
 					auto isRuntimeToolReady = [&runtimeToolsSnapshot](const std::string& expectedToolId) {
 						const std::string expectedNormalized = json::Trim(expectedToolId);
 						for (const auto& tool : runtimeToolsSnapshot) {
@@ -1292,7 +1306,7 @@ namespace blazeclaw::gateway {
 						RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
 							normalizedMessage,
 							runtimeToolsSnapshot,
-							host.m_skillsCatalogState.entries,
+							skills.catalogState.entries,
 							orderedSequencePolicyOverridePtr);
 					const bool preferChineseResponse =
 						stageContext.preferChineseResponse;
@@ -1567,7 +1581,7 @@ namespace blazeclaw::gateway {
 								". Missing runtime tool IDs: " + missingResolvedJoined +
 								". Remediation: verify required runtime manifests/scripts are present and enabled for each target, or remove unavailable targets from the strict ordered sequence.";
 
-							++host.m_orderedPreflightMissingTargetTotal;
+							++model.orderedPreflightMissingTargetTotal;
 
 							RunLoopBudget orderedRecoveryBudget;
 							const RecoveryOutcome orderedRecoveryOutcome =
@@ -1596,7 +1610,7 @@ namespace blazeclaw::gateway {
 								"ordered_preflight_missing_target_total",
 								std::string("{\"runId\":") + JsonString(runId) +
 								",\"total\":" +
-								std::to_string(host.m_orderedPreflightMissingTargetTotal) +
+								std::to_string(model.orderedPreflightMissingTargetTotal) +
 								",\"missingTargets\":" +
 								SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
 								",\"missingRuntimeToolIds\":" +
@@ -1674,12 +1688,12 @@ namespace blazeclaw::gateway {
 									backendErrorMessage.empty()
 									? "Forced terminal fallback emitted by ordered preflight guard."
 									: backendErrorMessage);
-								++host.m_orderedPreflightMissingTargetTerminalEmittedTotal;
+								++model.orderedPreflightMissingTargetTerminalEmittedTotal;
 								EmitTelemetryEvent(
 									"ordered_preflight_missing_target_terminal_emitted_total",
 									std::string("{\"runId\":") + JsonString(runId) +
 									",\"total\":" +
-									std::to_string(host.m_orderedPreflightMissingTargetTerminalEmittedTotal) +
+									std::to_string(model.orderedPreflightMissingTargetTerminalEmittedTotal) +
 									",\"errorCode\":" + JsonString(backendErrorCode) +
 									",\"missingOrderedTargets\":" +
 									SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
@@ -1713,7 +1727,7 @@ namespace blazeclaw::gateway {
 						forceWeatherEmailDeterministicOrchestration) {
 						const auto orchestrationResult =
 							TryOrchestrateWeatherEmailPrompt(
-								*host.RuntimeContext().toolRegistry,
+								*runtime.toolRegistry,
 								normalizedMessage);
 
 						if (orchestrationResult.matched) {
@@ -1836,8 +1850,8 @@ namespace blazeclaw::gateway {
 						}
 					}
 
-					if (!forceError && !orchestrationHandled && host.m_chatRuntimeCallback) {
-						auto& runtimeSessionEvents = host.m_chatEventsBySession[sessionKey];
+					if (!forceError && !orchestrationHandled && callbacks.chatRuntimeCallback) {
+						auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
 						PushEventWithRetentionLimit(runtimeSessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
 								.sessionKey = sessionKey,
@@ -1877,8 +1891,8 @@ namespace blazeclaw::gateway {
 							nowMs);
 						if (pushLifecycleEnabled) {
 							EmitPushLifecycleEvent(
-								*host.RuntimeContext().transport,
-								*host.RuntimeContext().eventFanout,
+								*runtime.transport,
+								*runtime.eventFanout,
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = runId,
 									.sessionKey = sessionKey,
@@ -1887,10 +1901,10 @@ namespace blazeclaw::gateway {
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
-								host.m_chatPushEventSeq);
+								sessions.pushEventSeq);
 							EmitPushLifecycleEvent(
-								*host.RuntimeContext().transport,
-								*host.RuntimeContext().eventFanout,
+								*runtime.transport,
+								*runtime.eventFanout,
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = runId,
 									.sessionKey = sessionKey,
@@ -1899,10 +1913,10 @@ namespace blazeclaw::gateway {
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
-								host.m_chatPushEventSeq);
+								sessions.pushEventSeq);
 						}
 
-						host.m_chatRunsById.insert_or_assign(
+						run.runsById.insert_or_assign(
 							runId,
 							GatewayHost::ChatRunState{
 								.runId = runId,
@@ -1944,7 +1958,7 @@ namespace blazeclaw::gateway {
 							});
 
 						std::size_t streamedDeltaCount = 0;
-						const auto runtimeResult = host.m_chatRuntimeCallback(
+						const auto runtimeResult = callbacks.chatRuntimeCallback(
 							GatewayHost::ChatRuntimeRequest{
 								.runId = runId,
 								.sessionKey = sessionKey,
@@ -1969,7 +1983,7 @@ namespace blazeclaw::gateway {
 								.hasAttachments = hasAttachments,
 								.attachmentMimeTypes = attachmentMimeTypes,
 								.onAssistantDelta =
-									[&host,
+									[&run, &sessions, &runtime,
 										&streamedDeltaCount,
 										&runId,
 										&sessionKey,
@@ -1988,14 +2002,14 @@ namespace blazeclaw::gateway {
 										}
 										if (normalizedDelta.find("tools.execute") == 0) {
 											const auto recipientsIt =
-												host.m_chatToolEventRecipientsByRun.find(runId);
-											if (recipientsIt == host.m_chatToolEventRecipientsByRun.end() ||
+												run.toolEventRecipientsByRun.find(runId);
+											if (recipientsIt == run.toolEventRecipientsByRun.end() ||
 												recipientsIt->second.empty()) {
 												return;
 											}
 										}
 
-										auto& streamEvents = host.m_chatEventsBySession[sessionKey];
+										auto& streamEvents = sessions.eventsBySession[sessionKey];
 										PushEventWithRetentionLimit(streamEvents, GatewayHost::ChatEventState{
 												.runId = runId,
 												.sessionKey = sessionKey,
@@ -2016,12 +2030,12 @@ namespace blazeclaw::gateway {
 											sessionKey,
 										 deltaNowMs);
 
-										auto runStateIt = host.m_chatRunsById.find(runId);
-										if (runStateIt != host.m_chatRunsById.end() &&
+										auto runStateIt = run.runsById.find(runId);
+										if (runStateIt != run.runsById.end() &&
 											runStateIt->second.pushLifecycleRequested) {
 											EmitPushLifecycleEvent(
-												*host.RuntimeContext().transport,
-												*host.RuntimeContext().eventFanout,
+												*runtime.transport,
+												*runtime.eventFanout,
 												GatewayEventFanoutService::ChatLifecycleEvent{
 													.runId = runId,
 													.sessionKey = sessionKey,
@@ -2030,10 +2044,10 @@ namespace blazeclaw::gateway {
 													.errorMessage = std::nullopt,
 													.timestampMs = deltaNowMs,
 												},
-												host.m_chatPushEventSeq);
+												sessions.pushEventSeq);
 										}
 
-										if (runStateIt != host.m_chatRunsById.end()) {
+										if (runStateIt != run.runsById.end()) {
 											runStateIt->second.assistantText = normalizedDelta;
 											runStateIt->second.streamCursor = normalizedDelta.size();
 											runStateIt->second.lastEmitMs = deltaNowMs;
@@ -2070,8 +2084,8 @@ namespace blazeclaw::gateway {
 									"chat runtime returned no assistant output";
 							}
 							else {
-								auto existingRunIt = host.m_chatRunsById.find(runId);
-								if (existingRunIt != host.m_chatRunsById.end()) {
+								auto existingRunIt = run.runsById.find(runId);
+								if (existingRunIt != run.runsById.end()) {
 									existingRunIt->second.assistantText = assistantText;
 									existingRunIt->second.providerDeltas = assistantDeltas;
 									existingRunIt->second.providerDeltaCursor = 0;
@@ -2116,8 +2130,8 @@ namespace blazeclaw::gateway {
 							assistantText.clear();
 						}
 
-						auto existingRunIt = host.m_chatRunsById.find(runId);
-						if (existingRunIt != host.m_chatRunsById.end()) {
+						auto existingRunIt = run.runsById.find(runId);
+						if (existingRunIt != run.runsById.end()) {
 							existingRunIt->second.assistantText = assistantText;
 							existingRunIt->second.providerDeltas = assistantDeltas;
 							existingRunIt->second.providerDeltaCursor = 0;
@@ -2154,7 +2168,7 @@ namespace blazeclaw::gateway {
 								runId,
 								sessionKey,
 								normalizedMessage,
-								*host.RuntimeContext().toolRegistry);
+								*runtime.toolRegistry);
 
 						if (failed) {
 							RunLoopBudget budget;
@@ -2245,7 +2259,7 @@ namespace blazeclaw::gateway {
 							runtimeTaskDeltas,
 							runtimeResult.ok && !failed);
 					}
-					else if (!forceError && !orchestrationHandled && !host.m_chatRuntimeCallback) {
+					else if (!forceError && !orchestrationHandled && !callbacks.chatRuntimeCallback) {
 						failed = true;
 						assistantText.clear();
 						assistantDeltas.clear();
@@ -2290,7 +2304,7 @@ namespace blazeclaw::gateway {
 						}
 					}
 
-					auto& sessionEvents = host.m_chatEventsBySession[sessionKey];
+					auto& sessionEvents = sessions.eventsBySession[sessionKey];
 					if (!lifecycleEventsEnqueued) {
 						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
@@ -2330,8 +2344,8 @@ namespace blazeclaw::gateway {
 							nowMs);
 						if (pushLifecycleEnabled) {
 							EmitPushLifecycleEvent(
-								*host.RuntimeContext().transport,
-								*host.RuntimeContext().eventFanout,
+								*runtime.transport,
+								*runtime.eventFanout,
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = runId,
 									.sessionKey = sessionKey,
@@ -2340,10 +2354,10 @@ namespace blazeclaw::gateway {
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
-								host.m_chatPushEventSeq);
+								sessions.pushEventSeq);
 							EmitPushLifecycleEvent(
-								*host.RuntimeContext().transport,
-								*host.RuntimeContext().eventFanout,
+								*runtime.transport,
+								*runtime.eventFanout,
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = runId,
 									.sessionKey = sessionKey,
@@ -2352,7 +2366,7 @@ namespace blazeclaw::gateway {
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
-								host.m_chatPushEventSeq);
+								sessions.pushEventSeq);
 						}
 					}
 					EmitDeepSeekGatewayDiagnostic(
@@ -2410,8 +2424,8 @@ namespace blazeclaw::gateway {
 									std::to_string(sessionEvents.size()));
 								if (pushLifecycleEnabled) {
 									EmitPushLifecycleEvent(
-										*host.RuntimeContext().transport,
-										*host.RuntimeContext().eventFanout,
+										*runtime.transport,
+										*runtime.eventFanout,
 										GatewayEventFanoutService::ChatLifecycleEvent{
 											.runId = runId,
 											.sessionKey = sessionKey,
@@ -2420,7 +2434,7 @@ namespace blazeclaw::gateway {
 											.errorMessage = std::nullopt,
 											.timestampMs = nowMs,
 										},
-										host.m_chatPushEventSeq);
+										sessions.pushEventSeq);
 								}
 							};
 
@@ -2528,8 +2542,8 @@ namespace blazeclaw::gateway {
 						}
 					}
 
-					if (host.m_chatRunsById.find(runId) == host.m_chatRunsById.end()) {
-						host.m_chatRunsById.insert_or_assign(
+					if (run.runsById.find(runId) == run.runsById.end()) {
+						run.runsById.insert_or_assign(
 							runId,
 							GatewayHost::ChatRunState{
 								.runId = runId,
@@ -2572,8 +2586,8 @@ namespace blazeclaw::gateway {
 								.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
 							});
 					}
-					auto insertedRunIt = host.m_chatRunsById.find(runId);
-					if (insertedRunIt != host.m_chatRunsById.end() &&
+					auto insertedRunIt = run.runsById.find(runId);
+					if (insertedRunIt != run.runsById.end() &&
 						!insertedRunIt->second.failed &&
 						!silentAssistantReply &&
 						insertedRunIt->second.streamCursor >= insertedRunIt->second.assistantText.size() &&
@@ -2619,8 +2633,8 @@ namespace blazeclaw::gateway {
 							nowMs);
 						if (insertedRunIt->second.pushLifecycleRequested) {
 							EmitPushLifecycleEvent(
-								*host.RuntimeContext().transport,
-								*host.RuntimeContext().eventFanout,
+								*runtime.transport,
+								*runtime.eventFanout,
 								GatewayEventFanoutService::ChatLifecycleEvent{
 									.runId = insertedRunIt->second.runId,
 									.sessionKey = insertedRunIt->second.sessionKey,
@@ -2629,15 +2643,15 @@ namespace blazeclaw::gateway {
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
-								host.m_chatPushEventSeq);
+								sessions.pushEventSeq);
 						}
 						insertedRunIt->second.terminalEventEnqueued = true;
 						insertedRunIt->second.active = false;
-						host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
+						runtime.transportRecipientRegistry->MarkRunFinalized(
 							insertedRunIt->second.runId,
 							nowMs);
-						host.m_chatToolEventRecipientsByRun.erase(insertedRunIt->second.runId);
-						host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+						run.toolEventRecipientsByRun.erase(insertedRunIt->second.runId);
+						runtime.transportRecipientRegistry->PruneExpired(nowMs);
 						EmitTelemetryEvent(
 							"gateway.chat.final.fastpath",
 							std::string("{\"runId\":") +
@@ -2648,10 +2662,10 @@ namespace blazeclaw::gateway {
 							",\"reason\":\"assistant_text_fully_available\"}");
 					}
 
-					host.m_chatTerminalDeliveredRunIds.erase(runId);
+					run.terminalDeliveredRunIds.erase(runId);
 
 					if (!idempotencyKey.empty()) {
-						host.m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+						run.runByIdempotency.insert_or_assign(idempotencyKey, runId);
 					}
 
 					std::string sendPayload =
@@ -2679,7 +2693,7 @@ namespace blazeclaw::gateway {
 
 					const protocol::ResponseFrame sendResponse = protocol::OkResponse(request, sendPayload);
 					if (!idempotencyKey.empty()) {
-						host.m_chatReplayByIdempotency.insert_or_assign(
+						run.replayByIdempotency.insert_or_assign(
 							idempotencyKey,
 							GatewayHost::ChatReplayEntry{
 								.ok = sendResponse.ok,
@@ -2699,9 +2713,9 @@ namespace blazeclaw::gateway {
 					return sendResponse;
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"chat.inject",
-				[&host](const protocol::RequestFrame& request) {
+				[sessions](const protocol::RequestFrame& request) {
 					const std::string requestedSessionKey =
 						ExtractStringParam(request.paramsJson, "sessionKey");
 					const std::string sessionKey =
@@ -2760,7 +2774,7 @@ namespace blazeclaw::gateway {
 
 					const std::uint64_t nowMs = CurrentEpochMsLocal();
 					const std::string runId = "inject-" + appended.messageId;
-					auto& queue = host.m_chatEventsBySession[sessionKey];
+					auto& queue = sessions.eventsBySession[sessionKey];
 					PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
 							.runId = runId,
 							.sessionKey = sessionKey,
@@ -2782,7 +2796,7 @@ namespace blazeclaw::gateway {
 
 					if (!RuntimeTranscriptGuard::IsSilentReplyText(message)) {
 						PushHistoryMessageIfNew(
-							host.m_chatHistoryBySession[sessionKey],
+							sessions.historyBySession[sessionKey],
 							appended.messageJson);
 					}
 
@@ -2790,9 +2804,9 @@ namespace blazeclaw::gateway {
 						JsonString(appended.messageId) + "}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"chat.abort",
-				[&host](const protocol::RequestFrame& request) {
+				[run, sessions, callbacks, runtime](const protocol::RequestFrame& request) {
 					const std::string requestedSessionKey =
 						ExtractStringParam(request.paramsJson, "sessionKey");
 					const std::string sessionKey =
@@ -2800,40 +2814,40 @@ namespace blazeclaw::gateway {
 					const std::string requestedRunId =
 						ExtractStringParam(request.paramsJson, "runId");
 
-					auto runIt = host.m_chatRunsById.end();
+					auto runIt = run.runsById.end();
 					if (!requestedRunId.empty()) {
-						const auto exact = host.m_chatRunsById.find(requestedRunId);
-						if (exact != host.m_chatRunsById.end() &&
+						const auto exact = run.runsById.find(requestedRunId);
+						if (exact != run.runsById.end() &&
 							exact->second.sessionKey == sessionKey) {
 							runIt = exact;
 						}
 					}
 					else {
 						runIt = std::find_if(
-							host.m_chatRunsById.begin(),
-							host.m_chatRunsById.end(),
+							run.runsById.begin(),
+							run.runsById.end(),
 							[&](const auto& pair) {
 								return pair.second.sessionKey == sessionKey &&
 									pair.second.active;
 							});
 					}
 
-					if (runIt == host.m_chatRunsById.end()) {
+					if (runIt == run.runsById.end()) {
 						return protocol::OkResponse(request, "{\"aborted\":false,\"sessionKey\":\"" +
 							EscapeJsonLocal(sessionKey) +
 							"\"}");
 					}
 
 					const std::string runId = runIt->second.runId;
-					if (host.m_chatAbortCallback) {
-						host.m_chatAbortCallback(
+					if (callbacks.chatAbortCallback) {
+						callbacks.chatAbortCallback(
 							GatewayHost::ChatAbortRequest{
 								.runId = runId,
 								.sessionKey = sessionKey,
 							});
 					}
 
-					auto& queue = host.m_chatEventsBySession[sessionKey];
+					auto& queue = sessions.eventsBySession[sessionKey];
 					std::erase_if(
 						queue,
 						[&](const GatewayHost::ChatEventState& item) {
@@ -2880,9 +2894,9 @@ namespace blazeclaw::gateway {
 					runIt->second.active = false;
 					runIt->second.streamCursor = runIt->second.assistantText.size();
 					runIt->second.lastProgressAtMs = nowMs;
-					host.m_chatToolEventRecipientsByRun.erase(runId);
-					host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(runId, nowMs);
-					host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+					run.toolEventRecipientsByRun.erase(runId);
+					runtime.transportRecipientRegistry->MarkRunFinalized(runId, nowMs);
+					runtime.transportRecipientRegistry->PruneExpired(nowMs);
 
 					ChatAbortCoordinator abortCoordinator;
 					const auto persistResult = abortCoordinator.PersistAbortedPartial(
@@ -2913,9 +2927,9 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"chat.events.poll",
-				[&host, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
+				[run, sessions, pollMetrics, runtime, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
 					const protocol::RequestFrame& request) {
 						const std::string requestedSessionKey =
 							ExtractStringParam(request.paramsJson, "sessionKey");
@@ -2927,14 +2941,14 @@ namespace blazeclaw::gateway {
 							(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
 
 						const std::uint64_t nowMs = CurrentEpochMsLocal();
-						auto& queue = host.m_chatEventsBySession[sessionKey];
+						auto& queue = sessions.eventsBySession[sessionKey];
 						constexpr std::size_t maxActiveRunsPerPoll = 12;
 						constexpr std::uint64_t stalledActiveRunTimeoutMs = 45 * 1000;
 						constexpr std::uint64_t terminalWaitExceededThresholdMs = 12 * 1000;
 
 						std::vector<GatewayHost::ChatRunState*> sessionActiveRuns;
-						sessionActiveRuns.reserve(host.m_chatRunsById.size());
-						for (auto& [_, candidateRun] : host.m_chatRunsById) {
+						sessionActiveRuns.reserve(run.runsById.size());
+						for (auto& [_, candidateRun] : run.runsById) {
 							if (candidateRun.sessionKey == sessionKey && candidateRun.active) {
 								sessionActiveRuns.push_back(&candidateRun);
 							}
@@ -2967,6 +2981,7 @@ namespace blazeclaw::gateway {
 								",\"reconcileCount\":" + std::to_string(reconcileCount) + "}");
 						}
 
+						const auto& runTracking = run;
 						auto processRun = [&](GatewayHost::ChatRunState& run) {
 							const bool pushLifecycleEnabledForRun = run.pushLifecycleRequested;
 							const bool silentAssistantReply =
@@ -2989,13 +3004,13 @@ namespace blazeclaw::gateway {
 									reconcileFocusRunId = run.runId;
 									reconcileFocusElapsedMs = noProgressElapsedMs;
 								}
-								++host.m_chatPollTerminalWaitExceededTotal;
+								++pollMetrics.terminalWaitExceededTotal;
 								EmitTelemetryEvent(
 									"chat_poll_terminal_wait_exceeded_total",
 									std::string("{\"runId\":") + JsonString(run.runId) +
 									",\"sessionKey\":" + JsonString(run.sessionKey) +
 									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
-									",\"total\":" + std::to_string(host.m_chatPollTerminalWaitExceededTotal) + "}");
+									",\"total\":" + std::to_string(pollMetrics.terminalWaitExceededTotal) + "}");
 							}
 
 							if (!run.failed &&
@@ -3006,7 +3021,7 @@ namespace blazeclaw::gateway {
 									reconcileFocusRunId = run.runId;
 									reconcileFocusElapsedMs = noProgressElapsedMs;
 								}
-								++host.m_chatPollStalledActiveRunTotal;
+								++pollMetrics.stalledActiveRunTotal;
 								run.failed = true;
 								run.errorCode = "chat_poll_stalled_active_run";
 								run.errorMessage =
@@ -3019,19 +3034,19 @@ namespace blazeclaw::gateway {
 									{"elapsedMs", JsonNumber(noProgressElapsedMs)},
 									{"timeoutMs", JsonNumber(stalledActiveRunTimeoutMs)},
 									});
-								++host.m_chatPollStalledActiveRunForcedTerminalTotal;
+								++pollMetrics.stalledActiveRunForcedTerminalTotal;
 								EmitTelemetryEvent(
 									"chat_poll_stalled_active_run_total",
 									std::string("{\"runId\":") + JsonString(run.runId) +
 									",\"sessionKey\":" + JsonString(run.sessionKey) +
 									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
-									",\"total\":" + std::to_string(host.m_chatPollStalledActiveRunTotal) + "}");
+									",\"total\":" + std::to_string(pollMetrics.stalledActiveRunTotal) + "}");
 								EmitTelemetryEvent(
 									"chat_poll_stalled_active_run_forced_terminal_total",
 									std::string("{\"runId\":") + JsonString(run.runId) +
 									",\"sessionKey\":" + JsonString(run.sessionKey) +
 									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
-									",\"total\":" + std::to_string(host.m_chatPollStalledActiveRunForcedTerminalTotal) + "}");
+									",\"total\":" + std::to_string(pollMetrics.stalledActiveRunForcedTerminalTotal) + "}");
 							}
 
 							const bool enoughTimeElapsed =
@@ -3066,8 +3081,8 @@ namespace blazeclaw::gateway {
 										if (controlPlaneService.ShouldPublishToolDelta(deltaText, pollDecision)) {
 											if (deltaText.find("tools.execute") == 0) {
 												const auto recipientsIt =
-													host.m_chatToolEventRecipientsByRun.find(run.runId);
-												if (recipientsIt == host.m_chatToolEventRecipientsByRun.end() ||
+													runTracking.toolEventRecipientsByRun.find(run.runId);
+												if (recipientsIt == runTracking.toolEventRecipientsByRun.end() ||
 													recipientsIt->second.empty()) {
 													deltaText.clear();
 													continue;
@@ -3153,8 +3168,8 @@ namespace blazeclaw::gateway {
 										});
 									if (pushLifecycleEnabledForRun) {
 										EmitPushLifecycleEvent(
-											*host.RuntimeContext().transport,
-											*host.RuntimeContext().eventFanout,
+											*runtime.transport,
+											*runtime.eventFanout,
 											GatewayEventFanoutService::ChatLifecycleEvent{
 												.runId = run.runId,
 												.sessionKey = run.sessionKey,
@@ -3163,7 +3178,7 @@ namespace blazeclaw::gateway {
 												.errorMessage = std::nullopt,
 												.timestampMs = nowMs,
 											},
-											host.m_chatPushEventSeq);
+											sessions.pushEventSeq);
 									}
 									EmitDeepSeekGatewayDiagnostic(
 										"event.enqueue",
@@ -3231,8 +3246,8 @@ namespace blazeclaw::gateway {
 									});
 								if (pushLifecycleEnabledForRun) {
 									EmitPushLifecycleEvent(
-										*host.RuntimeContext().transport,
-										*host.RuntimeContext().eventFanout,
+										*runtime.transport,
+										*runtime.eventFanout,
 										GatewayEventFanoutService::ChatLifecycleEvent{
 											.runId = run.runId,
 											.sessionKey = run.sessionKey,
@@ -3241,7 +3256,7 @@ namespace blazeclaw::gateway {
 											.errorMessage = terminalError,
 											.timestampMs = nowMs,
 										},
-										host.m_chatPushEventSeq);
+										sessions.pushEventSeq);
 								}
 								GatewayLifecycleEventEmitter::EmitLifecycle(
 									runTerminalState,
@@ -3251,7 +3266,7 @@ namespace blazeclaw::gateway {
 									terminalError);
 								run.terminalEventEnqueued = true;
 								run.lastProgressAtMs = nowMs;
-								host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
+								runtime.transportRecipientRegistry->MarkRunFinalized(
 									run.runId,
 									nowMs);
 								EmitDeepSeekGatewayDiagnostic(
@@ -3266,8 +3281,8 @@ namespace blazeclaw::gateway {
 									std::to_string(queue.size()));
 
 								run.active = false;
-								host.m_chatToolEventRecipientsByRun.erase(run.runId);
-								host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+								runTracking.toolEventRecipientsByRun.erase(run.runId);
+								runtime.transportRecipientRegistry->PruneExpired(nowMs);
 							}
 							};
 
@@ -3286,15 +3301,15 @@ namespace blazeclaw::gateway {
 								queue.pop_front();
 
 								if (IsTerminalChatState(eventState.state)) {
-									if (host.m_chatTerminalDeliveredRunIds.find(eventState.runId) != host.m_chatTerminalDeliveredRunIds.end() ||
+									if (run.terminalDeliveredRunIds.find(eventState.runId) != run.terminalDeliveredRunIds.end() ||
 										terminalRunIdsSeenThisPoll.find(eventState.runId) != terminalRunIdsSeenThisPoll.end()) {
 										continue;
 									}
 
 									terminalRunIdsSeenThisPoll.insert(eventState.runId);
-									host.m_chatTerminalDeliveredRunIds.insert(eventState.runId);
-									if (host.m_chatTerminalDeliveredRunIds.size() > 1024) {
-										host.m_chatTerminalDeliveredRunIds.clear();
+									run.terminalDeliveredRunIds.insert(eventState.runId);
+									if (run.terminalDeliveredRunIds.size() > 1024) {
+										run.terminalDeliveredRunIds.clear();
 									}
 								}
 
@@ -3318,8 +3333,8 @@ namespace blazeclaw::gateway {
 								std::optional<std::string> eventErrorCode;
 								std::optional<std::string> eventContextJson;
 								if (eventState.state == "error") {
-									const auto runContextIt = host.m_chatRunsById.find(eventState.runId);
-									if (runContextIt != host.m_chatRunsById.end()) {
+									const auto runContextIt = run.runsById.find(eventState.runId);
+									if (runContextIt != run.runsById.end()) {
 										if (!runContextIt->second.errorCode.empty()) {
 											eventErrorCode = runContextIt->second.errorCode;
 										}
@@ -3350,28 +3365,28 @@ namespace blazeclaw::gateway {
 									!IsSilentAssistantMessageJson(eventState.messageJson.value()))
 								{
 									bool isDetachedRun = false;
-									const auto runContextIt = host.m_chatRunsById.find(eventState.runId);
-									if (runContextIt != host.m_chatRunsById.end()) {
+									const auto runContextIt = run.runsById.find(eventState.runId);
+									if (runContextIt != run.runsById.end()) {
 										isDetachedRun = runContextIt->second.detached;
 									}
 
 									if (!isDetachedRun) {
 										PushHistoryMessageIfNew(
-											host.m_chatHistoryBySession[sessionKey],
+											sessions.historyBySession[sessionKey],
 											eventState.messageJson.value());
 									}
 								}
 
 								if (IsTerminalChatState(eventState.state)) {
-									const auto runIt = host.m_chatRunsById.find(eventState.runId);
-									if (runIt != host.m_chatRunsById.end()) {
+									const auto runIt = run.runsById.find(eventState.runId);
+									if (runIt != run.runsById.end()) {
 										if (!runIt->second.idempotencyKey.empty()) {
-											host.m_chatRunByIdempotency.erase(
+											run.runByIdempotency.erase(
 												runIt->second.idempotencyKey);
 										}
 
-										host.m_chatRunsById.erase(runIt);
-										host.RuntimeContext().transportRecipientRegistry->PruneRun(eventState.runId);
+										run.runsById.erase(runIt);
+										runtime.transportRecipientRegistry->PruneRun(eventState.runId);
 									}
 								}
 							}
@@ -3427,10 +3442,10 @@ namespace blazeclaw::gateway {
 							"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.status",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 
 					return protocol::OkResponse(request, "{\"total\":" +
 						std::to_string(state.entries.size()) +
@@ -3577,21 +3592,21 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"skills.status",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher](const protocol::RequestFrame& request) {
 					protocol::RequestFrame delegated = request;
 					delegated.method = "gateway.skills.status";
-					return host.RuntimeContext().dispatcher->Dispatch(delegated);
+					return dispatcher->Dispatch(delegated);
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.install.options",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					std::string optionsJson = "[";
 					bool first = true;
 					std::size_t count = 0;
-					for (const auto& entry : host.m_skillsCatalogState.entries) {
+					for (const auto& entry : skills.catalogState.entries) {
 						if (entry.installKind.empty()) {
 							continue;
 						}
@@ -3624,19 +3639,19 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.install.execute",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					const auto skillName =
 						ExtractStringParam(request.paramsJson, "skill");
 					const auto it = std::find_if(
-						host.m_skillsCatalogState.entries.begin(),
-						host.m_skillsCatalogState.entries.end(),
+						skills.catalogState.entries.begin(),
+						skills.catalogState.entries.end(),
 						[&skillName](const SkillsCatalogGatewayEntry& item) {
 							return item.name == skillName;
 						});
 
-					if (it == host.m_skillsCatalogState.entries.end()) {
+					if (it == skills.catalogState.entries.end()) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3650,9 +3665,9 @@ namespace blazeclaw::gateway {
 							});
 					}
 
-					const auto warning = host.m_skillsCatalogState.scanCriticalCount > 0
+					const auto warning = skills.catalogState.scanCriticalCount > 0
 						? "security_scan_critical"
-						: (host.m_skillsCatalogState.scanWarnCount > 0
+						: (skills.catalogState.scanWarnCount > 0
 							? "security_scan_warn"
 							: "none");
 
@@ -3667,16 +3682,16 @@ namespace blazeclaw::gateway {
 						",\"warning\":\"" +
 						warning +
 						"\",\"scanCritical\":" +
-						std::to_string(host.m_skillsCatalogState.scanCriticalCount) +
+						std::to_string(skills.catalogState.scanCriticalCount) +
 						",\"scanWarn\":" +
-						std::to_string(host.m_skillsCatalogState.scanWarnCount) +
+						std::to_string(skills.catalogState.scanWarnCount) +
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.scan.status",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 					return protocol::OkResponse(request, "{\"files\":" +
 						std::to_string(state.scanScannedFiles) +
 						",\"info\":" +
@@ -3688,10 +3703,10 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.sandbox.status",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 					return protocol::OkResponse(request, "{\"ok\":" +
 						std::string(state.sandboxSyncOk ? "true" : "false") +
 						",\"synced\":" +
@@ -3701,10 +3716,10 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.env.status",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 					return protocol::OkResponse(request, "{\"allowed\":" +
 						std::to_string(state.envAllowed) +
 						",\"blocked\":" +
@@ -3712,10 +3727,10 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.config.schema.get",
-				[&host](const protocol::RequestFrame& request) {
-					if (!host.m_configSchemaGetCallback) {
+				[configSchema](const protocol::RequestFrame& request) {
+					if (!configSchema.getCallback) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3728,7 +3743,7 @@ namespace blazeclaw::gateway {
 							});
 					}
 
-					const auto state = host.m_configSchemaGetCallback();
+					const auto state = configSchema.getCallback();
 					const std::string payload =
 						"{\"schema\":" +
 						NormalizeJsonRawForPayload(state.schemaJson, "{}") +
@@ -3743,10 +3758,10 @@ namespace blazeclaw::gateway {
 					return protocol::OkResponse(request, payload);
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.config.schema.lookup",
-				[&host](const protocol::RequestFrame& request) {
-					if (!host.m_configSchemaLookupCallback) {
+				[configSchema](const protocol::RequestFrame& request) {
+					if (!configSchema.lookupCallback) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3780,7 +3795,7 @@ namespace blazeclaw::gateway {
 					}
 
 					const auto lookupResult =
-						host.m_configSchemaLookupCallback(normalizedPath.value());
+						configSchema.lookupCallback(normalizedPath.value());
 					if (!lookupResult.has_value()) {
 						return protocol::ErrorResponse(
 							request,
@@ -3800,9 +3815,9 @@ namespace blazeclaw::gateway {
 						lookupResult.value()));
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.info",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					const auto skillName =
 						ExtractStringParam(request.paramsJson, "skill");
 					if (skillName.empty()) {
@@ -3818,14 +3833,14 @@ namespace blazeclaw::gateway {
 					}
 
 					const auto it = std::find_if(
-						host.m_skillsCatalogState.entries.begin(),
-						host.m_skillsCatalogState.entries.end(),
+						skills.catalogState.entries.begin(),
+						skills.catalogState.entries.end(),
 						[&skillName](const SkillsCatalogGatewayEntry& entry) {
 							return entry.name == skillName ||
 								entry.skillKey == skillName;
 						});
 
-					if (it == host.m_skillsCatalogState.entries.end()) {
+					if (it == skills.catalogState.entries.end()) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3871,16 +3886,16 @@ namespace blazeclaw::gateway {
 						"\",\"installExecutable\":" +
 						std::string(it->installExecutable ? "true" : "false") +
 						",\"scanCritical\":" +
-						std::to_string(host.m_skillsCatalogState.scanCriticalCount) +
+						std::to_string(skills.catalogState.scanCriticalCount) +
 						"}");
 				});
 
-			// Skills update: no param parsing here; forward to host.m_skillsUpdateCallback (BlazeClaw:
+			// Skills update: no param parsing here; forward to skills.updateCallback (BlazeClaw:
 			// SkillsGatewayMethodHandler::HandleSkillsUpdate). Alias "skills.update" below rewrites method only.
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.update",
-				[&host](const protocol::RequestFrame& request) {
-					if (!host.m_skillsUpdateCallback) {
+				[skills](const protocol::RequestFrame& request) {
+					if (!skills.updateCallback) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3892,15 +3907,15 @@ namespace blazeclaw::gateway {
 							});
 					}
 
-					return host.m_skillsUpdateCallback(request);
+					return skills.updateCallback(request);
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"skills.update",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					protocol::RequestFrame delegated = request;
 					delegated.method = "gateway.skills.update";
-					if (!host.m_skillsUpdateCallback) {
+					if (!skills.updateCallback) {
 						return protocol::ErrorResponse(
 							request,
 							protocol::ErrorShape{
@@ -3912,13 +3927,13 @@ namespace blazeclaw::gateway {
 							});
 					}
 
-					return host.m_skillsUpdateCallback(delegated);
+					return skills.updateCallback(delegated);
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.check",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 					const bool ok =
 						state.scanCriticalCount == 0 &&
 						state.installBlockedCount == 0 &&
@@ -3940,10 +3955,10 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.diagnostics",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 					std::vector<std::string> hints;
 					if (state.installBlockedCount > 0) {
 						hints.push_back("skills.install.options");
@@ -4098,10 +4113,10 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.prompt",
-				[&host](const protocol::RequestFrame& request) {
-					const auto& state = host.m_skillsCatalogState;
+				[skills](const protocol::RequestFrame& request) {
+					const auto& state = skills.catalogState;
 
 					return protocol::OkResponse(request, "{\"prompt\":\"" +
 						EscapeJsonLocal(state.prompt) +
@@ -4114,14 +4129,14 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.commands",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					std::string commandsJson = "[";
 					bool first = true;
 					std::size_t count = 0;
 
-					for (const auto& entry : host.m_skillsCatalogState.entries) {
+					for (const auto& entry : skills.catalogState.entries) {
 						if (entry.commandName.empty()) {
 							continue;
 						}
@@ -4164,24 +4179,24 @@ namespace blazeclaw::gateway {
 						"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"skills.commands",
-				[&host](const protocol::RequestFrame& request) {
+				[dispatcher](const protocol::RequestFrame& request) {
 					auto forwarded = request;
 					forwarded.method = "gateway.skills.commands";
-					return host.RuntimeContext().dispatcher->Dispatch(forwarded);
+					return dispatcher->Dispatch(forwarded);
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.refresh",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					bool refreshed = false;
-					if (host.m_skillsRefreshCallback) {
-						host.m_skillsCatalogState = host.m_skillsRefreshCallback();
+					if (skills.refreshCallback) {
+						skills.catalogState = skills.refreshCallback();
 						refreshed = true;
 					}
 
-					const auto& state = host.m_skillsCatalogState;
+					const auto& state = skills.catalogState;
 					return protocol::OkResponse(request, "{\"refreshed\":" +
 						std::string(refreshed ? "true" : "false") +
 						",\"version\":" +
@@ -4191,9 +4206,9 @@ namespace blazeclaw::gateway {
 						"\"}");
 				});
 
-			host.RuntimeContext().dispatcher->Register(
+			dispatcher->Register(
 				"gateway.skills.list",
-				[&host](const protocol::RequestFrame& request) {
+				[skills](const protocol::RequestFrame& request) {
 					const auto includeInvalid =
 						ExtractBoolParam(request.paramsJson, "includeInvalid");
 					const bool shouldIncludeInvalid =
@@ -4202,7 +4217,7 @@ namespace blazeclaw::gateway {
 					std::string entriesJson = "[";
 					bool first = true;
 					std::size_t count = 0;
-					for (const auto& entry : host.m_skillsCatalogState.entries) {
+					for (const auto& entry : skills.catalogState.entries) {
 						if (!shouldIncludeInvalid && !entry.validFrontmatter) {
 							continue;
 						}
