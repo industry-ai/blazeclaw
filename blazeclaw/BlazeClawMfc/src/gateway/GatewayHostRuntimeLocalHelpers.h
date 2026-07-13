@@ -24,11 +24,15 @@ namespace blazeclaw::gateway {
 		inline constexpr std::size_t kMaxChatEventsPerSession = 200;
 
 		template <typename T>
-		inline void PushEventWithRetentionLimit(std::deque<T>& queue, T eventState) {
+		inline std::size_t PushEventWithRetentionLimit(std::deque<T>& queue, T eventState) {
+			std::size_t droppedCount = 0;
 			queue.push_back(std::move(eventState));
 			while (queue.size() > kMaxChatEventsPerSession) {
 				queue.pop_front();
+				++droppedCount;
 			}
+
+			return droppedCount;
 		}
 
 		std::string SerializeStringArrayLocal(

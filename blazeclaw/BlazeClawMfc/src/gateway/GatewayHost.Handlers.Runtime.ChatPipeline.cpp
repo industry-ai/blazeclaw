@@ -124,6 +124,54 @@ namespace blazeclaw::gateway {
 			auto sessionState = std::make_shared<SessionOperatorState>();
 			ChatPipelineRequestNormalization requestNormalization(*sessionRegistry);
 
+			struct ChatMemoryMetricsState {
+				std::uint64_t enqueueCount = 0;
+				std::uint64_t eventDropCount = 0;
+				std::uint64_t replayEventCount = 0;
+				std::size_t maxQueueDepth = 0;
+			};
+
+			auto chatMemoryMetrics = std::make_shared<ChatMemoryMetricsState>();
+			auto emitChatMemoryMetrics =
+				[chatMemoryMetrics, runtime](const std::string& sessionKey, const std::size_t queueDepth) {
+					const std::size_t fanoutBacklog = runtime.transport != nullptr
+						? runtime.transport->OutboundBacklogCount()
+						: 0;
+					EmitTelemetryEvent(
+						"gateway.chat.runtime.memory",
+						std::string("{\"sessionKey\":") + JsonString(sessionKey) +
+						",\"queueDepth\":" + std::to_string(queueDepth) +
+						",\"maxQueueDepth\":" + std::to_string(chatMemoryMetrics->maxQueueDepth) +
+						",\"eventDropCount\":" + std::to_string(chatMemoryMetrics->eventDropCount) +
+						",\"replaySize\":" + std::to_string(chatMemoryMetrics->replayEventCount) +
+						",\"fanoutBacklog\":" + std::to_string(fanoutBacklog) +
+						",\"enqueueCount\":" + std::to_string(chatMemoryMetrics->enqueueCount) +
+						"}");
+				};
+			auto pushChatEventWithMetrics =
+				[chatMemoryMetrics, emitChatMemoryMetrics](
+					std::deque<GatewayHost::ChatEventState>& queue,
+					GatewayHost::ChatEventState eventState,
+					const std::string& sessionKey,
+					const bool isReplayEvent) {
+					const std::size_t droppedCount =
+						PushEventWithRetentionLimit(queue, std::move(eventState));
+					chatMemoryMetrics->enqueueCount += 1;
+					chatMemoryMetrics->eventDropCount +=
+						static_cast<std::uint64_t>(droppedCount);
+					if (isReplayEvent) {
+						chatMemoryMetrics->replayEventCount += 1;
+					}
+					chatMemoryMetrics->maxQueueDepth =
+						(std::max)(chatMemoryMetrics->maxQueueDepth, queue.size());
+
+					if (droppedCount > 0 ||
+						isReplayEvent ||
+						(chatMemoryMetrics->enqueueCount % 32 == 0)) {
+						emitChatMemoryMetrics(sessionKey, queue.size());
+					}
+				};
+
 			dispatcher->Register(
 				"sessions.subscribe",
 				[sessionState, requestNormalization](const protocol::RequestFrame& request) {
@@ -409,7 +457,8 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.send",
-				[runtime, run, sessions, callbacks, taskDeltas, model, skills](const protocol::RequestFrame& request) {
+				[runtime, run, sessions, callbacks, taskDeltas, model, skills, pushChatEventWithMetrics](
+					const protocol::RequestFrame& request) {
 					ChatRunStageContext stageContext{
 						.requestId = request.id,
 						.method = request.method,
@@ -950,7 +999,7 @@ namespace blazeclaw::gateway {
 
 							const std::string replayMessage =
 								BuildAssistantDeltaMessageJson(replayText);
-							PushEventWithRetentionLimit(replayQueue, GatewayHost::ChatEventState{
+							pushChatEventWithMetrics(replayQueue, GatewayHost::ChatEventState{
 									.runId = activeRun.runId,
 									.sessionKey = activeRun.sessionKey,
 									.state = "delta",
@@ -962,7 +1011,9 @@ namespace blazeclaw::gateway {
 									.approvalNextAction = std::nullopt,
 									.terminalReason = std::nullopt,
 									.timestampMs = nowMs,
-								});
+								},
+								activeRun.sessionKey,
+								true);
 							BranchDecisionDiagnostics::Emit(
 								activeRun.runId,
 								"controlplane",
@@ -1842,7 +1893,7 @@ namespace blazeclaw::gateway {
 
 					if (!forceError && !orchestrationHandled && callbacks.chatRuntimeCallback) {
 						auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
-						PushEventWithRetentionLimit(runtimeSessionEvents, GatewayHost::ChatEventState{
+						pushChatEventWithMetrics(runtimeSessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
 								.sessionKey = sessionKey,
 								.state = "queued",
@@ -1854,8 +1905,10 @@ namespace blazeclaw::gateway {
 								.approvalNextAction = std::nullopt,
 								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
-							});
-						PushEventWithRetentionLimit(runtimeSessionEvents, GatewayHost::ChatEventState{
+							},
+							sessionKey,
+							false);
+						pushChatEventWithMetrics(runtimeSessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
 								.sessionKey = sessionKey,
 								.state = "started",
@@ -1867,7 +1920,9 @@ namespace blazeclaw::gateway {
 								.approvalNextAction = std::nullopt,
 								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
-							});
+							},
+							sessionKey,
+							false);
 						lifecycleEventsEnqueued = true;
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							"queued",
@@ -1977,8 +2032,9 @@ namespace blazeclaw::gateway {
 										&streamedDeltaCount,
 										&runId,
 										&sessionKey,
-										&controlPlaneService,
-										&sendControlDecision](const std::string& delta) {
+									&controlPlaneService,
+									&sendControlDecision,
+									&pushChatEventWithMetrics](const std::string& delta) {
 										const std::string normalizedDelta = json::Trim(delta);
 										if (normalizedDelta.empty() ||
 											RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
@@ -2000,7 +2056,7 @@ namespace blazeclaw::gateway {
 										}
 
 										auto& streamEvents = sessions.eventsBySession[sessionKey];
-										PushEventWithRetentionLimit(streamEvents, GatewayHost::ChatEventState{
+									pushChatEventWithMetrics(streamEvents, GatewayHost::ChatEventState{
 												.runId = runId,
 												.sessionKey = sessionKey,
 												.state = "delta",
@@ -2012,7 +2068,9 @@ namespace blazeclaw::gateway {
 												.approvalNextAction = std::nullopt,
 												.terminalReason = std::nullopt,
 												.timestampMs = CurrentEpochMsLocal(),
-											});
+										},
+										sessionKey,
+										false);
 										const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
 										GatewayLifecycleEventEmitter::EmitLifecycle(
 											"delta",
@@ -2296,7 +2354,7 @@ namespace blazeclaw::gateway {
 
 					auto& sessionEvents = sessions.eventsBySession[sessionKey];
 					if (!lifecycleEventsEnqueued) {
-						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
+						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
 								.sessionKey = sessionKey,
 								.state = "queued",
@@ -2308,8 +2366,10 @@ namespace blazeclaw::gateway {
 								.approvalNextAction = std::nullopt,
 								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
-							});
-						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
+							},
+							sessionKey,
+							false);
+						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
 								.runId = runId,
 								.sessionKey = sessionKey,
 								.state = "started",
@@ -2321,7 +2381,9 @@ namespace blazeclaw::gateway {
 								.approvalNextAction = std::nullopt,
 								.terminalReason = std::nullopt,
 								.timestampMs = nowMs,
-							});
+							},
+							sessionKey,
+							false);
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							"queued",
 							runId,
@@ -2386,7 +2448,7 @@ namespace blazeclaw::gateway {
 								}
 								streamCursor = cursorAfter;
 								const std::string deltaMessage = BuildAssistantDeltaMessageJson(chunk);
-								PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
+								pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
 									.runId = runId,
 									.sessionKey = sessionKey,
 									.state = "delta",
@@ -2398,7 +2460,9 @@ namespace blazeclaw::gateway {
 									.approvalNextAction = std::nullopt,
 									.terminalReason = std::nullopt,
 									.timestampMs = nowMs,
-									});
+									},
+									sessionKey,
+									false);
 								GatewayLifecycleEventEmitter::EmitLifecycle(
 									"delta",
 									runId,
@@ -2589,7 +2653,7 @@ namespace blazeclaw::gateway {
 						const std::optional<std::string> terminalMessage =
 							std::optional<std::string>(
 								BuildAssistantFinalMessageJson(insertedRunIt->second.assistantText, nowMs));
-						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
+						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
 							.runId = insertedRunIt->second.runId,
 							.sessionKey = insertedRunIt->second.sessionKey,
 							.state = resolvedTerminalState,
@@ -2615,7 +2679,9 @@ namespace blazeclaw::gateway {
 								? std::nullopt
 								: std::optional<std::string>(insertedRunIt->second.terminalReason),
 							.timestampMs = nowMs,
-							});
+							},
+							insertedRunIt->second.sessionKey,
+							false);
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							resolvedTerminalState,
 							insertedRunIt->second.runId,
@@ -2705,7 +2771,7 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.inject",
-				[sessions](const protocol::RequestFrame& request) {
+				[sessions, pushChatEventWithMetrics](const protocol::RequestFrame& request) {
 					const auto route =
 						ChatPipelineRequestNormalization::NormalizeInjectRoute(request.paramsJson);
 					const std::string& sessionKey = route.session.sessionKey;
@@ -2762,7 +2828,7 @@ namespace blazeclaw::gateway {
 					const std::uint64_t nowMs = CurrentEpochMsLocal();
 					const std::string runId = "inject-" + appended.messageId;
 					auto& queue = sessions.eventsBySession[sessionKey];
-					PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+					pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
 							.runId = runId,
 							.sessionKey = sessionKey,
 							.state = "final",
@@ -2774,7 +2840,9 @@ namespace blazeclaw::gateway {
 							.approvalNextAction = std::nullopt,
 							.terminalReason = std::nullopt,
 							.timestampMs = nowMs,
-						});
+						},
+						sessionKey,
+						false);
 					GatewayLifecycleEventEmitter::EmitLifecycle(
 						"final",
 						runId,
@@ -2793,7 +2861,8 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.abort",
-				[run, sessions, callbacks, runtime](const protocol::RequestFrame& request) {
+				[run, sessions, callbacks, runtime, pushChatEventWithMetrics](
+					const protocol::RequestFrame& request) {
 					const auto route =
 						ChatPipelineRequestNormalization::NormalizeAbortRoute(request.paramsJson);
 					const std::string& sessionKey = route.session.sessionKey;
@@ -2843,7 +2912,7 @@ namespace blazeclaw::gateway {
 					const bool silentAssistantReply =
 						RuntimeTranscriptGuard::IsSilentReplyText(
 							runIt->second.assistantText);
-					PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+					pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
 						   .runId = runIt->second.runId,
 						   .sessionKey = sessionKey,
 						   .state = "aborted",
@@ -2860,7 +2929,9 @@ namespace blazeclaw::gateway {
 						   .approvalNextAction = std::nullopt,
 						   .terminalReason = std::nullopt,
 						   .timestampMs = nowMs,
-						});
+						},
+						sessionKey,
+						false);
 					GatewayLifecycleEventEmitter::EmitLifecycle(
 						"aborted",
 						runIt->second.runId,
@@ -2914,7 +2985,13 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.events.poll",
-				[run, sessions, pollMetrics, runtime, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
+				[run,
+				sessions,
+				pollMetrics,
+				runtime,
+				fastSyntheticRevealMode,
+				syntheticRevealMaxDurationMs,
+				pushChatEventWithMetrics](
 					const protocol::RequestFrame& request) {
 						const auto route =
 							ChatPipelineRequestNormalization::NormalizePollRoute(request.paramsJson);
@@ -3134,7 +3211,7 @@ namespace blazeclaw::gateway {
 										",\"streamCursor\":" + std::to_string(run.streamCursor) +
 										",\"pollRevealChunkSize\":" + std::to_string(revealChunkSize) + "}");
 
-									PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+									pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
 										   .runId = run.runId,
 										   .sessionKey = run.sessionKey,
 										   .state = "delta",
@@ -3146,7 +3223,9 @@ namespace blazeclaw::gateway {
 										   .approvalNextAction = std::nullopt,
 										   .terminalReason = std::nullopt,
 										   .timestampMs = nowMs,
-										});
+										},
+										run.sessionKey,
+										false);
 									if (pushLifecycleEnabledForRun) {
 										EmitPushLifecycleEvent(
 											*runtime.transport,
@@ -3198,7 +3277,7 @@ namespace blazeclaw::gateway {
 									? "error"
 									: (run.terminalState.empty() ? "final" : run.terminalState);
 
-								PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+								pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
 									   .runId = run.runId,
 									   .sessionKey = run.sessionKey,
 									   .state = runTerminalState,
@@ -3224,7 +3303,9 @@ namespace blazeclaw::gateway {
 										   ? std::nullopt
 										   : std::optional<std::string>(run.terminalReason),
 									   .timestampMs = nowMs,
-									});
+									},
+									run.sessionKey,
+									false);
 								if (pushLifecycleEnabledForRun) {
 									EmitPushLifecycleEvent(
 										*runtime.transport,

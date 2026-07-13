@@ -716,6 +716,16 @@ namespace blazeclaw::gateway {
 		return m_connections.size();
 	}
 
+	std::size_t GatewayWebSocketTransport::OutboundBacklogCount() const noexcept {
+		std::size_t backlog = 0;
+		for (const auto& [_, session] : m_connections) {
+			backlog += session.outboundFrames.size();
+			backlog += session.outboundNetworkFrames.size();
+		}
+
+		return backlog;
+	}
+
 	std::uint64_t GatewayWebSocketTransport::HandshakeTimeoutCount() const noexcept {
 		return m_handshakeTimeoutCount;
 	}
