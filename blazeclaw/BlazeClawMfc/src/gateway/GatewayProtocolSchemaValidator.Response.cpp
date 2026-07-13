@@ -2076,6 +2076,25 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (!IsArrayFieldExplicitlyEmpty(payload, "events") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{
+							"promptRunId",
+							"responderRunId",
+							"responderId",
+							"provider",
+							"model",
+							"runtimeKind",
+							"responderLabel"
+						})) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.events.poll` multi-active events require `promptRunId`, `responderRunId`, `responderId`, `provider`, `model`, `runtimeKind`, and `responderLabel` fields.");
+					return false;
+				}
+
 				return true;
 			} },
 			{ "chat.abort", [&]() {
