@@ -484,6 +484,23 @@ namespace blazeclaw::config {
 		LlamaRuntimeConfig llama;
 	};
 
+	struct ChatMultiActiveConfig {
+		bool enabled = true;
+		std::wstring threadingMode = L"thread_pool";
+		std::uint32_t maxActiveResponders = 4;
+		std::uint32_t poolMinThreads = 2;
+		std::uint32_t poolMaxThreads = 6;
+		std::uint32_t poolQueueCapacity = 128;
+		std::uint32_t poolDequeueTimeoutMs = 50;
+		std::uint32_t perResponderTimeoutMs = 90000;
+		std::uint32_t cancelDrainTimeoutMs = 3000;
+		std::uint32_t maxQueuedEventsPerSession = 1000;
+		std::uint32_t pollMinIntervalMs = 60;
+		std::uint32_t pollMaxBatchEvents = 50;
+		std::wstring abortPolicy = L"cancel_all_children";
+		bool abortWaitForDrain = true;
+	};
+
 	struct SpeechRecognitionConfig {
 		bool enabled = false;
 		bool cudaEnabled = true;
@@ -572,6 +589,7 @@ namespace blazeclaw::config {
 		//-------------------------------------------------------------------
 		ChatUiConfig chat;
 		LocalModelConfig localModel;
+		ChatMultiActiveConfig multiActive;
 		SpeechRecognitionConfig speechRecognition;
 		AgentsConfig agents;
 		AcpRuntimeConfig acp;
