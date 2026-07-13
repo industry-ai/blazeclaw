@@ -2456,6 +2456,14 @@ namespace blazeclaw::config {
 				std::uint32_t{ 1 },
 				std::uint32_t{ 1000 });
 
+		if (!outConfig.multiActive.enabled) {
+			// Compatibility fallback: when multi-active is disabled, force legacy
+			// single-responder semantics regardless of other multi-active knobs.
+			outConfig.multiActive.maxActiveResponders = 1;
+			outConfig.multiActive.poolMinThreads = 1;
+			outConfig.multiActive.poolMaxThreads = 1;
+		}
+
 		outConfig.localModel.llama.gpuLayers =
 			(std::clamp)(
 				outConfig.localModel.llama.gpuLayers,
