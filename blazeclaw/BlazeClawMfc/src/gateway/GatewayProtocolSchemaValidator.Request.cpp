@@ -3340,7 +3340,45 @@ namespace blazeclaw::gateway::protocol {
 					JsonFieldKind::Number,
 					issue,
 					"chat.send",
-					"number")) {
+				"number") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"responseMode",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"requestedResponders",
+					JsonFieldKind::Array,
+					issue,
+					"chat.send",
+					"an array") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"threadingMode",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string")) {
+				return false;
+			}
+
+			if (!ValidateCronEnumStringField(
+				request,
+				fieldKinds,
+				"chat.send",
+				"responseMode",
+				{ "single", "multi_active" },
+				issue) ||
+				!ValidateCronEnumStringField(
+					request,
+					fieldKinds,
+					"chat.send",
+					"threadingMode",
+					{ "thread_pool" },
+					issue)) {
 				return false;
 			}
 
@@ -3372,7 +3410,10 @@ namespace blazeclaw::gateway::protocol {
 					field == "configEmpty" ||
 					field == "isStopLikeInbound" ||
 					field == "abortCutoffTimestampMs" ||
-					field == "inboundTimestampMs") {
+					field == "inboundTimestampMs" ||
+					field == "responseMode" ||
+					field == "requestedResponders" ||
+					field == "threadingMode") {
 					continue;
 				}
 
