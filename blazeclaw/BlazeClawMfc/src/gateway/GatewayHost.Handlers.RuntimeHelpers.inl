@@ -680,6 +680,20 @@ std::string BuildAssistantDeltaMessageJson(const std::string& text) {
 		"\"}";
 }
 
+// Adapter: construct assistant delta JSON from normalized payload.
+std::string BuildAssistantDeltaMessageJsonFromPayload(const blazeclaw::gateway::ChatEventPayload& p) {
+	if (p.assistantDelta.has_value()) {
+		return BuildAssistantDeltaMessageJson(p.assistantDelta.value());
+	}
+	if (p.messageObject.has_value()) {
+		return p.messageObject.value().dump();
+	}
+	if (p.userMessage.has_value()) {
+		return BuildUserMessageJson(p.userMessage.value(), false, static_cast<std::uint64_t>(p.timestampMs));
+	}
+	return std::string();
+}
+
 std::string BuildUserMessageJson(
 	const std::string& text,
 	const bool hasAttachments,

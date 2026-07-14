@@ -6,11 +6,14 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <nlohmann/json.hpp>
 
 #include "GatewayHost.h"
 #include "GatewayToolRegistry.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayEventFanoutService.h"
+#include "GatewayChatEventPayload.h"
 #include "PluginRuntimeStateService.h"
 
 namespace blazeclaw::gateway {
@@ -22,6 +25,7 @@ namespace blazeclaw::gateway {
 		// Shared declarations for helpers implemented in GatewayHostRuntimeLocalHelpers.cpp (body was
 		// GatewayHost.Handlers.RuntimeHelpers.inl). Template that must instantiate in every TU that calls it:
 		inline constexpr std::size_t kMaxChatEventsPerSession = 200;
+		// Keep this template inline in the header so all translation units can instantiate it.
 
 		template <typename T>
 		inline std::size_t PushEventWithRetentionLimit(std::deque<T>& queue, T eventState) {
@@ -235,6 +239,11 @@ namespace blazeclaw::gateway {
 			const std::vector<float>& values);
 		std::string SerializeFloatMatrixLocal(
 			const std::vector<std::vector<float>>& vectors);
+
+		// ChatEventPayload is declared only in GatewayChatEventPayload.h (included above).
+		// Do not duplicate the type in this header; all helpers consume the canonical declaration.
+		// Serializer helper for building the wire frame for a chat event from normalized payload.
+		[[nodiscard]] std::string BuildChatEventFrameFromPayload(const blazeclaw::gateway::ChatEventPayload& payload, int64_t seq);
 
 	} // namespace runtime_local
 

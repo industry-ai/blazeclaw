@@ -108,7 +108,7 @@ namespace blazeclaw::gateway {
 		std::string browserVariantLabel;
 	};
 
-		// Native recording bridge result/ops are declared on the GatewayHost class below
+	// Native recording bridge result/ops are declared on the GatewayHost class below
 
 	struct SkillsCatalogGatewayState {
 		std::vector<SkillsCatalogGatewayEntry> entries;
@@ -751,7 +751,15 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionKey;
 			std::string state;
+			// Legacy pre-serialized JSON (kept for incremental migration) - prefer using
+			// `payload` (normalized) when available. Both fields are kept during the
+			// migration to avoid large refactors across many call sites.
 			std::optional<std::string> messageJson;
+			std::optional<nlohmann::json> messageObject;
+
+			// Transition from storing pre-serialized JSON to normalized payloads.
+			std::optional<blazeclaw::gateway::ChatEventPayload> payload;
+
 			std::optional<std::string> errorMessage;
 			bool approvalRequired = false;
 			std::optional<std::string> approvalToken;

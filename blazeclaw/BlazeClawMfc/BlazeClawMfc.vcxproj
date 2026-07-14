@@ -220,6 +220,7 @@
     <ClInclude Include="src\cron\CronOpsService.h" />
     <ClInclude Include="src\cron\CronStoreService.h" />
     <ClInclude Include="src\cron\CronTimerService.h" />
+    <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
     <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h" />
     <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h" />
     <ClInclude Include="src\gateway\GatewaySkillRootResolver.h" />

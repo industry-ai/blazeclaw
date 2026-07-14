@@ -1,8 +1,9 @@
 #include "pch.h"
 #include "GatewayEventFanoutService.h"
-
-#include "GatewayProtocolCodec.h"
+// Keep the full payload definition available in this implementation TU.
+#include "GatewayChatEventPayload.h"
 #include "GatewayJsonUtils.h"
+#include "GatewayProtocolCodec.h"
 
 namespace blazeclaw::gateway {
 
@@ -89,6 +90,9 @@ namespace blazeclaw::gateway {
 			seq,
 			"chat");
 	}
+
+// The payload-typed overload was intentionally removed from the header to
+// reduce header coupling. Keep no implementation here.
 
 	std::string GatewayEventFanoutService::BuildCronEventFrame(
 		const std::string& cronPayloadObjectJson,

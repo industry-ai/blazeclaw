@@ -641,6 +641,8 @@
     <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp">
       <Filter>core-chat\webview_routers</Filter>
     </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
+    <ClCompile Include="src\gateway\ChatPipelineRequestNormalization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1193,6 +1195,9 @@
     <ClInclude Include="src\app\webview_routers\WebViewRouterContext.h">
       <Filter>core-chat\webview_routers</Filter>
     </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostChatPipelineRouteDeps.h" />
+    <ClInclude Include="src\gateway\ChatPipelineRequestNormalization.h" />
+    <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

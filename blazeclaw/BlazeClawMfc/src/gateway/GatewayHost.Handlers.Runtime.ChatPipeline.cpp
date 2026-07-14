@@ -997,23 +997,30 @@ namespace blazeclaw::gateway {
 								continue;
 							}
 
-							const std::string replayMessage =
-								BuildAssistantDeltaMessageJson(replayText);
-							pushChatEventWithMetrics(replayQueue, GatewayHost::ChatEventState{
-									.runId = activeRun.runId,
-									.sessionKey = activeRun.sessionKey,
-									.state = "delta",
-									.messageJson = replayMessage,
-									.errorMessage = std::nullopt,
-									.approvalRequired = false,
-									.approvalToken = std::nullopt,
-									.approvalTokenExpiresAtEpochMs = std::nullopt,
-									.approvalNextAction = std::nullopt,
-									.terminalReason = std::nullopt,
-									.timestampMs = nowMs,
-								},
-								activeRun.sessionKey,
-								true);
+							{
+								GatewayHost::ChatEventState ev{};
+								ev.runId = activeRun.runId;
+								ev.sessionKey = activeRun.sessionKey;
+								ev.state = "delta";
+								ev.messageJson = std::nullopt;
+								{
+									blazeclaw::gateway::ChatEventPayload p;
+									p.eventType = "message";
+									p.timestampMs = nowMs;
+									p.userMessage = std::nullopt;
+									p.assistantDelta = replayText;
+									p.messageObject = std::nullopt;
+									ev.payload = std::move(p);
+								}
+								ev.errorMessage = std::nullopt;
+								ev.approvalRequired = false;
+								ev.approvalToken = std::nullopt;
+								ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+								ev.approvalNextAction = std::nullopt;
+								ev.terminalReason = std::nullopt;
+								ev.timestampMs = nowMs;
+								pushChatEventWithMetrics(replayQueue, std::move(ev), activeRun.sessionKey, true);
+							}
 							BranchDecisionDiagnostics::Emit(
 								activeRun.runId,
 								"controlplane",
@@ -1893,36 +1900,36 @@ namespace blazeclaw::gateway {
 
 					if (!forceError && !orchestrationHandled && callbacks.chatRuntimeCallback) {
 						auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
-						pushChatEventWithMetrics(runtimeSessionEvents, GatewayHost::ChatEventState{
-								.runId = runId,
-								.sessionKey = sessionKey,
-								.state = "queued",
-								.messageJson = std::nullopt,
-								.errorMessage = std::nullopt,
-								.approvalRequired = false,
-								.approvalToken = std::nullopt,
-								.approvalTokenExpiresAtEpochMs = std::nullopt,
-								.approvalNextAction = std::nullopt,
-								.terminalReason = std::nullopt,
-								.timestampMs = nowMs,
-							},
-							sessionKey,
-							false);
-						pushChatEventWithMetrics(runtimeSessionEvents, GatewayHost::ChatEventState{
-								.runId = runId,
-								.sessionKey = sessionKey,
-								.state = "started",
-								.messageJson = std::nullopt,
-								.errorMessage = std::nullopt,
-								.approvalRequired = false,
-								.approvalToken = std::nullopt,
-								.approvalTokenExpiresAtEpochMs = std::nullopt,
-								.approvalNextAction = std::nullopt,
-								.terminalReason = std::nullopt,
-								.timestampMs = nowMs,
-							},
-							sessionKey,
-							false);
+						{
+							GatewayHost::ChatEventState ev{};
+							ev.runId = runId;
+							ev.sessionKey = sessionKey;
+							ev.state = "queued";
+							ev.messageJson = std::nullopt;
+							ev.errorMessage = std::nullopt;
+							ev.approvalRequired = false;
+							ev.approvalToken = std::nullopt;
+							ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+							ev.approvalNextAction = std::nullopt;
+							ev.terminalReason = std::nullopt;
+							ev.timestampMs = nowMs;
+							pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
+						}
+						{
+							GatewayHost::ChatEventState ev{};
+							ev.runId = runId;
+							ev.sessionKey = sessionKey;
+							ev.state = "started";
+							ev.messageJson = std::nullopt;
+							ev.errorMessage = std::nullopt;
+							ev.approvalRequired = false;
+							ev.approvalToken = std::nullopt;
+							ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+							ev.approvalNextAction = std::nullopt;
+							ev.terminalReason = std::nullopt;
+							ev.timestampMs = nowMs;
+							pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
+						}
 						lifecycleEventsEnqueued = true;
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							"queued",
@@ -2055,22 +2062,30 @@ namespace blazeclaw::gateway {
 											}
 										}
 
-										auto& streamEvents = sessions.eventsBySession[sessionKey];
-									pushChatEventWithMetrics(streamEvents, GatewayHost::ChatEventState{
-												.runId = runId,
-												.sessionKey = sessionKey,
-												.state = "delta",
-												.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
-												.errorMessage = std::nullopt,
-												.approvalRequired = false,
-												.approvalToken = std::nullopt,
-												.approvalTokenExpiresAtEpochMs = std::nullopt,
-												.approvalNextAction = std::nullopt,
-												.terminalReason = std::nullopt,
-												.timestampMs = CurrentEpochMsLocal(),
-										},
-										sessionKey,
-										false);
+				auto& streamEvents = sessions.eventsBySession[sessionKey];
+				{
+					GatewayHost::ChatEventState ev{};
+					ev.runId = runId;
+					ev.sessionKey = sessionKey;
+					ev.state = "delta";
+					{
+						blazeclaw::gateway::ChatEventPayload p;
+						p.eventType = "delta";
+						p.timestampMs = CurrentEpochMsLocal();
+						p.userMessage = std::nullopt;
+						p.assistantDelta = normalizedDelta;
+						p.messageObject = std::nullopt;
+						ev.payload = std::move(p);
+					}
+					ev.errorMessage = std::nullopt;
+					ev.approvalRequired = false;
+					ev.approvalToken = std::nullopt;
+					ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+					ev.approvalNextAction = std::nullopt;
+					ev.terminalReason = std::nullopt;
+					ev.timestampMs = CurrentEpochMsLocal();
+					pushChatEventWithMetrics(streamEvents, std::move(ev), sessionKey, false);
+				}
 										const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
 										GatewayLifecycleEventEmitter::EmitLifecycle(
 											"delta",
@@ -2354,36 +2369,36 @@ namespace blazeclaw::gateway {
 
 					auto& sessionEvents = sessions.eventsBySession[sessionKey];
 					if (!lifecycleEventsEnqueued) {
-						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
-								.runId = runId,
-								.sessionKey = sessionKey,
-								.state = "queued",
-								.messageJson = std::nullopt,
-								.errorMessage = std::nullopt,
-								.approvalRequired = false,
-								.approvalToken = std::nullopt,
-								.approvalTokenExpiresAtEpochMs = std::nullopt,
-								.approvalNextAction = std::nullopt,
-								.terminalReason = std::nullopt,
-								.timestampMs = nowMs,
-							},
-							sessionKey,
-							false);
-						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
-								.runId = runId,
-								.sessionKey = sessionKey,
-								.state = "started",
-								.messageJson = std::nullopt,
-								.errorMessage = std::nullopt,
-								.approvalRequired = false,
-								.approvalToken = std::nullopt,
-								.approvalTokenExpiresAtEpochMs = std::nullopt,
-								.approvalNextAction = std::nullopt,
-								.terminalReason = std::nullopt,
-								.timestampMs = nowMs,
-							},
-							sessionKey,
-							false);
+						{
+							GatewayHost::ChatEventState queuedEvent{};
+							queuedEvent.runId = runId;
+							queuedEvent.sessionKey = sessionKey;
+							queuedEvent.state = "queued";
+							queuedEvent.messageJson = std::nullopt;
+							queuedEvent.errorMessage = std::nullopt;
+							queuedEvent.approvalRequired = false;
+							queuedEvent.approvalToken = std::nullopt;
+							queuedEvent.approvalTokenExpiresAtEpochMs = std::nullopt;
+							queuedEvent.approvalNextAction = std::nullopt;
+							queuedEvent.terminalReason = std::nullopt;
+							queuedEvent.timestampMs = nowMs;
+							pushChatEventWithMetrics(sessionEvents, std::move(queuedEvent), sessionKey, false);
+						}
+						{
+							GatewayHost::ChatEventState startedEvent{};
+							startedEvent.runId = runId;
+							startedEvent.sessionKey = sessionKey;
+							startedEvent.state = "started";
+							startedEvent.messageJson = std::nullopt;
+							startedEvent.errorMessage = std::nullopt;
+							startedEvent.approvalRequired = false;
+							startedEvent.approvalToken = std::nullopt;
+							startedEvent.approvalTokenExpiresAtEpochMs = std::nullopt;
+							startedEvent.approvalNextAction = std::nullopt;
+							startedEvent.terminalReason = std::nullopt;
+							startedEvent.timestampMs = nowMs;
+							pushChatEventWithMetrics(sessionEvents, std::move(startedEvent), sessionKey, false);
+						}
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							"queued",
 							runId,
@@ -2448,21 +2463,21 @@ namespace blazeclaw::gateway {
 								}
 								streamCursor = cursorAfter;
 								const std::string deltaMessage = BuildAssistantDeltaMessageJson(chunk);
-								pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
-									.runId = runId,
-									.sessionKey = sessionKey,
-									.state = "delta",
-									.messageJson = deltaMessage,
-									.errorMessage = std::nullopt,
-									.approvalRequired = false,
-									.approvalToken = std::nullopt,
-									.approvalTokenExpiresAtEpochMs = std::nullopt,
-									.approvalNextAction = std::nullopt,
-									.terminalReason = std::nullopt,
-									.timestampMs = nowMs,
-									},
-									sessionKey,
-									false);
+								{
+									GatewayHost::ChatEventState ev{};
+									ev.runId = runId;
+									ev.sessionKey = sessionKey;
+									ev.state = "delta";
+									ev.messageJson = deltaMessage;
+									ev.errorMessage = std::nullopt;
+									ev.approvalRequired = false;
+									ev.approvalToken = std::nullopt;
+									ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+									ev.approvalNextAction = std::nullopt;
+									ev.terminalReason = std::nullopt;
+									ev.timestampMs = nowMs;
+									pushChatEventWithMetrics(sessionEvents, std::move(ev), sessionKey, false);
+								}
 								GatewayLifecycleEventEmitter::EmitLifecycle(
 									"delta",
 									runId,
@@ -2653,35 +2668,39 @@ namespace blazeclaw::gateway {
 						const std::optional<std::string> terminalMessage =
 							std::optional<std::string>(
 								BuildAssistantFinalMessageJson(insertedRunIt->second.assistantText, nowMs));
-						pushChatEventWithMetrics(sessionEvents, GatewayHost::ChatEventState{
-							.runId = insertedRunIt->second.runId,
-							.sessionKey = insertedRunIt->second.sessionKey,
-							.state = resolvedTerminalState,
-							.messageJson = terminalMessage,
-							.errorMessage = std::nullopt,
-							.approvalRequired = resolvedTerminalState == "needs_approval"
+						{
+							GatewayHost::ChatEventState ev{};
+							ev.runId = insertedRunIt->second.runId;
+							ev.sessionKey = insertedRunIt->second.sessionKey;
+							ev.state = resolvedTerminalState;
+							ev.messageJson = terminalMessage;
+							ev.errorMessage = std::nullopt;
+							ev.approvalRequired = resolvedTerminalState == "needs_approval"
 								? insertedRunIt->second.approvalRequired
-								: false,
-							.approvalToken = (resolvedTerminalState == "needs_approval" &&
+								: false;
+							ev.approvalToken = (resolvedTerminalState == "needs_approval" &&
 								!insertedRunIt->second.approvalToken.empty())
 								? std::optional<std::string>(insertedRunIt->second.approvalToken)
-								: std::nullopt,
-							.approvalTokenExpiresAtEpochMs =
+								: std::nullopt;
+							ev.approvalTokenExpiresAtEpochMs =
 								(resolvedTerminalState == "needs_approval" &&
 									insertedRunIt->second.approvalTokenExpiresAtEpochMs > 0)
 								? std::optional<std::uint64_t>(insertedRunIt->second.approvalTokenExpiresAtEpochMs)
-								: std::nullopt,
-							.approvalNextAction = (resolvedTerminalState == "needs_approval" &&
+								: std::nullopt;
+							ev.approvalNextAction = (resolvedTerminalState == "needs_approval" &&
 								!insertedRunIt->second.approvalNextAction.empty())
 								? std::optional<std::string>(insertedRunIt->second.approvalNextAction)
-								: std::nullopt,
-							.terminalReason = insertedRunIt->second.terminalReason.empty()
+								: std::nullopt;
+							ev.terminalReason = insertedRunIt->second.terminalReason.empty()
 								? std::nullopt
-								: std::optional<std::string>(insertedRunIt->second.terminalReason),
-							.timestampMs = nowMs,
-							},
-							insertedRunIt->second.sessionKey,
-							false);
+								: std::optional<std::string>(insertedRunIt->second.terminalReason);
+							ev.timestampMs = nowMs;
+							pushChatEventWithMetrics(
+								sessionEvents,
+								std::move(ev),
+								insertedRunIt->second.sessionKey,
+								false);
+						}
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							resolvedTerminalState,
 							insertedRunIt->second.runId,
@@ -2828,21 +2847,29 @@ namespace blazeclaw::gateway {
 					const std::uint64_t nowMs = CurrentEpochMsLocal();
 					const std::string runId = "inject-" + appended.messageId;
 					auto& queue = sessions.eventsBySession[sessionKey];
-					pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
-							.runId = runId,
-							.sessionKey = sessionKey,
-							.state = "final",
-							.messageJson = appended.messageJson,
-							.errorMessage = std::nullopt,
-							.approvalRequired = false,
-							.approvalToken = std::nullopt,
-							.approvalTokenExpiresAtEpochMs = std::nullopt,
-							.approvalNextAction = std::nullopt,
-							.terminalReason = std::nullopt,
-							.timestampMs = nowMs,
-						},
-						sessionKey,
-						false);
+					{
+						GatewayHost::ChatEventState ev{};
+						ev.runId = runId;
+						ev.sessionKey = sessionKey;
+						ev.state = "final";
+						{
+							blazeclaw::gateway::ChatEventPayload p;
+							p.eventType = "message";
+							p.timestampMs = nowMs;
+							p.messageObject = nlohmann::json::parse(appended.messageJson);
+							p.userMessage = std::nullopt;
+							p.assistantDelta = std::nullopt;
+							ev.payload = std::move(p);
+						}
+						ev.errorMessage = std::nullopt;
+						ev.approvalRequired = false;
+						ev.approvalToken = std::nullopt;
+						ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+						ev.approvalNextAction = std::nullopt;
+						ev.terminalReason = std::nullopt;
+						ev.timestampMs = nowMs;
+						pushChatEventWithMetrics(queue, std::move(ev), sessionKey, false);
+					}
 					GatewayLifecycleEventEmitter::EmitLifecycle(
 						"final",
 						runId,
@@ -2912,26 +2939,26 @@ namespace blazeclaw::gateway {
 					const bool silentAssistantReply =
 						RuntimeTranscriptGuard::IsSilentReplyText(
 							runIt->second.assistantText);
-					pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
-						   .runId = runIt->second.runId,
-						   .sessionKey = sessionKey,
-						   .state = "aborted",
-						   .messageJson = silentAssistantReply
-							   ? std::nullopt
-							   : std::optional<std::string>(
-								   BuildAssistantFinalMessageJson(
-									   runIt->second.assistantText,
-									   nowMs)),
-						   .errorMessage = std::nullopt,
-						   .approvalRequired = false,
-						   .approvalToken = std::nullopt,
-						   .approvalTokenExpiresAtEpochMs = std::nullopt,
-						   .approvalNextAction = std::nullopt,
-						   .terminalReason = std::nullopt,
-						   .timestampMs = nowMs,
-						},
-						sessionKey,
-						false);
+					{
+						GatewayHost::ChatEventState ev{};
+						ev.runId = runIt->second.runId;
+						ev.sessionKey = sessionKey;
+						ev.state = "aborted";
+						ev.messageJson = silentAssistantReply
+							? std::nullopt
+							: std::optional<std::string>(
+								BuildAssistantFinalMessageJson(
+									runIt->second.assistantText,
+									nowMs));
+						ev.errorMessage = std::nullopt;
+						ev.approvalRequired = false;
+						ev.approvalToken = std::nullopt;
+						ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+						ev.approvalNextAction = std::nullopt;
+						ev.terminalReason = std::nullopt;
+						ev.timestampMs = nowMs;
+						pushChatEventWithMetrics(queue, std::move(ev), sessionKey, false);
+					}
 					GatewayLifecycleEventEmitter::EmitLifecycle(
 						"aborted",
 						runIt->second.runId,
@@ -3211,21 +3238,25 @@ namespace blazeclaw::gateway {
 										",\"streamCursor\":" + std::to_string(run.streamCursor) +
 										",\"pollRevealChunkSize\":" + std::to_string(revealChunkSize) + "}");
 
-									pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
-										   .runId = run.runId,
-										   .sessionKey = run.sessionKey,
-										   .state = "delta",
-										   .messageJson = pollDeltaMessage,
-										   .errorMessage = std::nullopt,
-										   .approvalRequired = false,
-										   .approvalToken = std::nullopt,
-										   .approvalTokenExpiresAtEpochMs = std::nullopt,
-										   .approvalNextAction = std::nullopt,
-										   .terminalReason = std::nullopt,
-										   .timestampMs = nowMs,
-										},
-										run.sessionKey,
-										false);
+									{
+										GatewayHost::ChatEventState ev{};
+										ev.runId = run.runId;
+										ev.sessionKey = run.sessionKey;
+										ev.state = "delta";
+										ev.messageJson = pollDeltaMessage;
+										ev.errorMessage = std::nullopt;
+										ev.approvalRequired = false;
+										ev.approvalToken = std::nullopt;
+										ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+										ev.approvalNextAction = std::nullopt;
+										ev.terminalReason = std::nullopt;
+										ev.timestampMs = nowMs;
+										pushChatEventWithMetrics(
+											queue,
+											std::move(ev),
+											run.sessionKey,
+											false);
+									}
 									if (pushLifecycleEnabledForRun) {
 										EmitPushLifecycleEvent(
 											*runtime.transport,
@@ -3277,35 +3308,35 @@ namespace blazeclaw::gateway {
 									? "error"
 									: (run.terminalState.empty() ? "final" : run.terminalState);
 
-								pushChatEventWithMetrics(queue, GatewayHost::ChatEventState{
-									   .runId = run.runId,
-									   .sessionKey = run.sessionKey,
-									   .state = runTerminalState,
-									   .messageJson = terminalMessage,
-									   .errorMessage = terminalError,
-									   .approvalRequired = runTerminalState == "needs_approval"
-										   ? run.approvalRequired
-										   : false,
-									   .approvalToken = (runTerminalState == "needs_approval" &&
-										   !run.approvalToken.empty())
-										   ? std::optional<std::string>(run.approvalToken)
-										   : std::nullopt,
-									   .approvalTokenExpiresAtEpochMs =
-										   (runTerminalState == "needs_approval" &&
+								{
+									GatewayHost::ChatEventState ev{};
+									ev.runId = run.runId;
+									ev.sessionKey = run.sessionKey;
+									ev.state = runTerminalState;
+									ev.messageJson = terminalMessage;
+									ev.errorMessage = terminalError;
+									ev.approvalRequired = runTerminalState == "needs_approval"
+										? run.approvalRequired
+										: false;
+									ev.approvalToken = (runTerminalState == "needs_approval" &&
+										!run.approvalToken.empty())
+										? std::optional<std::string>(run.approvalToken)
+										: std::nullopt;
+									ev.approvalTokenExpiresAtEpochMs =
+										(runTerminalState == "needs_approval" &&
 											run.approvalTokenExpiresAtEpochMs > 0)
-										   ? std::optional<std::uint64_t>(run.approvalTokenExpiresAtEpochMs)
-										   : std::nullopt,
-									   .approvalNextAction = (runTerminalState == "needs_approval" &&
-										   !run.approvalNextAction.empty())
-										   ? std::optional<std::string>(run.approvalNextAction)
-										   : std::nullopt,
-									   .terminalReason = run.terminalReason.empty()
-										   ? std::nullopt
-										   : std::optional<std::string>(run.terminalReason),
-									   .timestampMs = nowMs,
-									},
-									run.sessionKey,
-									false);
+										? std::optional<std::uint64_t>(run.approvalTokenExpiresAtEpochMs)
+										: std::nullopt;
+									ev.approvalNextAction = (runTerminalState == "needs_approval" &&
+										!run.approvalNextAction.empty())
+										? std::optional<std::string>(run.approvalNextAction)
+										: std::nullopt;
+									ev.terminalReason = run.terminalReason.empty()
+										? std::nullopt
+										: std::optional<std::string>(run.terminalReason);
+									ev.timestampMs = nowMs;
+									pushChatEventWithMetrics(queue, std::move(ev), run.sessionKey, false);
+								}
 								if (pushLifecycleEnabledForRun) {
 									EmitPushLifecycleEvent(
 										*runtime.transport,
@@ -3405,20 +3436,31 @@ namespace blazeclaw::gateway {
 										}
 									}
 								}
-								eventsJson += BuildChatEventJson(
-									eventState.runId,
-									eventState.sessionKey,
-									eventState.state,
-									eventState.messageJson,
-									eventErrorCode,
-									eventState.errorMessage,
-									eventContextJson,
-									eventState.approvalRequired,
-									eventState.approvalToken,
-									eventState.approvalTokenExpiresAtEpochMs,
-									eventState.approvalNextAction,
-									eventState.terminalReason,
-									eventState.timestampMs);
+								// Prefer edge serialization from normalized payload when available.
+								if (eventState.payload.has_value()) {
+									// Serialize at the edge and use the string-based fanout API.
+									const std::string payloadJson = eventState.payload.value().ToWireJson();
+									eventsJson += runtime.eventFanout->BuildChatEventFrame(
+										payloadJson,
+										++sessions.pushEventSeq);
+								}
+								else {
+									eventsJson += BuildChatEventJson(
+										eventState.runId,
+										eventState.sessionKey,
+										eventState.state,
+										eventState.messageJson,
+										eventErrorCode,
+										eventState.errorMessage,
+										eventContextJson,
+										eventState.approvalRequired,
+										eventState.approvalToken,
+										eventState.approvalTokenExpiresAtEpochMs,
+										eventState.approvalNextAction,
+										eventState.terminalReason,
+										eventState.timestampMs);
+								}
+								++emitted;
 								++emitted;
 
 								if ((eventState.state == "final" ||
