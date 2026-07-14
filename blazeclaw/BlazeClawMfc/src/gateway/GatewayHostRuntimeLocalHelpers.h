@@ -168,9 +168,16 @@ namespace blazeclaw::gateway {
 			const bool verboseOnly = true);
 		bool IsSilentReplyText(const std::string& text);
 		bool IsSilentAssistantMessageJson(const std::string& messageJson);
+		bool IsSilentAssistantMessagePayload(
+			const blazeclaw::gateway::ChatEventPayload& payload);
+		std::optional<std::string> TryBuildAssistantMessageJsonFromPayload(
+			const blazeclaw::gateway::ChatEventPayload& payload);
 		void PushHistoryMessageIfNew(
 			std::vector<std::string>& history,
 			const std::string& messageJson);
+		void PushHistoryMessageIfNewFromPayload(
+			std::vector<std::string>& history,
+			const blazeclaw::gateway::ChatEventPayload& payload);
 		bool ValidateAttachmentPayloadShape(
 			const std::optional<std::string>& paramsJson,
 			bool& hasAttachments,

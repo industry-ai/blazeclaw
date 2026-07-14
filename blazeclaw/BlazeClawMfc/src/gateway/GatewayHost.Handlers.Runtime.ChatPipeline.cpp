@@ -1002,7 +1002,6 @@ namespace blazeclaw::gateway {
 								ev.runId = activeRun.runId;
 								ev.sessionKey = activeRun.sessionKey;
 								ev.state = "delta";
-								ev.messageJson = std::nullopt;
 								{
 									blazeclaw::gateway::ChatEventPayload p;
 									p.eventType = "message";
@@ -1905,7 +1904,15 @@ namespace blazeclaw::gateway {
 							ev.runId = runId;
 							ev.sessionKey = sessionKey;
 							ev.state = "queued";
-							ev.messageJson = std::nullopt;
+							{
+								blazeclaw::gateway::ChatEventPayload p;
+								p.eventType = "lifecycle";
+								p.timestampMs = nowMs;
+								p.userMessage = std::nullopt;
+								p.assistantDelta = std::nullopt;
+								p.messageObject = std::nullopt;
+								ev.payload = std::move(p);
+							}
 							ev.errorMessage = std::nullopt;
 							ev.approvalRequired = false;
 							ev.approvalToken = std::nullopt;
@@ -1920,7 +1927,15 @@ namespace blazeclaw::gateway {
 							ev.runId = runId;
 							ev.sessionKey = sessionKey;
 							ev.state = "started";
-							ev.messageJson = std::nullopt;
+							{
+								blazeclaw::gateway::ChatEventPayload p;
+								p.eventType = "lifecycle";
+								p.timestampMs = nowMs;
+								p.userMessage = std::nullopt;
+								p.assistantDelta = std::nullopt;
+								p.messageObject = std::nullopt;
+								ev.payload = std::move(p);
+							}
 							ev.errorMessage = std::nullopt;
 							ev.approvalRequired = false;
 							ev.approvalToken = std::nullopt;
@@ -2374,7 +2389,15 @@ namespace blazeclaw::gateway {
 							queuedEvent.runId = runId;
 							queuedEvent.sessionKey = sessionKey;
 							queuedEvent.state = "queued";
-							queuedEvent.messageJson = std::nullopt;
+							{
+								blazeclaw::gateway::ChatEventPayload p;
+								p.eventType = "lifecycle";
+								p.timestampMs = nowMs;
+								p.userMessage = std::nullopt;
+								p.assistantDelta = std::nullopt;
+								p.messageObject = std::nullopt;
+								queuedEvent.payload = std::move(p);
+							}
 							queuedEvent.errorMessage = std::nullopt;
 							queuedEvent.approvalRequired = false;
 							queuedEvent.approvalToken = std::nullopt;
@@ -2389,7 +2412,15 @@ namespace blazeclaw::gateway {
 							startedEvent.runId = runId;
 							startedEvent.sessionKey = sessionKey;
 							startedEvent.state = "started";
-							startedEvent.messageJson = std::nullopt;
+							{
+								blazeclaw::gateway::ChatEventPayload p;
+								p.eventType = "lifecycle";
+								p.timestampMs = nowMs;
+								p.userMessage = std::nullopt;
+								p.assistantDelta = std::nullopt;
+								p.messageObject = std::nullopt;
+								startedEvent.payload = std::move(p);
+							}
 							startedEvent.errorMessage = std::nullopt;
 							startedEvent.approvalRequired = false;
 							startedEvent.approvalToken = std::nullopt;
@@ -2468,7 +2499,15 @@ namespace blazeclaw::gateway {
 									ev.runId = runId;
 									ev.sessionKey = sessionKey;
 									ev.state = "delta";
-									ev.messageJson = deltaMessage;
+									{
+										blazeclaw::gateway::ChatEventPayload p;
+										p.eventType = "delta";
+										p.timestampMs = nowMs;
+										p.userMessage = std::nullopt;
+										p.assistantDelta = chunk;
+										p.messageObject = std::nullopt;
+										ev.payload = std::move(p);
+									}
 									ev.errorMessage = std::nullopt;
 									ev.approvalRequired = false;
 									ev.approvalToken = std::nullopt;
@@ -2673,7 +2712,20 @@ namespace blazeclaw::gateway {
 							ev.runId = insertedRunIt->second.runId;
 							ev.sessionKey = insertedRunIt->second.sessionKey;
 							ev.state = resolvedTerminalState;
-							ev.messageJson = terminalMessage;
+							{
+								blazeclaw::gateway::ChatEventPayload p;
+								p.eventType = "message";
+								p.timestampMs = nowMs;
+								p.userMessage = std::nullopt;
+								p.assistantDelta = std::nullopt;
+								if (terminalMessage.has_value()) {
+									p.messageObject = nlohmann::json::parse(terminalMessage.value());
+								}
+								else {
+									p.messageObject = std::nullopt;
+								}
+								ev.payload = std::move(p);
+							}
 							ev.errorMessage = std::nullopt;
 							ev.approvalRequired = resolvedTerminalState == "needs_approval"
 								? insertedRunIt->second.approvalRequired
@@ -2944,12 +2996,23 @@ namespace blazeclaw::gateway {
 						ev.runId = runIt->second.runId;
 						ev.sessionKey = sessionKey;
 						ev.state = "aborted";
-						ev.messageJson = silentAssistantReply
-							? std::nullopt
-							: std::optional<std::string>(
-								BuildAssistantFinalMessageJson(
-									runIt->second.assistantText,
-									nowMs));
+						{
+							blazeclaw::gateway::ChatEventPayload p;
+							p.eventType = "message";
+							p.timestampMs = nowMs;
+							p.userMessage = std::nullopt;
+							p.assistantDelta = std::nullopt;
+							if (!silentAssistantReply) {
+								p.messageObject = nlohmann::json::parse(
+									BuildAssistantFinalMessageJson(
+										runIt->second.assistantText,
+										nowMs));
+							}
+							else {
+								p.messageObject = std::nullopt;
+							}
+							ev.payload = std::move(p);
+						}
 						ev.errorMessage = std::nullopt;
 						ev.approvalRequired = false;
 						ev.approvalToken = std::nullopt;
@@ -3243,7 +3306,15 @@ namespace blazeclaw::gateway {
 										ev.runId = run.runId;
 										ev.sessionKey = run.sessionKey;
 										ev.state = "delta";
-										ev.messageJson = pollDeltaMessage;
+								{
+									blazeclaw::gateway::ChatEventPayload p;
+									p.eventType = "delta";
+									p.timestampMs = nowMs;
+									p.userMessage = std::nullopt;
+									p.assistantDelta = deltaText;
+									p.messageObject = std::nullopt;
+									ev.payload = std::move(p);
+								}
 										ev.errorMessage = std::nullopt;
 										ev.approvalRequired = false;
 										ev.approvalToken = std::nullopt;
@@ -3313,7 +3384,20 @@ namespace blazeclaw::gateway {
 									ev.runId = run.runId;
 									ev.sessionKey = run.sessionKey;
 									ev.state = runTerminalState;
-									ev.messageJson = terminalMessage;
+								{
+									blazeclaw::gateway::ChatEventPayload p;
+									p.eventType = runTerminalState == "error" ? "error" : "message";
+									p.timestampMs = nowMs;
+									p.userMessage = std::nullopt;
+									p.assistantDelta = std::nullopt;
+									if (terminalMessage.has_value()) {
+										p.messageObject = nlohmann::json::parse(terminalMessage.value());
+									}
+									else {
+										p.messageObject = std::nullopt;
+									}
+									ev.payload = std::move(p);
+								}
 									ev.errorMessage = terminalError;
 									ev.approvalRequired = runTerminalState == "needs_approval"
 										? run.approvalRequired
@@ -3425,6 +3509,8 @@ namespace blazeclaw::gateway {
 
 								std::optional<std::string> eventErrorCode;
 								std::optional<std::string> eventContextJson;
+								std::optional<std::string> eventMessageJsonForHistory;
+								bool silentAssistantEvent = false;
 								if (eventState.state == "error") {
 									const auto runContextIt = run.runsById.find(eventState.runId);
 									if (runContextIt != run.runsById.end()) {
@@ -3436,36 +3522,38 @@ namespace blazeclaw::gateway {
 										}
 									}
 								}
-								// Prefer edge serialization from normalized payload when available.
+								// chat.events.poll must return chat event objects (state/runId/sessionKey/...)
+								// rather than transport event envelopes. BuildChatEventJson preserves
+								// that shape while still preferring payload-derived message content.
 								if (eventState.payload.has_value()) {
-									// Serialize at the edge and use the string-based fanout API.
-									const std::string payloadJson = eventState.payload.value().ToWireJson();
-									eventsJson += runtime.eventFanout->BuildChatEventFrame(
-										payloadJson,
-										++sessions.pushEventSeq);
+									const blazeclaw::gateway::ChatEventPayload& payload =
+										eventState.payload.value();
+									eventMessageJsonForHistory =
+										TryBuildAssistantMessageJsonFromPayload(payload);
+									silentAssistantEvent =
+										IsSilentAssistantMessagePayload(payload);
 								}
-								else {
-									eventsJson += BuildChatEventJson(
-										eventState.runId,
-										eventState.sessionKey,
-										eventState.state,
-										eventState.messageJson,
-										eventErrorCode,
-										eventState.errorMessage,
-										eventContextJson,
-										eventState.approvalRequired,
-										eventState.approvalToken,
-										eventState.approvalTokenExpiresAtEpochMs,
-										eventState.approvalNextAction,
-										eventState.terminalReason,
-										eventState.timestampMs);
-								}
+
+								eventsJson += BuildChatEventJson(
+									eventState.runId,
+									eventState.sessionKey,
+									eventState.state,
+									eventMessageJsonForHistory,
+									eventErrorCode,
+									eventState.errorMessage,
+									eventContextJson,
+									eventState.approvalRequired,
+									eventState.approvalToken,
+									eventState.approvalTokenExpiresAtEpochMs,
+									eventState.approvalNextAction,
+									eventState.terminalReason,
+									eventState.timestampMs);
 								++emitted;
 
 								if ((eventState.state == "final" ||
 									eventState.state == "aborted") &&
-									eventState.messageJson.has_value() &&
-									!IsSilentAssistantMessageJson(eventState.messageJson.value()))
+									eventMessageJsonForHistory.has_value() &&
+									!silentAssistantEvent)
 								{
 									bool isDetachedRun = false;
 									const auto runContextIt = run.runsById.find(eventState.runId);
@@ -3476,7 +3564,7 @@ namespace blazeclaw::gateway {
 									if (!isDetachedRun) {
 										PushHistoryMessageIfNew(
 											sessions.historyBySession[sessionKey],
-											eventState.messageJson.value());
+											eventMessageJsonForHistory.value());
 									}
 								}
 

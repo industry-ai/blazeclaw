@@ -1766,6 +1766,36 @@ bool IsSilentAssistantMessageJson(const std::string& messageJson) {
 		std::string::npos;
 }
 
+bool IsSilentAssistantMessagePayload(
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	if (payload.assistantDelta.has_value()) {
+		return IsSilentReplyText(payload.assistantDelta.value());
+	}
+
+	if (payload.messageObject.has_value()) {
+		return IsSilentAssistantMessageJson(payload.messageObject.value().dump());
+	}
+
+	return false;
+}
+
+std::optional<std::string> TryBuildAssistantMessageJsonFromPayload(
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	if (payload.messageObject.has_value()) {
+		return payload.messageObject.value().dump();
+	}
+
+	if (payload.assistantDelta.has_value()) {
+		return BuildAssistantDeltaMessageJson(payload.assistantDelta.value());
+	}
+
+	if (payload.userMessage.has_value()) {
+		return BuildUserMessageJson(payload.userMessage.value(), false, payload.timestampMs);
+	}
+
+	return std::nullopt;
+}
+
 void PushHistoryMessageIfNew(
 	std::vector<std::string>& history,
 	const std::string& messageJson) {
@@ -1781,6 +1811,18 @@ void PushHistoryMessageIfNew(
 			history.begin(),
 			history.begin() + static_cast<std::ptrdiff_t>(overflow));
 	}
+}
+
+void PushHistoryMessageIfNewFromPayload(
+	std::vector<std::string>& history,
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	const std::optional<std::string> messageJson =
+		TryBuildAssistantMessageJsonFromPayload(payload);
+	if (!messageJson.has_value()) {
+		return;
+	}
+
+	PushHistoryMessageIfNew(history, messageJson.value());
 }
 
 bool ValidateAttachmentPayloadShape(

@@ -751,10 +751,8 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionKey;
 			std::string state;
-			// Legacy pre-serialized JSON (kept for incremental migration) - prefer using
-			// `payload` (normalized) when available. Both fields are kept during the
-			// migration to avoid large refactors across many call sites.
-			std::optional<std::string> messageJson;
+			// Transitional structured message object for compatibility paths.
+			// Primary runtime data should flow through `payload`.
 			std::optional<nlohmann::json> messageObject;
 
 			// Transition from storing pre-serialized JSON to normalized payloads.
