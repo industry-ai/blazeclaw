@@ -542,7 +542,7 @@ namespace blazeclaw::gateway {
 								EscapeJsonLocal(stageContext.dedupedRunId) +
 								"\",\"queued\":false,\"deduped\":true"
 								",\"promptRunId\":\"" +
-								EscapeJsonLocal(stageContext.dedupedRunId) +
+								EscapeJsonLocal(stageContext.dedupedRunId + ".prompt") +
 								"\",\"responders\":[]}");
 						}
 
@@ -636,15 +636,31 @@ namespace blazeclaw::gateway {
 							transcriptSource = "voice";
 						}
 					}
+					auto buildPromptRunId = [&](const std::string& rawBaseRunId) {
+						if (rawBaseRunId.empty()) {
+							return std::string("prompt-run-") +
+								std::to_string(stageContext.nowEpochMs > 0
+									? stageContext.nowEpochMs
+									: CurrentEpochMsLocal()) +
+								".prompt";
+						}
+
+						if (rawBaseRunId.size() >= 7 &&
+							rawBaseRunId.rfind(".prompt") == rawBaseRunId.size() - 7) {
+							return rawBaseRunId;
+						}
+
+						return rawBaseRunId + ".prompt";
+						};
 					const std::uint64_t nowMs = stageContext.nowEpochMs > 0
 						? stageContext.nowEpochMs
 						: CurrentEpochMsLocal();
-					const std::string runId = !stageContext.runId.empty()
+					const std::string promptRunId = buildPromptRunId(!stageContext.runId.empty()
 						? stageContext.runId
 						: (!request.id.empty()
 							? request.id
 							: ("chat-run-" + std::to_string(nowMs) +
-								"-" + std::to_string(run.runsById.size() + 1)));
+								"-" + std::to_string(run.runsById.size() + 1))));
 
 					struct ChatSendResponderManifestEntry {
 						std::string responderRunId;
@@ -842,10 +858,26 @@ namespace blazeclaw::gateway {
 						auto& responder = responderManifest[index];
 						responder.responderOrder =
 							static_cast<std::uint32_t>(index);
-						responder.responderRunId = index == 0
-							? runId
-							: runId + ".responder." + std::to_string(index + 1);
+						responder.responderRunId =
+							promptRunId + ".responder." + std::to_string(index + 1);
 					}
+					const ChatSendResponderManifestEntry primaryResponder =
+						!responderManifest.empty()
+						? responderManifest.front()
+						: ChatSendResponderManifestEntry{
+							.responderRunId = promptRunId + ".responder.1",
+							.responderId = "local:" +
+								std::string(GatewayModel::kDefaultModelId),
+							.provider = "local",
+							.model = std::string(GatewayModel::kDefaultModelId),
+							.runtimeKind = "local",
+							.responderLabel =
+								GatewayModel::ResolveModelDisplayName(
+									std::string(GatewayModel::kDefaultModelId)) +
+								" (Local)",
+							.responderOrder = 0,
+						};
+					const std::string runId = primaryResponder.responderRunId;
 
 					std::string effectiveRequestedModelOverride = requestedModelOverride;
 					std::string effectiveRequestedProviderOverride = requestedProviderOverride;
@@ -2655,6 +2687,14 @@ namespace blazeclaw::gateway {
 							runId,
 							GatewayHost::ChatRunState{
 								.runId = runId,
+								.promptRunId = promptRunId,
+								.responderRunId = primaryResponder.responderRunId,
+								.responderId = primaryResponder.responderId,
+								.provider = primaryResponder.provider,
+								.model = primaryResponder.model,
+								.runtimeKind = primaryResponder.runtimeKind,
+								.responderLabel = primaryResponder.responderLabel,
+								.responderOrder = primaryResponder.responderOrder,
 								.sessionKey = sessionKey,
 								.idempotencyKey = idempotencyKey,
 								.userMessage = message,
@@ -2799,7 +2839,7 @@ namespace blazeclaw::gateway {
 						"{\"runId\":\"" +
 						EscapeJsonLocal(runId) +
 						"\",\"promptRunId\":" +
-						JsonString(runId) +
+						JsonString(promptRunId) +
 						",\"responders\":" +
 						responderManifestJson +
 						",\"backendErrorCode\":" +
@@ -3469,6 +3509,59 @@ namespace blazeclaw::gateway {
 							}
 						}
 
+					auto resolvePromptTerminalAggregation =
+						[&run, &sessionKey](const std::string& promptRunId)
+						-> std::optional<std::string> {
+							if (promptRunId.empty()) {
+								return std::nullopt;
+							}
+
+							bool hasPromptChild = false;
+							bool allTerminal = true;
+							bool hasError = false;
+							bool hasNeedsApproval = false;
+							bool hasAborted = false;
+
+							for (const auto& [_, candidate] : run.runsById) {
+								if (candidate.sessionKey != sessionKey ||
+									candidate.promptRunId != promptRunId) {
+									continue;
+								}
+
+								hasPromptChild = true;
+								const std::string childTerminalState = candidate.failed
+									? "error"
+									: (candidate.terminalState.empty()
+										? "final"
+										: candidate.terminalState);
+								if (candidate.active || !IsTerminalChatState(childTerminalState)) {
+									allTerminal = false;
+									continue;
+								}
+
+								hasError = hasError || childTerminalState == "error";
+								hasNeedsApproval =
+									hasNeedsApproval || childTerminalState == "needs_approval";
+								hasAborted = hasAborted || childTerminalState == "aborted";
+							}
+
+							if (!hasPromptChild || !allTerminal) {
+								return std::nullopt;
+							}
+
+							if (hasError) {
+								return std::string("error");
+							}
+							if (hasNeedsApproval) {
+								return std::string("needs_approval");
+							}
+							if (hasAborted) {
+								return std::string("aborted");
+							}
+
+							return std::string("final");
+						};
+
 						std::string eventsJson = "[";
 						std::size_t emitted = 0;
 						std::unordered_set<std::string> terminalRunIdsSeenThisPoll;
@@ -3510,18 +3603,50 @@ namespace blazeclaw::gateway {
 								std::optional<std::string> eventErrorCode;
 								std::optional<std::string> eventContextJson;
 								std::optional<std::string> eventMessageJsonForHistory;
+							std::string eventPromptRunId;
+							std::string eventResponderRunId;
+							std::string eventResponderId;
+							std::string eventProvider;
+							std::string eventModel;
+							std::string eventRuntimeKind;
+							std::string eventResponderLabel;
+							std::uint32_t eventResponderOrder = 0;
+							std::string emittedState = eventState.state;
 								bool silentAssistantEvent = false;
+							const auto runContextIt = run.runsById.find(eventState.runId);
+							if (runContextIt != run.runsById.end()) {
+								eventPromptRunId = runContextIt->second.promptRunId;
+								eventResponderRunId = runContextIt->second.responderRunId;
+								eventResponderId = runContextIt->second.responderId;
+								eventProvider = runContextIt->second.provider;
+								eventModel = runContextIt->second.model;
+								eventRuntimeKind = runContextIt->second.runtimeKind;
+								eventResponderLabel = runContextIt->second.responderLabel;
+								eventResponderOrder = runContextIt->second.responderOrder;
 								if (eventState.state == "error") {
-									const auto runContextIt = run.runsById.find(eventState.runId);
-									if (runContextIt != run.runsById.end()) {
-										if (!runContextIt->second.errorCode.empty()) {
-											eventErrorCode = runContextIt->second.errorCode;
-										}
-										if (!runContextIt->second.errorContextJson.empty()) {
-											eventContextJson = runContextIt->second.errorContextJson;
-										}
+									if (!runContextIt->second.errorCode.empty()) {
+										eventErrorCode = runContextIt->second.errorCode;
+									}
+									if (!runContextIt->second.errorContextJson.empty()) {
+										eventContextJson = runContextIt->second.errorContextJson;
 									}
 								}
+								if (IsTerminalChatState(eventState.state) &&
+									runContextIt->second.responderOrder == 0) {
+									const auto promptTerminalState =
+										resolvePromptTerminalAggregation(
+											runContextIt->second.promptRunId);
+									if (promptTerminalState.has_value()) {
+										emittedState = promptTerminalState.value();
+									}
+								}
+								}
+							if (eventPromptRunId.empty()) {
+								eventPromptRunId = eventState.runId + ".prompt";
+							}
+							if (eventResponderRunId.empty()) {
+								eventResponderRunId = eventState.runId;
+							}
 								// chat.events.poll must return chat event objects (state/runId/sessionKey/...)
 								// rather than transport event envelopes. BuildChatEventJson preserves
 								// that shape while still preferring payload-derived message content.
@@ -3536,8 +3661,16 @@ namespace blazeclaw::gateway {
 
 								eventsJson += BuildChatEventJson(
 									eventState.runId,
+								eventPromptRunId,
+								eventResponderRunId,
+								eventResponderId,
+								eventProvider,
+								eventModel,
+								eventRuntimeKind,
+								eventResponderLabel,
+								eventResponderOrder,
 									eventState.sessionKey,
-									eventState.state,
+								emittedState,
 									eventMessageJsonForHistory,
 									eventErrorCode,
 									eventState.errorMessage,

@@ -728,6 +728,14 @@ std::string BuildUserMessageJson(
 
 std::string BuildChatEventJson(
 	const std::string& runId,
+	const std::string& promptRunId,
+	const std::string& responderRunId,
+	const std::string& responderId,
+	const std::string& provider,
+	const std::string& model,
+	const std::string& runtimeKind,
+	const std::string& responderLabel,
+	const std::uint32_t responderOrder,
 	const std::string& sessionKey,
 	const std::string& state,
 	const std::optional<std::string>& messageJson,
@@ -743,6 +751,22 @@ std::string BuildChatEventJson(
 	std::string payload =
 		"{\"runId\":\"" +
 		EscapeJsonLocal(runId) +
+		"\",\"promptRunId\":\"" +
+		EscapeJsonLocal(promptRunId.empty() ? runId : promptRunId) +
+		"\",\"responderRunId\":\"" +
+		EscapeJsonLocal(responderRunId.empty() ? runId : responderRunId) +
+		"\",\"responderId\":\"" +
+		EscapeJsonLocal(responderId) +
+		"\",\"provider\":\"" +
+		EscapeJsonLocal(provider) +
+		"\",\"model\":\"" +
+		EscapeJsonLocal(model) +
+		"\",\"runtimeKind\":\"" +
+		EscapeJsonLocal(runtimeKind) +
+		"\",\"responderLabel\":\"" +
+		EscapeJsonLocal(responderLabel) +
+		"\",\"responderOrder\":" +
+		std::to_string(static_cast<std::uint64_t>(responderOrder)) +
 		"\",\"sessionKey\":\"" +
 		EscapeJsonLocal(sessionKey) +
 		"\",\"state\":\"" +

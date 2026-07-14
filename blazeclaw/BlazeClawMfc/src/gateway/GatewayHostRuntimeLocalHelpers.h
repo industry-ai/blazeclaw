@@ -104,6 +104,14 @@ namespace blazeclaw::gateway {
 			const std::uint64_t timestampMs);
 		std::string BuildChatEventJson(
 			const std::string& runId,
+			const std::string& promptRunId,
+			const std::string& responderRunId,
+			const std::string& responderId,
+			const std::string& provider,
+			const std::string& model,
+			const std::string& runtimeKind,
+			const std::string& responderLabel,
+			const std::uint32_t responderOrder,
 			const std::string& sessionKey,
 			const std::string& state,
 			const std::optional<std::string>& messageJson,
