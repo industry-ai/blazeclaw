@@ -3461,7 +3461,6 @@ namespace blazeclaw::gateway {
 										eventState.timestampMs);
 								}
 								++emitted;
-								++emitted;
 
 								if ((eventState.state == "final" ||
 									eventState.state == "aborted") &&
