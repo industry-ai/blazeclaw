@@ -703,6 +703,13 @@ namespace blazeclaw::gateway {
 			std::string runtimeKind;
 			std::string responderLabel;
 			std::uint32_t responderOrder = 0;
+			std::string taskId;
+			std::uint64_t taskEnqueueAtMs = 0;
+			std::uint64_t taskStartAtMs = 0;
+			std::uint64_t taskCompletedAtMs = 0;
+			std::uint64_t taskQueueWaitMs = 0;
+			std::uint64_t taskRunDurationMs = 0;
+			std::string taskExecutionState = "queued";
 			std::string sessionKey;
 			std::string idempotencyKey;
 			std::string userMessage;

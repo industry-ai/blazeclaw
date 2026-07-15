@@ -290,6 +290,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptFormatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SharedFrontmatterCompat.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ThreadPoolRuntimeService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\OpenClawOriginalImportService.cpp" />

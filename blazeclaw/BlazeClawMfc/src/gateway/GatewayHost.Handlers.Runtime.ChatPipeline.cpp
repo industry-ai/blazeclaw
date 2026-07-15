@@ -35,6 +35,7 @@
 #include "GatewayEventFanoutService.h"
 #include "executors/EmailScheduleExecutor.h"
 #include "../app/BlazeClawMfcApp.h"
+#include "../core/ThreadPoolRuntimeService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -123,6 +124,8 @@ namespace blazeclaw::gateway {
 			};
 			auto sessionState = std::make_shared<SessionOperatorState>();
 			ChatPipelineRequestNormalization requestNormalization(*sessionRegistry);
+			auto threadPoolRuntimeService =
+				std::make_shared<blazeclaw::core::ThreadPoolRuntimeService>();
 
 			struct ChatMemoryMetricsState {
 				std::uint64_t enqueueCount = 0;
@@ -457,7 +460,15 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.send",
-				[runtime, run, sessions, callbacks, taskDeltas, model, skills, pushChatEventWithMetrics](
+				[runtime,
+				run,
+				sessions,
+				callbacks,
+				taskDeltas,
+				model,
+				skills,
+				threadPoolRuntimeService,
+				pushChatEventWithMetrics](
 					const protocol::RequestFrame& request) {
 					ChatRunStageContext stageContext{
 						.requestId = request.id,
@@ -675,6 +686,13 @@ namespace blazeclaw::gateway {
 					std::unordered_set<std::string> responderIdSet;
 					bool localResponderEnabled = true;
 					std::uint32_t maxActiveResponders = 1;
+					std::uint32_t poolMinThreads = 2;
+					std::uint32_t poolMaxThreads = 6;
+					std::uint32_t poolQueueCapacity = 128;
+					std::uint32_t poolDequeueTimeoutMs = 50;
+					std::uint32_t perResponderTimeoutMs = 90000;
+					std::uint32_t cancelDrainTimeoutMs = 3000;
+					bool abortWaitForDrain = true;
 					if (const auto* appConfig =
 						dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 						appConfig != nullptr) {
@@ -683,6 +701,19 @@ namespace blazeclaw::gateway {
 							std::max<std::uint32_t>(
 								1,
 								appConfig->Config().multiActive.maxActiveResponders);
+						poolMinThreads =
+							(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.poolMinThreads);
+						poolMaxThreads =
+							(std::max)(poolMinThreads, appConfig->Config().multiActive.poolMaxThreads);
+						poolQueueCapacity =
+							(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.poolQueueCapacity);
+						poolDequeueTimeoutMs =
+							(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.poolDequeueTimeoutMs);
+						perResponderTimeoutMs =
+							(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.perResponderTimeoutMs);
+						cancelDrainTimeoutMs =
+							(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.cancelDrainTimeoutMs);
+						abortWaitForDrain = appConfig->Config().multiActive.abortWaitForDrain;
 					}
 					if (!multiActiveRequested) {
 						maxActiveResponders = 1;
@@ -2019,6 +2050,33 @@ namespace blazeclaw::gateway {
 							runId,
 							GatewayHost::ChatRunState{
 								.runId = runId,
+								.promptRunId = promptRunId,
+								.responderRunId = runId,
+								.responderId = !responderManifest.empty()
+									? responderManifest.front().responderId
+									: std::string(),
+								.provider = !responderManifest.empty()
+									? responderManifest.front().provider
+									: std::string(),
+								.model = !responderManifest.empty()
+									? responderManifest.front().model
+									: std::string(),
+								.runtimeKind = !responderManifest.empty()
+									? responderManifest.front().runtimeKind
+									: std::string(),
+								.responderLabel = !responderManifest.empty()
+									? responderManifest.front().responderLabel
+									: std::string(),
+								.responderOrder = !responderManifest.empty()
+									? responderManifest.front().responderOrder
+									: 0,
+								.taskId = std::string(),
+								.taskEnqueueAtMs = nowMs,
+								.taskStartAtMs = 0,
+								.taskCompletedAtMs = 0,
+								.taskQueueWaitMs = 0,
+								.taskRunDurationMs = 0,
+								.taskExecutionState = "queued",
 								.sessionKey = sessionKey,
 								.idempotencyKey = idempotencyKey,
 								.userMessage = message,
@@ -2057,8 +2115,41 @@ namespace blazeclaw::gateway {
 							});
 
 						std::size_t streamedDeltaCount = 0;
-						const auto runtimeResult = callbacks.chatRuntimeCallback(
-							GatewayHost::ChatRuntimeRequest{
+						blazeclaw::gateway::GatewayHost::ChatRuntimeResult runtimeResult{};
+						blazeclaw::core::ThreadPoolRuntimeService::ExecuteResult poolExecuteResult{};
+						threadPoolRuntimeService->Configure(
+							blazeclaw::core::ThreadPoolRuntimeService::Config{
+								.minThreads = poolMinThreads,
+								.maxThreads = poolMaxThreads,
+								.queueCapacity = poolQueueCapacity,
+								.dequeueTimeoutMs = poolDequeueTimeoutMs,
+							});
+						poolExecuteResult = threadPoolRuntimeService->EnqueueAndExecute(
+							blazeclaw::core::ThreadPoolRuntimeService::ExecuteRequest{
+								.runId = runId,
+								.sessionKey = sessionKey,
+								.responderRunId = runId,
+								.timeoutMs = perResponderTimeoutMs,
+								.task = [&callbacks,
+									runId,
+									sessionKey,
+									runtimeMessage,
+									stageContext,
+									effectiveRequestedModelOverride,
+									effectiveRequestedProviderOverride,
+									enforceOrderedAllowlist,
+									orderedAllowlistTargets,
+									hasAttachments,
+									attachmentMimeTypes,
+									&run,
+									&sessions,
+									&runtime,
+									&streamedDeltaCount,
+									&controlPlaneService,
+									&sendControlDecision,
+									&pushChatEventWithMetrics]() {
+										return callbacks.chatRuntimeCallback(
+											GatewayHost::ChatRuntimeRequest{
 								.runId = runId,
 								.sessionKey = sessionKey,
 								.message = runtimeMessage,
@@ -2086,9 +2177,9 @@ namespace blazeclaw::gateway {
 										&streamedDeltaCount,
 										&runId,
 										&sessionKey,
-									&controlPlaneService,
-									&sendControlDecision,
-									&pushChatEventWithMetrics](const std::string& delta) {
+										&controlPlaneService,
+										&sendControlDecision,
+										&pushChatEventWithMetrics](const std::string& delta) {
 										const std::string normalizedDelta = json::Trim(delta);
 										if (normalizedDelta.empty() ||
 											RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
@@ -2165,9 +2256,90 @@ namespace blazeclaw::gateway {
 											runStateIt->second.terminalWaitExceededNotified = false;
 										}
 
-										++streamedDeltaCount;
+									++streamedDeltaCount;
 									}
 							});
+									},
+							});
+
+						if (poolExecuteResult.accepted) {
+							auto runStateIt = run.runsById.find(runId);
+							if (runStateIt != run.runsById.end()) {
+								runStateIt->second.taskId = poolExecuteResult.metadata.taskId;
+								runStateIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
+								runStateIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
+								runStateIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
+								runStateIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
+								runStateIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
+								runStateIt->second.taskExecutionState = poolExecuteResult.metadata.executionState;
+							}
+
+							EmitTelemetryEvent(
+								"gateway.chat.thread_pool.enqueue",
+								JsonObject({
+									{"runId", JsonString(runId)},
+									{"sessionKey", JsonString(sessionKey)},
+									{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+									{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
+									{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
+									{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
+									{"executionState", JsonString(poolExecuteResult.metadata.executionState)},
+									}));
+						}
+
+						if (!poolExecuteResult.accepted) {
+							failed = true;
+							backendErrorCode = poolExecuteResult.saturated
+								? "chat_multi_active_queue_saturated"
+								: "chat_multi_active_task_enqueue_failed";
+							backendErrorMessage = poolExecuteResult.saturated
+								? "thread pool queue saturated for multi-active execution"
+								: "failed to enqueue thread-pool task";
+							EmitTelemetryEvent(
+								"gateway.chat.thread_pool.saturation",
+								JsonObject({
+									{"runId", JsonString(runId)},
+									{"sessionKey", JsonString(sessionKey)},
+									{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
+									{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
+									{"diagnosticCode", JsonString(poolExecuteResult.diagnosticCode)},
+									}));
+						}
+						else if (poolExecuteResult.timedOut) {
+							failed = true;
+							backendErrorCode = "chat_multi_active_task_timeout";
+							backendErrorMessage = "thread-pool responder task timed out";
+							if (abortWaitForDrain && !poolExecuteResult.metadata.taskId.empty()) {
+								const bool drained = threadPoolRuntimeService->WaitForTaskDrain(
+									poolExecuteResult.metadata.taskId,
+									cancelDrainTimeoutMs);
+								EmitTelemetryEvent(
+									"gateway.chat.thread_pool.cancel_drain",
+									JsonObject({
+										{"runId", JsonString(runId)},
+										{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+										{"drained", JsonBool(drained)},
+									{"drainTimeoutMs", JsonNumber(static_cast<std::uint64_t>(cancelDrainTimeoutMs))},
+										}));
+							}
+							EmitTelemetryEvent(
+								"gateway.chat.thread_pool.timeout",
+								JsonObject({
+									{"runId", JsonString(runId)},
+									{"sessionKey", JsonString(sessionKey)},
+									{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+									{"timeoutMs", JsonNumber(static_cast<std::uint64_t>(perResponderTimeoutMs))},
+									{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
+									}));
+						}
+						else if (poolExecuteResult.runtimeResult.has_value()) {
+							runtimeResult = poolExecuteResult.runtimeResult.value();
+						}
+						else {
+							failed = true;
+							backendErrorCode = "chat_multi_active_task_no_result";
+							backendErrorMessage = "thread-pool task completed without runtime result";
+						}
 						providerStreamed = streamedDeltaCount > 0;
 
 						if (runtimeResult.ok) {
@@ -2196,6 +2368,19 @@ namespace blazeclaw::gateway {
 							else {
 								auto existingRunIt = run.runsById.find(runId);
 								if (existingRunIt != run.runsById.end()) {
+							if (!poolExecuteResult.metadata.taskId.empty()) {
+								existingRunIt->second.taskId = poolExecuteResult.metadata.taskId;
+								existingRunIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
+								existingRunIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
+								existingRunIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
+								existingRunIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
+								existingRunIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
+							}
+							existingRunIt->second.taskExecutionState = !poolExecuteResult.accepted
+								? "rejected"
+								: (poolExecuteResult.timedOut
+									? "timeout"
+									: poolExecuteResult.metadata.executionState);
 									existingRunIt->second.assistantText = assistantText;
 									existingRunIt->second.providerDeltas = assistantDeltas;
 									existingRunIt->second.providerDeltaCursor = 0;
@@ -2980,7 +3165,12 @@ namespace blazeclaw::gateway {
 
 			dispatcher->Register(
 				"chat.abort",
-				[run, sessions, callbacks, runtime, pushChatEventWithMetrics](
+				[run,
+				sessions,
+				callbacks,
+				runtime,
+				threadPoolRuntimeService,
+				pushChatEventWithMetrics](
 					const protocol::RequestFrame& request) {
 					const auto route =
 						ChatPipelineRequestNormalization::NormalizeAbortRoute(request.paramsJson);
@@ -3012,6 +3202,47 @@ namespace blazeclaw::gateway {
 					}
 
 					const std::string runId = runIt->second.runId;
+					const std::string taskId = runIt->second.taskId;
+					std::uint32_t cancelDrainTimeoutMs = 3000;
+					bool abortWaitForDrain = true;
+					if (const auto* appConfig =
+						dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+						appConfig != nullptr) {
+						cancelDrainTimeoutMs =
+							(std::max)(
+								std::uint32_t{ 1 },
+								appConfig->Config().multiActive.cancelDrainTimeoutMs);
+						abortWaitForDrain =
+							appConfig->Config().multiActive.abortWaitForDrain;
+					}
+
+					if (!taskId.empty()) {
+						const bool cancelRequested =
+							threadPoolRuntimeService->CancelTask(taskId);
+						EmitTelemetryEvent(
+							"gateway.chat.thread_pool.cancel_request",
+							JsonObject({
+								{"runId", JsonString(runId)},
+								{"sessionKey", JsonString(sessionKey)},
+								{"taskId", JsonString(taskId)},
+								{"accepted", JsonBool(cancelRequested)},
+								}));
+						if (abortWaitForDrain && cancelRequested) {
+							const bool drained = threadPoolRuntimeService->WaitForTaskDrain(
+								taskId,
+								cancelDrainTimeoutMs);
+							EmitTelemetryEvent(
+								"gateway.chat.thread_pool.cancel_drain",
+								JsonObject({
+									{"runId", JsonString(runId)},
+									{"sessionKey", JsonString(sessionKey)},
+									{"taskId", JsonString(taskId)},
+									{"drained", JsonBool(drained)},
+									{"drainTimeoutMs", JsonNumber(static_cast<std::uint64_t>(cancelDrainTimeoutMs))},
+									}));
+						}
+					}
+
 					if (callbacks.chatAbortCallback) {
 						callbacks.chatAbortCallback(
 							GatewayHost::ChatAbortRequest{

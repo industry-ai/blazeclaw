@@ -563,6 +563,9 @@
     <ClCompile Include="src\core\ChatProviderRuntimeService.cpp">
       <Filter>core-chat</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\ThreadPoolRuntimeService.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
     <ClCompile Include="src\gateway\ChatRoutePolicy.cpp">
       <Filter>core-chat</Filter>
     </ClCompile>
@@ -1198,6 +1201,7 @@
     <ClInclude Include="src\gateway\GatewayHostChatPipelineRouteDeps.h" />
     <ClInclude Include="src\gateway\ChatPipelineRequestNormalization.h" />
     <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
+    <ClInclude Include="src\core\ThreadPoolRuntimeService.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

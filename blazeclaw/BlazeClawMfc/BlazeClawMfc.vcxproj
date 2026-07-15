@@ -213,6 +213,7 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.h" />
+    <ClInclude Include="src\core\ThreadPoolRuntimeService.h" />
     <ClInclude Include="src\cron\CronHygiene.h" />
     <ClInclude Include="src\cron\CronJsonCompat.h" />
     <ClInclude Include="src\cron\CronModels.h" />
@@ -540,6 +541,7 @@
     <ClCompile Include="src\core\SharedFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\ChatProviderRuntimeService.cpp" />
+    <ClCompile Include="src\core\ThreadPoolRuntimeService.cpp" />
     <ClCompile Include="src\core\OperatorDiagnosticsAssembler.cpp" />
     <ClCompile Include="src\core\SkillCommandInvocationService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
