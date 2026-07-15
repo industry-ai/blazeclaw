@@ -45,6 +45,48 @@
         state.seenChatTerminalRuns = state.seenChatTerminalRuns || new Set();
         state.seenToolLifecycleKeys = state.seenToolLifecycleKeys || new Set();
 
+        function buildResponderMetadata(event, fallback) {
+            const source = event && typeof event === "object"
+                ? event
+                : {};
+            const metadata = {
+                runId: String(source.runId || "").trim(),
+                promptRunId: String(source.promptRunId || source.parentRunId || "").trim(),
+                responderRunId: String(source.responderRunId || source.runId || "").trim(),
+                responderId: String(source.responderId || source.responder || "").trim(),
+                responderLabel: String(
+                    source.responderLabel ||
+                    source.label ||
+                    source.responderName ||
+                    ""
+                ).trim(),
+                responderOrder: Number.isFinite(Number(source.responderOrder))
+                    ? Number(source.responderOrder)
+                    : Number.MAX_SAFE_INTEGER,
+                responseMode: String(source.responseMode || "multi_active").trim() || "multi_active",
+                terminalState: String(source.state || fallback || "").trim().toLowerCase(),
+                state: String(source.state || fallback || "").trim().toLowerCase(),
+            };
+
+            if (!metadata.promptRunId && metadata.runId) {
+                metadata.promptRunId = `${metadata.runId}.prompt`;
+            }
+
+            if (!metadata.responderRunId && metadata.runId) {
+                metadata.responderRunId = metadata.runId;
+            }
+
+            if (!metadata.responderLabel && metadata.responderId) {
+                metadata.responderLabel = metadata.responderId;
+            }
+
+            if (!Number.isFinite(metadata.responderOrder)) {
+                metadata.responderOrder = Number.MAX_SAFE_INTEGER;
+            }
+
+            return metadata;
+        }
+
         function normalizeFinalAssistantMessage(message) {
             if (!message || typeof message !== "object") {
                 return null;
@@ -379,13 +421,18 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurn) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, terminalState);
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState,
+                                text,
+                            });
                         } else {
                             addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
-                        finalizeStream();
+                        finalizeStream(buildResponderMetadata(event, terminalState));
                         shouldReconcile = true;
                     }
 
@@ -428,13 +475,18 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnApproval) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, "needs_approval");
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState: "needs_approval",
+                                text,
+                            });
                         } else {
                             addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
-                        finalizeStream();
+                        finalizeStream(buildResponderMetadata(event, "needs_approval"));
                         controller.scheduleHistoryReconcile();
                     }
 

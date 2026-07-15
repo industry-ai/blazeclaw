@@ -323,7 +323,7 @@
     const chatControllerApi = window.BlazeClawChatController || {};
     const scriptOrderCompat =
         window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ &&
-        typeof window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ === "object"
+            typeof window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ === "object"
             ? window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__
             : null;
 
@@ -946,6 +946,63 @@
                 const message = String(data.message || data.text || "").trim();
                 if (message) {
                     setStatus(message);
+                }
+                continue;
+            }
+
+            if (op === "chat.update_stream") {
+                const text = String(data.text || "");
+                if (!text) {
+                    continue;
+                }
+                addOrReplaceStream(text, {
+                    runId: data.runId,
+                    promptRunId: data.promptRunId,
+                    responderRunId: data.responderRunId,
+                    responderId: data.responderId,
+                    responderLabel: data.responderLabel,
+                    responderOrder: data.responderOrder,
+                    responseMode: data.responseMode || "multi_active",
+                    state: "delta",
+                });
+                continue;
+            }
+
+            if (op === "chat.finalize_stream") {
+                const text = String(data.text || "");
+                if (text) {
+                    addOrReplaceStream(text, {
+                        runId: data.runId,
+                        promptRunId: data.promptRunId,
+                        responderRunId: data.responderRunId,
+                        responderId: data.responderId,
+                        responderLabel: data.responderLabel,
+                        responderOrder: data.responderOrder,
+                        responseMode: data.responseMode || "multi_active",
+                        state: "delta",
+                    });
+                }
+                finalizeStream({
+                    runId: data.runId,
+                    promptRunId: data.promptRunId,
+                    responderRunId: data.responderRunId,
+                    responderId: data.responderId,
+                    responderLabel: data.responderLabel,
+                    responderOrder: data.responderOrder,
+                    responseMode: data.responseMode || "multi_active",
+                    terminalState: data.terminalState,
+                    text,
+                });
+                continue;
+            }
+
+            if (op === "chat.complete_prompt_group") {
+                if (guiModule && typeof guiModule.completePromptGroup === "function") {
+                    guiModule.completePromptGroup({
+                        promptRunId: data.promptRunId,
+                        terminalState: data.terminalState,
+                        responseMode: data.responseMode || "multi_active",
+                    });
                 }
                 continue;
             }
@@ -3773,7 +3830,7 @@
                     runId: stablePreviewRunId,
                     generation: pollGeneration,
                     stage,
-                        intervalMs: liveSpeechPollIntervalMs,
+                    intervalMs: liveSpeechPollIntervalMs,
                     hasAudioArtifact: Boolean(audioArtifact),
                     hasAudioPath: Boolean(audioPath),
                     clickToPreviewRequestMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
