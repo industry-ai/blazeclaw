@@ -34,6 +34,8 @@ namespace blazeclaw::app::chatcontroller {
 			std::string sessionKey;
 			std::string message;
 			std::string idempotencyKey;
+			std::string responseMode = "single";
+			std::vector<std::string> requestedResponders;
 			bool detached = false;
 			bool forceError = false;
 			std::size_t attachmentCount = 0;
@@ -43,6 +45,14 @@ namespace blazeclaw::app::chatcontroller {
 			std::string requestCorrelationId;
 			std::string status;
 			std::string activeRunId;
+			std::string promptRunId;
+			std::string activePromptRunId;
+			std::string activeResponderRunId;
+			std::string responseMode = "single";
+			std::string promptTerminalState;
+			bool multiActive = false;
+			bool promptGroupCompleted = false;
+			std::size_t activeResponderCount = 0;
 			std::size_t queueDepth = 0;
 			std::size_t pendingCorrelationCount = 0;
 			bool queued = false;
@@ -50,11 +60,18 @@ namespace blazeclaw::app::chatcontroller {
 
 		struct NativeStreamStateSnapshot {
 			std::string activeRunId;
+			std::string activePromptRunId;
+			std::string activeResponderRunId;
 			std::string streamText;
 			std::string terminalState;
 			bool hasStreamDraft = false;
+			bool promptCompleted = false;
+			std::size_t activeResponderCount = 0;
+			std::size_t completedResponderCount = 0;
 			std::size_t deltaCount = 0;
 			std::size_t terminalCount = 0;
+			nlohmann::json responderStreams = nlohmann::json::array();
+			nlohmann::json promptGroups = nlohmann::json::array();
 		};
 
 		struct NativeProcessEventsParams {
@@ -207,6 +224,9 @@ namespace blazeclaw::app::chatcontroller {
 				const NativeSendParams& params)
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
+				m_responseMode = NormalizeResponseMode(params.responseMode);
+				m_lastPromptCompleted = false;
+				m_lastPromptTerminalState.clear();
 
 				const std::string correlationId = TrimCopy(request.id);
 				const bool hasActiveRun = !m_activeRunId.empty();
@@ -220,6 +240,8 @@ namespace blazeclaw::app::chatcontroller {
 					m_activeRunId = provisionalRunId.empty()
 						? std::string("native-") + correlationId
 						: provisionalRunId;
+					m_activeResponderRunId = m_activeRunId;
+					m_activePromptRunId = m_activeRunId + ".prompt";
 				}
 
 				m_pendingCorrelations[correlationId] = CorrelationEntry{
@@ -229,6 +251,8 @@ namespace blazeclaw::app::chatcontroller {
 						return key.empty() ? std::string("main") : key;
 					}(),
 					.status = hasActiveRun ? "queued" : "dispatched",
+					.responseMode = m_responseMode,
+					.requestedResponders = params.requestedResponders,
 				};
 
 				return BuildSnapshot(correlationId, hasActiveRun);
@@ -238,7 +262,12 @@ namespace blazeclaw::app::chatcontroller {
 				const std::string& correlationId,
 				bool ok,
 				const std::string& runId,
-				bool terminal)
+				bool terminal,
+				const std::string& terminalState,
+				const std::string& promptRunId,
+				const std::string& responderRunId,
+				const std::vector<std::string>& responderRunIds,
+				const std::string& responseMode)
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -247,7 +276,16 @@ namespace blazeclaw::app::chatcontroller {
 				if (it != m_pendingCorrelations.end())
 				{
 					it->second.status = ok ? "acknowledged" : "failed";
+					if (!responseMode.empty())
+					{
+						it->second.responseMode = NormalizeResponseMode(responseMode);
+					}
+					m_responseMode = it->second.responseMode;
 					m_pendingCorrelations.erase(it);
+				}
+				else if (!responseMode.empty())
+				{
+					m_responseMode = NormalizeResponseMode(responseMode);
 				}
 
 				const std::string normalizedRunId = TrimCopy(runId);
@@ -256,16 +294,120 @@ namespace blazeclaw::app::chatcontroller {
 					m_activeRunId = normalizedRunId;
 				}
 
+				const std::string normalizedPromptRunId = ResolvePromptRunId(promptRunId, normalizedRunId);
+				if (!normalizedPromptRunId.empty())
+				{
+					m_activePromptRunId = normalizedPromptRunId;
+				}
+
+				const std::string normalizedResponderRunId = ResolveResponderRunId(responderRunId, normalizedRunId);
+				if (!normalizedResponderRunId.empty())
+				{
+					m_activeResponderRunId = normalizedResponderRunId;
+				}
+
+				RegisterPromptRespondersUnsafe(normalizedPromptRunId, responderRunIds);
+
 				if (terminal)
 				{
-					m_activeRunId.clear();
-					if (!m_sendQueue.empty())
+					const auto completion = HandleTerminalTransitionUnsafe(
+						normalizedPromptRunId,
+						normalizedResponderRunId,
+						terminalState);
+					if (completion.completed)
 					{
-						m_sendQueue.pop_front();
+						FinishPromptGroupUnsafe(completion.promptRunId, completion.terminalState);
 					}
 				}
 
 				return BuildSnapshot(normalizedCorrelationId, false);
+			}
+
+			NativeSendCorrelationSnapshot HandleRpcResult(
+				const std::string& correlationId,
+				bool ok,
+				const std::string& runId,
+				bool terminal)
+			{
+				return HandleRpcResult(
+					correlationId,
+					ok,
+					runId,
+					terminal,
+					"",
+					"",
+					"",
+					{},
+					"");
+			}
+
+			NativeSendCorrelationSnapshot NoteEventTransition(
+				const std::string& promptRunId,
+				const std::string& responderRunId,
+				const std::string& state)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				const std::string normalizedPrompt = ResolvePromptRunId(promptRunId, responderRunId);
+				const std::string normalizedResponder = ResolveResponderRunId(responderRunId, responderRunId);
+				const auto completion = HandleTerminalTransitionUnsafe(
+					normalizedPrompt,
+					normalizedResponder,
+					state);
+				if (completion.completed)
+				{
+					FinishPromptGroupUnsafe(completion.promptRunId, completion.terminalState);
+				}
+
+				NativeSendCorrelationSnapshot snapshot = BuildSnapshot("", false);
+				snapshot.promptGroupCompleted = completion.completed;
+				snapshot.promptRunId = completion.promptRunId;
+				snapshot.promptTerminalState = completion.terminalState;
+				return snapshot;
+			}
+
+			NativeSendCorrelationSnapshot NotePromptAbort(
+				const std::string& promptRunId,
+				const std::string& state)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				NativeSendCorrelationSnapshot snapshot = BuildSnapshot("", false);
+				const std::string normalizedPromptRunId = TrimCopy(promptRunId);
+				if (normalizedPromptRunId.empty())
+				{
+					return snapshot;
+				}
+
+				auto& group = m_promptGroups[normalizedPromptRunId];
+				for (const auto& runId : group.expectedResponderRunIds)
+				{
+					if (!runId.empty())
+					{
+						group.terminalResponderRunIds.insert(runId);
+					}
+				}
+				for (const auto& runId : group.observedResponderRunIds)
+				{
+					if (!runId.empty())
+					{
+						group.terminalResponderRunIds.insert(runId);
+					}
+				}
+
+				std::string normalizedState = NormalizeState(state);
+				if (!IsTerminalState(normalizedState))
+				{
+					normalizedState = "aborted";
+				}
+
+				group.completed = true;
+				group.terminalState = normalizedState;
+				FinishPromptGroupUnsafe(normalizedPromptRunId, group.terminalState);
+
+				snapshot = BuildSnapshot("", false);
+				snapshot.promptGroupCompleted = true;
+				snapshot.promptRunId = normalizedPromptRunId;
+				snapshot.promptTerminalState = group.terminalState;
+				return snapshot;
 			}
 
 			NativeSendCorrelationSnapshot Snapshot() const
@@ -275,6 +417,14 @@ namespace blazeclaw::app::chatcontroller {
 					.requestCorrelationId = "",
 					.status = "snapshot",
 					.activeRunId = m_activeRunId,
+					.promptRunId = m_activePromptRunId,
+					.activePromptRunId = m_activePromptRunId,
+					.activeResponderRunId = m_activeResponderRunId,
+					.responseMode = m_responseMode,
+					.promptTerminalState = m_lastPromptTerminalState,
+					.multiActive = m_responseMode == "multi_active",
+					.promptGroupCompleted = m_lastPromptCompleted,
+					.activeResponderCount = ActiveResponderCountUnsafe(),
 					.queueDepth = m_sendQueue.size(),
 					.pendingCorrelationCount = m_pendingCorrelations.size(),
 					.queued = false,
@@ -287,6 +437,12 @@ namespace blazeclaw::app::chatcontroller {
 				m_sendQueue.clear();
 				m_pendingCorrelations.clear();
 				m_activeRunId.clear();
+				m_activePromptRunId.clear();
+				m_activeResponderRunId.clear();
+				m_responseMode = "single";
+				m_lastPromptTerminalState.clear();
+				m_lastPromptCompleted = false;
+				m_promptGroups.clear();
 			}
 
 		private:
@@ -294,7 +450,197 @@ namespace blazeclaw::app::chatcontroller {
 				std::string method;
 				std::string sessionKey;
 				std::string status;
+				std::string responseMode = "single";
+				std::vector<std::string> requestedResponders;
 			};
+
+			struct PromptGroupEntry {
+				std::unordered_set<std::string> expectedResponderRunIds;
+				std::unordered_set<std::string> observedResponderRunIds;
+				std::unordered_set<std::string> terminalResponderRunIds;
+				std::string terminalState;
+				bool completed = false;
+			};
+
+			struct PromptCompletion {
+				bool completed = false;
+				std::string promptRunId;
+				std::string terminalState;
+			};
+
+			static std::string NormalizeState(const std::string& value)
+			{
+				std::string normalized = TrimCopy(value);
+				std::transform(
+					normalized.begin(),
+					normalized.end(),
+					normalized.begin(),
+					[](const unsigned char c) {
+						return static_cast<char>(std::tolower(c));
+					});
+				return normalized;
+			}
+
+			static bool IsTerminalState(const std::string& normalizedState)
+			{
+				return normalizedState == "final" ||
+					normalizedState == "completed" ||
+					normalizedState == "error" ||
+					normalizedState == "aborted" ||
+					normalizedState == "needs_approval";
+			}
+
+			static std::string NormalizeResponseMode(const std::string& value)
+			{
+				const std::string normalized = NormalizeState(value);
+				return normalized == "multi_active"
+					? normalized
+					: "single";
+			}
+
+			static std::string ResolvePromptRunId(
+				const std::string& promptRunId,
+				const std::string& runId)
+			{
+				const std::string normalizedPrompt = TrimCopy(promptRunId);
+				if (!normalizedPrompt.empty())
+				{
+					return normalizedPrompt;
+				}
+
+				const std::string normalizedRun = TrimCopy(runId);
+				if (normalizedRun.empty())
+				{
+					return "";
+				}
+
+				return normalizedRun + ".prompt";
+			}
+
+			static std::string ResolveResponderRunId(
+				const std::string& responderRunId,
+				const std::string& runId)
+			{
+				const std::string normalizedResponder = TrimCopy(responderRunId);
+				if (!normalizedResponder.empty())
+				{
+					return normalizedResponder;
+				}
+
+				return TrimCopy(runId);
+			}
+
+			void RegisterPromptRespondersUnsafe(
+				const std::string& promptRunId,
+				const std::vector<std::string>& responderRunIds)
+			{
+				if (promptRunId.empty())
+				{
+					return;
+				}
+
+				auto& group = m_promptGroups[promptRunId];
+				for (const auto& candidate : responderRunIds)
+				{
+					const std::string normalized = TrimCopy(candidate);
+					if (normalized.empty())
+					{
+						continue;
+					}
+					group.expectedResponderRunIds.insert(normalized);
+				}
+			}
+
+			PromptCompletion HandleTerminalTransitionUnsafe(
+				const std::string& promptRunId,
+				const std::string& responderRunId,
+				const std::string& state)
+			{
+				PromptCompletion completion;
+				completion.promptRunId = promptRunId;
+				if (promptRunId.empty() || responderRunId.empty())
+				{
+					return completion;
+				}
+
+				auto& group = m_promptGroups[promptRunId];
+				group.observedResponderRunIds.insert(responderRunId);
+
+				const std::string normalizedState = NormalizeState(state);
+				if (IsTerminalState(normalizedState))
+				{
+					group.terminalResponderRunIds.insert(responderRunId);
+					if (group.terminalState.empty())
+					{
+						group.terminalState = normalizedState;
+					}
+					else if (normalizedState == "error")
+					{
+						group.terminalState = "error";
+					}
+					else if (group.terminalState != "error" && normalizedState == "needs_approval")
+					{
+						group.terminalState = "needs_approval";
+					}
+					else if (group.terminalState != "error" &&
+						group.terminalState != "needs_approval" &&
+						normalizedState == "aborted")
+					{
+						group.terminalState = "aborted";
+					}
+				}
+
+				if (!group.expectedResponderRunIds.empty())
+				{
+					group.completed =
+						group.terminalResponderRunIds.size() >= group.expectedResponderRunIds.size();
+				}
+				else
+				{
+					group.completed =
+						!group.observedResponderRunIds.empty() &&
+						group.terminalResponderRunIds.size() >= group.observedResponderRunIds.size();
+				}
+
+				completion.completed = group.completed;
+				completion.terminalState = group.terminalState.empty()
+					? std::string("final")
+					: group.terminalState;
+				return completion;
+			}
+
+			void FinishPromptGroupUnsafe(
+				const std::string& promptRunId,
+				const std::string& terminalState)
+			{
+				m_lastPromptCompleted = true;
+				m_lastPromptTerminalState = terminalState;
+				m_activePromptRunId = promptRunId;
+				m_activeResponderRunId.clear();
+				m_activeRunId.clear();
+				if (!m_sendQueue.empty())
+				{
+					m_sendQueue.pop_front();
+				}
+			}
+
+			std::size_t ActiveResponderCountUnsafe() const
+			{
+				if (m_activePromptRunId.empty())
+				{
+					return 0;
+				}
+				const auto it = m_promptGroups.find(m_activePromptRunId);
+				if (it == m_promptGroups.end())
+				{
+					return 0;
+				}
+				if (!it->second.expectedResponderRunIds.empty())
+				{
+					return it->second.expectedResponderRunIds.size();
+				}
+				return it->second.observedResponderRunIds.size();
+			}
 
 			NativeSendCorrelationSnapshot BuildSnapshot(
 				const std::string& correlationId,
@@ -304,6 +650,14 @@ namespace blazeclaw::app::chatcontroller {
 					.requestCorrelationId = correlationId,
 					.status = queued ? "queued" : "dispatched",
 					.activeRunId = m_activeRunId,
+					.promptRunId = m_activePromptRunId,
+					.activePromptRunId = m_activePromptRunId,
+					.activeResponderRunId = m_activeResponderRunId,
+					.responseMode = m_responseMode,
+					.promptTerminalState = m_lastPromptTerminalState,
+					.multiActive = m_responseMode == "multi_active",
+					.promptGroupCompleted = m_lastPromptCompleted,
+					.activeResponderCount = ActiveResponderCountUnsafe(),
 					.queueDepth = m_sendQueue.size(),
 					.pendingCorrelationCount = m_pendingCorrelations.size(),
 					.queued = queued,
@@ -313,7 +667,13 @@ namespace blazeclaw::app::chatcontroller {
 			mutable std::mutex m_mutex;
 			std::deque<std::string> m_sendQueue;
 			std::unordered_map<std::string, CorrelationEntry> m_pendingCorrelations;
+			std::unordered_map<std::string, PromptGroupEntry> m_promptGroups;
 			std::string m_activeRunId;
+			std::string m_activePromptRunId;
+			std::string m_activeResponderRunId;
+			std::string m_responseMode = "single";
+			std::string m_lastPromptTerminalState;
+			bool m_lastPromptCompleted = false;
 		};
 
 		NativeChatSendState& SendStateInstance()
@@ -1622,26 +1982,80 @@ namespace blazeclaw::app::chatcontroller {
 					const std::string runId = TrimCopy(event.value("runId", std::string{}));
 					const std::string state = NormalizeState(event.value("state", std::string{}));
 					const std::string text = ParseTextFromMessageField(event);
+					const std::string promptRunId = ResolvePromptRunId(event, runId);
+					const std::string responderRunId = ResolveResponderRunId(event, runId);
+					const std::string responderId = ReadStringByAlias(
+						event,
+						{"responderId", "responder"});
+					const std::string responderLabel = ReadStringByAlias(
+						event,
+						{"responderLabel", "label", "responderName"});
+					const std::int64_t responderOrder = ReadIntegerByAlias(
+						event,
+						{"responderOrder", "order"},
+						-1);
+					const std::string responseMode = NormalizeResponseMode(ReadStringByAlias(
+						event,
+						{"responseMode"}));
+
+					EnsurePromptGroup(
+						promptRunId,
+						responseMode,
+						responderRunId);
+
+					ResponderStreamEntry* responderEntry = nullptr;
+					if (!responderRunId.empty())
+					{
+						responderEntry = &EnsureResponderStream(
+							responderRunId,
+							promptRunId,
+							responderId,
+							responderLabel,
+							responderOrder);
+					}
 
 					if (state == "delta")
 					{
 						if (!runId.empty())
 						{
-							m_snapshot.activeRunId = runId;
+							m_snapshot.activeRunId = !responderRunId.empty()
+								? responderRunId
+								: runId;
+							m_snapshot.activeResponderRunId = responderRunId;
+							m_snapshot.activePromptRunId = promptRunId;
 						}
-						if (!text.empty() && !IsSilentReplyText(text) && text.size() >= m_snapshot.streamText.size())
+						if (!text.empty() &&
+							!IsSilentReplyText(text) &&
+							text.size() >= m_snapshot.streamText.size())
 						{
 							m_snapshot.streamText = text;
 							m_snapshot.hasStreamDraft = true;
 							m_snapshot.terminalState = "delta";
+							if (responderEntry != nullptr)
+							{
+								if (text.size() >= responderEntry->streamText.size())
+								{
+									responderEntry->streamText = text;
+								}
+								responderEntry->hasStreamDraft = true;
+							}
 							result.uiOps.push_back({
 								{"op", "chat.update_stream"},
 								{"target", "messages"},
 								{"data", {
 									{"runId", m_snapshot.activeRunId},
+									{"promptRunId", promptRunId},
+									{"responderRunId", responderRunId},
+									{"responderId", responderId},
+									{"responderLabel", responderLabel},
+									{"responderOrder", responderOrder},
 									{"text", m_snapshot.streamText},
 								}},
 							});
+						}
+						if (responderEntry != nullptr)
+						{
+							responderEntry->deltaCount += 1;
 						}
 						m_snapshot.deltaCount += 1;
 						result.processedEventCount += 1;
@@ -1652,10 +2066,35 @@ namespace blazeclaw::app::chatcontroller {
 					{
 						const std::string terminalText = !text.empty()
 							? text
-							: m_snapshot.streamText;
-						const std::string effectiveRunId = !runId.empty()
-							? runId
-							: m_snapshot.activeRunId;
+							: (responderEntry != nullptr ? responderEntry->streamText : m_snapshot.streamText);
+						const std::string effectiveRunId = !responderRunId.empty()
+							? responderRunId
+							: (!runId.empty() ? runId : m_snapshot.activeRunId);
+
+						if (responderEntry != nullptr)
+						{
+							responderEntry->terminalState = state;
+							responderEntry->completed = true;
+							responderEntry->hasStreamDraft = false;
+							responderEntry->terminalCount += 1;
+						}
+
+						if (!promptRunId.empty())
+						{
+							auto promptIt = m_promptGroups.find(promptRunId);
+							if (promptIt != m_promptGroups.end())
+							{
+								if (!responderRunId.empty())
+								{
+									promptIt->second.completedResponderRunIds.insert(responderRunId);
+								}
+								promptIt->second.completed =
+									!promptIt->second.responderRunIds.empty() &&
+									promptIt->second.completedResponderRunIds.size() >=
+										promptIt->second.responderRunIds.size();
+								promptIt->second.terminalState = state;
+							}
+						}
 
 						if (!terminalText.empty() && !IsSilentReplyText(terminalText))
 						{
@@ -1664,21 +2103,55 @@ namespace blazeclaw::app::chatcontroller {
 								{"target", "messages"},
 								{"data", {
 									{"runId", effectiveRunId},
+									{"promptRunId", promptRunId},
+									{"responderRunId", responderRunId},
+									{"responderId", responderId},
+									{"responderLabel", responderLabel},
+									{"responderOrder", responderOrder},
 									{"text", terminalText},
 									{"terminalState", state},
 								}},
 							});
 						}
 
-						sendState.HandleRpcResult("", true, effectiveRunId, true);
+						auto sendSnapshot = sendState.NoteEventTransition(
+							promptRunId,
+							responderRunId,
+							state);
+						if (responderRunId.empty() && !promptRunId.empty() && state == "aborted")
+						{
+							sendSnapshot = sendState.NotePromptAbort(promptRunId, state);
+						}
+
+						if (sendSnapshot.promptGroupCompleted && !sendSnapshot.promptRunId.empty())
+						{
+							result.uiOps.push_back({
+								{"op", "chat.complete_prompt_group"},
+								{"target", "messages"},
+								{"data", {
+									{"promptRunId", sendSnapshot.promptRunId},
+									{"terminalState", sendSnapshot.promptTerminalState},
+									{"responseMode", sendSnapshot.responseMode},
+								}},
+							});
+						}
+
 						m_snapshot.activeRunId.clear();
+						m_snapshot.activeResponderRunId.clear();
+						m_snapshot.activePromptRunId = promptRunId;
 						m_snapshot.streamText.clear();
 						m_snapshot.hasStreamDraft = false;
 						m_snapshot.terminalState = state;
+						m_snapshot.promptCompleted = sendSnapshot.promptGroupCompleted;
 						m_snapshot.terminalCount += 1;
 						result.processedEventCount += 1;
 					}
 				}
+
+				m_snapshot.responderStreams = BuildResponderStreamsJson();
+				m_snapshot.promptGroups = BuildPromptGroupsJson();
+				m_snapshot.completedResponderCount = CountCompletedResponders();
+				m_snapshot.activeResponderCount = CountTrackedResponders();
 
 				result.streamSnapshot = m_snapshot;
 				return result;
@@ -1694,9 +2167,35 @@ namespace blazeclaw::app::chatcontroller {
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_snapshot = NativeStreamStateSnapshot{};
+				m_responderStreams.clear();
+				m_promptGroups.clear();
 			}
 
 		private:
+			struct ResponderStreamEntry {
+				std::string runId;
+				std::string promptRunId;
+				std::string responderRunId;
+				std::string responderId;
+				std::string responderLabel;
+				std::int64_t responderOrder = -1;
+				std::string streamText;
+				std::string terminalState;
+				bool hasStreamDraft = false;
+				bool completed = false;
+				std::size_t deltaCount = 0;
+				std::size_t terminalCount = 0;
+			};
+
+			struct PromptGroupEntry {
+				std::string promptRunId;
+				std::string responseMode = "single";
+				std::string terminalState;
+				bool completed = false;
+				std::unordered_set<std::string> responderRunIds;
+				std::unordered_set<std::string> completedResponderRunIds;
+			};
+
 			static std::string NormalizeSessionKey(const std::string& value)
 			{
 				const std::string key = TrimCopy(value);
@@ -1727,6 +2226,219 @@ namespace blazeclaw::app::chatcontroller {
 					value == "aborted" ||
 					value == "error" ||
 					value == "needs_approval";
+			}
+
+			static std::string NormalizeResponseMode(const std::string& value)
+			{
+				const std::string normalized = NormalizeState(value);
+				return normalized == "multi_active"
+					? normalized
+					: "single";
+			}
+
+			static std::string ReadStringByAlias(
+				const nlohmann::json& event,
+				std::initializer_list<const char*> keys)
+			{
+				if (!event.is_object())
+				{
+					return "";
+				}
+				for (const char* key : keys)
+				{
+					if (key == nullptr)
+					{
+						continue;
+					}
+					auto it = event.find(key);
+					if (it != event.end() && it->is_string())
+					{
+						const std::string value = TrimCopy(it->get<std::string>());
+						if (!value.empty())
+						{
+							return value;
+						}
+					}
+				}
+				return "";
+			}
+
+			static std::int64_t ReadIntegerByAlias(
+				const nlohmann::json& event,
+				std::initializer_list<const char*> keys,
+				std::int64_t fallback)
+			{
+				if (!event.is_object())
+				{
+					return fallback;
+				}
+				for (const char* key : keys)
+				{
+					if (key == nullptr)
+					{
+						continue;
+					}
+					auto it = event.find(key);
+					if (it == event.end() || !it->is_number_integer())
+					{
+						continue;
+					}
+					return it->get<std::int64_t>();
+				}
+				return fallback;
+			}
+
+			static std::string ResolvePromptRunId(
+				const nlohmann::json& event,
+				const std::string& runId)
+			{
+				const std::string promptRunId = ReadStringByAlias(
+					event,
+					{"promptRunId", "parentRunId"});
+				if (!promptRunId.empty())
+				{
+					return promptRunId;
+				}
+
+				if (runId.empty())
+				{
+					return "";
+				}
+				return runId + ".prompt";
+			}
+
+			static std::string ResolveResponderRunId(
+				const nlohmann::json& event,
+				const std::string& runId)
+			{
+				const std::string responderRunId = ReadStringByAlias(
+					event,
+					{"responderRunId"});
+				if (!responderRunId.empty())
+				{
+					return responderRunId;
+				}
+
+				return TrimCopy(runId);
+			}
+
+			ResponderStreamEntry& EnsureResponderStream(
+				const std::string& responderRunId,
+				const std::string& promptRunId,
+				const std::string& responderId,
+				const std::string& responderLabel,
+				std::int64_t responderOrder)
+			{
+				auto [it, inserted] = m_responderStreams.emplace(
+					responderRunId,
+					ResponderStreamEntry{});
+				ResponderStreamEntry& entry = it->second;
+				if (inserted)
+				{
+					entry.runId = responderRunId;
+					entry.responderRunId = responderRunId;
+				}
+				if (!promptRunId.empty())
+				{
+					entry.promptRunId = promptRunId;
+				}
+				if (!responderId.empty())
+				{
+					entry.responderId = responderId;
+				}
+				if (!responderLabel.empty())
+				{
+					entry.responderLabel = responderLabel;
+				}
+				if (responderOrder >= 0)
+				{
+					entry.responderOrder = responderOrder;
+				}
+				return entry;
+			}
+
+			void EnsurePromptGroup(
+				const std::string& promptRunId,
+				const std::string& responseMode,
+				const std::string& responderRunId)
+			{
+				if (promptRunId.empty())
+				{
+					return;
+				}
+
+				auto [it, inserted] = m_promptGroups.emplace(promptRunId, PromptGroupEntry{});
+				PromptGroupEntry& group = it->second;
+				if (inserted)
+				{
+					group.promptRunId = promptRunId;
+				}
+				if (!responseMode.empty())
+				{
+					group.responseMode = responseMode;
+				}
+				if (!responderRunId.empty())
+				{
+					group.responderRunIds.insert(responderRunId);
+				}
+			}
+
+			nlohmann::json BuildResponderStreamsJson() const
+			{
+				nlohmann::json rows = nlohmann::json::array();
+				for (const auto& [runId, entry] : m_responderStreams)
+				{
+					rows.push_back({
+						{"runId", runId},
+						{"promptRunId", entry.promptRunId},
+						{"responderRunId", entry.responderRunId},
+						{"responderId", entry.responderId},
+						{"responderLabel", entry.responderLabel},
+						{"responderOrder", entry.responderOrder},
+						{"streamText", entry.streamText},
+						{"terminalState", entry.terminalState},
+						{"hasStreamDraft", entry.hasStreamDraft},
+						{"completed", entry.completed},
+						{"deltaCount", entry.deltaCount},
+						{"terminalCount", entry.terminalCount},
+					});
+				}
+				return rows;
+			}
+
+			nlohmann::json BuildPromptGroupsJson() const
+			{
+				nlohmann::json rows = nlohmann::json::array();
+				for (const auto& [promptRunId, group] : m_promptGroups)
+				{
+					rows.push_back({
+						{"promptRunId", promptRunId},
+						{"responseMode", group.responseMode},
+						{"terminalState", group.terminalState},
+						{"completed", group.completed},
+						{"totalResponders", group.responderRunIds.size()},
+						{"completedResponders", group.completedResponderRunIds.size()},
+					});
+				}
+				return rows;
+			}
+
+			std::size_t CountTrackedResponders() const
+			{
+				return m_responderStreams.size();
+			}
+
+			std::size_t CountCompletedResponders() const
+			{
+				std::size_t count = 0;
+				for (const auto& [runId, entry] : m_responderStreams)
+				{
+					if (entry.completed)
+					{
+						count += 1;
+					}
+				}
+				return count;
 			}
 
 			static std::string ParseTextFromMessageObject(const nlohmann::json& message)
@@ -1784,6 +2496,8 @@ namespace blazeclaw::app::chatcontroller {
 
 			mutable std::mutex m_mutex;
 			NativeStreamStateSnapshot m_snapshot;
+			std::unordered_map<std::string, ResponderStreamEntry> m_responderStreams;
+			std::unordered_map<std::string, PromptGroupEntry> m_promptGroups;
 		};
 
 		NativeChatStreamState& StreamStateInstance()
@@ -2062,17 +2776,36 @@ namespace blazeclaw::app::chatcontroller {
 						{"requestCorrelationId", sendState.requestCorrelationId},
 						{"status", sendState.status},
 						{"activeRunId", sendState.activeRunId},
+						{"promptRunId", sendState.promptRunId},
+						{"activePromptRunId", sendState.activePromptRunId},
+						{"activeResponderRunId", sendState.activeResponderRunId},
+						{"responseMode", sendState.responseMode},
+						{"promptTerminalState", sendState.promptTerminalState},
+						{"multiActive", sendState.multiActive},
+						{"promptGroupCompleted", sendState.promptGroupCompleted},
+						{"activeResponderCount", sendState.activeResponderCount},
 						{"queueDepth", sendState.queueDepth},
 						{"pendingCorrelationCount", sendState.pendingCorrelationCount},
 						{"queued", sendState.queued},
 					}},
 					{"chatStream", {
 						{"activeRunId", streamState.activeRunId},
+						{"activePromptRunId", streamState.activePromptRunId},
+						{"activeResponderRunId", streamState.activeResponderRunId},
 						{"streamText", streamState.streamText},
 						{"terminalState", streamState.terminalState},
 						{"hasStreamDraft", streamState.hasStreamDraft},
+						{"promptCompleted", streamState.promptCompleted},
+						{"activeResponderCount", streamState.activeResponderCount},
+						{"completedResponderCount", streamState.completedResponderCount},
 						{"deltaCount", streamState.deltaCount},
 						{"terminalCount", streamState.terminalCount},
+						{"responderStreams", streamState.responderStreams.is_array()
+							? streamState.responderStreams
+							: nlohmann::json::array()},
+						{"promptGroups", streamState.promptGroups.is_array()
+							? streamState.promptGroups
+							: nlohmann::json::array()},
 					}},
 					{"chatReconcile", {
 						{"watchdogActive", reconcileWatchdog.active},
@@ -2223,8 +2956,11 @@ namespace blazeclaw::app::chatcontroller {
 					{"counters", {
 						{"chatSend.queueDepth", sendState.queueDepth},
 						{"chatSend.pendingCorrelations", sendState.pendingCorrelationCount},
+						{"chatSend.activeResponderCount", sendState.activeResponderCount},
 						{"chatStream.deltaCount", streamState.deltaCount},
 						{"chatStream.terminalCount", streamState.terminalCount},
+						{"chatStream.activeResponderCount", streamState.activeResponderCount},
+						{"chatStream.completedResponderCount", streamState.completedResponderCount},
 						{"session.optionsCount", sessionSettings.options.size()},
 						{"session.switchGeneration", sessionSettings.switchGeneration},
 						{"models.optionsCount", modelSettings.modelOptions.size()},
@@ -2380,6 +3116,24 @@ namespace blazeclaw::app::chatcontroller {
 			params.sessionKey = readString("sessionKey");
 			params.message = readString("message");
 			params.idempotencyKey = readString("idempotencyKey");
+			params.responseMode = readString("responseMode");
+
+			const auto respondersIt = parsed.find("responders");
+			if (respondersIt != parsed.end() && respondersIt->is_array())
+			{
+				for (const auto& row : *respondersIt)
+				{
+					if (!row.is_string())
+					{
+						continue;
+					}
+					const std::string responder = TrimCopy(row.get<std::string>());
+					if (!responder.empty())
+					{
+						params.requestedResponders.push_back(responder);
+					}
+				}
+			}
 
 			const auto detachedIt = parsed.find("detached");
 			if (detachedIt != parsed.end() && detachedIt->is_boolean())
@@ -2433,11 +3187,53 @@ namespace blazeclaw::app::chatcontroller {
 			const auto payload = ParseObjectOrDefault(parsed, "payload");
 			const std::string runId = payload.value("runId", std::string{});
 			const std::string state = payload.value("state", std::string{});
-			const bool terminal = state == "completed" ||
-				state == "failed" ||
-				state == "aborted";
+			std::string normalizedState = TrimCopy(state);
+			std::transform(
+				normalizedState.begin(),
+				normalizedState.end(),
+				normalizedState.begin(),
+				[](const unsigned char c) {
+					return static_cast<char>(std::tolower(c));
+				});
+			if (normalizedState == "failed")
+			{
+				normalizedState = "error";
+			}
+			const std::string promptRunId = payload.value("promptRunId", std::string{});
+			const std::string responderRunId = payload.value("responderRunId", std::string{});
+			const std::string responseMode = payload.value("responseMode", std::string{});
+			std::vector<std::string> responderRunIds;
+			if (payload.contains("responderRunIds") && payload["responderRunIds"].is_array())
+			{
+				for (const auto& row : payload["responderRunIds"])
+				{
+					if (!row.is_string())
+					{
+						continue;
+					}
+					const std::string normalized = TrimCopy(row.get<std::string>());
+					if (!normalized.empty())
+					{
+						responderRunIds.push_back(normalized);
+					}
+				}
+			}
+			const bool terminal = normalizedState == "completed" ||
+				normalizedState == "error" ||
+				normalizedState == "aborted" ||
+				normalizedState == "final" ||
+				normalizedState == "needs_approval";
 
-			return SendStateInstance().HandleRpcResult(correlationId, ok, runId, terminal);
+			return SendStateInstance().HandleRpcResult(
+				correlationId,
+				ok,
+				runId,
+				terminal,
+				normalizedState,
+				promptRunId,
+				responderRunId,
+				responderRunIds,
+				responseMode);
 		}
 
 		NativeProcessEventsParams ParseProcessEventsParams(
