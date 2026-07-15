@@ -687,6 +687,8 @@
     <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsContractTests.cpp" />
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
@@ -715,17 +717,6 @@
     <None Include="tools\speech\New-SherpaCpuFallbackTuningMatrix.ps1" />
     <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />
     <None Include="tools\speech\Test-SherpaFirstTokenBenchmarkSummary.ps1" />
-    <None Include="VOICE_STREAM_TO_ASR_REPEAT_WORD_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_SHERPA_NO_OUTPUT_ROOT_CAUSE_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_SHERPA_RECOGNITION_QUALITY_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP11_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP12_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP13_PHASE_A_TO_E_IMPLEMENTATION.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP1_TRACE.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP2_CONTRACT.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP3_ASYNC_DISPATCH.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md" />
-    <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\agent-chat-vanilla\html\css\main.css" />
     <None Include="web\agent-chat-vanilla\html\css\variables.css" />
     <None Include="web\agent-chat-vanilla\html\index.html" />

@@ -646,6 +646,12 @@
     </ClCompile>
     <ClCompile Include="src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
     <ClCompile Include="src\gateway\ChatPipelineRequestNormalization.cpp" />
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsContractTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsThreadPoolTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1326,17 +1332,6 @@
     <None Include="tools\speech\New-SherpaCpuFallbackTuningMatrix.ps1" />
     <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />
     <None Include="tools\speech\Test-SherpaFirstTokenBenchmarkSummary.ps1" />
-    <None Include="VOICE_STREAM_TO_ASR_REPEAT_WORD_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_SHERPA_NO_OUTPUT_ROOT_CAUSE_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_SHERPA_RECOGNITION_QUALITY_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP11_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP12_ROOT_CAUSE_AND_FIX_PLAN.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP13_PHASE_A_TO_E_IMPLEMENTATION.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP1_TRACE.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP2_CONTRACT.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP3_ASYNC_DISPATCH.md" />
-    <None Include="VOICE_STREAM_TO_ASR_STEP4_HANDOFF_BOUNDARY.md" />
-    <None Include="VOICE_STREAM_TO_ASR_WIRING_PLAN.md" />
     <None Include="web\chat\devices-controller.js" />
     <None Include="web\chat\files-controller.js" />
     <None Include="packages.config" />
@@ -1701,6 +1696,9 @@
     </Filter>
     <Filter Include="core-chat\webview_routers">
       <UniqueIdentifier>{bf0087c2-b593-4643-8897-1005d5af85e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{3ff0feb6-e339-4f12-8b55-4f1f2e2cf6ff}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

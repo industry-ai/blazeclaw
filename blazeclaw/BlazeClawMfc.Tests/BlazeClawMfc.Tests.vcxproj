@@ -71,6 +71,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleAcceptanceMatrixTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\PluginRuntimeStateServiceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillCommandsAggregationServiceContractTests.cpp" />
