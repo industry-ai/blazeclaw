@@ -1981,7 +1981,7 @@ namespace blazeclaw::app::chatcontroller {
 
 					const std::string runId = TrimCopy(event.value("runId", std::string{}));
 					const std::string state = NormalizeState(event.value("state", std::string{}));
-					const std::string text = ParseTextFromMessageField(event);
+					const std::string text = ParseTextFromMessageField(event);	// now, it may return error messages
 					const std::string promptRunId = ResolvePromptRunId(event, runId);
 					const std::string responderRunId = ResolveResponderRunId(event, runId);
 					const std::string responderId = ReadStringByAlias(
@@ -2065,7 +2065,7 @@ namespace blazeclaw::app::chatcontroller {
 					if (IsTerminalState(state))
 					{
 						const std::string terminalText = !text.empty()
-							? text
+							? text	// this will already prefer errorMessage when message.empty()
 							: (responderEntry != nullptr ? responderEntry->streamText : m_snapshot.streamText);
 						const std::string effectiveRunId = !responderRunId.empty()
 							? responderRunId
@@ -2479,19 +2479,36 @@ namespace blazeclaw::app::chatcontroller {
 				return "";
 			}
 
+			// existing helper already parses `message`. 
+			// Add fallback to return `errorMessage` when message absent.
 			static std::string ParseTextFromMessageField(const nlohmann::json& event)
 			{
-				if (!event.is_object() || !event.contains("message"))
+				//if (!event.is_object() || !event.contains("message"))
+				if (!event.is_object())
 				{
 					return "";
 				}
 
+				// If there's a message (string or structured), return it
 				const auto& message = event["message"];
 				if (message.is_string())
 				{
-					return TrimCopy(message.get<std::string>());
+					//return TrimCopy(message.get<std::string>());
+					const std::string msg = TrimCopy(message.get<std::string>());
+					if (!msg.empty()) return msg;
 				}
-				return ParseTextFromMessageObject(message);
+				//return ParseTextFromMessageObject(message);
+				// handle object message form (existing ParseTextFromMessageObject)
+				const std::string parsed = ParseTextFromMessageObject(message);
+				if (!parsed.empty()) return parsed;
+
+				// NEW: fallback to optional errorMessage (server-provided)
+				if (event.contains("errorMessage") && event["errorMessage"].is_string()) {
+					const std::string err = TrimCopy(event["errorMessage"].get<std::string>());
+					if (!err.empty()) return err;
+				}
+
+				return "";	// NEW: no text found
 			}
 
 			mutable std::mutex m_mutex;

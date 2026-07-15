@@ -406,8 +406,13 @@
 
                 if (event.state === "final" || event.state === "completed") {
                     const terminalState = event.state === "completed" ? "completed" : "final";
-                    const normalizedFinal = normalizeFinalAssistantMessage(event.message);
-                    const text = controller.consumeTerminalText(normalizedFinal || event.message);
+                    // defensively normalize the final message to ensure it is an assistant message
+                    // const normalizedFinal = normalizeFinalAssistantMessage(event.message);
+                    // const text = controller.consumeTerminalText(normalizedFinal || event.message);
+                    const normalizedFinal = normalizeFinalAssistantMessage(event.message ||
+                        event.errorMessage || "defensive JS\r\ndefensive JS - normalizedFinal\r\n");
+                    const text = controller.consumeTerminalText(normalizedFinal || event.message ||
+                        event.errorMessage || "defensive JS\r\ndefensive JS - text\r\n");
                     let shouldReconcile = false;
                     if (text) {
                         controller.commitStreamTranscriptFinal({
