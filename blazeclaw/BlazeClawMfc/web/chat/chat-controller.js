@@ -3773,15 +3773,54 @@
 
         const facade = {
             __compatFacade: true,
-            __compatFacadeVersion: "step8.1",
+            __compatFacadeVersion: "step9.0",
+            __compatFacadeDelegationMode: "pass_through",
         };
 
-        for (const methodName of legacyApiMethods) {
-            if (typeof controllerImpl[methodName] === "function") {
-                facade[methodName] = function (...args) {
-                    return controllerImpl[methodName](...args);
+        function invokeFallbackLegacyMethod(methodName, args) {
+            if (methodName === "isSilentReplyText") {
+                return isSilentReplyText(args[0]);
+            }
+
+            if (methodName === "parseTextFromMessage") {
+                return parseTextFromMessage(args[0]);
+            }
+
+            if (methodName === "parseApprovalTokenFromText") {
+                return parseApprovalTokenFromText(args[0]);
+            }
+
+            if (methodName === "hasTerminalRun" || methodName === "hasBufferedAssistantStream") {
+                return false;
+            }
+
+            if (methodName === "getStructuredTranscript") {
+                return [];
+            }
+
+            if (methodName === "getOperatorDiagnosticsSnapshot") {
+                return {
+                    counters: {},
+                    lastEmitMs: {},
                 };
             }
+
+            return undefined;
+        }
+
+        function invokeDelegatedMethod(methodName, args) {
+            const candidate = controllerImpl[methodName];
+            if (typeof candidate === "function") {
+                return candidate(...args);
+            }
+
+            return invokeFallbackLegacyMethod(methodName, args);
+        }
+
+        for (const methodName of legacyApiMethods) {
+            facade[methodName] = function (...args) {
+                return invokeDelegatedMethod(methodName, args);
+            };
         }
 
         for (const key of Object.keys(controllerImpl)) {
@@ -3795,7 +3834,20 @@
                     return controllerImpl[key](...args);
                 };
             } else {
-                facade[key] = value;
+                try {
+                    Object.defineProperty(facade, key, {
+                        enumerable: true,
+                        configurable: true,
+                        get: function () {
+                            return controllerImpl[key];
+                        },
+                        set: function (nextValue) {
+                            controllerImpl[key] = nextValue;
+                        },
+                    });
+                } catch (_) {
+                    facade[key] = value;
+                }
             }
         }
 
