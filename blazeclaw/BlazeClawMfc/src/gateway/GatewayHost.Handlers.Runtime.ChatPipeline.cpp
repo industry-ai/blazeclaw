@@ -1063,6 +1063,14 @@ namespace blazeclaw::gateway {
 							{
 								GatewayHost::ChatEventState ev{};
 								ev.runId = activeRun.runId;
+								ev.promptRunId = activeRun.promptRunId;
+								ev.responderRunId = activeRun.responderRunId;
+								ev.responderId = activeRun.responderId;
+								ev.provider = activeRun.provider;
+								ev.model = activeRun.model;
+								ev.runtimeKind = activeRun.runtimeKind;
+								ev.responderLabel = activeRun.responderLabel;
+								ev.responderOrder = activeRun.responderOrder;
 								ev.sessionKey = activeRun.sessionKey;
 								ev.state = "delta";
 								{
@@ -1965,6 +1973,26 @@ namespace blazeclaw::gateway {
 						{
 							GatewayHost::ChatEventState ev{};
 							ev.runId = runId;
+							ev.promptRunId = promptRunId;
+							ev.responderRunId = runId;
+							ev.responderId = !responderManifest.empty()
+								? responderManifest.front().responderId
+								: std::string();
+							ev.provider = !responderManifest.empty()
+								? responderManifest.front().provider
+								: std::string();
+							ev.model = !responderManifest.empty()
+								? responderManifest.front().model
+								: std::string();
+							ev.runtimeKind = !responderManifest.empty()
+								? responderManifest.front().runtimeKind
+								: std::string();
+							ev.responderLabel = !responderManifest.empty()
+								? responderManifest.front().responderLabel
+								: std::string();
+							ev.responderOrder = !responderManifest.empty()
+								? responderManifest.front().responderOrder
+								: 0;
 							ev.sessionKey = sessionKey;
 							ev.state = "queued";
 							{
@@ -1988,6 +2016,26 @@ namespace blazeclaw::gateway {
 						{
 							GatewayHost::ChatEventState ev{};
 							ev.runId = runId;
+							ev.promptRunId = promptRunId;
+							ev.responderRunId = runId;
+							ev.responderId = !responderManifest.empty()
+								? responderManifest.front().responderId
+								: std::string();
+							ev.provider = !responderManifest.empty()
+								? responderManifest.front().provider
+								: std::string();
+							ev.model = !responderManifest.empty()
+								? responderManifest.front().model
+								: std::string();
+							ev.runtimeKind = !responderManifest.empty()
+								? responderManifest.front().runtimeKind
+								: std::string();
+							ev.responderLabel = !responderManifest.empty()
+								? responderManifest.front().responderLabel
+								: std::string();
+							ev.responderOrder = !responderManifest.empty()
+								? responderManifest.front().responderOrder
+								: 0;
 							ev.sessionKey = sessionKey;
 							ev.state = "started";
 							{
@@ -2139,6 +2187,8 @@ namespace blazeclaw::gateway {
 									effectiveRequestedProviderOverride,
 									enforceOrderedAllowlist,
 									orderedAllowlistTargets,
+									promptRunId,
+									responderManifest,
 									hasAttachments,
 									attachmentMimeTypes,
 									&run,
@@ -2177,6 +2227,8 @@ namespace blazeclaw::gateway {
 										&streamedDeltaCount,
 										&runId,
 										&sessionKey,
+										&promptRunId,
+										&responderManifest,
 										&controlPlaneService,
 										&sendControlDecision,
 										&pushChatEventWithMetrics](const std::string& delta) {
@@ -2204,6 +2256,26 @@ namespace blazeclaw::gateway {
 				{
 					GatewayHost::ChatEventState ev{};
 					ev.runId = runId;
+					ev.promptRunId = promptRunId;
+					ev.responderRunId = runId;
+					ev.responderId = !responderManifest.empty()
+						? responderManifest.front().responderId
+						: std::string();
+					ev.provider = !responderManifest.empty()
+						? responderManifest.front().provider
+						: std::string();
+					ev.model = !responderManifest.empty()
+						? responderManifest.front().model
+						: std::string();
+					ev.runtimeKind = !responderManifest.empty()
+						? responderManifest.front().runtimeKind
+						: std::string();
+					ev.responderLabel = !responderManifest.empty()
+						? responderManifest.front().responderLabel
+						: std::string();
+					ev.responderOrder = !responderManifest.empty()
+						? responderManifest.front().responderOrder
+						: 0;
 					ev.sessionKey = sessionKey;
 					ev.state = "delta";
 					{
@@ -2714,6 +2786,14 @@ namespace blazeclaw::gateway {
 								{
 									GatewayHost::ChatEventState ev{};
 									ev.runId = runId;
+									ev.promptRunId = promptRunId;
+									ev.responderRunId = runId;
+									ev.responderId = primaryResponder.responderId;
+									ev.provider = primaryResponder.provider;
+									ev.model = primaryResponder.model;
+									ev.runtimeKind = primaryResponder.runtimeKind;
+									ev.responderLabel = primaryResponder.responderLabel;
+									ev.responderOrder = primaryResponder.responderOrder;
 									ev.sessionKey = sessionKey;
 									ev.state = "delta";
 									{
@@ -2935,6 +3015,14 @@ namespace blazeclaw::gateway {
 						{
 							GatewayHost::ChatEventState ev{};
 							ev.runId = insertedRunIt->second.runId;
+							ev.promptRunId = insertedRunIt->second.promptRunId;
+							ev.responderRunId = insertedRunIt->second.responderRunId;
+							ev.responderId = insertedRunIt->second.responderId;
+							ev.provider = insertedRunIt->second.provider;
+							ev.model = insertedRunIt->second.model;
+							ev.runtimeKind = insertedRunIt->second.runtimeKind;
+							ev.responderLabel = insertedRunIt->second.responderLabel;
+							ev.responderOrder = insertedRunIt->second.responderOrder;
 							ev.sessionKey = insertedRunIt->second.sessionKey;
 							ev.state = resolvedTerminalState;
 							{
@@ -3127,6 +3215,14 @@ namespace blazeclaw::gateway {
 					{
 						GatewayHost::ChatEventState ev{};
 						ev.runId = runId;
+						ev.promptRunId = runId + ".prompt";
+						ev.responderRunId = runId;
+						ev.responderId = "injected:" + runId;
+						ev.provider = "injected";
+						ev.model = "injected";
+						ev.runtimeKind = "local";
+						ev.responderLabel = "Injected";
+						ev.responderOrder = 0;
 						ev.sessionKey = sessionKey;
 						ev.state = "final";
 						{
@@ -3265,6 +3361,14 @@ namespace blazeclaw::gateway {
 					{
 						GatewayHost::ChatEventState ev{};
 						ev.runId = runIt->second.runId;
+						ev.promptRunId = runIt->second.promptRunId;
+						ev.responderRunId = runIt->second.responderRunId;
+						ev.responderId = runIt->second.responderId;
+						ev.provider = runIt->second.provider;
+						ev.model = runIt->second.model;
+						ev.runtimeKind = runIt->second.runtimeKind;
+						ev.responderLabel = runIt->second.responderLabel;
+						ev.responderOrder = runIt->second.responderOrder;
 						ev.sessionKey = sessionKey;
 						ev.state = "aborted";
 						{
@@ -3575,6 +3679,14 @@ namespace blazeclaw::gateway {
 									{
 										GatewayHost::ChatEventState ev{};
 										ev.runId = run.runId;
+									ev.promptRunId = run.promptRunId;
+									ev.responderRunId = run.responderRunId;
+									ev.responderId = run.responderId;
+									ev.provider = run.provider;
+									ev.model = run.model;
+									ev.runtimeKind = run.runtimeKind;
+									ev.responderLabel = run.responderLabel;
+									ev.responderOrder = run.responderOrder;
 										ev.sessionKey = run.sessionKey;
 										ev.state = "delta";
 								{
@@ -3653,6 +3765,14 @@ namespace blazeclaw::gateway {
 								{
 									GatewayHost::ChatEventState ev{};
 									ev.runId = run.runId;
+									ev.promptRunId = run.promptRunId;
+									ev.responderRunId = run.responderRunId;
+									ev.responderId = run.responderId;
+									ev.provider = run.provider;
+									ev.model = run.model;
+									ev.runtimeKind = run.runtimeKind;
+									ev.responderLabel = run.responderLabel;
+									ev.responderOrder = run.responderOrder;
 									ev.sessionKey = run.sessionKey;
 									ev.state = runTerminalState;
 								{
@@ -3834,14 +3954,14 @@ namespace blazeclaw::gateway {
 								std::optional<std::string> eventErrorCode;
 								std::optional<std::string> eventContextJson;
 								std::optional<std::string> eventMessageJsonForHistory;
-							std::string eventPromptRunId;
-							std::string eventResponderRunId;
-							std::string eventResponderId;
-							std::string eventProvider;
-							std::string eventModel;
-							std::string eventRuntimeKind;
-							std::string eventResponderLabel;
-							std::uint32_t eventResponderOrder = 0;
+							std::string eventPromptRunId = eventState.promptRunId;
+							std::string eventResponderRunId = eventState.responderRunId;
+							std::string eventResponderId = eventState.responderId;
+							std::string eventProvider = eventState.provider;
+							std::string eventModel = eventState.model;
+							std::string eventRuntimeKind = eventState.runtimeKind;
+							std::string eventResponderLabel = eventState.responderLabel;
+							std::uint32_t eventResponderOrder = eventState.responderOrder;
 							std::string emittedState = eventState.state;
 								bool silentAssistantEvent = false;
 							const auto runContextIt = run.runsById.find(eventState.runId);
@@ -3877,6 +3997,21 @@ namespace blazeclaw::gateway {
 							}
 							if (eventResponderRunId.empty()) {
 								eventResponderRunId = eventState.runId;
+							}
+							if (eventResponderId.empty()) {
+								eventResponderId = "unknown:" + eventResponderRunId;
+							}
+							if (eventProvider.empty()) {
+								eventProvider = "unknown";
+							}
+							if (eventModel.empty()) {
+								eventModel = "unknown";
+							}
+							if (eventRuntimeKind.empty()) {
+								eventRuntimeKind = "local";
+							}
+							if (eventResponderLabel.empty()) {
+								eventResponderLabel = "Unknown";
 							}
 								// chat.events.poll must return chat event objects (state/runId/sessionKey/...)
 								// rather than transport event envelopes. BuildChatEventJson preserves

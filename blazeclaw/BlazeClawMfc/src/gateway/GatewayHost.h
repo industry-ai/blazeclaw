@@ -764,6 +764,14 @@ namespace blazeclaw::gateway {
 
 		struct ChatEventState {
 			std::string runId;
+			std::string promptRunId;
+			std::string responderRunId;
+			std::string responderId;
+			std::string provider;
+			std::string model;
+			std::string runtimeKind;
+			std::string responderLabel;
+			std::uint32_t responderOrder = 0;
 			std::string sessionKey;
 			std::string state;
 			// Transitional structured message object for compatibility paths.

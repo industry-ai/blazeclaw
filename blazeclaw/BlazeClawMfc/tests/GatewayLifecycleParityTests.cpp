@@ -738,6 +738,54 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Gateway protocol capability checks validate enriched chat.events.poll envelope across responder states",
+	"[gateway][lifecycle][p0][capability][multi-active]")
+{
+	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
+	using blazeclaw::gateway::protocol::ResponseFrame;
+	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	const std::vector<std::string> states = {
+		"delta",
+		"final",
+		"error",
+		"aborted",
+		"needs_approval",
+	};
+
+	for (const auto& state : states) {
+		SchemaValidationIssue issue;
+		const std::string payload =
+			std::string("{\"sessionKey\":\"main\",\"events\":[{") +
+			"\"runId\":\"run-1\"," +
+			"\"promptRunId\":\"run-1.prompt\"," +
+			"\"responderRunId\":\"run-1\"," +
+			"\"responderId\":\"local:gemma\"," +
+			"\"provider\":\"local\"," +
+			"\"model\":\"gemma\"," +
+			"\"runtimeKind\":\"local\"," +
+			"\"responderLabel\":\"Gemma (Local)\"," +
+			"\"responderOrder\":0," +
+			"\"sessionKey\":\"main\"," +
+			"\"state\":\"" + state + "\"," +
+			"\"timestamp\":1}],\"count\":1}";
+
+		const ResponseFrame response{
+			.id = "poll-envelope-" + state,
+			.ok = true,
+			.payloadJson = payload,
+			.error = std::nullopt,
+		};
+
+		REQUIRE(
+			GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+				"chat.events.poll",
+				response,
+				issue));
+	}
+}
+
+TEST_CASE(
 	"Gateway protocol capability checks validate doctor memory request and response contracts",
 	"[gateway][lifecycle][p2][capability]")
 {
