@@ -767,7 +767,7 @@ std::string BuildChatEventJson(
 		EscapeJsonLocal(responderLabel) +
 		"\",\"responderOrder\":" +
 		std::to_string(static_cast<std::uint64_t>(responderOrder)) +
-		"\",\"sessionKey\":\"" +
+		",\"sessionKey\":\"" +
 		EscapeJsonLocal(sessionKey) +
 		"\",\"state\":\"" +
 		EscapeJsonLocal(state) +
