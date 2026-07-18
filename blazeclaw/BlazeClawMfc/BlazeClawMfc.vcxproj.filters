@@ -1598,18 +1598,20 @@
     <None Include="tools\compare_sherpa_baseline.py">
       <Filter>STT</Filter>
     </None>
-    <None Include="web\chat\index.css">
-      <Filter>res</Filter>
-    </None>
     <None Include="web\chat\dist\index.html">
       <Filter>res</Filter>
     </None>
-    <None Include="web\chat\index.html">
-      <Filter>res</Filter>
-    </None>
-    <None Include="web\chat\chat-controller-gui.js" />
     <None Include="src\gateway\GatewayHost.Handlers.RuntimeHelpers.inl">
       <Filter>gateway</Filter>
+    </None>
+    <None Include="web\chat\chat-controller-gui.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\index.css">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\index.html">
+      <Filter>web\chat</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

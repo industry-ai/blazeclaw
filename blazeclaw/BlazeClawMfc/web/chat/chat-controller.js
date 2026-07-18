@@ -3379,6 +3379,10 @@
             const terminalState = typeof source.terminalState === "string" && source.terminalState.trim()
                 ? source.terminalState.trim()
                 : "final";
+            const modelLabel = typeof source.modelLabel === "string" && source.modelLabel.trim()
+                ? source.modelLabel.trim()
+                : "";
+
             const committed = recordStructuredTranscript({
                 role: "assistant",
                 text,
@@ -3386,6 +3390,7 @@
                 sessionKey: state.sessionKey,
                 source: "stream",
                 terminalState,
+                modelLabel,
             });
             state.streamTranscriptDraft = null;
             return committed;

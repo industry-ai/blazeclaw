@@ -126,6 +126,7 @@
             const responderId = String(source.responderId || source.responder || "").trim();
             const responderLabel = String(
                 source.responderLabel ||
+                source.modelLabel ||
                 source.label ||
                 source.responderName ||
                 responderId ||
@@ -663,6 +664,26 @@
             }
             elements.messagesEl.scrollTop = elements.messagesEl.scrollHeight;
         }
+        function renderMessageWithResponderLabel(container, text, responderLabel) {
+            const normalizedText = String(text || "");
+            const normalizedLabel = String(responderLabel || "").trim();
+            if (!normalizedLabel) {
+                container.textContent = normalizedText;
+                return;
+            }
+
+            container.textContent = "";
+            const labelEl = document.createElement("div");
+            labelEl.className = "msg-responder-label";
+            labelEl.textContent = normalizedLabel;
+
+            const bodyEl = document.createElement("div");
+            bodyEl.className = "msg-body";
+            bodyEl.textContent = normalizedText;
+
+            container.appendChild(labelEl);
+            container.appendChild(bodyEl);
+        }
 
         function renderMessagesFromStructuredTranscript(streamTextOverride) {
             const controller = callbacks.controllerProvider();
@@ -697,7 +718,11 @@
                 }
                 const div = document.createElement("div");
                 div.className = `msg ${kind}`;
-                div.textContent = text;
+                const responderLabel = kind === "peer"
+                    ? String(entry.modelLabel || entry.responderLabel || "").trim()
+                    : "";
+                renderMessageWithResponderLabel(div, text, responderLabel);
+
                 elements.messagesEl.appendChild(div);
                 if (kind === "peer") {
                     callbacks.scanApprovalTokenFromText(text);
@@ -709,14 +734,16 @@
                 const streamDiv = document.createElement("div");
                 streamDiv.id = "stream-msg";
                 streamDiv.className = "msg peer";
-                streamDiv.textContent = streamText;
+                renderMessageWithResponderLabel(streamDiv, streamText,
+                    String(state.streamResponderLabel || "").trim()
+                );
                 elements.messagesEl.appendChild(streamDiv);
             }
 
             scrollBottom();
         }
 
-        function addMessage(text, kind) {
+        function addMessage(text, kind, meta) {
             const controller = callbacks.controllerProvider();
             if (structuredTranscriptRenderEnabled) {
                 const stream = String(state.streamText || "").trim();
@@ -726,14 +753,24 @@
             if (!elements.messagesEl) {
                 return;
             }
+
+            const sourceMeta = meta && typeof meta === "object"
+                ? meta
+                : {};
             const div = document.createElement("div");
             div.className = `msg ${kind}`;
-            div.textContent = text;
-            elements.messagesEl.appendChild(div);
+
             if (kind === "peer") {
+                const responderLabel = String(sourceMeta.responderLabel ||
+                    sourceMeta.modelLabel || "").trim();
+                renderMessageWithResponderLabel(div, text, responderLabel);
                 callbacks.scanApprovalTokenFromText(text);
                 callbacks.harvestApprovalTokensFromText(text);
+            } else {
+                div.textContent = text;
             }
+
+            elements.messagesEl.appendChild(div);
             scrollBottom();
         }
 
@@ -772,17 +809,25 @@
                 return;
             }
 
+            const sourceMeta = metadata && typeof metadata === "object"
+                ? metadata
+                : {};
+            const responderLabel = String(sourceMeta.responderLabel ||
+                sourceMeta.modelLabel || 
+                state.streamResponderLabel || "").trim();
+
             const existing = groupedResponsesState.legacyStreamElement || document.getElementById("stream-msg");
             if (existing) {
-                existing.textContent = text;
+                renderMessageWithResponderLabel(existing, text, responderLabel);
                 groupedResponsesState.legacyStreamElement = existing;
                 scrollBottom();
                 return;
             }
+
             const div = document.createElement("div");
             div.id = "stream-msg";
             div.className = "msg peer";
-            div.textContent = text;
+            renderMessageWithResponderLabel(div, text, responderLabel);
             elements.messagesEl.appendChild(div);
             groupedResponsesState.legacyStreamElement = div;
             scrollBottom();

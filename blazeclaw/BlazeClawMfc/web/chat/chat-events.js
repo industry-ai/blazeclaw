@@ -60,6 +60,7 @@
                     source.responderName ||
                     ""
                 ).trim(),
+                modelLabel: String(source.modelLabel || "").trim(),
                 responderOrder: Number.isFinite(Number(source.responderOrder))
                     ? Number(source.responderOrder)
                     : Number.MAX_SAFE_INTEGER,
@@ -71,13 +72,20 @@
             if (!metadata.promptRunId && metadata.runId) {
                 metadata.promptRunId = `${metadata.runId}.prompt`;
             }
-
             if (!metadata.responderRunId && metadata.runId) {
                 metadata.responderRunId = metadata.runId;
             }
 
-            if (!metadata.responderLabel && metadata.responderId) {
-                metadata.responderLabel = metadata.responderId;
+            if (!metadata.responderLabel) {
+                metadata.responderLabel = String(
+                    metadata.modelLabel ||
+                    resolveResponderLabel(source) ||
+                    metadata.responderId ||
+                    "Responder"
+                ).trim();
+            }
+            if (!metadata.modelLabel) {
+                metadata.modelLabel = metadata.responderLabel;
             }
 
             if (!Number.isFinite(metadata.responderOrder)) {
@@ -415,10 +423,12 @@
                         event.errorMessage || "defensive JS\r\ndefensive JS - text\r\n");
                     let shouldReconcile = false;
                     if (text) {
+                        const resolvedModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState,
+                            modelLabel: resolvedModelLabel,
                         });
 
                         const streamedThisTurn =
@@ -469,10 +479,12 @@
                     }
 
                     if (text) {
+                        const approvalModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState: "needs_approval",
+                            modelLabel: approvalModelLabel,
                         });
 
                         const streamedThisTurnApproval =
@@ -507,10 +519,12 @@
                     const text = controller.consumeTerminalText(normalizedAborted || event.message);
                     let shouldReconcile = false;
                     if (text) {
+                        const abortedModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState: "aborted",
+                            modelLabel: abortedModelLabel,
                         });
                         const streamedThisTurnAborted =
                             (typeof controller.hasBufferedAssistantStream === "function" &&
