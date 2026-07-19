@@ -33,6 +33,7 @@
 #include "ToolEventRecipientPolicy.h"
 #include "ChatControlPlaneService.h"
 #include "GatewayEventFanoutService.h"
+#include "../app/CredentialStore.h"
 #include "executors/EmailScheduleExecutor.h"
 #include "../app/BlazeClawMfcApp.h"
 #include "../core/ThreadPoolRuntimeService.h"
@@ -50,6 +51,37 @@
 namespace blazeclaw::gateway {
 
 	namespace handlers::runtime {
+
+		namespace {
+
+			bool HasPersistedDeepSeekCredential() {
+				const auto credential =
+					blazeclaw::app::CredentialStore::LoadCredential(
+						L"blazeclaw.deepseek");
+				if (credential.has_value() && !credential->empty()) {
+					return true;
+				}
+
+				wchar_t appdataBuf[MAX_PATH] = {};
+				const DWORD appdataLen =
+					GetEnvironmentVariableW(
+						L"APPDATA",
+						appdataBuf,
+						static_cast<DWORD>(MAX_PATH));
+				if (appdataLen == 0 || appdataLen >= MAX_PATH) {
+					return false;
+				}
+
+				const std::wstring dpapiPath =
+					std::wstring(appdataBuf) + L"\\BlazeClaw\\deepseek.key";
+				const auto dpapiCredential =
+					blazeclaw::app::CredentialStore::LoadCredentialDPAPI(
+						dpapiPath);
+				return dpapiCredential.has_value() &&
+					!dpapiCredential->empty();
+			}
+
+		} // namespace
 
 		void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 			using namespace blazeclaw::gateway::runtime_local;
@@ -590,9 +622,22 @@ namespace blazeclaw::gateway {
 								});
 							return normalized;
 							};
+
 						const std::string responseMode =
 							ToLowerTrimmed(sendParams.GetString("responseMode"));
-						const bool multiActiveRequested = responseMode == "multi_active";
+
+						const bool responseModeForcesMulti =
+							(responseMode == "multi_active");
+						const bool responseModeForcesSingle =
+							(responseMode == "single" ||
+								responseMode == "single_active" ||
+								responseMode == "primary_only");
+
+						bool multiActiveRequested = responseModeForcesMulti;
+						bool multiActiveEnabledByConfig = true;
+
+
+						//const bool multiActiveRequested = responseMode == "multi_active";
 						std::vector<std::string> requestedResponderTokens;
 						std::string requestedRespondersRaw;
 						if (json::FindRawField(
@@ -693,10 +738,13 @@ namespace blazeclaw::gateway {
 						std::uint32_t perResponderTimeoutMs = 90000;
 						std::uint32_t cancelDrainTimeoutMs = 3000;
 						bool abortWaitForDrain = true;
+
 						if (const auto* appConfig =
 							dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 							appConfig != nullptr) {
 							localResponderEnabled = appConfig->Config().localModel.enabled;
+							multiActiveEnabledByConfig = appConfig->Config().multiActive.enabled;
+
 							maxActiveResponders =
 								std::max<std::uint32_t>(
 									1,
@@ -715,10 +763,21 @@ namespace blazeclaw::gateway {
 								(std::max)(std::uint32_t{ 1 }, appConfig->Config().multiActive.cancelDrainTimeoutMs);
 							abortWaitForDrain = appConfig->Config().multiActive.abortWaitForDrain;
 						}
+
+						if (!responseModeForcesMulti && !responseModeForcesSingle) {
+							multiActiveRequested = multiActiveEnabledByConfig;
+						}
+						//else if (responseModeForcesSingle) {
+						if (responseModeForcesSingle) {
+							multiActiveRequested = false;
+						}
+
 						if (!multiActiveRequested) {
 							maxActiveResponders = 1;
 						}
-						const bool remoteDeepSeekReady = !model.runtimeDeepSeekApiKey.empty();
+
+						const bool remoteDeepSeekReady =
+							!model.runtimeDeepSeekApiKey.empty() || HasPersistedDeepSeekCredential();
 
 						auto normalizeLocalModelId = [](const std::string& rawModelId) {
 							if (rawModelId.empty() ||
@@ -771,6 +830,46 @@ namespace blazeclaw::gateway {
 										.responderOrder = 0,
 									});
 							};
+
+						const bool requestedDeepSeekResponder =
+							requestedProviderOverrideNormalized == "deepseek" ||
+							GatewayModel::IsDeepSeekModelId(requestedModelOverride) ||
+							std::any_of(
+								requestedResponderTokens.begin(),
+								requestedResponderTokens.end(),
+								[](const std::string& token) {
+									return token == "deepseek" ||
+										token == "remote" ||
+										token.rfind("deepseek:", 0) == 0 ||
+										token.rfind("deepseek/", 0) == 0 ||
+										token.rfind("remote:", 0) == 0;
+								});
+
+						if (responderManifest.empty()) {
+							if (remoteDeepSeekReady) {
+								appendResponder(
+									"deepseek",
+									normalizeDeepSeekModelId(std::string()),
+									"remote");
+							}
+							else if (localResponderEnabled) {
+								appendResponder(
+									"local",
+									std::string(GatewayModel::kDefaultModelId),
+									"local");
+							}
+							else {
+								return protocol::ErrorResponse(
+									request,
+									BuildRuntimeErrorShape(
+										"no_available_responder",
+										requestedDeepSeekResponder
+										? "DeepSeek requested but credential/runtime is unavailable."
+										: "No active responder is available (local disabled, remote unavailable).",
+										stageContext.runId,
+										stageContext.sessionKey));
+							}
+						}
 
 						auto maybeAppendLocal = [&](const std::string& modelHint) {
 							if (!localResponderEnabled) {
@@ -1969,490 +2068,547 @@ namespace blazeclaw::gateway {
 						}
 
 						if (!forceError && !orchestrationHandled && callbacks.chatRuntimeCallback) {
-							auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
-							{
-								GatewayHost::ChatEventState ev{};
-								ev.runId = runId;
-								ev.promptRunId = promptRunId;
-								ev.responderRunId = runId;
-								ev.responderId = !responderManifest.empty()
-									? responderManifest.front().responderId
-									: std::string();
-								ev.provider = !responderManifest.empty()
-									? responderManifest.front().provider
-									: std::string();
-								ev.model = !responderManifest.empty()
-									? responderManifest.front().model
-									: std::string();
-								ev.runtimeKind = !responderManifest.empty()
-									? responderManifest.front().runtimeKind
-									: std::string();
-								ev.responderLabel = !responderManifest.empty()
-									? responderManifest.front().responderLabel
-									: std::string();
-								ev.responderOrder = !responderManifest.empty()
-									? responderManifest.front().responderOrder
-									: 0;
-								ev.sessionKey = sessionKey;
-								ev.state = "queued";
-								{
-									blazeclaw::gateway::ChatEventPayload p;
-									p.eventType = "lifecycle";
-									p.timestampMs = nowMs;
-									p.userMessage = std::nullopt;
-									p.assistantDelta = std::nullopt;
-									p.messageObject = std::nullopt;
-									ev.payload = std::move(p);
-								}
-								ev.errorMessage = std::nullopt;
-								ev.approvalRequired = false;
-								ev.approvalToken = std::nullopt;
-								ev.approvalTokenExpiresAtEpochMs = std::nullopt;
-								ev.approvalNextAction = std::nullopt;
-								ev.terminalReason = std::nullopt;
-								ev.timestampMs = nowMs;
-								pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
-							}
-							{
-								GatewayHost::ChatEventState ev{};
-								ev.runId = runId;
-								ev.promptRunId = promptRunId;
-								ev.responderRunId = runId;
-								ev.responderId = !responderManifest.empty()
-									? responderManifest.front().responderId
-									: std::string();
-								ev.provider = !responderManifest.empty()
-									? responderManifest.front().provider
-									: std::string();
-								ev.model = !responderManifest.empty()
-									? responderManifest.front().model
-									: std::string();
-								ev.runtimeKind = !responderManifest.empty()
-									? responderManifest.front().runtimeKind
-									: std::string();
-								ev.responderLabel = !responderManifest.empty()
-									? responderManifest.front().responderLabel
-									: std::string();
-								ev.responderOrder = !responderManifest.empty()
-									? responderManifest.front().responderOrder
-									: 0;
-								ev.sessionKey = sessionKey;
-								ev.state = "started";
-								{
-									blazeclaw::gateway::ChatEventPayload p;
-									p.eventType = "lifecycle";
-									p.timestampMs = nowMs;
-									p.userMessage = std::nullopt;
-									p.assistantDelta = std::nullopt;
-									p.messageObject = std::nullopt;
-									ev.payload = std::move(p);
-								}
-								ev.errorMessage = std::nullopt;
-								ev.approvalRequired = false;
-								ev.approvalToken = std::nullopt;
-								ev.approvalTokenExpiresAtEpochMs = std::nullopt;
-								ev.approvalNextAction = std::nullopt;
-								ev.terminalReason = std::nullopt;
-								ev.timestampMs = nowMs;
-								pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
-							}
-							lifecycleEventsEnqueued = true;
-							GatewayLifecycleEventEmitter::EmitLifecycle(
-								"queued",
-								runId,
-								sessionKey,
-								nowMs);
-							GatewayLifecycleEventEmitter::EmitLifecycle(
-								"started",
-								runId,
-								sessionKey,
-								nowMs);
-							if (pushLifecycleEnabled) {
-								EmitPushLifecycleEvent(
-									*runtime.transport,
-									*runtime.eventFanout,
-									GatewayEventFanoutService::ChatLifecycleEvent{
-										.runId = runId,
-										.sessionKey = sessionKey,
-										.state = "queued",
-										.messageJson = std::nullopt,
-										.errorMessage = std::nullopt,
-										.timestampMs = nowMs,
-									},
-									sessions.pushEventSeq);
-								EmitPushLifecycleEvent(
-									*runtime.transport,
-									*runtime.eventFanout,
-									GatewayEventFanoutService::ChatLifecycleEvent{
-										.runId = runId,
-										.sessionKey = sessionKey,
-										.state = "started",
-										.messageJson = std::nullopt,
-										.errorMessage = std::nullopt,
-										.timestampMs = nowMs,
-									},
-									sessions.pushEventSeq);
-							}
+							for (const auto& responder : responderManifest) {
+								const ChatSendResponderManifestEntry activeResponder = responder;
+								const std::string activeRunId = activeResponder.responderRunId;
+								const std::string runId = activeRunId;
+								const ChatSendResponderManifestEntry primaryResponder = activeResponder;
+								const std::vector<ChatSendResponderManifestEntry> responderManifest{
+									activeResponder,
+								};
 
-							run.runsById.insert_or_assign(
-								runId,
-								GatewayHost::ChatRunState{
-									.runId = runId,
-									.promptRunId = promptRunId,
-									.responderRunId = runId,
-									.responderId = !responderManifest.empty()
+								std::string activeRequestedModelOverride = activeResponder.model;
+								std::string activeRequestedProviderOverride = activeResponder.provider;
+								if (activeResponder.runtimeKind == "local") {
+									activeRequestedProviderOverride.clear();
+								}
+
+								auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
+								{
+									GatewayHost::ChatEventState ev{};
+									ev.runId = runId;
+									ev.promptRunId = promptRunId;
+									ev.responderRunId = runId;
+									ev.responderId = !responderManifest.empty()
 										? responderManifest.front().responderId
-										: std::string(),
-									.provider = !responderManifest.empty()
+										: std::string();
+									ev.provider = !responderManifest.empty()
 										? responderManifest.front().provider
-										: std::string(),
-									.model = !responderManifest.empty()
+										: std::string();
+									ev.model = !responderManifest.empty()
 										? responderManifest.front().model
-										: std::string(),
-									.runtimeKind = !responderManifest.empty()
+										: std::string();
+									ev.runtimeKind = !responderManifest.empty()
 										? responderManifest.front().runtimeKind
-										: std::string(),
-									.responderLabel = !responderManifest.empty()
+										: std::string();
+									ev.responderLabel = !responderManifest.empty()
 										? responderManifest.front().responderLabel
-										: std::string(),
-									.responderOrder = !responderManifest.empty()
+										: std::string();
+									ev.responderOrder = !responderManifest.empty()
 										? responderManifest.front().responderOrder
-										: 0,
-									.taskId = std::string(),
-									.taskEnqueueAtMs = nowMs,
-									.taskStartAtMs = 0,
-									.taskCompletedAtMs = 0,
-									.taskQueueWaitMs = 0,
-									.taskRunDurationMs = 0,
-									.taskExecutionState = "queued",
-									.sessionKey = sessionKey,
-									.idempotencyKey = idempotencyKey,
-									.userMessage = message,
-									.assistantText = {},
-									.providerDeltas = {},
-									.providerDeltaCursor = 0,
-									.streamCursor = 0,
-									.lastEmitMs = nowMs,
-									.lastProgressAtMs = nowMs,
-									.terminalWaitExceededNotified = false,
-									.failed = false,
-									.terminalState = "final",
-									.approvalRequired = false,
-									.approvalToken = {},
-									.approvalTokenExpiresAtEpochMs = 0,
-									.approvalNextAction = {},
-									.terminalReason = {},
-									.errorCode = {},
-									.errorMessage = {},
-									.errorContextJson = {},
-									.startedAtMs = nowMs,
-									.active = true,
-									.detached = detachedSend,
-									.terminalEventEnqueued = false,
-									.pushLifecycleRequested = pushLifecycleEnabled,
-									.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
-									.originatingChannel = sendControlDecision.route.originatingChannel,
-									.originatingTo = sendControlDecision.route.originatingTo,
-									.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
-									.inputSource = hasTranscriptInjection ? transcriptSource : "typed",
-									.voiceTranscriptInjected = hasTranscriptInjection,
-									.transcriptSessionId = transcriptSessionId,
-									.transcriptRunId = transcriptRunId,
-									.transcriptInjectionJson = hasTranscriptInjection ? transcriptInjectionRaw : std::string(),
-									.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
-								});
+										: 0;
+									ev.sessionKey = sessionKey;
+									ev.state = "queued";
+									{
+										blazeclaw::gateway::ChatEventPayload p;
+										p.eventType = "lifecycle";
+										p.timestampMs = nowMs;
+										p.userMessage = std::nullopt;
+										p.assistantDelta = std::nullopt;
+										p.messageObject = std::nullopt;
+										ev.payload = std::move(p);
+									}
+									ev.errorMessage = std::nullopt;
+									ev.approvalRequired = false;
+									ev.approvalToken = std::nullopt;
+									ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+									ev.approvalNextAction = std::nullopt;
+									ev.terminalReason = std::nullopt;
+									ev.timestampMs = nowMs;
+									pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
+								}
+								{
+									GatewayHost::ChatEventState ev{};
+									ev.runId = runId;
+									ev.promptRunId = promptRunId;
+									ev.responderRunId = runId;
+									ev.responderId = !responderManifest.empty()
+										? responderManifest.front().responderId
+										: std::string();
+									ev.provider = !responderManifest.empty()
+										? responderManifest.front().provider
+										: std::string();
+									ev.model = !responderManifest.empty()
+										? responderManifest.front().model
+										: std::string();
+									ev.runtimeKind = !responderManifest.empty()
+										? responderManifest.front().runtimeKind
+										: std::string();
+									ev.responderLabel = !responderManifest.empty()
+										? responderManifest.front().responderLabel
+										: std::string();
+									ev.responderOrder = !responderManifest.empty()
+										? responderManifest.front().responderOrder
+										: 0;
+									ev.sessionKey = sessionKey;
+									ev.state = "started";
+									{
+										blazeclaw::gateway::ChatEventPayload p;
+										p.eventType = "lifecycle";
+										p.timestampMs = nowMs;
+										p.userMessage = std::nullopt;
+										p.assistantDelta = std::nullopt;
+										p.messageObject = std::nullopt;
+										ev.payload = std::move(p);
+									}
+									ev.errorMessage = std::nullopt;
+									ev.approvalRequired = false;
+									ev.approvalToken = std::nullopt;
+									ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+									ev.approvalNextAction = std::nullopt;
+									ev.terminalReason = std::nullopt;
+									ev.timestampMs = nowMs;
+									pushChatEventWithMetrics(runtimeSessionEvents, std::move(ev), sessionKey, false);
+								}
 
-							std::size_t streamedDeltaCount = 0;
-							blazeclaw::gateway::GatewayHost::ChatRuntimeResult runtimeResult{};
-							blazeclaw::core::ThreadPoolRuntimeService::ExecuteResult poolExecuteResult{};
-							threadPoolRuntimeService->Configure(
-								blazeclaw::core::ThreadPoolRuntimeService::Config{
-									.minThreads = poolMinThreads,
-									.maxThreads = poolMaxThreads,
-									.queueCapacity = poolQueueCapacity,
-									.dequeueTimeoutMs = poolDequeueTimeoutMs,
-								});
-							poolExecuteResult = threadPoolRuntimeService->EnqueueAndExecute(
-								blazeclaw::core::ThreadPoolRuntimeService::ExecuteRequest{
-									.runId = runId,
-									.sessionKey = sessionKey,
-									.responderRunId = runId,
-									.timeoutMs = perResponderTimeoutMs,
-									.task = [&callbacks,
-										runId,
-										sessionKey,
-										runtimeMessage,
-										stageContext,
-										effectiveRequestedModelOverride,
-										effectiveRequestedProviderOverride,
-										enforceOrderedAllowlist,
-										orderedAllowlistTargets,
-										promptRunId,
-										responderManifest,
-										hasAttachments,
-										attachmentMimeTypes,
-										&run,
-										&sessions,
-										&runtime,
-										&streamedDeltaCount,
-										&controlPlaneService,
-										&sendControlDecision,
-										&pushChatEventWithMetrics]() {
-											return callbacks.chatRuntimeCallback(
-												GatewayHost::ChatRuntimeRequest{
-									.runId = runId,
-									.sessionKey = sessionKey,
-									.message = runtimeMessage,
-									.bodyForCommands = stageContext.bodyForCommands,
-									.bodyForAgent = stageContext.bodyForAgent.empty()
-										? runtimeMessage
-										: stageContext.bodyForAgent,
-									.modelIdOverride = effectiveRequestedModelOverride,
-									.providerOverride = effectiveRequestedProviderOverride,
-									.slashCommandName = stageContext.slashCommandName,
-									.shouldLoadInlineSkillCommands =
-										stageContext.shouldLoadInlineSkillCommands,
-									.inlineInvocationAuthorizedSender =
-										stageContext.inlineInvocationAuthorizedSender,
-									.inlineInvocationSenderIsOwner =
-										stageContext.inlineInvocationSenderIsOwner,
-									.allowInlineToolImmediateExecution =
-										stageContext.allowInlineToolImmediateExecution,
-									.enforceOrderedAllowlist = enforceOrderedAllowlist,
-									.orderedAllowedToolTargets = orderedAllowlistTargets,
-									.hasAttachments = hasAttachments,
-									.attachmentMimeTypes = attachmentMimeTypes,
-									.onAssistantDelta =
-										[&run, &sessions, &runtime,
+								lifecycleEventsEnqueued = true;
+								GatewayLifecycleEventEmitter::EmitLifecycle(
+									"queued",
+									runId,
+									sessionKey,
+									nowMs);
+								GatewayLifecycleEventEmitter::EmitLifecycle(
+									"started",
+									runId,
+									sessionKey,
+									nowMs);
+								if (pushLifecycleEnabled) {
+									EmitPushLifecycleEvent(
+										*runtime.transport,
+										*runtime.eventFanout,
+										GatewayEventFanoutService::ChatLifecycleEvent{
+											.runId = runId,
+											.sessionKey = sessionKey,
+											.state = "queued",
+											.messageJson = std::nullopt,
+											.errorMessage = std::nullopt,
+											.timestampMs = nowMs,
+										},
+										sessions.pushEventSeq);
+									EmitPushLifecycleEvent(
+										*runtime.transport,
+										*runtime.eventFanout,
+										GatewayEventFanoutService::ChatLifecycleEvent{
+											.runId = runId,
+											.sessionKey = sessionKey,
+											.state = "started",
+											.messageJson = std::nullopt,
+											.errorMessage = std::nullopt,
+											.timestampMs = nowMs,
+										},
+										sessions.pushEventSeq);
+								}
+
+								run.runsById.insert_or_assign(
+									runId,
+									GatewayHost::ChatRunState{
+										.runId = runId,
+										.promptRunId = promptRunId,
+										.responderRunId = runId,
+										.responderId = !responderManifest.empty()
+											? responderManifest.front().responderId
+											: std::string(),
+										.provider = !responderManifest.empty()
+											? responderManifest.front().provider
+											: std::string(),
+										.model = !responderManifest.empty()
+											? responderManifest.front().model
+											: std::string(),
+										.runtimeKind = !responderManifest.empty()
+											? responderManifest.front().runtimeKind
+											: std::string(),
+										.responderLabel = !responderManifest.empty()
+											? responderManifest.front().responderLabel
+											: std::string(),
+										.responderOrder = !responderManifest.empty()
+											? responderManifest.front().responderOrder
+											: 0,
+										.taskId = std::string(),
+										.taskEnqueueAtMs = nowMs,
+										.taskStartAtMs = 0,
+										.taskCompletedAtMs = 0,
+										.taskQueueWaitMs = 0,
+										.taskRunDurationMs = 0,
+										.taskExecutionState = "queued",
+										.sessionKey = sessionKey,
+										.idempotencyKey = idempotencyKey,
+										.userMessage = message,
+										.assistantText = {},
+										.providerDeltas = {},
+										.providerDeltaCursor = 0,
+										.streamCursor = 0,
+										.lastEmitMs = nowMs,
+										.lastProgressAtMs = nowMs,
+										.terminalWaitExceededNotified = false,
+										.failed = false,
+										.terminalState = "final",
+										.approvalRequired = false,
+										.approvalToken = {},
+										.approvalTokenExpiresAtEpochMs = 0,
+										.approvalNextAction = {},
+										.terminalReason = {},
+										.errorCode = {},
+										.errorMessage = {},
+										.errorContextJson = {},
+										.startedAtMs = nowMs,
+										.active = true,
+										.detached = detachedSend,
+										.terminalEventEnqueued = false,
+										.pushLifecycleRequested = pushLifecycleEnabled,
+										.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
+										.originatingChannel = sendControlDecision.route.originatingChannel,
+										.originatingTo = sendControlDecision.route.originatingTo,
+										.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
+										.inputSource = hasTranscriptInjection ? transcriptSource : "typed",
+										.voiceTranscriptInjected = hasTranscriptInjection,
+										.transcriptSessionId = transcriptSessionId,
+										.transcriptRunId = transcriptRunId,
+										.transcriptInjectionJson = hasTranscriptInjection ? transcriptInjectionRaw : std::string(),
+										.speechArtifactJson = hasSpeechArtifact ? speechArtifactRaw : std::string(),
+									});
+
+								std::size_t streamedDeltaCount = 0;
+								blazeclaw::gateway::GatewayHost::ChatRuntimeResult runtimeResult{};
+								blazeclaw::core::ThreadPoolRuntimeService::ExecuteResult poolExecuteResult{};
+								threadPoolRuntimeService->Configure(
+									blazeclaw::core::ThreadPoolRuntimeService::Config{
+										.minThreads = poolMinThreads,
+										.maxThreads = poolMaxThreads,
+										.queueCapacity = poolQueueCapacity,
+										.dequeueTimeoutMs = poolDequeueTimeoutMs,
+									});
+								poolExecuteResult = threadPoolRuntimeService->EnqueueAndExecute(
+									blazeclaw::core::ThreadPoolRuntimeService::ExecuteRequest{
+										.runId = runId,
+										.sessionKey = sessionKey,
+										//.responderRunId = runId,
+										.responderRunId = activeRunId,
+										.timeoutMs = perResponderTimeoutMs,
+										.task = [&callbacks,
+											//runId,
+											activeRunId,
+											sessionKey,
+											runtimeMessage,
+											stageContext,
+											//effectiveRequestedModelOverride,
+											activeRequestedModelOverride,
+											//effectiveRequestedProviderOverride,
+											activeRequestedProviderOverride,
+											enforceOrderedAllowlist,
+											orderedAllowlistTargets,
+											promptRunId,
+											//responderManifest,
+											activeResponder,
+											hasAttachments,
+											attachmentMimeTypes,
+											&run,
+											&sessions,
+											&runtime,
 											&streamedDeltaCount,
-											&runId,
-											&sessionKey,
-											&promptRunId,
-											&responderManifest,
 											&controlPlaneService,
 											&sendControlDecision,
-											&pushChatEventWithMetrics](const std::string& delta) {
-											const std::string normalizedDelta = json::Trim(delta);
-											if (normalizedDelta.empty() ||
-												RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
-												return;
-											}
-
-											if (!controlPlaneService.ShouldPublishToolDelta(
-												normalizedDelta,
-												sendControlDecision)) {
-												return;
-											}
-											if (normalizedDelta.find("tools.execute") == 0) {
-												const auto recipientsIt =
-													run.toolEventRecipientsByRun.find(runId);
-												if (recipientsIt == run.toolEventRecipientsByRun.end() ||
-													recipientsIt->second.empty()) {
-													return;
-												}
-											}
-
-					auto& streamEvents = sessions.eventsBySession[sessionKey];
-					{
-						GatewayHost::ChatEventState ev{};
-						ev.runId = runId;
-						ev.promptRunId = promptRunId;
-						ev.responderRunId = runId;
-						ev.responderId = !responderManifest.empty()
-							? responderManifest.front().responderId
-							: std::string();
-						ev.provider = !responderManifest.empty()
-							? responderManifest.front().provider
-							: std::string();
-						ev.model = !responderManifest.empty()
-							? responderManifest.front().model
-							: std::string();
-						ev.runtimeKind = !responderManifest.empty()
-							? responderManifest.front().runtimeKind
-							: std::string();
-						ev.responderLabel = !responderManifest.empty()
-							? responderManifest.front().responderLabel
-							: std::string();
-						ev.responderOrder = !responderManifest.empty()
-							? responderManifest.front().responderOrder
-							: 0;
-						ev.sessionKey = sessionKey;
-						ev.state = "delta";
-						{
-							blazeclaw::gateway::ChatEventPayload p;
-							p.eventType = "delta";
-							p.timestampMs = CurrentEpochMsLocal();
-							p.userMessage = std::nullopt;
-							p.assistantDelta = normalizedDelta;
-							p.messageObject = std::nullopt;
-							ev.payload = std::move(p);
-						}
-						ev.errorMessage = std::nullopt;
-						ev.approvalRequired = false;
-						ev.approvalToken = std::nullopt;
-						ev.approvalTokenExpiresAtEpochMs = std::nullopt;
-						ev.approvalNextAction = std::nullopt;
-						ev.terminalReason = std::nullopt;
-						ev.timestampMs = CurrentEpochMsLocal();
-						pushChatEventWithMetrics(streamEvents, std::move(ev), sessionKey, false);
-					}
-											const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
-											GatewayLifecycleEventEmitter::EmitLifecycle(
-												"delta",
-												runId,
-												sessionKey,
-											 deltaNowMs);
-
-											auto runStateIt = run.runsById.find(runId);
-											if (runStateIt != run.runsById.end() &&
-												runStateIt->second.pushLifecycleRequested) {
-												EmitPushLifecycleEvent(
-													*runtime.transport,
-													*runtime.eventFanout,
-													GatewayEventFanoutService::ChatLifecycleEvent{
-														.runId = runId,
+											&pushChatEventWithMetrics]() {
+												return callbacks.chatRuntimeCallback(
+													GatewayHost::ChatRuntimeRequest{
+														//.runId = runId,
+														.runId = activeRunId,
 														.sessionKey = sessionKey,
-														.state = "delta",
-														.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
-														.errorMessage = std::nullopt,
-														.timestampMs = deltaNowMs,
-													},
-													sessions.pushEventSeq);
-											}
+														.message = runtimeMessage,
+														.bodyForCommands = stageContext.bodyForCommands,
+														.bodyForAgent = stageContext.bodyForAgent.empty()
+															? runtimeMessage
+															: stageContext.bodyForAgent,
+														//.modelIdOverride = effectiveRequestedModelOverride,
+														.modelIdOverride = activeRequestedModelOverride,
+														//.providerOverride = effectiveRequestedProviderOverride,
+														.providerOverride = activeRequestedProviderOverride,
+														.slashCommandName = stageContext.slashCommandName,
+														.shouldLoadInlineSkillCommands =
+															stageContext.shouldLoadInlineSkillCommands,
+														.inlineInvocationAuthorizedSender =
+															stageContext.inlineInvocationAuthorizedSender,
+														.inlineInvocationSenderIsOwner =
+															stageContext.inlineInvocationSenderIsOwner,
+														.allowInlineToolImmediateExecution =
+															stageContext.allowInlineToolImmediateExecution,
+														.enforceOrderedAllowlist = enforceOrderedAllowlist,
+														.orderedAllowedToolTargets = orderedAllowlistTargets,
+														.hasAttachments = hasAttachments,
+														.attachmentMimeTypes = attachmentMimeTypes,
+														.onAssistantDelta =
+															[&run, &sessions, &runtime,
+																&streamedDeltaCount,
+																&activeRunId,
+																&sessionKey,
+																&promptRunId,
+																&activeResponder,
+																&controlPlaneService,
+																&sendControlDecision,
+																&pushChatEventWithMetrics](const std::string& delta) {
+																const std::string normalizedDelta = json::Trim(delta);
+																if (normalizedDelta.empty() ||
+																	RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
+																	return;
+																}
 
-											if (runStateIt != run.runsById.end()) {
-												runStateIt->second.assistantText = normalizedDelta;
-												runStateIt->second.streamCursor = normalizedDelta.size();
-												runStateIt->second.lastEmitMs = deltaNowMs;
-												runStateIt->second.lastProgressAtMs = deltaNowMs;
-												runStateIt->second.terminalWaitExceededNotified = false;
-											}
+																if (!controlPlaneService.ShouldPublishToolDelta(
+																	normalizedDelta,
+																	sendControlDecision)) {
+																	return;
+																}
+																if (normalizedDelta.find("tools.execute") == 0) {
+																	const auto recipientsIt =
+																		run.toolEventRecipientsByRun.find(activeRunId);
+																	if (recipientsIt == run.toolEventRecipientsByRun.end() ||
+																		recipientsIt->second.empty()) {
+																		return;
+																	}
+																}
 
-										++streamedDeltaCount;
+																auto& streamEvents = sessions.eventsBySession[sessionKey];
+																{
+																	GatewayHost::ChatEventState ev{};
+																	ev.runId = activeRunId;
+																	ev.promptRunId = promptRunId;
+																	ev.responderRunId = activeRunId;
+																	ev.responderId = activeResponder.responderId;
+																	ev.provider = activeResponder.provider;
+																	ev.model = activeResponder.model;
+																	ev.runtimeKind = activeResponder.runtimeKind;
+																	ev.responderLabel = activeResponder.responderLabel;
+																	ev.responderOrder = activeResponder.responderOrder;																	ev.sessionKey = sessionKey;
+																	ev.state = "delta";
+																	{
+																		blazeclaw::gateway::ChatEventPayload p;
+																		p.eventType = "delta";
+																		p.timestampMs = CurrentEpochMsLocal();
+																		p.userMessage = std::nullopt;
+																		p.assistantDelta = normalizedDelta;
+																		p.messageObject = std::nullopt;
+																		ev.payload = std::move(p);
+																	}
+																	ev.errorMessage = std::nullopt;
+																	ev.approvalRequired = false;
+																	ev.approvalToken = std::nullopt;
+																	ev.approvalTokenExpiresAtEpochMs = std::nullopt;
+																	ev.approvalNextAction = std::nullopt;
+																	ev.terminalReason = std::nullopt;
+																	ev.timestampMs = CurrentEpochMsLocal();
+																	pushChatEventWithMetrics(streamEvents, std::move(ev), sessionKey, false);
+																}
+																const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
+																GatewayLifecycleEventEmitter::EmitLifecycle(
+																	"delta",
+																	activeRunId,
+																	sessionKey,
+																	deltaNowMs);
+
+																auto runStateIt = run.runsById.find(activeRunId);
+																if (runStateIt != run.runsById.end() &&
+																	runStateIt->second.pushLifecycleRequested) {
+																	EmitPushLifecycleEvent(
+																		*runtime.transport,
+																		*runtime.eventFanout,
+																		GatewayEventFanoutService::ChatLifecycleEvent{
+																			.runId = activeRunId,
+																			.sessionKey = sessionKey,
+																			.state = "delta",
+																			.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
+																			.errorMessage = std::nullopt,
+																			.timestampMs = deltaNowMs,
+																		},
+																		sessions.pushEventSeq);
+																}
+
+																if (runStateIt != run.runsById.end()) {
+																	runStateIt->second.assistantText = normalizedDelta;
+																	runStateIt->second.streamCursor = normalizedDelta.size();
+																	runStateIt->second.lastEmitMs = deltaNowMs;
+																	runStateIt->second.lastProgressAtMs = deltaNowMs;
+																	runStateIt->second.terminalWaitExceededNotified = false;
+																}
+
+																++streamedDeltaCount;
+																}
+													});
+											},
+									});
+
+									if (poolExecuteResult.accepted) {
+										auto runStateIt = run.runsById.find(runId);
+										if (runStateIt != run.runsById.end()) {
+											runStateIt->second.taskId = poolExecuteResult.metadata.taskId;
+											runStateIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
+											runStateIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
+											runStateIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
+											runStateIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
+											runStateIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
+											runStateIt->second.taskExecutionState = poolExecuteResult.metadata.executionState;
 										}
-								});
-										},
-								});
 
-							if (poolExecuteResult.accepted) {
-								auto runStateIt = run.runsById.find(runId);
-								if (runStateIt != run.runsById.end()) {
-									runStateIt->second.taskId = poolExecuteResult.metadata.taskId;
-									runStateIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
-									runStateIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
-									runStateIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
-									runStateIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
-									runStateIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
-									runStateIt->second.taskExecutionState = poolExecuteResult.metadata.executionState;
-								}
+										EmitTelemetryEvent(
+											"gateway.chat.thread_pool.enqueue",
+											JsonObject({
+												{"runId", JsonString(runId)},
+												{"sessionKey", JsonString(sessionKey)},
+												{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+												{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
+												{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
+												{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
+												{"executionState", JsonString(poolExecuteResult.metadata.executionState)},
+												}));
+									}
 
-								EmitTelemetryEvent(
-									"gateway.chat.thread_pool.enqueue",
-									JsonObject({
-										{"runId", JsonString(runId)},
-										{"sessionKey", JsonString(sessionKey)},
-										{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
-										{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
-										{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
-										{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
-										{"executionState", JsonString(poolExecuteResult.metadata.executionState)},
-										}));
-							}
+									if (!poolExecuteResult.accepted) {
+										failed = true;
+										backendErrorCode = poolExecuteResult.saturated
+											? "chat_multi_active_queue_saturated"
+											: "chat_multi_active_task_enqueue_failed";
+										backendErrorMessage = poolExecuteResult.saturated
+											? "thread pool queue saturated for multi-active execution"
+											: "failed to enqueue thread-pool task";
+										EmitTelemetryEvent(
+											"gateway.chat.thread_pool.saturation",
+											JsonObject({
+												{"runId", JsonString(runId)},
+												{"sessionKey", JsonString(sessionKey)},
+												{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
+												{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
+												{"diagnosticCode", JsonString(poolExecuteResult.diagnosticCode)},
+												}));
+									}
+									else if (poolExecuteResult.timedOut) {
+										failed = true;
+										backendErrorCode = "chat_multi_active_task_timeout";
+										backendErrorMessage = "thread-pool responder task timed out";
+										if (abortWaitForDrain && !poolExecuteResult.metadata.taskId.empty()) {
+											const bool drained = threadPoolRuntimeService->WaitForTaskDrain(
+												poolExecuteResult.metadata.taskId,
+												cancelDrainTimeoutMs);
+											EmitTelemetryEvent(
+												"gateway.chat.thread_pool.cancel_drain",
+												JsonObject({
+													{"runId", JsonString(runId)},
+													{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+													{"drained", JsonBool(drained)},
+												{"drainTimeoutMs", JsonNumber(static_cast<std::uint64_t>(cancelDrainTimeoutMs))},
+													}));
+										}
+										EmitTelemetryEvent(
+											"gateway.chat.thread_pool.timeout",
+											JsonObject({
+												{"runId", JsonString(runId)},
+												{"sessionKey", JsonString(sessionKey)},
+												{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
+												{"timeoutMs", JsonNumber(static_cast<std::uint64_t>(perResponderTimeoutMs))},
+												{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
+												}));
+									}
+									else if (poolExecuteResult.runtimeResult.has_value()) {
+										runtimeResult = poolExecuteResult.runtimeResult.value();
+									}
+									else {
+										failed = true;
+										backendErrorCode = "chat_multi_active_task_no_result";
+										backendErrorMessage = "thread-pool task completed without runtime result";
+									}
+									providerStreamed = streamedDeltaCount > 0;
 
-							if (!poolExecuteResult.accepted) {
-								failed = true;
-								backendErrorCode = poolExecuteResult.saturated
-									? "chat_multi_active_queue_saturated"
-									: "chat_multi_active_task_enqueue_failed";
-								backendErrorMessage = poolExecuteResult.saturated
-									? "thread pool queue saturated for multi-active execution"
-									: "failed to enqueue thread-pool task";
-								EmitTelemetryEvent(
-									"gateway.chat.thread_pool.saturation",
-									JsonObject({
-										{"runId", JsonString(runId)},
-										{"sessionKey", JsonString(sessionKey)},
-										{"queueDepth", JsonNumber(static_cast<std::uint64_t>(threadPoolRuntimeService->QueueDepth()))},
-										{"activeTasks", JsonNumber(threadPoolRuntimeService->ActiveTaskCount())},
-										{"diagnosticCode", JsonString(poolExecuteResult.diagnosticCode)},
-										}));
-							}
-							else if (poolExecuteResult.timedOut) {
-								failed = true;
-								backendErrorCode = "chat_multi_active_task_timeout";
-								backendErrorMessage = "thread-pool responder task timed out";
-								if (abortWaitForDrain && !poolExecuteResult.metadata.taskId.empty()) {
-									const bool drained = threadPoolRuntimeService->WaitForTaskDrain(
-										poolExecuteResult.metadata.taskId,
-										cancelDrainTimeoutMs);
-									EmitTelemetryEvent(
-										"gateway.chat.thread_pool.cancel_drain",
-										JsonObject({
-											{"runId", JsonString(runId)},
-											{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
-											{"drained", JsonBool(drained)},
-										{"drainTimeoutMs", JsonNumber(static_cast<std::uint64_t>(cancelDrainTimeoutMs))},
-											}));
-								}
-								EmitTelemetryEvent(
-									"gateway.chat.thread_pool.timeout",
-									JsonObject({
-										{"runId", JsonString(runId)},
-										{"sessionKey", JsonString(sessionKey)},
-										{"taskId", JsonString(poolExecuteResult.metadata.taskId)},
-										{"timeoutMs", JsonNumber(static_cast<std::uint64_t>(perResponderTimeoutMs))},
-										{"queueWaitMs", JsonNumber(poolExecuteResult.metadata.queueWaitMs)},
-										}));
-							}
-							else if (poolExecuteResult.runtimeResult.has_value()) {
-								runtimeResult = poolExecuteResult.runtimeResult.value();
-							}
-							else {
-								failed = true;
-								backendErrorCode = "chat_multi_active_task_no_result";
-								backendErrorMessage = "thread-pool task completed without runtime result";
-							}
-							providerStreamed = streamedDeltaCount > 0;
+									if (runtimeResult.ok) {
+										if (!runtimeResult.assistantText.empty()) {
+											assistantText = runtimeResult.assistantText;
+										}
 
-							if (runtimeResult.ok) {
-								if (!runtimeResult.assistantText.empty()) {
-									assistantText = runtimeResult.assistantText;
-								}
+										if (assistantText.empty() &&
+											!runtimeResult.assistantDeltas.empty()) {
+											assistantText = runtimeResult.assistantDeltas.back();
+										}
 
-								if (assistantText.empty() &&
-									!runtimeResult.assistantDeltas.empty()) {
-									assistantText = runtimeResult.assistantDeltas.back();
-								}
+										std::vector<std::string> providerDeltas =
+											RuntimeTranscriptGuard::NormalizeAssistantDeltas(
+												runtimeResult.assistantDeltas,
+												assistantText,
+												providerStreamed);
+										assistantDeltas = providerDeltas;
 
-								std::vector<std::string> providerDeltas =
-									RuntimeTranscriptGuard::NormalizeAssistantDeltas(
-										runtimeResult.assistantDeltas,
-										assistantText,
-										providerStreamed);
-								assistantDeltas = providerDeltas;
+										if (assistantText.empty()) {
+											failed = true;
+											backendErrorCode = "chat_runtime_empty_response";
+											backendErrorMessage =
+												"chat runtime returned no assistant output";
+										}
+										else {
+											auto existingRunIt = run.runsById.find(runId);
+											if (existingRunIt != run.runsById.end()) {
+												if (!poolExecuteResult.metadata.taskId.empty()) {
+													existingRunIt->second.taskId = poolExecuteResult.metadata.taskId;
+													existingRunIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
+													existingRunIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
+													existingRunIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
+													existingRunIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
+													existingRunIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
+												}
+												existingRunIt->second.taskExecutionState = !poolExecuteResult.accepted
+													? "rejected"
+													: (poolExecuteResult.timedOut
+														? "timeout"
+														: poolExecuteResult.metadata.executionState);
+												existingRunIt->second.assistantText = assistantText;
+												existingRunIt->second.providerDeltas = assistantDeltas;
+												existingRunIt->second.providerDeltaCursor = 0;
+												existingRunIt->second.streamCursor =
+													providerStreamed ? assistantText.size() : 0;
+												existingRunIt->second.lastEmitMs = nowMs;
+												existingRunIt->second.lastProgressAtMs = nowMs;
+												existingRunIt->second.terminalWaitExceededNotified = false;
+												existingRunIt->second.failed = failed;
+												existingRunIt->second.terminalState = failed ? "error" : "final";
+												existingRunIt->second.approvalRequired = false;
+												existingRunIt->second.approvalToken.clear();
+												existingRunIt->second.approvalTokenExpiresAtEpochMs = 0;
+												existingRunIt->second.approvalNextAction.clear();
+												existingRunIt->second.terminalReason.clear();
+												existingRunIt->second.errorCode = backendErrorCode;
+												existingRunIt->second.errorMessage = backendErrorMessage;
+												existingRunIt->second.errorContextJson = backendErrorContextJson;
+												existingRunIt->second.active = true;
+											}
+										}
+									}
+									else {
+										failed = true;
+										backendErrorCode = runtimeResult.errorCode.empty()
+											? "chat_runtime_error"
+											: runtimeResult.errorCode;
+										backendErrorMessage = runtimeResult.errorMessage.empty()
+											? "chat runtime failed"
+											: runtimeResult.errorMessage;
+										if (backendErrorMessage.find("baidu-search.search.web") != std::string::npos &&
+											(backendErrorMessage.find("429") != std::string::npos ||
+												backendErrorCode.find("rate_limit") != std::string::npos)) {
+											backendErrorContextJson = JsonObject({
+												{"layer", JsonString("tool_runtime")},
+												{"toolId", JsonString("baidu-search.search.web")},
+												{"errorCategory", JsonString("rate_limited")},
+												{"fallbackInstruction", JsonString("retry later, reduce burst frequency, or use fallback search source")},
+												{"cooldownSuggestion", JsonString("wait for cooldown window and avoid immediate repeated identical queries")},
+												});
+										}
+										assistantText.clear();
+									}
 
-								if (assistantText.empty()) {
-									failed = true;
-									backendErrorCode = "chat_runtime_empty_response";
-									backendErrorMessage =
-										"chat runtime returned no assistant output";
-								}
-								else {
 									auto existingRunIt = run.runsById.find(runId);
 									if (existingRunIt != run.runsById.end()) {
-										if (!poolExecuteResult.metadata.taskId.empty()) {
-											existingRunIt->second.taskId = poolExecuteResult.metadata.taskId;
-											existingRunIt->second.taskEnqueueAtMs = poolExecuteResult.metadata.enqueueAtMs;
-											existingRunIt->second.taskStartAtMs = poolExecuteResult.metadata.startAtMs;
-											existingRunIt->second.taskCompletedAtMs = poolExecuteResult.metadata.completedAtMs;
-											existingRunIt->second.taskQueueWaitMs = poolExecuteResult.metadata.queueWaitMs;
-											existingRunIt->second.taskRunDurationMs = poolExecuteResult.metadata.runDurationMs;
-										}
-										existingRunIt->second.taskExecutionState = !poolExecuteResult.accepted
-											? "rejected"
-											: (poolExecuteResult.timedOut
-												? "timeout"
-												: poolExecuteResult.metadata.executionState);
 										existingRunIt->second.assistantText = assistantText;
 										existingRunIt->second.providerDeltas = assistantDeltas;
 										existingRunIt->second.providerDeltaCursor = 0;
@@ -2473,158 +2629,113 @@ namespace blazeclaw::gateway {
 										existingRunIt->second.errorContextJson = backendErrorContextJson;
 										existingRunIt->second.active = true;
 									}
-								}
-							}
-							else {
-								failed = true;
-								backendErrorCode = runtimeResult.errorCode.empty()
-									? "chat_runtime_error"
-									: runtimeResult.errorCode;
-								backendErrorMessage = runtimeResult.errorMessage.empty()
-									? "chat runtime failed"
-									: runtimeResult.errorMessage;
-								if (backendErrorMessage.find("baidu-search.search.web") != std::string::npos &&
-									(backendErrorMessage.find("429") != std::string::npos ||
-										backendErrorCode.find("rate_limit") != std::string::npos)) {
-									backendErrorContextJson = JsonObject({
-										{"layer", JsonString("tool_runtime")},
-										{"toolId", JsonString("baidu-search.search.web")},
-										{"errorCategory", JsonString("rate_limited")},
-										{"fallbackInstruction", JsonString("retry later, reduce burst frequency, or use fallback search source")},
-										{"cooldownSuggestion", JsonString("wait for cooldown window and avoid immediate repeated identical queries")},
-										});
-								}
-								assistantText.clear();
-							}
 
-							auto existingRunIt = run.runsById.find(runId);
-							if (existingRunIt != run.runsById.end()) {
-								existingRunIt->second.assistantText = assistantText;
-								existingRunIt->second.providerDeltas = assistantDeltas;
-								existingRunIt->second.providerDeltaCursor = 0;
-								existingRunIt->second.streamCursor =
-									providerStreamed ? assistantText.size() : 0;
-								existingRunIt->second.lastEmitMs = nowMs;
-								existingRunIt->second.lastProgressAtMs = nowMs;
-								existingRunIt->second.terminalWaitExceededNotified = false;
-								existingRunIt->second.failed = failed;
-								existingRunIt->second.terminalState = failed ? "error" : "final";
-								existingRunIt->second.approvalRequired = false;
-								existingRunIt->second.approvalToken.clear();
-								existingRunIt->second.approvalTokenExpiresAtEpochMs = 0;
-								existingRunIt->second.approvalNextAction.clear();
-								existingRunIt->second.terminalReason.clear();
-								existingRunIt->second.errorCode = backendErrorCode;
-								existingRunIt->second.errorMessage = backendErrorMessage;
-								existingRunIt->second.errorContextJson = backendErrorContextJson;
-								existingRunIt->second.active = true;
-							}
+									auto runtimeTaskDeltas =
+										RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
+											runtimeResult.taskDeltas,
+											runId,
+											sessionKey,
+											runtimeResult.ok && !failed,
+											assistantText,
+											backendErrorCode,
+											backendErrorMessage);
+									runtimeTaskDeltas =
+										RuntimeToolCallNormalizer::ApplyInvalidArgumentsRecoveryPolicy(
+											runtimeTaskDeltas,
+											runId,
+											sessionKey,
+											normalizedMessage,
+											*runtime.toolRegistry);
 
-							auto runtimeTaskDeltas =
-								RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
-									runtimeResult.taskDeltas,
-									runId,
-									sessionKey,
-									runtimeResult.ok && !failed,
-									assistantText,
-									backendErrorCode,
-									backendErrorMessage);
-							runtimeTaskDeltas =
-								RuntimeToolCallNormalizer::ApplyInvalidArgumentsRecoveryPolicy(
-									runtimeTaskDeltas,
-									runId,
-									sessionKey,
-									normalizedMessage,
-									*runtime.toolRegistry);
+									if (failed) {
+										RunLoopBudget budget;
+										const RecoveryOutcome recoveryOutcome =
+											RecoveryPolicyEngine::Execute(
+												RecoveryRequest{
+													.runId = runId,
+													.sessionKey = sessionKey,
+													.message = normalizedMessage,
+													.errorCode = backendErrorCode,
+													.errorMessage = backendErrorMessage,
+													.authProfileId = "default",
+													.taskDeltas = runtimeTaskDeltas,
+												},
+												budget);
 
-							if (failed) {
-								RunLoopBudget budget;
-								const RecoveryOutcome recoveryOutcome =
-									RecoveryPolicyEngine::Execute(
-										RecoveryRequest{
-											.runId = runId,
-											.sessionKey = sessionKey,
-											.message = normalizedMessage,
-											.errorCode = backendErrorCode,
-											.errorMessage = backendErrorMessage,
-											.authProfileId = "default",
-											.taskDeltas = runtimeTaskDeltas,
-										},
-										budget);
+										if (!recoveryOutcome.recoveryDeltas.empty()) {
+											runtimeTaskDeltas.insert(
+												runtimeTaskDeltas.end(),
+												recoveryOutcome.recoveryDeltas.begin(),
+												recoveryOutcome.recoveryDeltas.end());
+										}
 
-								if (!recoveryOutcome.recoveryDeltas.empty()) {
-									runtimeTaskDeltas.insert(
-										runtimeTaskDeltas.end(),
-										recoveryOutcome.recoveryDeltas.begin(),
-										recoveryOutcome.recoveryDeltas.end());
-								}
+										if (!recoveryOutcome.normalizedDeltas.empty()) {
+											runtimeTaskDeltas = recoveryOutcome.normalizedDeltas;
+										}
 
-								if (!recoveryOutcome.normalizedDeltas.empty()) {
-									runtimeTaskDeltas = recoveryOutcome.normalizedDeltas;
-								}
+										EmitTelemetryEvent(
+											"gateway.chat.recovery.decision",
+											std::string("{\"runId\":") +
+											JsonString(runId) +
+											",\"recovered\":" +
+											std::string(recoveryOutcome.recovered ? "true" : "false") +
+											",\"retry\":" +
+											std::string(recoveryOutcome.shouldRetry ? "true" : "false") +
+											",\"reinvoke\":" +
+											std::string(recoveryOutcome.shouldReinvokeRuntime ? "true" : "false") +
+											",\"recoveryRoute\":" +
+											JsonString(recoveryOutcome.recoveryRoute) +
+											",\"compaction\":" +
+											std::string(recoveryOutcome.compactionApplied ? "true" : "false") +
+											",\"truncation\":" +
+											std::string(recoveryOutcome.truncationApplied ? "true" : "false") +
+											",\"fallbackPolicyProfile\":" +
+											JsonString(orchestrationPolicy.fallbackPolicyProfile) +
+											",\"profile\":" +
+											JsonString(recoveryOutcome.selectedProfileId) +
+											",\"contextEngine\":" +
+											JsonString(recoveryOutcome.selectedContextEngineId) +
+											",\"terminalCode\":" +
+											JsonString(recoveryOutcome.terminalErrorCode) +
+											"}");
+										BranchDecisionDiagnostics::Emit(
+											runId,
+											"recovery",
+											recoveryOutcome.recovered
+											? "recovered"
+											: "terminal",
+											recoveryOutcome.terminalErrorCode.empty()
+											? "recovery_chain_continue"
+											: recoveryOutcome.terminalErrorCode);
 
-								EmitTelemetryEvent(
-									"gateway.chat.recovery.decision",
-									std::string("{\"runId\":") +
-									JsonString(runId) +
-									",\"recovered\":" +
-									std::string(recoveryOutcome.recovered ? "true" : "false") +
-									",\"retry\":" +
-									std::string(recoveryOutcome.shouldRetry ? "true" : "false") +
-									",\"reinvoke\":" +
-									std::string(recoveryOutcome.shouldReinvokeRuntime ? "true" : "false") +
-									",\"recoveryRoute\":" +
-									JsonString(recoveryOutcome.recoveryRoute) +
-									",\"compaction\":" +
-									std::string(recoveryOutcome.compactionApplied ? "true" : "false") +
-									",\"truncation\":" +
-									std::string(recoveryOutcome.truncationApplied ? "true" : "false") +
-									",\"fallbackPolicyProfile\":" +
-									JsonString(orchestrationPolicy.fallbackPolicyProfile) +
-									",\"profile\":" +
-									JsonString(recoveryOutcome.selectedProfileId) +
-									",\"contextEngine\":" +
-									JsonString(recoveryOutcome.selectedContextEngineId) +
-									",\"terminalCode\":" +
-									JsonString(recoveryOutcome.terminalErrorCode) +
-									"}");
-								BranchDecisionDiagnostics::Emit(
-									runId,
-									"recovery",
-									recoveryOutcome.recovered
-									? "recovered"
-									: "terminal",
-									recoveryOutcome.terminalErrorCode.empty()
-									? "recovery_chain_continue"
-									: recoveryOutcome.terminalErrorCode);
-
-								if (recoveryOutcome.recovered) {
-									failed = false;
-									backendErrorCode.clear();
-									backendErrorMessage.clear();
-									if (assistantText.empty()) {
-										assistantText = recoveryOutcome.compactionApplied
-											? "Recovered via context compaction; runtime will continue."
-											: "Recovered via fallback normalization; runtime will continue.";
+										if (recoveryOutcome.recovered) {
+											failed = false;
+											backendErrorCode.clear();
+											backendErrorMessage.clear();
+											if (assistantText.empty()) {
+												assistantText = recoveryOutcome.compactionApplied
+													? "Recovered via context compaction; runtime will continue."
+													: "Recovered via fallback normalization; runtime will continue.";
+											}
+										}
+										else if (!recoveryOutcome.terminalErrorCode.empty()) {
+											backendErrorCode = recoveryOutcome.terminalErrorCode;
+											if (!recoveryOutcome.terminalErrorMessage.empty()) {
+												backendErrorMessage = recoveryOutcome.terminalErrorMessage;
+											}
+										}
 									}
-								}
-								else if (!recoveryOutcome.terminalErrorCode.empty()) {
-									backendErrorCode = recoveryOutcome.terminalErrorCode;
-									if (!recoveryOutcome.terminalErrorMessage.empty()) {
-										backendErrorMessage = recoveryOutcome.terminalErrorMessage;
-									}
-								}
+
+									runtimeTaskDeltas = mergeWithPreflightTaskDeltas(
+										std::move(runtimeTaskDeltas),
+										failed,
+										backendErrorCode,
+										backendErrorMessage);
+
+									persistTaskDeltas(
+										runtimeTaskDeltas,
+										runtimeResult.ok && !failed);
 							}
-
-							runtimeTaskDeltas = mergeWithPreflightTaskDeltas(
-								std::move(runtimeTaskDeltas),
-								failed,
-								backendErrorCode,
-								backendErrorMessage);
-
-							persistTaskDeltas(
-								runtimeTaskDeltas,
-								runtimeResult.ok && !failed);
 						}
 						else if (!forceError && !orchestrationHandled && !callbacks.chatRuntimeCallback) {
 							failed = true;
