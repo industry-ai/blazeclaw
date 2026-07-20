@@ -1,8 +1,14 @@
 /* ================================================================
-   AgentChat HTML 版 - 任务中心页面 (匹配 PersonalTaskCenterPanel)
+   AgentChat 重构版 - 任务中心页面 (匹配 PersonalTaskCenterPanel)
+   ----------------------------------------------------------------
+   纯 UI 页面：保留全部渲染逻辑与事件绑定。
+   业务逻辑（任务列表/完成/取消/延期、会话切换、群帖加载）通过
+   Bridge → postMessage 交由 C++ 原生宿主处理，不再直接访问
+   stores/chatStore.js。UiStore（视图栈/任务详情）、Toast、TimeUtils
+   仍为本地纯前端逻辑，保持原状。
    ================================================================ */
 
-import ChatStore from '../stores/chatStore.js';
+import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
@@ -15,13 +21,13 @@ const TasksPage = {
     this.container = document.getElementById('page-tasks');
     this.activeSegment = 'pending';
     this.render();
-    // 对齐 Vue 版：任务页打开时预取所有群聊的帖子
-    this._loadGroupPosts();
+    // 对齐 Vue 版：任务页打开时预取所有群聊的帖子（异步，不阻塞 init）
+    void this._loadGroupPosts();
   },
 
   async _loadGroupPosts() {
     try {
-      await ChatStore.loadAllGroupPosts();
+      await Bridge.loadAllGroupPosts();
       this.render();
     } catch (e) {
       console.warn('[TasksPage] Failed to load group posts:', e.message);
@@ -30,9 +36,9 @@ const TasksPage = {
 
   render() {
     if (!this.container) return;
-    const tasks = ChatStore.getPersonalTasksForCurrentUser();
-    const posts = ChatStore.getPosts;
-    const conversations = ChatStore.getConversations();
+    const tasks = Bridge.getPersonalTasksForCurrentUser();
+    const posts = Bridge.getPosts;
+    const conversations = Bridge.getConversations();
     const sourceNames = {};
     conversations.forEach(c => { sourceNames[c.id] = c.name; });
 
@@ -260,38 +266,53 @@ const TasksPage = {
   },
 
   _findPersonalItem(key) {
-    const tasks = ChatStore.getPersonalTasksForCurrentUser();
+    const tasks = Bridge.getPersonalTasksForCurrentUser();
     const t = tasks.find(t => `personal:${t.id}` === key);
     if (t) return { kind: 'personal', task: t };
-    const conversations = ChatStore.getConversations();
+    const conversations = Bridge.getConversations();
     for (const c of conversations) {
-      const post = ChatStore.getPosts(c.id).find(p => `group:${p.id}` === key);
+      const post = Bridge.getPosts(c.id).find(p => `group:${p.id}` === key);
       if (post) return { kind: 'group', post, conversationId: c.id };
     }
     return null;
   },
 
-  _completeTask(key) {
+  async _completeTask(key) {
     const item = this._findPersonalItem(key);
     if (item?.kind === 'personal') {
-      if (ChatStore.completePersonalTask(item.task.id)) Toast.success('任务已完成');
+      try {
+        await Bridge.completePersonalTask(item.task.id);
+        Toast.success('任务已完成');
+      } catch (e) {
+        console.warn('[TasksPage] completeTask failed:', e.message);
+      }
     }
     this.render();
   },
 
-  _cancelTask(key) {
+  async _cancelTask(key) {
     const item = this._findPersonalItem(key);
     if (item?.kind === 'personal') {
-      if (ChatStore.cancelPersonalTask(item.task.id)) Toast.success('任务已取消');
+      try {
+        await Bridge.cancelPersonalTask(item.task.id);
+        Toast.success('任务已取消');
+      } catch (e) {
+        console.warn('[TasksPage] cancelTask failed:', e.message);
+      }
     }
     this.render();
   },
 
-  _postponeTask(key) {
+  async _postponeTask(key) {
     const item = this._findPersonalItem(key);
     if (item?.kind === 'personal') {
       const base = item.task.dueAt && item.task.dueAt > Date.now() ? item.task.dueAt : Date.now();
-      if (ChatStore.reschedulePersonalTask(item.task.id, base + 3600000)) Toast.success('已延期 1 小时');
+      try {
+        await Bridge.reschedulePersonalTask(item.task.id, base + 3600000);
+        Toast.success('已延期 1 小时');
+      } catch (e) {
+        console.warn('[TasksPage] postponeTask failed:', e.message);
+      }
     }
     this.render();
   },
@@ -305,7 +326,7 @@ const TasksPage = {
         : t.sourceConversationId;
       if (!convId) { Toast.warn('这个任务只在工作空间内，没有绑定群聊'); return; }
       // 对齐 Vue 版 openPersonalSource：切换会话 + 重置聊天视图
-      ChatStore.setActiveConversation(convId);
+      Bridge.setActiveConversation(convId);
       UiStore.setActiveConversation(convId, true);
       UiStore.resetToChatView();
       window.location.hash = '#/chat';
@@ -316,7 +337,7 @@ const TasksPage = {
     const item = this._findPersonalItem(key);
     if (item?.kind === 'group') {
       // 对齐 Vue 版 openGroupItem：切换群聊 + 打开任务详情
-      ChatStore.setActiveConversation(item.conversationId);
+      Bridge.setActiveConversation(item.conversationId);
       UiStore.setActiveConversation(item.conversationId, true);
       UiStore.resetToChatView();
       UiStore.openTask({

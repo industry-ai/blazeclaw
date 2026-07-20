@@ -68,12 +68,77 @@ img {
   display: block;
 }
 
-/* --- App Shell --- */
+/* --- App Shell（左侧 Tab 导航 + 右侧内容区） --- */
 #app {
   height: 100dvh;
   width: 100%;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: row;
+}
+
+/* 左侧主导航 */
+.side-nav {
+  flex: 0 0 auto;
+  width: 168px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface);
+  border-right: 1px solid var(--app-border);
+  z-index: 50;
+}
+.side-nav-brand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--app-header-height);
+  border-bottom: 1px solid var(--app-border);
+}
+.side-nav-brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6b38f6 0%, #8352ff 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.side-nav-items {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
+  overflow-y: auto;
+}
+.side-nav-footer {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--app-border);
+}
+.side-nav-status {
+  font-size: 11px;
+  color: var(--app-muted);
+  text-align: center;
+}
+html.dark .side-nav {
+  background: var(--app-surface);
+  border-right-color: var(--app-border);
+}
+
+/* 右侧内容区 */
+.content {
+  flex: 1 1 auto;
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .page {
@@ -253,337 +318,30 @@ html.dark ::-webkit-scrollbar-thumb {
 }
 
 /* ================================================================
-   Auth / Login Page
+   左侧主导航项（Side Nav Items）
    ================================================================ */
-.auth-page {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100dvh;
-  padding: 1.5rem 1.25rem;
-  background: var(--app-page-bg);
-  overflow: hidden;
-}
-
-/* Background decorations */
-.auth-bg-decor {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.auth-bg-orb {
-  position: absolute;
-  border-radius: 50%;
-}
-.auth-bg-orb-1 {
-  left: -10%;
-  top: 12%;
-  width: 28rem;
-  height: 28rem;
-  background: radial-gradient(
-    circle,
-    rgba(120, 92, 255, 0.14),
-    transparent 62%
-  );
-  filter: blur(3rem);
-}
-.auth-bg-orb-2 {
-  bottom: -8%;
-  right: -12%;
-  width: 34rem;
-  height: 34rem;
-  border: 1px solid rgba(201, 192, 255, 0.35);
-  background: radial-gradient(
-    circle at 30% 30%,
-    rgba(147, 99, 255, 0.18),
-    transparent 58%
-  );
-}
-html.dark .auth-bg-orb-1 {
-  background: radial-gradient(
-    circle,
-    rgba(120, 92, 255, 0.08),
-    transparent 62%
-  );
-}
-html.dark .auth-bg-orb-2 {
-  border-color: rgba(201, 192, 255, 0.15);
-  background: radial-gradient(
-    circle at 30% 30%,
-    rgba(147, 99, 255, 0.1),
-    transparent 58%
-  );
-}
-
-/* Container */
-.auth-container {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 31rem;
-  padding: 1rem 0;
-}
-
-/* Mobile logo */
-.auth-logo-mobile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 2.5rem;
-}
-.auth-logo-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: 2rem;
-  background: linear-gradient(160deg, #8f6dff 0%, #6c37f6 44%, #174fbb 100%);
-  font-size: 2rem;
-  font-weight: 900;
-  color: #fff;
-  box-shadow: 0 18px 40px rgba(96, 66, 232, 0.28);
-  margin-bottom: 1.25rem;
-}
-.auth-logo-text {
-  font-size: 2.55rem;
-  font-weight: 600;
-  letter-spacing: -0.06em;
-  color: var(--app-text);
-}
-
-/* Header */
-.auth-header {
-  text-align: center;
-}
-.auth-title {
-  font-size: 2.25rem;
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  color: var(--app-text);
-}
-.auth-subtitle {
-  margin-top: 0.75rem;
-  font-size: 1.02rem;
-  line-height: 1.75;
-  color: var(--app-text-secondary);
-}
-
-/* Form */
-.auth-form {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-/* Input group */
-.auth-input-group {
-  display: block;
-}
-.auth-input-wrap {
-  display: flex;
-  align-items: center;
-  height: 4.8rem;
-  border-radius: 1.2rem;
-  border: 1px solid var(--app-border);
-  background: var(--app-input-bg);
-  padding: 0 1.25rem;
-  box-shadow: 0 10px 30px rgba(109, 61, 247, 0.06);
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.auth-input-wrap:focus-within {
-  border-color: var(--app-brand);
-  box-shadow: 0 10px 30px rgba(109, 61, 247, 0.12);
-}
-
-.auth-input-prefix {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding-right: 1rem;
-  font-weight: 600;
-  font-size: 1.05rem;
-  color: var(--app-text);
-}
-.auth-country-code {
-  white-space: nowrap;
-}
-
-.auth-input-divider {
-  width: 1px;
-  height: 1.75rem;
-  background: var(--app-border);
-  flex-shrink: 0;
-}
-.auth-input-divider-right {
-  margin-right: 0.75rem;
-}
-
-.auth-input-icon {
-  flex-shrink: 0;
-  color: var(--app-muted);
-}
-
-.auth-input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  font-size: 1.05rem;
-  color: var(--app-text);
-  outline: none;
-}
-.auth-input::placeholder {
-  color: var(--app-text-muted);
-}
-.auth-input-code {
-  margin-left: 0.75rem;
-}
-
-/* Send code button */
-.auth-send-code-btn {
-  flex-shrink: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--app-brand);
-  transition: opacity 0.15s;
-  padding: 0.25rem 0.5rem;
-}
-.auth-send-code-btn.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Submit button */
-.auth-submit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  height: 4.3rem;
-  border-radius: 1.15rem;
-  background: linear-gradient(90deg, #5f2df6 0%, #7b4dff 100%);
-  color: #fff;
-  font-size: 1.22rem;
-  font-weight: 600;
-  box-shadow: 0 18px 44px rgba(103, 61, 246, 0.28);
-  transition:
-    filter 0.15s,
-    opacity 0.15s;
-}
-.auth-submit-btn:hover:not(.disabled) {
-  filter: brightness(1.03);
-}
-.auth-submit-btn.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Terms checkbox */
-.auth-terms-label {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  cursor: pointer;
-  user-select: none;
-  padding: 0.25rem 0;
-}
-.auth-checkbox {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 0.375rem;
-  border: 1.5px solid var(--app-border);
-  background: var(--app-surface);
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-  flex-shrink: 0;
-}
-.auth-checkbox.checked {
-  background: var(--app-brand);
-  border-color: var(--app-brand);
-}
-.auth-terms-text {
-  font-size: 0.85rem;
-  color: var(--app-muted);
-}
-.auth-terms-link {
-  color: var(--app-brand);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-/* Error banner */
-.auth-error-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  font-size: 0.85rem;
-}
-
-/* Footer mobile */
-.auth-footer-mobile {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 3rem;
-  font-size: 0.98rem;
-  font-weight: 500;
-  color: var(--app-text-secondary);
-}
-.auth-footer-mobile svg {
-  color: var(--app-brand);
-}
-
-/* Dark mode adjustments */
-html.dark .auth-input-wrap {
-  box-shadow: none;
-}
-html.dark .auth-submit-btn {
-  box-shadow: 0 18px 44px rgba(103, 61, 246, 0.18);
-}
-
-/* ================================================================
-   Bottom Navigation (match AppMobileBottomNav)
-   ================================================================ */
-#bottom-nav {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  height: calc(var(--app-bottom-bar-height) + var(--safe-bottom));
-  padding-bottom: var(--safe-bottom);
-  background: var(--app-surface);
-  border-top: 1px solid var(--app-border);
-}
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 12px 8px;
+  width: 100%;
+  border-radius: var(--app-control-radius);
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  transition: color 150ms;
+  transition: color 150ms, background 150ms;
   position: relative;
-  min-width: 52px;
+}
+.nav-item:hover {
+  background: var(--app-subtle-bg);
+  color: var(--app-text-secondary);
 }
 .nav-item.active {
   color: var(--app-brand);
+  background: var(--app-brand-soft);
 }
 .nav-item svg {
   width: 22px;
@@ -591,8 +349,8 @@ html.dark .auth-submit-btn {
 }
 .nav-badge {
   position: absolute;
-  top: 2px;
-  right: -4px;
+  top: 6px;
+  right: 10px;
   min-width: 16px;
   height: 16px;
   border-radius: 8px;
@@ -1305,8 +1063,8 @@ html.dark .conv-item .conv-time {
   box-shadow: 0 8px 16px rgba(107, 56, 246, 0.24);
 }
 
-/* 会话列表项删除按钮（对齐设计规范：Ghost 弱操作） */
-.conv-delete-btn {
+/* 会话列表项更多操作按钮（三点菜单） */
+.conv-more-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1324,23 +1082,83 @@ html.dark .conv-item .conv-time {
     color 0.12s,
     border-color 0.12s;
 }
-.conv-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.2);
+.conv-more-btn:hover {
+  background: var(--app-subtle-bg, rgba(0,0,0,0.04));
+  color: var(--app-text, #1f2937);
+  border-color: var(--app-border, rgba(0,0,0,0.08));
 }
-.conv-delete-btn:active {
+.conv-more-btn:active {
   transform: scale(0.94);
 }
-.conv-item.active .conv-delete-btn {
+.conv-item.active .conv-more-btn {
   color: var(--app-brand);
 }
-html.dark .conv-delete-btn {
+html.dark .conv-more-btn {
   color: #64748b;
 }
-html.dark .conv-delete-btn:hover {
+html.dark .conv-more-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #e2e8f0;
+}
+
+/* 会话更多操作下拉菜单 */
+.conv-dropdown-menu {
+  width: 160px;
+  background: var(--app-surface, #fff);
+  border: 1px solid var(--app-border, rgba(0,0,0,0.08));
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 9999;
+  padding: 0.25rem;
+}
+.conv-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--app-text, #1f2937);
+  font-size: 0.875rem;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: background 0.1s;
+  text-align: left;
+}
+.conv-dropdown-item:hover {
+  background: var(--app-subtle-bg, rgba(0,0,0,0.04));
+}
+.conv-dropdown-item svg {
+  flex-shrink: 0;
+  color: var(--app-muted, #9aa3bd);
+}
+.conv-dropdown-danger {
+  color: #ef4444;
+}
+.conv-dropdown-danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+.conv-dropdown-danger svg {
+  color: #ef4444;
+}
+html.dark .conv-dropdown-menu {
+  background: #1e293b;
+  border-color: rgba(255,255,255,0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+html.dark .conv-dropdown-item {
+  color: #e2e8f0;
+}
+html.dark .conv-dropdown-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+html.dark .conv-dropdown-item svg {
+  color: #64748b;
+}
+html.dark .conv-dropdown-danger:hover {
   background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
 }
 
 /* ================================================================
@@ -1547,7 +1365,7 @@ html.dark .sidebar-search-box input::placeholder {
 .msg-stream {
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 19rem);
+  max-height: calc(100vh - 15rem);
   overflow-y: auto;
   padding: 1rem;
 }
@@ -2094,279 +1912,6 @@ html.dark .composer-card.agent:focus-within {
   color: rgba(148, 163, 184, 0.6);
 }
 /* ================================================================
-   Auth page (match AuthShell)
-   ================================================================ */
-.auth-main {
-  position: relative;
-  display: flex;
-  min-height: 100dvh;
-  overflow: hidden;
-  padding: 1rem 1.25rem;
-  background: var(--app-page-bg);
-  color: var(--app-text);
-}
-@media (min-width: 640px) {
-  .auth-main {
-    padding: 1.25rem 1.5rem;
-  }
-}
-.auth-card {
-  position: relative;
-  z-index: 10;
-  margin: auto;
-  display: flex;
-  min-height: calc(100dvh - 2rem);
-  width: 100%;
-  max-width: 70rem;
-  overflow: hidden;
-  border-radius: 1.8rem;
-  background: var(--app-surface);
-}
-@media (min-width: 1024px) {
-  .auth-card {
-    border: 1px solid var(--app-border);
-    box-shadow: 0 24px 70px rgba(88, 72, 154, 0.12);
-  }
-}
-.auth-hero {
-  display: none;
-  position: relative;
-  width: 48%;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: linear-gradient(160deg, #faf8ff 0%, #f3efff 40%, #e8e0ff 100%);
-}
-@media (min-width: 1024px) {
-  .auth-hero {
-    display: flex;
-  }
-}
-.auth-hero-bg {
-  position: absolute;
-  inset: 0;
-  opacity: 0.3;
-  background:
-    radial-gradient(
-      circle at 30% 30%,
-      rgba(109, 61, 247, 0.25),
-      transparent 50%
-    ),
-    radial-gradient(circle at 70% 70%, rgba(91, 46, 240, 0.15), transparent 50%);
-}
-.auth-hero-content {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 0 2.5rem;
-}
-.auth-hero-icon {
-  display: flex;
-  width: 6rem;
-  height: 6rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2.5rem;
-  font-size: 2.5rem;
-  font-weight: 900;
-  color: #fff;
-  margin-bottom: 2rem;
-  background: linear-gradient(160deg, #8f6dff, #6c37f6, #174fbb);
-  box-shadow: 0 18px 40px rgba(96, 66, 232, 0.28);
-}
-.auth-hero-title {
-  font-size: 2.8rem;
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  color: var(--app-text);
-  margin-bottom: 0.75rem;
-}
-.auth-hero-desc {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--app-text-secondary);
-}
-.auth-hero-steps {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  text-align: left;
-}
-.auth-hero-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-.auth-hero-step-num {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--app-brand);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.auth-hero-step-title {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--app-text);
-}
-.auth-hero-step-desc {
-  font-size: 0.78rem;
-  color: var(--app-muted);
-  margin-top: 2px;
-}
-
-.auth-form-section {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem 1rem;
-}
-@media (min-width: 640px) {
-  .auth-form-section {
-    padding: 1.5rem 2rem;
-  }
-}
-@media (min-width: 1024px) {
-  .auth-form-section {
-    max-width: 52rem;
-    padding: 2rem 2.5rem;
-  }
-}
-.auth-form-card {
-  width: 100%;
-  max-width: 28rem;
-  padding: 1rem 0;
-}
-@media (min-width: 640px) {
-  .auth-form-card {
-    max-width: 35rem;
-    padding: 1rem 0.5rem;
-  }
-}
-@media (min-width: 1024px) {
-  .auth-form-card {
-    max-width: 41rem;
-    border-radius: 2rem;
-    border: 1px solid var(--app-border);
-    background: var(--app-surface-elevated);
-    padding: 2.5rem;
-    box-shadow: 0 24px 60px rgba(88, 72, 154, 0.1);
-  }
-}
-
-.auth-form-logo-mobile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 2rem;
-}
-@media (min-width: 1024px) {
-  .auth-form-logo-mobile {
-    display: none;
-  }
-}
-.auth-form-logo-icon {
-  display: flex;
-  width: 5rem;
-  height: 5rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2rem;
-  font-size: 2rem;
-  font-weight: 900;
-  color: #fff;
-  margin-bottom: 1rem;
-  background: linear-gradient(160deg, #8f6dff, #6c37f6, #174fbb);
-  box-shadow: 0 18px 40px rgba(96, 66, 232, 0.28);
-}
-.auth-form-logo-title {
-  font-size: 2.4rem;
-  font-weight: 600;
-  letter-spacing: -0.06em;
-  color: var(--app-text);
-}
-
-.auth-form-heading {
-  text-align: center;
-}
-@media (min-width: 1024px) {
-  .auth-form-heading {
-    text-align: left;
-  }
-}
-.auth-form-heading h2 {
-  font-size: 2.25rem;
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  color: var(--app-text);
-  margin-bottom: 0.5rem;
-}
-.auth-form-heading p {
-  font-size: 1.02rem;
-  line-height: 1.75rem;
-  color: var(--app-text-secondary);
-}
-.auth-form-fields {
-  margin-top: 2rem;
-}
-.auth-form-fields label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--app-text-secondary);
-  margin-bottom: 0.375rem;
-}
-.auth-form-fields .field-group {
-  margin-bottom: 1rem;
-}
-.auth-sms-row {
-  display: flex;
-  gap: 0.75rem;
-}
-.auth-sms-row input {
-  flex: 1;
-}
-.auth-sms-btn {
-  flex-shrink: 0;
-  min-width: 100px;
-  font-size: 0.85rem;
-}
-.auth-error {
-  font-size: 0.8rem;
-  color: var(--app-danger);
-  padding: 0 0.25rem;
-  margin-top: 0.25rem;
-}
-.auth-submit {
-  margin-top: 1.5rem;
-}
-.auth-terms {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--app-muted);
-  margin-top: 0.5rem;
-}
-.auth-terms a {
-  color: var(--app-brand);
-  text-decoration: underline;
-}
-
-/* ================================================================
    Me page (match MeShell)
    ================================================================ */
 .me-main {
@@ -2385,7 +1930,7 @@ html.dark .composer-card.agent:focus-within {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 30rem;
+  max-width: 100%;
   margin: 0 auto;
   width: 100%;
 }
@@ -2394,12 +1939,12 @@ html.dark .composer-card.agent:focus-within {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1.5rem;
   background: var(--app-surface-strong);
   border-bottom: 1px solid var(--app-border);
 }
 .me-header-title {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--app-text);
 }
@@ -2426,7 +1971,7 @@ html.dark .composer-card.agent:focus-within {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.5rem;
   background: var(--app-surface-strong);
   border-bottom: 1px solid var(--app-border);
 }
@@ -2455,10 +2000,18 @@ html.dark .composer-card.agent:focus-within {
 .me-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0 2rem;
+  padding: 0 1.5rem 2rem;
+  max-width: 48rem;
+  width: 100%;
+  margin: 0 auto;
+}
+@media (min-width: 1024px) {
+  .me-scroll {
+    max-width: 56rem;
+  }
 }
 .me-profile-card {
-  margin: 1rem;
+  margin: 1rem 0;
   padding: 1.25rem;
   border-radius: var(--app-card-radius);
   border: 1px solid var(--app-border);
@@ -2489,7 +2042,7 @@ html.dark .composer-card.agent:focus-within {
   margin-top: 2px;
 }
 .me-menu {
-  margin: 0 1rem;
+  margin: 0;
   border-radius: var(--app-card-radius);
   border: 1px solid var(--app-border);
   background: var(--app-surface);
@@ -2533,9 +2086,6 @@ html.dark .composer-card.agent:focus-within {
 .me-menu-arrow svg {
   width: 0.875rem;
   height: 0.875rem;
-}
-.me-logout {
-  margin: 1.5rem 1rem;
 }
 
 /* ================================================================
@@ -2651,7 +2201,7 @@ html.dark .hub-page-bg {
   z-index: 10;
   margin: 0 auto;
   width: 100%;
-  max-width: 30rem;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   display: flex;
@@ -2663,11 +2213,11 @@ html.dark .hub-page-bg {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem 0.75rem 1.25rem;
+  padding: 0.75rem 1.5rem 0.75rem 1.5rem;
   min-height: 3.75rem;
 }
 .hub-header-title {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--app-text);
@@ -2698,7 +2248,7 @@ html.dark .hub-page-bg {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  padding: 0 1rem 1.5rem;
+  padding: 0 1.5rem 1.5rem;
 }
 .hub-content {
   flex: 1;
@@ -2708,7 +2258,7 @@ html.dark .hub-page-bg {
   flex-direction: column;
   gap: 1rem;
   padding-top: 1rem;
-  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  padding-bottom: 2rem;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -2776,7 +2326,17 @@ html.dark .hub-seg-btn {
 .hub-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
+  gap: 0.75rem;
+}
+@media (min-width: 768px) {
+  .hub-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (min-width: 1280px) {
+  .hub-stats {
+    grid-template-columns: repeat(6, 1fr);
+  }
 }
 .hub-stat-card {
   border-radius: 1.1rem;
@@ -2903,6 +2463,16 @@ html.dark .hub-card {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
 }
+@media (min-width: 768px) {
+  .hub-card-3col {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (min-width: 1280px) {
+  .hub-card-3col {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
 /* 技能迷你卡片容器：flex 自适应一行两个，超出换行 */
 .hub-card-2col {
   margin-top: 1rem;
@@ -2921,6 +2491,16 @@ html.dark .hub-card {
   background: var(--app-subtle-bg);
   padding: 0.75rem;
   overflow: hidden;
+}
+@media (min-width: 768px) {
+  .hub-skill-mini {
+    flex: 0 0 calc(33.333% - 0.4167rem);
+  }
+}
+@media (min-width: 1280px) {
+  .hub-skill-mini {
+    flex: 0 0 calc(25% - 0.4688rem);
+  }
 }
 
 .hub-mini-card {
@@ -2989,6 +2569,11 @@ html.dark .hub-card {
   color: #fff;
   border-color: var(--app-brand);
 }
+@media (min-width: 768px) {
+  .hub-op-btn-full {
+    grid-column: span 4;
+  }
+}
 
 /* 技能迷你卡片标题/描述：单行省略号 */
 .hub-skill-mini-title {
@@ -3026,6 +2611,13 @@ html.dark .hub-card {
   flex-direction: column;
   gap: 0.625rem;
 }
+@media (min-width: 768px) {
+  .hub-exec-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
 .hub-exec-item {
   display: flex;
   align-items: flex-start;
@@ -3057,6 +2649,13 @@ html.dark .hub-card {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+@media (min-width: 768px) {
+  .hub-skill-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 .hub-skill-row {
   display: flex;
@@ -3116,6 +2715,20 @@ html.dark .hub-card {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* Web 端：列表项双列布局 */
+@media (min-width: 768px) {
+  .hub-item-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+@media (min-width: 1280px) {
+  .hub-item-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .hub-item-card {
   border-radius: 1.35rem;
@@ -3688,7 +3301,6 @@ html.dark .dc-icon-wrap {
 .pp-loading,
 .pp-error,
 .pp-empty {
-  text-align: center;
   padding: 2rem 1rem;
   font-size: 0.9rem;
   color: var(--app-muted);
@@ -4667,7 +4279,7 @@ html.dark .pc-fs-section-card {
   position: relative;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: scroll;
 }
 
 .td-drawer-footer {
@@ -5102,4 +4714,1036 @@ html.dark .td-submit-card {
 
 .td-btn-confirm-no:active {
   transform: scale(0.985);
+}
+
+/* ================================================================
+   IRC 聊天室（Chatroom）— 三栏布局
+   对齐 IRC_CHATROOM_ARCHITECTURE.md Layer 4 UI
+   ================================================================ */
+.irc-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: var(--app-page-bg);
+  overflow: hidden;
+}
+
+/* ── 左栏：频道列表 ── */
+.irc-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface);
+  border-right: 1px solid var(--app-border);
+}
+.irc-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+.irc-sidebar-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.irc-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--app-muted);
+  transition: background 0.15s, color 0.15s;
+}
+.irc-icon-btn:hover {
+  background: var(--app-subtle-bg);
+  color: var(--app-brand);
+}
+.irc-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.irc-channel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.irc-channel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.irc-channel-item:hover {
+  background: var(--app-subtle-bg);
+}
+.irc-channel-item.active {
+  background: var(--app-brand-soft);
+}
+.irc-channel-hash {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--app-muted);
+  flex-shrink: 0;
+}
+.irc-channel-item.active .irc-channel-hash {
+  color: var(--app-brand);
+}
+.irc-channel-info {
+  flex: 1;
+  min-width: 0;
+}
+.irc-channel-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irc-channel-item.active .irc-channel-name {
+  color: var(--app-brand);
+}
+.irc-channel-topic {
+  font-size: 0.75rem;
+  color: var(--app-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.irc-channel-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.irc-channel-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--app-muted);
+  background: var(--app-subtle-bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+  min-width: 20px;
+  text-align: center;
+}
+.irc-channel-mode-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--app-warning);
+  background: rgba(255, 159, 31, 0.12);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.irc-sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+.irc-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.irc-status-dot.online {
+  background: var(--app-success);
+  box-shadow: 0 0 0 3px rgba(32, 178, 107, 0.15);
+}
+.irc-status-dot.offline {
+  background: var(--app-muted);
+}
+.irc-status-text {
+  font-size: 0.78rem;
+  color: var(--app-muted);
+}
+
+/* ── 中栏：消息流 ── */
+.irc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-page-bg);
+}
+.irc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+  flex-shrink: 0;
+}
+.irc-header-empty {
+  color: var(--app-muted);
+  font-size: 0.9rem;
+}
+.irc-header-main {
+  min-width: 0;
+  flex: 1;
+}
+.irc-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.irc-header-hash {
+  color: var(--app-muted);
+}
+.irc-mode-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--app-warning);
+  background: rgba(255, 159, 31, 0.12);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.irc-header-topic {
+  font-size: 0.78rem;
+  color: var(--app-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.irc-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--app-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+.irc-header-btn:hover {
+  background: var(--app-subtle-bg);
+  color: var(--app-brand);
+}
+.irc-header-btn-danger:hover {
+  background: rgba(255, 77, 109, 0.1);
+  color: var(--app-danger);
+}
+.irc-header-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.irc-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.irc-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--app-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.irc-msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.irc-msg-system {
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--app-text-muted);
+  padding: 4px 12px;
+  background: var(--app-subtle-bg);
+  border-radius: 8px;
+  align-self: center;
+  max-width: 80%;
+}
+.irc-msg {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.irc-msg.mine {
+  flex-direction: row-reverse;
+}
+.irc-msg-body {
+  max-width: 70%;
+  min-width: 0;
+}
+.irc-msg.mine .irc-msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.irc-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.irc-msg.mine .irc-msg-meta {
+  flex-direction: row-reverse;
+}
+.irc-op-mark {
+  color: var(--app-brand);
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.irc-msg-author {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+.irc-msg-time {
+  font-size: 0.7rem;
+  color: var(--app-text-muted);
+}
+.irc-ai-mark,
+.irc-prompt-mark {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.irc-ai-mark {
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+}
+.irc-prompt-mark {
+  background: rgba(255, 159, 31, 0.12);
+  color: var(--app-warning);
+}
+.irc-msg-text {
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--app-text);
+  background: var(--app-message-other-bg);
+  border: 1px solid var(--app-border);
+  word-break: break-word;
+}
+.irc-msg.mine .irc-msg-text {
+  background: var(--app-message-mine-bg);
+  color: #fff;
+  border-color: transparent;
+}
+.irc-msg.agent .irc-msg-text {
+  background: var(--app-message-agent-bg);
+  border-color: var(--app-brand-soft);
+}
+.irc-msg-text a {
+  color: var(--app-brand);
+  text-decoration: underline;
+}
+.irc-msg.mine .irc-msg-text a {
+  color: #fff;
+}
+
+/* ── 输入框 ── */
+.irc-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+  flex-shrink: 0;
+}
+.irc-composer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--app-muted);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.irc-composer-btn:hover {
+  background: var(--app-subtle-bg);
+  color: var(--app-brand);
+}
+.irc-composer-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.irc-composer-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.irc-composer-input:focus {
+  border-color: var(--app-brand);
+}
+.irc-composer-input::placeholder {
+  color: var(--app-text-muted);
+}
+.irc-composer-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--app-brand);
+  color: #fff;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.irc-composer-send:hover {
+  background: var(--app-brand-hover);
+}
+.irc-composer-send:active {
+  transform: scale(0.94);
+}
+.irc-composer-send svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── 右栏：成员/话题面板 ── */
+.irc-aside {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface);
+  border-left: 1px solid var(--app-border);
+  overflow: hidden;
+}
+.irc-aside-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+.irc-aside-tabs {
+  display: flex;
+  gap: 4px;
+}
+.irc-aside-tab {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--app-muted);
+  transition: background 0.15s, color 0.15s;
+}
+.irc-aside-tab:hover {
+  background: var(--app-subtle-bg);
+}
+.irc-aside-tab.active {
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+}
+.irc-aside-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--app-text);
+}
+.irc-aside-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.irc-empty-mini {
+  text-align: center;
+  padding: 24px 12px;
+  font-size: 0.82rem;
+  color: var(--app-muted);
+}
+
+/* 成员项 */
+.irc-member-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.irc-member-item:hover {
+  background: var(--app-subtle-bg);
+}
+.irc-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.irc-member-prefix {
+  font-weight: 700;
+  font-size: 0.85rem;
+  width: 14px;
+  flex-shrink: 0;
+}
+.irc-member-prefix.op {
+  color: var(--app-brand);
+}
+.irc-member-prefix.voice {
+  color: var(--app-success);
+}
+.irc-member-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irc-member-admin-badge {
+  font-size: 0.62rem;
+  color: #fff;
+  background: var(--app-brand);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+html.dark .irc-member-admin-badge {
+  background: var(--app-brand);
+}
+.irc-member-away {
+  font-size: 0.62rem;
+  color: var(--app-warning);
+  background: rgba(255, 159, 31, 0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.irc-member-globop {
+  color: var(--app-warning);
+  font-size: 0.8rem;
+}
+.irc-member-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--app-muted);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.irc-member-menu-btn:hover {
+  background: var(--app-border);
+  color: var(--app-text);
+}
+.irc-member-menu-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 话题项 */
+.irc-topics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.irc-topic-item {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.irc-topic-item:hover {
+  border-color: var(--app-brand);
+}
+.irc-topic-item:active {
+  transform: scale(0.99);
+}
+.irc-topic-item.closed {
+  opacity: 0.6;
+}
+.irc-topic-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.irc-topic-pin {
+  font-size: 0.85rem;
+}
+.irc-topic-title {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irc-topic-status {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.irc-topic-status.open {
+  background: rgba(32, 178, 107, 0.12);
+  color: var(--app-success);
+}
+.irc-topic-status.closed {
+  background: var(--app-subtle-bg);
+  color: var(--app-muted);
+}
+.irc-topic-status.pinned {
+  background: rgba(255, 159, 31, 0.12);
+  color: var(--app-warning);
+}
+.irc-topic-status.archived {
+  background: var(--app-subtle-bg);
+  color: var(--app-text-muted);
+}
+.irc-topic-content {
+  font-size: 0.78rem;
+  color: var(--app-muted);
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.irc-topic-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--app-text-muted);
+}
+.irc-topic-ai {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+}
+
+/* 话题详情 */
+.irc-topic-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.irc-topic-detail-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.irc-topic-detail-content {
+  font-size: 0.85rem;
+  color: var(--app-text-secondary);
+  line-height: 1.6;
+}
+.irc-topic-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--app-muted);
+  flex-wrap: wrap;
+}
+.irc-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--app-border);
+  padding-top: 12px;
+}
+.irc-reply {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.irc-reply.ai {
+  background: var(--app-brand-soft);
+  border-radius: 10px;
+  padding: 8px;
+}
+.irc-reply-body {
+  flex: 1;
+  min-width: 0;
+}
+.irc-reply-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.irc-reply-author {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+.irc-reply-time {
+  font-size: 0.68rem;
+  color: var(--app-text-muted);
+}
+.irc-reply-text {
+  font-size: 0.82rem;
+  color: var(--app-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.irc-reply-text a {
+  color: var(--app-brand);
+}
+.irc-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.irc-reply-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font-size: 0.82rem;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+.irc-reply-input:focus {
+  border-color: var(--app-brand);
+}
+.irc-reply-form .btn {
+  align-self: flex-end;
+}
+.irc-topic-closed-hint {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--app-muted);
+  padding: 8px;
+}
+
+/* ── 弹窗 ── */
+.irc-modal-body {
+  padding: 1.25rem 1.5rem;
+}
+.irc-field-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  margin-bottom: 0.5rem;
+}
+.irc-field-label + .irc-field-label {
+  margin-top: 1rem;
+}
+.irc-field-input {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.irc-field-input:focus {
+  border-color: var(--app-brand);
+}
+.irc-field-textarea {
+  min-height: 80px;
+  resize: none;
+  line-height: 1.6;
+}
+.irc-field-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+}
+.irc-field-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--app-brand);
+}
+.irc-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--app-border);
+}
+
+/* WHOIS */
+.irc-whois-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--app-border);
+  font-size: 0.85rem;
+}
+.irc-whois-row span:first-child {
+  color: var(--app-muted);
+}
+.irc-whois-row span:last-child {
+  color: var(--app-text);
+  font-weight: 500;
+  text-align: right;
+  max-width: 60%;
+  word-break: break-all;
+}
+
+/* 右键菜单 */
+.irc-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+.irc-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 170px;
+  background: var(--app-surface-strong);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+  padding: 4px;
+}
+.irc-menu-header {
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--app-muted);
+  border-bottom: 1px solid var(--app-border);
+  margin-bottom: 4px;
+}
+.irc-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--app-text);
+  transition: background 0.12s;
+}
+.irc-menu-item:hover {
+  background: var(--app-subtle-bg);
+}
+.irc-menu-item.danger {
+  color: var(--app-danger);
+}
+.irc-menu-item.danger:hover {
+  background: rgba(255, 77, 109, 0.08);
+}
+.irc-menu-hint {
+  padding: 8px 12px;
+  font-size: 0.76rem;
+  color: var(--app-muted);
+}
+
+/* ================================================================
+   群聊话题卡片（Posts Panel 话题区域）
+   ================================================================ */
+.pp-topic-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: background 0.15s, transform 0.1s;
+}
+.pp-topic-create-btn:hover {
+  background: var(--app-brand);
+  color: #fff;
+}
+.pp-topic-create-btn:active {
+  transform: scale(0.96);
+}
+
+.pp-topic-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  margin-bottom: 0.75rem;
+  border-radius: 1.2rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  box-shadow: 0 8px 20px rgba(36, 47, 90, 0.045);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.pp-topic-card:last-child {
+  margin-bottom: 0;
+}
+.pp-topic-card:hover {
+  border-color: rgba(109, 61, 247, 0.25);
+}
+html.dark .pp-topic-card {
+  box-shadow: none;
+}
+
+.pp-topic-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.85rem;
+  background: var(--app-brand-soft);
+  color: var(--app-brand);
+  flex-shrink: 0;
+}
+
+.pp-topic-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-topic-card-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pp-topic-card-summary {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--app-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.pp-topic-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--app-text-muted);
+}
+
+.pp-topic-card-action {
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.pp-topic-enter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: var(--app-brand);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+.pp-topic-enter-btn:hover {
+  background: var(--app-brand-hover);
+}
+.pp-topic-enter-btn:active {
+  transform: scale(0.96);
+}
+
+.pp-topic-leave-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid var(--app-border);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.pp-topic-leave-btn:hover {
+  color: var(--app-danger);
+  border-color: var(--app-danger);
+  background: rgba(255, 77, 109, 0.06);
+}
+.pp-topic-leave-btn:active {
+  transform: scale(0.96);
+}
+
+.pp-topic-join-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: var(--app-brand);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+.pp-topic-join-btn:hover {
+  background: var(--app-brand-hover);
+}
+.pp-topic-join-btn:active {
+  transform: scale(0.96);
 }
