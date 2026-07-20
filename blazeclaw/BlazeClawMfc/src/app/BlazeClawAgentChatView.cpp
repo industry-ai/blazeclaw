@@ -4,12 +4,17 @@
 #include "BlazeClawMfcApp.h"
 #include "TcpReceiverWnd.h"
 #include "MainFrame.h"
+#include "CChatRoomBridge.h"
+#include "Client.h"
+#include "CNetwork_c.h"
 
 #include <Shlwapi.h>
 #include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <sstream>
+#include <deque>
+#include <mutex>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -136,6 +141,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawAgentChatView, CView)
 	ON_WM_ERASEBKGND()
 	ON_WM_TIMER()
 	ON_MESSAGE(WM_AGENTCHAT_WEBMESSAGE_RECEIVED, &CBlazeClawAgentChatView::OnWebMessageReceived)
+	ON_MESSAGE(WM_CHATROOM_EMIT_TO_WEB, &CBlazeClawAgentChatView::OnChatroomEmitToWeb)
 END_MESSAGE_MAP()
 
 CBlazeClawAgentChatView::CBlazeClawAgentChatView() noexcept
@@ -177,6 +183,7 @@ int CBlazeClawAgentChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
 	//StartNodeServer();
 
+	InitChatRoomBridge();
 	StartConfiguredRuntime();
 	//-------------------------------------------------------------------
 
@@ -201,8 +208,6 @@ void CBlazeClawAgentChatView::OnSize(UINT nType, int /*cx*/, int /*cy*/)
 	{
 		CRect rc;
 		GetClientRect(&rc);
-		TRACE("CBlazeClawAgentChatView: OnSize fixing bounds (%d,%d,%d,%d)\n",
-			rc.left, rc.top, rc.right, rc.bottom);
 		m_webViewController->put_Bounds(rc);
 	}
 }
@@ -421,6 +426,27 @@ void CBlazeClawAgentChatView::StopNativeRuntime()
 	m_nativeHttpListenerPort = 0;
 }
 
+void CBlazeClawAgentChatView::InitChatRoomBridge()
+{
+	blazeclaw::irc::ChatRoomBridgeDependencies deps;
+	deps.get_current_session_id = []() {
+		return std::to_string(CClient::Instance().GetSessionId());
+	};
+	deps.get_current_nickname = []() {
+		auto info = CClient::Instance().GetTokenInfo();
+		return info.name.empty() ? info.phone : info.name;
+	};
+	deps.emit_to_web = [this](const std::string& json) {
+		this->EmitToChatroomWeb(json);
+	};
+	deps.send_request = [](uint8_t msg_type, const std::string& payload, std::string& response) -> bool {
+		auto& network = CNetwork_c::Instance();
+		response = network.SendRequest(msg_type, payload);
+		return !response.empty();
+	};
+	blazeclaw::irc::CChatRoomBridge::Instance().Initialize(std::move(deps));
+}
+
 void CBlazeClawAgentChatView::StartConfiguredRuntime()
 {
 	m_runtimeModeResolved = ResolveRuntimeMode();
@@ -430,13 +456,13 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 	{
 	case blazeclaw::config::AgentChatRuntimeMode::Legacy:
 		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=legacy\n");
-		StartNodeServer();
+		//StartNodeServer();
 		m_nodeRuntimeStartedByMode = m_bNodeServerStarted;
 		break;
 
 	case blazeclaw::config::AgentChatRuntimeMode::Native:
 		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=native\n");
-		StartNodeServer();
+		//StartNodeServer();
 		if (!StartNativeRuntime())
 		{
 			TRACE("CBlazeClawAgentChatView: Native mode startup failed\n");
@@ -452,11 +478,12 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 		TRACE("CBlazeClawAgentChatView: AgentChat runtime mode=auto\n");
 		if (!StartNativeRuntime())
 		{
-			TRACE("CBlazeClawAgentChatView: Auto mode fallback to legacy Node runtime\n");
+			TRACE("CBlazeClawAgentChatView: Auto mode: native runtime unavailable; staying in-process only (no Node.js fallback)\n");
 			StopNativeRuntime();
-			StartNodeServer();
-			m_nodeRuntimeStartedByMode = m_bNodeServerStarted;
-			m_runtimeModeResolved = blazeclaw::config::AgentChatRuntimeMode::Legacy;
+			// Intentionally NOT falling back to StartNodeServer(): the chatroom
+			// is fully driven by the C++ IRC transport + Bridge. Legacy Node
+			// bridge is disabled per project decision.
+			m_nodeRuntimeStartedByMode = false;
 		}
 		break;
 	}
@@ -465,18 +492,27 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 
 LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 {
-	std::wstring pendingJson;
+	// 一次性处理队列里所有累积的 web message。
+	// 之前单槽位 + std::move 的实现会把同时间窗到达的多条消息相互覆盖，
+	// 表现为 "empty pending payload" + 部分请求永远等不到响应。
+	while (true)
 	{
-		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
-		pendingJson = std::move(m_pendingWebMessageJson);
-		m_pendingWebMessageJson.clear();
-	}
+		std::wstring pendingJson;
+		{
+			std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+			if (m_pendingWebMessageJson.empty())
+			{
+				return 0;
+			}
+			pendingJson = std::move(m_pendingWebMessageJson.front());
+			m_pendingWebMessageJson.pop_front();
+		}
 
-	if (pendingJson.empty())
-	{
-		TRACE("CBlazeClawAgentChatView: native bridge web message dropped (empty pending payload)\n");
-		return 0;
-	}
+		if (pendingJson.empty())
+		{
+			TRACE("CBlazeClawAgentChatView: native bridge web message dropped (empty pending payload)\n");
+			continue;
+		}
 
 	const nlohmann::json frame = nlohmann::json::parse(
 		WideToUtf8(pendingJson),
@@ -487,16 +523,70 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		TRACE(
 			"CBlazeClawAgentChatView: native bridge web message dropped (invalid json, size=%u)\n",
 			static_cast<unsigned int>(pendingJson.size()));
-		return 0;
+		continue;
 	}
 
 	const std::string channel = frame.value("channel", std::string());
+
+	if (channel == "chatroom.bridge.request")
+	{
+		const std::string requestId = frame.value("requestId", std::string());
+		const std::string kind = frame.value("kind", std::string());
+
+		TRACE(
+			"CBlazeClawAgentChatView: chatroom bridge request received requestId=%s kind=%s\n",
+			requestId.c_str(),
+			kind.c_str());
+
+		auto chatroomEmitToWeb = [this](const std::string& json, const char* evt)
+		{
+			if (m_webView == nullptr)
+			{
+				TRACE("CBlazeClawAgentChatView: chatroomEmitToWeb skipped (m_webView null)\n");
+				return;
+			}
+			const std::wstring script =
+				L"(function(){try{const __msg=" +
+				Utf8ToWide(json) +
+				L";window.dispatchEvent(new CustomEvent('" + Utf8ToWide(std::string(evt)) +
+				L"',{detail:__msg}));}catch(e){}})();";
+			HRESULT execHr = m_webView->ExecuteScript(script.c_str(), nullptr);
+			if (FAILED(execHr)) {
+				TRACE("CBlazeClawAgentChatView: chatroomEmitToWeb ExecuteScript failed hr=0x%08x\n",
+					static_cast<unsigned int>(execHr));
+			}
+		};
+
+		nlohmann::json payload = frame.value("payload", nlohmann::json::object());
+		auto& bridge = blazeclaw::irc::CChatRoomBridge::Instance();
+
+		nlohmann::json responseJson;
+		responseJson["channel"] = "chatroom.bridge.response";
+		responseJson["requestId"] = requestId;
+
+		// Non-blocking: HandleWebMessageAsync posts response to web when ready.
+		// This avoids blocking the UI thread while waiting for server response.
+		blazeclaw::irc::BridgeRequest req;
+		req.request_id = requestId;
+		req.kind = kind;
+		req.payload_json = payload.is_object() ? payload.dump() : "{}";
+		req.session_id = frame.value("sessionId", std::string());
+		req.timestamp_ms = static_cast<uint64_t>(
+			std::chrono::steady_clock::now().time_since_epoch().count());
+
+		// Async: returns immediately, response arrives later via emit_to_web
+		bridge.HandleWebMessageAsync(req);
+
+		// Don't emit a response here — HandleWebMessageAsync will do it via deps_.emit_to_web
+		continue;
+	}
+
 	if (channel != "agentchat.bridge.request")
 	{
 		TRACE(
 			"CBlazeClawAgentChatView: native bridge web message ignored channel=%s\n",
 			channel.c_str());
-		return 0;
+		continue;
 	}
 
 	const std::string requestId = frame.value("requestId", std::string());
@@ -506,7 +596,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		TRACE(
 			"CBlazeClawAgentChatView: native bridge web message dropped (missing requestId/kind) channel=%s\n",
 			channel.c_str());
-		return 0;
+		continue;
 	}
 	TRACE(
 		"CBlazeClawAgentChatView: native bridge request received requestId=%s kind=%s\n",
@@ -542,7 +632,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "ok", true },
 			{ "payload", nlohmann::json{ { "aborted", true } } },
 		});
-		return 0;
+		continue;
 	}
 
 	if (kind == "agent.health")
@@ -558,7 +648,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				{ "ok", false },
 				{ "error", nlohmann::json{ { "message", "native_bridge_unavailable" } } },
 			});
-			return 0;
+			continue;
 		}
 
 		const auto healthResponse = m_nativeBridgeHost->HandleRequest("GET", "/health", "{}");
@@ -582,7 +672,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "ok", healthResponse.statusCode >= 200 && healthResponse.statusCode < 300 },
 			{ "payload", payload },
 		});
-		return 0;
+		continue;
 	}
 
 	if (kind != "agent.turn")
@@ -593,7 +683,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "ok", false },
 			{ "error", nlohmann::json{ { "message", "unsupported_kind" } } },
 		});
-		return 0;
+		continue;
 	}
 
 	{
@@ -606,7 +696,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				{ "ok", false },
 				{ "error", nlohmann::json{ { "message", "request_already_in_progress" } } },
 			});
-			return 0;
+			continue;
 		}
 		m_activeAgentBridgeRequestIds.insert(requestId);
 		m_cancelledAgentBridgeRequestIds.erase(requestId);
@@ -637,7 +727,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "error", nlohmann::json{ { "message", "native_bridge_unavailable" } } },
 		});
 		finalizeRequest();
-		return 0;
+		continue;
 	}
 
 	if (isCancelled())
@@ -651,18 +741,30 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			{ "payload", nlohmann::json{ { "type", "error" }, { "message", "request_aborted" } } },
 		});
 		finalizeRequest();
-		return 0;
+		continue;
 	}
 
-	const nlohmann::json payload = frame.contains("payload") && frame["payload"].is_object()
+	const nlohmann::json rawPayload = frame.contains("payload") && frame["payload"].is_object()
 		? frame["payload"]
 		: nlohmann::json::object();
-	const bool stream = payload.value("stream", true);
+
+	nlohmann::json payload = rawPayload;
+	payload["message"] = rawPayload.value("text", std::string());
+	payload["userId"] = frame.value("userId", std::string());
+	payload["userName"] = frame.value("userName", std::string());
+	payload["phone"] = frame.value("phone", std::string());
+	payload["conversationId"] = rawPayload.value("conversationId", std::string());
+	payload["channel"] = rawPayload.value("channel", std::string());
+	payload["groupId"] = rawPayload.value("groupId", std::string());
+	payload["sessionKey"] = rawPayload.value("sessionKey", std::string());
+
+	const bool stream = rawPayload.value("stream", true);
 	const std::string requestBody = payload.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 	TRACE(
-		"CBlazeClawAgentChatView: native bridge request posted requestId=%s stream=%s\n",
+		"CBlazeClawAgentChatView: native bridge request posted requestId=%s stream=%s body=%s\n",
 		requestId.c_str(),
-		stream ? "true" : "false");
+		stream ? "true" : "false",
+		requestBody.c_str());
 	const auto response = m_nativeBridgeHost->HandleInProcessAgentTurn(requestBody);
 	const bool isSseResponse = response.contentType.find("text/event-stream") != std::string::npos;
 
@@ -744,7 +846,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			requestId.c_str(),
 			response.statusCode);
 		finalizeRequest();
-		return 0;
+		continue;
 	}
 
 	nlohmann::json responsePayload = nlohmann::json::object();
@@ -826,6 +928,10 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 	emitToWeb(bridgeResponse);
 	finalizeRequest();
+	continue;
+	}
+	// while(true) 永远循环取下一条消息；这里的 return 不可达，作为占位
+	// 防止编译器对 "non-void function does not return a value" 报错
 	return 0;
 }
 
@@ -1279,18 +1385,28 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 					return S_OK;
 				}
 
-				TRACE(
-					"CBlazeClawAgentChatView: native bridge web message received (size=%u)\n",
-					static_cast<unsigned int>(message.size()));
 
 				{
 					std::lock_guard<std::mutex> lock(m_webBridgeMutex);
-					m_pendingWebMessageJson = message;
+					if (m_pendingWebMessageJson.size() >= kMaxPendingWebMessages) {
+						// 满了就丢最早的，避免内存膨胀；前端会在下一次同步时拿到不一致状态由上层兜底
+						m_pendingWebMessageJson.pop_front();
+						TRACE(
+							"CBlazeClawAgentChatView: pending web message queue full (%zu), dropping oldest\n",
+							m_pendingWebMessageJson.size());
+					}
+					m_pendingWebMessageJson.push_back(std::move(message));
 				}
 
 				if (m_messageHandler)
 				{
-					m_messageHandler(message);
+					// 回调一般用于做上层分发（例如预解析）；此处仅同步通知，原消息仍在队列里等 WM_AGENTCHAT_WEBMESSAGE_RECEIVED 处理
+					std::wstring snapshot;
+					{
+						std::lock_guard<std::mutex> lock(m_webBridgeMutex);
+						snapshot = m_pendingWebMessageJson.back();
+					}
+					m_messageHandler(snapshot);
 				}
 
 				PostMessage(WM_AGENTCHAT_WEBMESSAGE_RECEIVED);
@@ -1346,6 +1462,12 @@ void CBlazeClawAgentChatView::SetupWebViewEvents()
 				InjectRuntimeBridgeConfig();
 				_DoInjectAuthState();
 			}
+
+			// 关键修复：WebView 加载完成后，必须处理之前排队的 push 消息
+			// 在 WebView 加载期间到达的 push 消息会被加入队列但不会发送
+			// NavigationCompleted 之后需要手动调用 FlushChatroomEmitQueue()
+			TRACE("CBlazeClawAgentChatView: Navigation completed, flushing chatroom emit queue\n");
+			FlushChatroomEmitQueue();
 
 			return S_OK;
 		}).Get(), nullptr);
@@ -1414,9 +1536,6 @@ void CBlazeClawAgentChatView::StopNativeRuntime()
 {
 }
 
-void CBlazeClawAgentChatView::StartConfiguredRuntime()
-{
-}
 //-------------------------------------------------------------------
 
 void CBlazeClawAgentChatView::OnSize(UINT nType, int cx, int cy)
@@ -1580,4 +1699,76 @@ void CBlazeClawAgentChatView::_DoInjectAuthState()
 		L"}catch(e){}}())";
 
 	m_webView->ExecuteScript(script.c_str(), nullptr);
+}
+
+void CBlazeClawAgentChatView::EmitToChatroomWeb(const std::string& json)
+{
+	// WebView2 ExecuteScript must run on the UI thread, but TCP callbacks
+	// arrive on a worker thread.  Queue the JSON and post a message to
+	// ourselves so that FlushChatroomEmitQueue() runs on the UI thread.
+	{
+		std::lock_guard<std::mutex> lock(m_chatroomEmitQueueMutex);
+		m_chatroomEmitQueue.push_back(json);
+	}
+	::PostMessage(m_hWnd, WM_CHATROOM_EMIT_TO_WEB, 0, 0);
+}
+
+LRESULT CBlazeClawAgentChatView::OnChatroomEmitToWeb(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	FlushChatroomEmitQueue();
+	return 0;
+}
+
+void CBlazeClawAgentChatView::FlushChatroomEmitQueue()
+{
+	if (m_webView == nullptr) {
+		TRACE(_T("FlushChatroomEmitQueue: m_webView is null, skipping\n"));
+		return;
+	}
+
+	std::deque<std::string> queue;
+	{
+		std::lock_guard<std::mutex> lock(m_chatroomEmitQueueMutex);
+		queue = std::move(m_chatroomEmitQueue);
+	}
+	if (queue.empty()) {
+		TRACE(_T("FlushChatroomEmitQueue: queue empty, skipping\n"));
+		return;
+	}
+
+	TRACE(_T("FlushChatroomEmitQueue: processing %zu items\n"), queue.size());
+
+	// 批量合并为一次 ExecuteScript：避免高并发 IRC push 时 UI 线程被多次 EvaluateScript 阻塞
+	// channel 决定发送到哪个事件：
+	//   - chatroom.bridge.response → request 响应
+	//   - chatroom.bridge.push → IRC push 事件
+	nlohmann::json arrResponse = nlohmann::json::array();
+	nlohmann::json arrPush = nlohmann::json::array();
+	for (const auto& json : queue)
+	{
+		auto parsed = nlohmann::json::parse(json, nullptr, false);
+		if (!parsed.is_discarded()) {
+			std::string ch = parsed.value("channel", "");
+			if (ch == "chatroom.bridge.response") {
+				arrResponse.push_back(std::move(parsed));
+			} else {
+				arrPush.push_back(std::move(parsed));
+			}
+		}
+	}
+
+	const std::wstring script =
+		L"(function(){try{"
+		L"const __resp=" + Utf8ToWide(arrResponse.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)) +
+		L";for(const __msg of __resp){window.dispatchEvent(new CustomEvent('chatroom.bridge.response',{detail:__msg}));}"
+		L"const __push=" + Utf8ToWide(arrPush.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)) +
+		L";for(const __msg of __push){window.dispatchEvent(new CustomEvent('chatroom.bridge.push',{detail:__msg}));}"
+		L"}catch(e){}})();";
+	TRACE(_T("FlushChatroomEmitQueue: executing script, responses=%zu pushes=%zu\n"), arrResponse.size(), arrPush.size());
+	// 调试：打印实际发送的 JSON
+	if (!arrResponse.empty()) {
+		TRACE(_T("FlushChatroomEmitQueue: response JSON: %hs\n"), arrResponse.dump().c_str());
+	}
+	m_webView->ExecuteScript(script.c_str(), nullptr);
+	TRACE(_T("FlushChatroomEmitQueue: done\n"));
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 #include <string>
@@ -7,6 +7,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <vector>
+#include <deque>
 #include "Client.h"
 
 #include "../config/ConfigModels.h"
@@ -63,6 +64,7 @@ protected:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg LRESULT OnWebMessageReceived(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnChatroomEmitToWeb(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 
 private:
@@ -77,6 +79,14 @@ private:
 	bool	StartNativeRuntime();
 	void	StopNativeRuntime();
 	void	StartConfiguredRuntime();
+	// Initialize ChatRoom Bridge unconditionally for push event routing.
+	// Must succeed regardless of native runtime mode.
+	void	InitChatRoomBridge();
+	// Forward a chatroom bridge message (UTF-8 JSON) to the embedded WebView2.
+	// Safe to call before the WebView2 controller is created - the call is
+	// silently dropped in that case so C++ push events are not lost forever
+	// (the IRC transport keeps them queued until a later pull/snapshot).
+	void	EmitToChatroomWeb(const std::string& json);
 	//-------------------------------------------------------------------
 
 #ifdef BLAZECLAW_AGENTCHATVIEW_WEBVIEW2
@@ -138,7 +148,15 @@ private:
 	std::wstring m_injectedPhone;
 	bool m_hasInjectedAuth;
 	std::mutex m_webBridgeMutex;
-	std::wstring m_pendingWebMessageJson;
+	// 改为队列 + 队列长度上限，避免恶意/异常前端把内存撑爆。
+	std::deque<std::wstring> m_pendingWebMessageJson;
+	static constexpr size_t kMaxPendingWebMessages = 64;
 	std::unordered_set<std::string> m_activeAgentBridgeRequestIds;
 	std::unordered_set<std::string> m_cancelledAgentBridgeRequestIds;
+
+	// 跨线程消息队列：TCP 线程把消息入队，主 UI 线程派发到 WebView
+	static constexpr UINT WM_CHATROOM_EMIT_TO_WEB = WM_USER + 200;
+	std::deque<std::string> m_chatroomEmitQueue;
+	std::mutex m_chatroomEmitQueueMutex;
+	void FlushChatroomEmitQueue();
 };

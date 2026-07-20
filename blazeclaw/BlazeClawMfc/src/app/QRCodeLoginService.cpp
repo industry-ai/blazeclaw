@@ -212,7 +212,7 @@ std::string QRCodeLoginService::SendNodeBindRequest(const std::string& payload) 
 
     // 发送 230 请求（NodeBindReq）
     LOG_INFO("[QRCodeLoginService] Sending NodeBindReq type=230");
-    const std::string response = network.SendRequest(230, payload);
+    const std::string response = network.SendRequestTcp(static_cast<uint16_t>(MsgType::NodeBindReq), payload);
 
     if (!response.empty()) {
         LOG_INFO("[QRCodeLoginService] Received response ({} bytes)", response.length());
