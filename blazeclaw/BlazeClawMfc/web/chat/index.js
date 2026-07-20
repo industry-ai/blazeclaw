@@ -931,6 +931,41 @@
     }
 
     function applyNormalizedUiOps(uiOps) {
+        function resolveUiOpResponderLabel(data) {
+            const source = data && typeof data === "object" ? data : {};
+            const explicit = String(source.responderLabel || source.modelLabel || "").trim();
+            if (explicit) {
+                return explicit;
+            }
+
+            const provider = String(
+                source.provider ||
+                state.gatewayLifecycleProvider ||
+                ""
+            ).trim().toLowerCase();
+            const model = String(
+                source.model ||
+                state.gatewayLifecycleModel ||
+                state.selectedModel ||
+                ""
+            ).trim();
+            const runtimeKind = String(
+                source.runtimeKind ||
+                state.gatewayLifecycleRuntimeKind ||
+                ""
+            ).trim().toLowerCase();
+            const resolvedRuntime = runtimeKind || (provider === "deepseek" ? "remote" : "local");
+            const modelPart = model || "(unknown-model)";
+
+            if (!provider && !model) {
+                return "Responder: unknown";
+            }
+            if (!provider) {
+                return `Responder: ${resolvedRuntime} ${modelPart}`;
+            }
+            return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
+        }
+
         const operations = Array.isArray(uiOps) ? uiOps : [];
         for (const item of operations) {
             if (!item || typeof item !== "object") {
@@ -955,12 +990,13 @@
                 if (!text) {
                     continue;
                 }
+                const responderLabel = resolveUiOpResponderLabel(data);
                 addOrReplaceStream(text, {
                     runId: data.runId,
                     promptRunId: data.promptRunId,
                     responderRunId: data.responderRunId,
                     responderId: data.responderId,
-                    responderLabel: data.responderLabel,
+                    responderLabel,
                     responderOrder: data.responderOrder,
                     responseMode: data.responseMode || "multi_active",
                     state: "delta",
@@ -970,13 +1006,14 @@
 
             if (op === "chat.finalize_stream") {
                 const text = String(data.text || "");
+                const responderLabel = resolveUiOpResponderLabel(data);
                 if (text) {
                     addOrReplaceStream(text, {
                         runId: data.runId,
                         promptRunId: data.promptRunId,
                         responderRunId: data.responderRunId,
                         responderId: data.responderId,
-                        responderLabel: data.responderLabel,
+                        responderLabel,
                         responderOrder: data.responderOrder,
                         responseMode: data.responseMode || "multi_active",
                         state: "delta",
@@ -987,7 +1024,7 @@
                     promptRunId: data.promptRunId,
                     responderRunId: data.responderRunId,
                     responderId: data.responderId,
-                    responderLabel: data.responderLabel,
+                    responderLabel,
                     responderOrder: data.responderOrder,
                     responseMode: data.responseMode || "multi_active",
                     terminalState: data.terminalState,

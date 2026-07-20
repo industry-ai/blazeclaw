@@ -433,11 +433,28 @@
                     : "ui",
             };
 
+            const normalizedModelLabel = String(
+                source.modelLabel ||
+                source.responderLabel ||
+                ""
+            ).trim();
+            const normalizedResponderLabel = String(
+                source.responderLabel ||
+                source.modelLabel ||
+                ""
+            ).trim();
+
             if (runId) {
                 entry.runId = runId;
             }
             if (typeof source.terminalState === "string" && source.terminalState.trim()) {
                 entry.terminalState = source.terminalState.trim();
+            }
+            if (normalizedModelLabel) {
+                entry.modelLabel = normalizedModelLabel;
+            }
+            if (normalizedResponderLabel) {
+                entry.responderLabel = normalizedResponderLabel;
             }
 
             return entry;
@@ -461,14 +478,19 @@
             const sourceMeta = meta && typeof meta === "object"
                 ? meta
                 : {};
+            const modelLabel = typeof sourceMeta.modelLabel === "string"
+                ? sourceMeta.modelLabel
+                : "";
+            const responderLabel = typeof sourceMeta.responderLabel === "string"
+                ? sourceMeta.responderLabel
+                : "";
 
             recordStructuredTranscript({
                 role: bubbleKindToTranscriptRole(kind),
                 text,
                 source: "ui",
-                modelLabel: typeof sourceMeta.modelLabel === "string"
-                    ? sourceMeta.modelLabel
-                    : "",
+                modelLabel,
+                responderLabel,
             });
             rawAddMessage(text, kind, sourceMeta);
         }
@@ -1335,6 +1357,17 @@
                         continue;
                     }
 
+                    const historyModelLabel = String(
+                        message.modelLabel ||
+                        message.responderLabel ||
+                        ""
+                    ).trim();
+                    const historyResponderLabel = String(
+                        message.responderLabel ||
+                        message.modelLabel ||
+                        ""
+                    ).trim();
+
                     recordStructuredTranscript({
                         id: typeof message.id === "string" ? message.id : undefined,
                         role,
@@ -1345,9 +1378,18 @@
                             : state.sessionKey,
                         ts: Number.isFinite(message.ts) ? Number(message.ts) : Date.now(),
                         source: "history",
+                        modelLabel: historyModelLabel,
+                        responderLabel: historyResponderLabel,
                         terminalState: typeof message.state === "string" ? message.state : undefined,
                     });
-                    rawAddMessage(text, role === "user" ? "self" : "peer");
+                    rawAddMessage(
+                        text,
+                        role === "user" ? "self" : "peer",
+                        {
+                            modelLabel: historyModelLabel,
+                            responderLabel: historyResponderLabel,
+                        }
+                    );
                 }
             } catch (error) {
                 addMessage(`history error: ${String(error)}`, "error", { source: "history" });
@@ -3382,6 +3424,9 @@
             const modelLabel = typeof source.modelLabel === "string" && source.modelLabel.trim()
                 ? source.modelLabel.trim()
                 : "";
+            const responderLabel = typeof source.responderLabel === "string" && source.responderLabel.trim()
+                ? source.responderLabel.trim()
+                : modelLabel;
 
             const committed = recordStructuredTranscript({
                 role: "assistant",
@@ -3391,6 +3436,7 @@
                 source: "stream",
                 terminalState,
                 modelLabel,
+                responderLabel,
             });
             state.streamTranscriptDraft = null;
             return committed;

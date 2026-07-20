@@ -379,8 +379,10 @@
                             if (nextAction) {
                                 fallback += ` nextAction=${nextAction}`;
                             }
-                            addMessage(fallback, "peer");
-                        }
+                            addMessage(fallback, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                                responderLabel: resolveResponderLabel(event),
+                            });                        }
                     } else if (event.state === "aborted") {
                         const otherAborted = normalizeAbortedAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherAborted || event.message);
@@ -531,8 +533,13 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnAborted) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, "aborted");
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState: "aborted",
+                                text,
+                            });
                         } else {
                             addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
@@ -582,6 +589,10 @@
                 if (typeof message.runtimeKind === "string") {
                     runtimeKind = message.runtimeKind;
                 }
+
+                state.gatewayLifecycleProvider = provider;
+                state.gatewayLifecycleModel = model;
+                state.gatewayLifecycleRuntimeKind = runtimeKind;
 
                 const details = [];
                 if (runtimeKind) {

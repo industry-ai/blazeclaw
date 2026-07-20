@@ -53,7 +53,7 @@ using IrcPushCallback = std::function<void(const IrcPushEvent&)>;
 class CIrcChatTransport {
 public:
     CIrcChatTransport() = default;
-    ~CIrcChatTransport() = default;
+    ~CIrcChatTransport() noexcept;
 
     CIrcChatTransport(const CIrcChatTransport&) = delete;
     CIrcChatTransport& operator=(const CIrcChatTransport&) = delete;

@@ -134,6 +134,14 @@ bool ParseJoinPart(const std::string& line, std::string& nick,
 
 // CIrcChatTransport implementation
 
+CIrcChatTransport::~CIrcChatTransport() noexcept {
+    try {
+        Shutdown();
+    } catch (...) {
+        // Destructors must not throw.
+    }
+}
+
 bool CIrcChatTransport::Initialize() {
     if (initialized_.load()) {
         TRACE(_T("[CIrcChatTransport] Initialize: already initialized, skipping\n"));
@@ -274,6 +282,10 @@ bool CIrcChatTransport::Initialize() {
 void CIrcChatTransport::Shutdown() {
     StopReceivers();
     initialized_.store(false);
+
+    // Ensure all owned background threads observe stop state before joins.
+    heartbeat_running_.store(false);
+
     // 关键修复：先告诉 ReconnectLoop 退出，�?join�?
     // 否则 Shutdown �?join 一个还�?sleep_for / connect 的线程会永远卡�?
     // 由于 Shutdown 拿不�?lock 来原子地 "set false + join"，直接用 exchange�?
@@ -287,6 +299,12 @@ void CIrcChatTransport::Shutdown() {
         reconnect_thread_.join();
         LOG_INFO("[CIrcChatTransport] Shutdown: reconnect thread joined");
     }
+
+    if (heartbeat_thread_.joinable()) {
+        heartbeat_thread_.join();
+        LOG_INFO("[CIrcChatTransport] Shutdown: heartbeat thread joined");
+    }
+
     LOG_INFO("[CIrcChatTransport] Shutdown complete");
 }
 
