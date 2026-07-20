@@ -790,6 +790,7 @@
     <None Include="web\chat\channels-controller.js" />
     <None Include="web\chat\channels-state-contract.js" />
     <None Include="web\chat\chat-composer.js" />
+    <None Include="web\chat\chat-controller-adapter.js" />
     <None Include="web\chat\chat-controller-gui.js" />
     <None Include="web\chat\chat-controller.js" />
     <None Include="web\chat\chat-events.js" />

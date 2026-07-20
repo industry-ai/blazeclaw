@@ -652,6 +652,14 @@
     <ClCompile Include="tests\GatewayChatMultiActiveModelsThreadPoolTests.cpp">
       <Filter>tests</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ChatMessage.cpp" />
+    <ClCompile Include="src\app\CChatRoomBridge.cpp" />
+    <ClCompile Include="src\app\CIrcChatTransport.cpp" />
+    <ClCompile Include="src\app\CChannel.cpp" />
+    <ClCompile Include="src\app\CMgrChannels.cpp" />
+    <ClCompile Include="src\app\COperator.cpp" />
+    <ClCompile Include="src\app\CPeer.cpp" />
+    <ClCompile Include="src\app\CTopic.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1208,6 +1216,14 @@
     <ClInclude Include="src\gateway\ChatPipelineRequestNormalization.h" />
     <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
     <ClInclude Include="src\core\ThreadPoolRuntimeService.h" />
+    <ClInclude Include="src\app\ChatMessage.h" />
+    <ClInclude Include="src\app\CChatRoomBridge.h" />
+    <ClInclude Include="src\app\CIrcChatTransport.h" />
+    <ClInclude Include="src\app\CChannel.h" />
+    <ClInclude Include="src\app\CMgrChannels.h" />
+    <ClInclude Include="src\app\COperator.h" />
+    <ClInclude Include="src\app\CPeer.h" />
+    <ClInclude Include="src\app\CTopic.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />
@@ -1613,6 +1629,7 @@
     <None Include="web\chat\index.html">
       <Filter>web\chat</Filter>
     </None>
+    <None Include="web\chat\chat-controller-adapter.js" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">
