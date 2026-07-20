@@ -335,7 +335,6 @@ WebView2 → C++ 入口 (kind 映射):
   demote_operator      → CMgrChannels::DemoteOperator
   whois                → CMgrChannels::Whois
   names                → CMgrChannels::GetNamesList
-  get_history          → (历史消息查询)
   create_topic         → CChannel::CreateTopic
   reply_topic          → CTopic::AddReply
   list_topics          → CChannel::ListTopics
@@ -615,4 +614,11 @@ public:
 - **CPrompt (TCP)**: JOIN/PART 通知、广播、AI 指令、Operator 管理命令、
 
 ---
+
+待解决问题：
+1.加载群聊后需要点击某个群聊才能正常接收其他成员消息
+2.创建任务功能只实现了接口，但是缺少参数未写入数据库
+3.聊天记录暂未实现本地存储
+4.设备功能暂时只实现获取二维码功能
+
 
