@@ -845,31 +845,31 @@ namespace blazeclaw::gateway {
 										token.rfind("remote:", 0) == 0;
 								});
 
-						if (responderManifest.empty()) {
-							if (remoteDeepSeekReady) {
-								appendResponder(
-									"deepseek",
-									normalizeDeepSeekModelId(std::string()),
-									"remote");
-							}
-							else if (localResponderEnabled) {
-								appendResponder(
-									"local",
-									std::string(GatewayModel::kDefaultModelId),
-									"local");
-							}
-							else {
-								return protocol::ErrorResponse(
-									request,
-									BuildRuntimeErrorShape(
-										"no_available_responder",
-										requestedDeepSeekResponder
-										? "DeepSeek requested but credential/runtime is unavailable."
-										: "No active responder is available (local disabled, remote unavailable).",
-										stageContext.runId,
-										stageContext.sessionKey));
-							}
-						}
+						//if (responderManifest.empty()) {
+						//	if (remoteDeepSeekReady) {
+						//		appendResponder(
+						//			"deepseek",
+						//			normalizeDeepSeekModelId(std::string()),
+						//			"remote");
+						//	}
+						//	else if (localResponderEnabled) {
+						//		appendResponder(
+						//			"local",
+						//			std::string(GatewayModel::kDefaultModelId),
+						//			"local");
+						//	}
+						//	else {
+						//		return protocol::ErrorResponse(
+						//			request,
+						//			BuildRuntimeErrorShape(
+						//				"no_available_responder",
+						//				requestedDeepSeekResponder
+						//				? "DeepSeek requested but credential/runtime is unavailable."
+						//				: "No active responder is available (local disabled, remote unavailable).",
+						//				stageContext.runId,
+						//				stageContext.sessionKey));
+						//	}
+						//}
 
 						auto maybeAppendLocal = [&](const std::string& modelHint) {
 							if (!localResponderEnabled) {
@@ -945,11 +945,18 @@ namespace blazeclaw::gateway {
 								requestedProviderOverrideNormalized == "local" ||
 								requestedProviderOverrideNormalized == "seed";
 
+							// REPLACE requestedDeepSeekOnly / requestedLocalOnly branch with:
 							if (requestedDeepSeekOnly) {
 								maybeAppendDeepSeek(requestedModelOverride);
+								if (multiActiveRequested) {
+									maybeAppendLocal(std::string());
+								}
 							}
 							else if (requestedLocalOnly) {
 								maybeAppendLocal(requestedModelOverride);
+								if (multiActiveRequested) {
+									maybeAppendDeepSeek(std::string());
+								}
 							}
 							else {
 								maybeAppendLocal(requestedModelOverride);
@@ -959,11 +966,36 @@ namespace blazeclaw::gateway {
 							}
 						}
 
+						//if (responderManifest.empty()) {
+						//	appendResponder(
+						//		"local",
+						//		std::string(GatewayModel::kDefaultModelId),
+						//		"local");
+						//}
 						if (responderManifest.empty()) {
-							appendResponder(
-								"local",
-								std::string(GatewayModel::kDefaultModelId),
-								"local");
+							if (remoteDeepSeekReady) {
+								appendResponder(
+									"deepseek",
+									normalizeDeepSeekModelId(std::string()),
+									"remote");
+							}
+							else if (localResponderEnabled) {
+								appendResponder(
+									"local",
+									std::string(GatewayModel::kDefaultModelId),
+									"local");
+							}
+							else {
+								return protocol::ErrorResponse(
+									request,
+									BuildRuntimeErrorShape(
+										"no_available_responder",
+										requestedDeepSeekResponder
+										? "DeepSeek requested but credential/runtime is unavailable."
+										: "No active responder is available (local disabled, remote unavailable).",
+										stageContext.runId,
+										stageContext.sessionKey));
+							}
 						}
 
 						std::vector<ChatSendResponderManifestEntry> orderedResponders;
@@ -2079,9 +2111,9 @@ namespace blazeclaw::gateway {
 
 								std::string activeRequestedModelOverride = activeResponder.model;
 								std::string activeRequestedProviderOverride = activeResponder.provider;
-								if (activeResponder.runtimeKind == "local") {
-									activeRequestedProviderOverride.clear();
-								}
+								//if (activeResponder.runtimeKind == "local") {
+								//	activeRequestedProviderOverride.clear();
+								//}
 
 								auto& runtimeSessionEvents = sessions.eventsBySession[sessionKey];
 								{
