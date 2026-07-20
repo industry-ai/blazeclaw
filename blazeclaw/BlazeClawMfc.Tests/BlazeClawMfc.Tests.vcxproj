@@ -145,6 +145,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatPipelineRequestNormalization.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\CredentialStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />

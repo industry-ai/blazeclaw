@@ -9,9 +9,13 @@ on:
     paths:
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Enforce-ParityDriftReleaseGate.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
+      - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
       - "docs/compare/server.impl.ts/**"
   pull_request:
@@ -22,9 +26,13 @@ on:
     paths:
       - "blazeclaw/BlazeClawMfc/src/core/**"
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "blazeclaw/BlazeClawMfc/src/config/**"
       - "blazeclaw/BlazeClawMfc/tests/**"
       - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
+      - "blazeclaw/BlazeClawMfc/tools/Enforce-ParityDriftReleaseGate.ps1"
       - "blazeclaw/BlazeClawMfc.Tests/**"
+      - "blazeclaw/docs/diagnostics/PARITY_DRIFT_DASHBOARD.md"
       - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
       - "docs/compare/server.impl.ts/**"
   workflow_dispatch:
@@ -39,10 +47,32 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Verify linkage guard (ConfigLoader + chat-pipeline parity)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $script = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Verify-ConfigLoaderTestProjectLinkage.ps1"
+          Write-Host "=== Linkage Guard ==="
+          Write-Host "RepoRoot: $root"
+          Write-Host "Script:   $script"
+          & $script -RepoRoot $root
+
       - name: Build BlazeClaw.sln (Debug x64, UTF-8)
         shell: pwsh
         run: |
           msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001 /m
+
+      - name: Enforce parity drift release gate (hard-fail default)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $script = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Enforce-ParityDriftReleaseGate.ps1"
+          Write-Host "=== Parity Drift Release Gate ==="
+          Write-Host "RepoRoot: $root"
+          Write-Host "Script:   $script"
+          & $script -RepoRoot $root
 
       - name: Run S6 lifecycle parity gate + full Catch2 suite
         shell: pwsh
