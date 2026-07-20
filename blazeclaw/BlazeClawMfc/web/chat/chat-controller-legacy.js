@@ -5563,7 +5563,7 @@
         };
     }
 
-    window.BlazeClawChatController = {
+    window.BlazeClawChatControllerLegacy = {
         createController,
         runRegressionChecks,
     };

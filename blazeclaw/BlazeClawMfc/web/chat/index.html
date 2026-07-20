@@ -73,7 +73,7 @@
     <script src="./devices-controller.js"></script>
     <script src="./agents-controller.js"></script>
     <script src="./agents-toggle.js"></script>
-    <script src="./chat-controller.js"></script>
+    <script src="./chat-controller-legacy.js"></script>
     <script src="./chat-controller-adapter.js"></script>
     <script src="./chat-controller-gui.js"></script>
     <script src="./chat-events.js"></script>
@@ -82,8 +82,8 @@
     <script>
         (function verifyChatScriptOrderingCompatibility() {
             const missing = [];
-            if (!window.BlazeClawChatController) {
-                missing.push("BlazeClawChatController");
+            if (!window.BlazeClawChatControllerLegacy) {
+                missing.push("BlazeClawChatControllerLegacy");
             }
             if (!window.BlazeClawChatControllerAdapter) {
                 missing.push("BlazeClawChatControllerAdapter");

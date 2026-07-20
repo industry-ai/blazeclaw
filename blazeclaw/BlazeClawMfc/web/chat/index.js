@@ -320,9 +320,7 @@
     state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
     const guiApi = window.BlazeClawChatControllerGui || {};
-    const chatControllerApi = window.BlazeClawChatControllerAdapter ||
-        window.BlazeClawChatController ||
-        {};
+    const chatControllerApi = window.BlazeClawChatControllerAdapter || {};
     const scriptOrderCompat =
         window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ &&
             typeof window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ === "object"

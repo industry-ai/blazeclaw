@@ -54,10 +54,37 @@
         "executeExecApprovalAction",
     ];
 
+    function resolveLegacyControllerEnabled() {
+        if (typeof window.__BLAZECLAW_CHAT_LEGACY_CONTROLLER_ENABLED__ === "boolean") {
+            return window.__BLAZECLAW_CHAT_LEGACY_CONTROLLER_ENABLED__;
+        }
+
+        try {
+            if (window.localStorage && typeof window.localStorage.getItem === "function") {
+                const raw = String(window.localStorage.getItem("blazeclaw.chat.legacyControllerEnabled") || "")
+                    .trim()
+                    .toLowerCase();
+                if (raw === "0" || raw === "false" || raw === "off" || raw === "disabled") {
+                    return false;
+                }
+                if (raw === "1" || raw === "true" || raw === "on" || raw === "enabled") {
+                    return true;
+                }
+            }
+        } catch (_) {
+        }
+
+        return true;
+    }
+
     function getLegacyControllerApi() {
-        const api = window.BlazeClawChatController;
+        if (!resolveLegacyControllerEnabled()) {
+            throw new Error("BlazeClawChatControllerLegacy disabled by kill-switch");
+        }
+
+        const api = window.BlazeClawChatControllerLegacy;
         if (!api || typeof api !== "object") {
-            throw new Error("BlazeClawChatController unavailable");
+            throw new Error("BlazeClawChatControllerLegacy unavailable");
         }
         return api;
     }
@@ -606,7 +633,8 @@
             facade.getAdapterParitySnapshot = function () {
                 return {
                     adapterVersion: "step7.0",
-                    adapterMode: "legacy+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards",
+                    adapterMode: "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards",
+                    legacyControllerEnabled: resolveLegacyControllerEnabled(),
                     bridgeBackedLowRiskMethods: BRIDGE_BACKED_LOW_RISK_METHODS.slice(),
                     runLoopTranscriptMethods: RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice(),
                     speechApprovalMethods: SPEECH_APPROVAL_PARITY_METHODS.slice(),
@@ -614,8 +642,9 @@
             };
         }
 
-        facade.__adapterVersion = "step7.0";
-        facade.__adapterMode = "legacy+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards";
+        facade.__adapterVersion = "step10.0";
+        facade.__adapterMode = "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards";
+        facade.__adapterLegacyControllerEnabled = resolveLegacyControllerEnabled();
         facade.__adapterBridgeBackedLowRiskMethods = BRIDGE_BACKED_LOW_RISK_METHODS.slice();
         facade.__adapterRunLoopTranscriptMethods = RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice();
         facade.__adapterSpeechApprovalMethods = SPEECH_APPROVAL_PARITY_METHODS.slice();
@@ -626,7 +655,7 @@
     function createController(options) {
         const legacyApi = getLegacyControllerApi();
         if (typeof legacyApi.createController !== "function") {
-            throw new Error("BlazeClawChatController.createController unavailable");
+            throw new Error("BlazeClawChatControllerLegacy.createController unavailable");
         }
         const legacyController = legacyApi.createController(options);
         return createAdapterControllerFacade(legacyController);
@@ -635,7 +664,7 @@
     async function runRegressionChecks() {
         const legacyApi = getLegacyControllerApi();
         if (typeof legacyApi.runRegressionChecks !== "function") {
-            throw new Error("BlazeClawChatController.runRegressionChecks unavailable");
+            throw new Error("BlazeClawChatControllerLegacy.runRegressionChecks unavailable");
         }
         return legacyApi.runRegressionChecks();
     }
