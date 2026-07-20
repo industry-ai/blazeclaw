@@ -22,8 +22,17 @@
 #include <list>
 #include <mutex>
 
+class CTcpReceiverWnd;
+namespace TcpReceiverSink {
+    // 全局指针：由 MainFrame 在 m_wndTcpReceiver.Create 成功后设置。
+    // ReadMessage 等底层代码通过 Get/Set 拿到 CTcpReceiverWnd* 投递日志。
+    void Set(CTcpReceiverWnd* wnd);
+    CTcpReceiverWnd* Get();
+}
+
 constexpr UINT WM_TCP_RECEIVER_DATA = WM_USER + 0x200;
 constexpr UINT WM_TCP_RECEIVER_STATUS = WM_USER + 0x201;
+constexpr UINT WM_TCP_RECEIVER_APPEND_LINE = WM_USER + 0x202;
 
 struct TcpDataItem
 {
@@ -44,6 +53,10 @@ public:
 
 	void ClearData();
 
+	// 线程安全投递：在任意线程调用都会把 line 切到 UI 线程，
+	// 追加到富文本日志控件。内部通过 SendMessage 把 CString* 跨线程搬运。
+	void EnqueueIncomingLogLine(const CString& line);
+
 protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
@@ -52,6 +65,7 @@ protected:
 	afx_msg BOOL OnCopyData(CWnd* pWnd, COPYDATASTRUCT* pCopyDataStruct);
 	afx_msg LRESULT OnTcpDataReceived(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnTcpStatusChanged(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnAppendLogLine(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnClear();
 	afx_msg void OnUpdateClear(CCmdUI* pCmdUI);
 	afx_msg void OnSearchTextChanged();

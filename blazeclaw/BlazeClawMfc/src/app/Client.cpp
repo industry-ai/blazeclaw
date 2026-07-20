@@ -16,6 +16,7 @@
 #include <nlohmann/json.hpp>
 
 #include "CNetwork_c.h"
+#include "CIrcChatTransport.h"
 #include "IoData_cFactory.h"
 #include "LogSinks.h"
 #include "Logger.h"
@@ -214,6 +215,12 @@ void CClient::Init(CNetwork_c& network) {
 
     TLS_server_ip_ = ConfigClient::instance().getTlsHost();
     TLS_server_port_ = ConfigClient::instance().getTlsPort();
+
+	network_->server_config_.tcp_host = server_ip_;
+	network_->server_config_.tcp_port = server_port_;
+	network_->server_config_.tls_host = TLS_server_ip_;
+	network_->server_config_.tls_port = TLS_server_port_;   
+
 }
 
 int CClient::start() {
@@ -278,6 +285,7 @@ uint64_t CClient::GetSessionId() const noexcept {
 
 void CClient::SetSessionId(uint64_t session_id) noexcept {
     session_id_.store(session_id);
+    network_->SetSessionId(session_id);
 }
 
 void CClient::SetServerAddress(const std::string& ip, int port) {
@@ -524,6 +532,13 @@ std::string CClient::LoginWithSms(const std::string& phoneNumber, const std::str
     }
 
     current_token_info_ = ParseTokenInfo(response);
+
+    // Initialize dual connections for chat room
+    network_->ConnectTcp(server_ip_, server_port_);
+
+    // Start background receivers for push messages
+    blazeclaw::irc::CIrcChatTransport::Instance().StartReceivers();
+
     return session_token_;
 }
 
@@ -789,6 +804,12 @@ std::string CClient::AutoLogin() {
             LOG_INFO("[CClient] AutoLogin: Token expiry time set to {} ms from now", token_expiry_time_ - GetCurrentTimestamp());
             
             current_token_info_ = ParseTokenInfo(response);
+
+            network_->ConnectTcp(server_ip_, server_port_);
+
+            // Start background receivers for push messages
+            blazeclaw::irc::CIrcChatTransport::Instance().StartReceivers();
+
             return "SESSION_OK";
         } else if (status == "SESSION_INVALID" || status == "SESSION_CONFLICT" || status == "JWT_REFRESH_FAILED") {
             // Session is invalid, conflict, or JWT refresh failed, need to login with SMS

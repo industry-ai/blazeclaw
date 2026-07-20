@@ -1,15 +1,16 @@
-/* ================================================================
-   AgentChat HTML 版 - 聊天主页面 (精确匹配原 Vue 版样式)
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
+   AgentChat 重构版 - 聊天主页面（UI 渲染层）
+   业务逻辑（消息收发/群管理/任务/Agent/语音/设备投递）通过 Bridge -> postMessage 交由 C++ 处理
    ================================================================ */
 
-import ChatStore from '../stores/chatStore.js';
+import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
-import AuthStore from '../stores/authStore.js';
-import ChatApi from '../api/chatApi.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
 import MarkdownRenderer from '../utils/markdown.js';
 import AvatarSwatch from '../utils/avatar.js';
+import DevicesPanelMixin from '../panels/devicesPanel.js';
+import PostsPanelMixin from '../panels/postsPanel.js';
 
 const ChatPage = {
   searchQuery: '',
@@ -27,6 +28,16 @@ const ChatPage = {
   invitePanelOpen: false,
   postsPanelOpen: false,
   postsPanelView: 'board',
+  devicesPanelOpen: false,
+  // 设备绑定流程 UI 状态（手动输入三步流程：input -> confirm -> result）
+  devicesBindFlowOpen: false,
+  devicesBindStep: 'input',
+  devicesBindManualInput: '',
+  devicesBindToken: '',
+  devicesBindSession: null,
+  devicesBindResult: null,
+  devicesBindError: '',
+  devicesBindConfirming: false,
   postsLoading: false,
   postsError: '',
   postCreatorOpen: false,
@@ -61,16 +72,25 @@ const ChatPage = {
   deleteConversationDialogOpen: false,
   deleteConversationTargetId: '',
   deleteConversationTargetName: '',
+  // 群聊话题（创建/加入）
+  topicsLoading: false,
+  topicsError: '',
+  topicCreatorOpen: false,
+  topicCreatorTitle: '',
+  topicCreatorSummary: '',
+  topicCreatorSubmitting: false,
+  joinTopicConfirmOpen: false,
+  joinTopicTarget: null,
 
   init() {
     this.container = document.getElementById('page-chat');
     this._scheduleRender = this._debounce(() => {
-      if (this.createGroupDialogOpen || this.postCreatorOpen || this.postDetailOpen || this.postsPanelOpen) return;
+      if (this.createGroupDialogOpen || this.postCreatorOpen || this.postDetailOpen || this.postsPanelOpen || this.topicCreatorOpen || this.joinTopicConfirmOpen || this.devicesPanelOpen) return;
       this.render();
     }, 80);
-    this.unsubChat = ChatStore.subscribe(() => this._scheduleRender());
+    this.unsubChat = Bridge.subscribe(() => this._scheduleRender());
     this.unsubUi = UiStore.subscribe(() => this._scheduleRender());
-    const activeId = ChatStore.getActiveConversationId();
+    const activeId = Bridge.getActiveConversationId();
     if (activeId && UiStore.getActiveConversationId() !== activeId) {
       UiStore.setActiveConversation(activeId, true);
       UiStore.resetToChatView();
@@ -100,10 +120,10 @@ const ChatPage = {
   _activateConversation(conversationId, options = {}) {
     const id = String(conversationId || '').trim();
     if (!id) return;
-    ChatStore.setActiveConversation(id);
+    Bridge.setActiveConversation(id);
     UiStore.setActiveConversation(id, options.preventNavigation === true);
     if (!options.skipMarkRead) {
-      ChatStore.clearMarkRead(id);
+      Bridge.clearMarkRead(id);
     }
   },
 
@@ -126,7 +146,7 @@ const ChatPage = {
     if (!this.container) return;
     const isDesktop = this._isDesktop();
     // 检测会话切换：上次渲染的会话与当前不同时，标记需要滚动到底部
-    const currentConvId = ChatStore.getActiveConversationId();
+    const currentConvId = Bridge.getActiveConversationId();
     if (this._lastRenderedConvId && this._lastRenderedConvId !== currentConvId) {
       this.pendingScrollConvId = currentConvId;
     }
@@ -142,7 +162,10 @@ const ChatPage = {
         </div>
         ${isDesktop ? this._renderDesktopShell() : this._renderMobileShell()}
         ${this._renderPostsPanel()}
+        ${this._renderDevicesPanel()}
         ${this._renderPostCreator()}
+        ${this._renderTopicCreator()}
+        ${this._renderJoinTopicConfirm()}
         ${this._renderTaskDetail()}
       </div>
     `;
@@ -153,12 +176,14 @@ const ChatPage = {
     this._bindMessagePostCards();
     this._bindRetryButtons();
     this._bindPostsPanelEvents();
+    this._bindDevicesPanelEvents();
     this._bindPostCreatorEvents();
+    this._bindTopicDialogEvents();
     this._bindTaskDetailEvents();
     this._restoreComposerState(composerState);
     this._restorePostsPanelState(postsPanelState);
     this._restoreScrollState(scrollState);
-    this._lastRenderedConvId = ChatStore.getActiveConversationId();
+    this._lastRenderedConvId = Bridge.getActiveConversationId();
 
     // 对齐 Vue 版 ui.openTask：检查是否有待打开的任务详情
     const pendingTask = UiStore.consumePendingTask();
@@ -221,10 +246,10 @@ const ChatPage = {
   // DESKTOP SHELL (match ChatShellDesktopPane)
   // ═══════════════════════════════════════════
   _renderDesktopShell() {
-    const convs = ChatStore.getConversations();
-    const activeId = ChatStore.getActiveConversationId();
-    const activeConv = ChatStore.getActiveConversation();
-    const messages = ChatStore.getActiveMessages();
+    const convs = Bridge.getConversations();
+    const activeId = Bridge.getActiveConversationId();
+    const activeConv = Bridge.getActiveConversation();
+    const messages = Bridge.getActiveMessages();
     const isAgent = this._isAgentConv(activeConv);
     const isGroup = activeConv?.type === 'group';
 
@@ -298,7 +323,7 @@ const ChatPage = {
    * - 其他（connecting/disconnected/error）→ 不显示
    */
   _renderStatusIndicator() {
-    const status = ChatStore.getStatus();
+    const status = Bridge.getStatus();
     if (status === 'connected') {
       return `<span class="status-dot connected" aria-hidden="true"></span>`;
     }
@@ -320,7 +345,7 @@ const ChatPage = {
    * - disconnected/error → 灰点 + "离线"
    */
   _renderConnectionLabel() {
-    const status = ChatStore.getStatus();
+    const status = Bridge.getStatus();
     const map = {
       connected: { color: '#10b981', text: '在线', spin: false },
       reconnecting: { color: 'var(--app-warning)', text: '重连中', spin: true },
@@ -340,10 +365,10 @@ const ChatPage = {
   },
 
   _renderMobileShell() {
-    const convs = ChatStore.getConversations();
-    const activeId = UiStore.getActiveConversationId() || ChatStore.getActiveConversationId();
-    const activeConv = convs.find(c => c.id === activeId) || ChatStore.getActiveConversation();
-    const messages = activeConv ? ChatStore.getMessages(activeConv.id) : [];
+    const convs = Bridge.getConversations();
+    const activeId = UiStore.getActiveConversationId() || Bridge.getActiveConversationId();
+    const activeConv = convs.find(c => c.id === activeId) || Bridge.getActiveConversation();
+    const messages = activeConv ? Bridge.getMessages(activeConv.id) : [];
     const currentView = UiStore.getView();
     console.log('[ChatPage] _renderMobileShell:', { convCount: convs.length, convIds: convs.map(c => c.id), activeId, currentView, hasActiveConv: !!activeConv });
 
@@ -424,7 +449,7 @@ const ChatPage = {
   // SIDEBAR (match ConversationSidebar)
   // ═══════════════════════════════════════════
   _renderSidebar(convs, activeId) {
-    const unread = ChatStore.getTotalUnreadCount();
+    const unread = Bridge.getTotalUnreadCount();
     return `
     <div class="sidebar-header">
       <div style="display:flex;align-items:center;gap:0.5rem;">
@@ -445,7 +470,7 @@ const ChatPage = {
     </div>
 
     <!-- Search -->
-    <div id="sidebar-search-panel" style="display:${this.searchOpen?'block':'none'};padding:0 1rem 0.75rem;border-bottom:1px solid var(--app-border);flex-shrink:0;">
+    <div id="sidebar-search-panel" style="display:${this.searchOpen?'block':'none'};padding:0.75rem 1rem 0.75rem;border-bottom:1px solid var(--app-border);flex-shrink:0;">
       <div class="sidebar-search-box" style="margin:0;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input type="text" id="sidebar-search-input" placeholder="搜索会话、成员或消息" value="${this.searchQuery}">
@@ -464,15 +489,54 @@ const ChatPage = {
 
     <!-- Profile Card -->
     <div class="sidebar-profile" id="sidebar-profile-btn">
-      <div class="sp-avatar" style="background:${AvatarSwatch.getSwatch(AuthStore.getUserId()||'me').bg};color:${AvatarSwatch.getSwatch(AuthStore.getUserId()||'me').fg};">
-        ${(AuthStore.getPhone()||'用户').slice(-2)}
+      <div class="sp-avatar" style="background:${AvatarSwatch.getSwatch(Bridge.getUserId()||'me').bg};color:${AvatarSwatch.getSwatch(Bridge.getUserId()||'me').fg};">
+        ${(Bridge.getPhone()||'用户').slice(-2)}
       </div>
       <div style="flex:1;min-width:0;">
-        <div class="sp-name">${this._esc(AuthStore.getPhone()||'未登录')}</div>
+        <div class="sp-name">${this._esc(Bridge.getPhone()||'未登录')}</div>
         <div class="sp-status">AI 在线</div>
       </div>
       <svg class="sp-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </div>`;
+  },
+
+  // 仅刷新会话列表 DOM（不重建搜索框等，避免输入框失焦）
+  _refreshConvList() {
+    const convs = Bridge.getConversations();
+    const activeId = UiStore.getActiveConversationId() || Bridge.getActiveConversationId();
+    const html = this._renderConversationList(convs, activeId) +
+      (convs.length === 0 ? '<div style="text-align:center;padding:2.5rem 1rem;color:var(--app-muted);font-size:0.85rem;">暂无会话</div>' : '');
+    this.container?.querySelectorAll('.conv-list').forEach(el => {
+      el.innerHTML = html;
+    });
+    this._bindConvListEvents();
+  },
+
+  // 绑定会话列表项事件（列表 DOM 更新后需重新绑定）
+  _bindConvListEvents() {
+    // Conversation list clicks
+    this.container.querySelectorAll('.conv-item').forEach(el => {
+      el.onclick = (e) => {
+        if (e.target.closest('.conv-more-btn')) return;
+        const id = el.dataset.convId;
+        Bridge.setActiveConversation(id);
+        UiStore.setActiveConversation(id);
+        Bridge.clearMarkRead(id);
+        this.searchOpen = false;
+        this.searchQuery = '';
+        const msp = document.getElementById('mobile-search-panel');
+        if (msp) msp.style.display = 'none';
+      };
+    });
+
+    // 会话列表更多操作按钮（三点菜单）
+    this.container.querySelectorAll('.conv-more-btn').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.convId;
+        if (id) this._openConvDropdown(btn, id);
+      };
+    });
   },
 
   _renderConversationList(convs, activeId) {
@@ -486,8 +550,8 @@ const ChatPage = {
       const aPinned = a.scope === 'personal_workspace';
       const bPinned = b.scope === 'personal_workspace';
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
-      const aMsgs = ChatStore.getMessages(a.id);
-      const bMsgs = ChatStore.getMessages(b.id);
+      const aMsgs = Bridge.getMessages(a.id);
+      const bMsgs = Bridge.getMessages(b.id);
       const aLatest = aMsgs.length > 0 ? aMsgs[aMsgs.length - 1].createdAt : 0;
       const bLatest = bMsgs.length > 0 ? bMsgs[bMsgs.length - 1].createdAt : 0;
       if (aLatest !== bLatest) return bLatest - aLatest;
@@ -495,14 +559,14 @@ const ChatPage = {
     });
 
     const renderItem = (c) => {
-      const msgs = ChatStore.getMessages(c.id);
+      const msgs = Bridge.getMessages(c.id);
       const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-      const preview = lastMsg ? lastMsg.content.slice(0, 50) : '';
+      const preview = lastMsg ? (lastMsg.text || lastMsg.content || '').slice(0, 50) : '';
       const isActive = c.id === activeId;
       const isAgent = c.type === 'agent';
       const isGroup = c.type === 'group';
       const isPinned = c.scope === 'personal_workspace';
-      const unread = ChatStore.getConversationUnreadCount ? ChatStore.getConversationUnreadCount(c.id) : (c.unread || 0);
+      const unread = Bridge.getConversationUnreadCount ? Bridge.getConversationUnreadCount(c.id) : (c.unread || 0);
       const timeLabel = this._convTimeLabel(c.id);
 
       // Avatar rendering
@@ -569,8 +633,8 @@ const ChatPage = {
           ${timeLabel ? `<span class="conv-time">${timeLabel}</span>` : ''}
           ${unread > 0 ? `<span class="conv-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
         </div>
-        ${isGroup && !isPinned ? `<button class="conv-delete-btn" data-conv-id="${c.id}" title="删除群聊" aria-label="删除群聊">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        ${isGroup && !isPinned ? `<button class="conv-more-btn" data-conv-id="${c.id}" title="更多操作" aria-label="更多操作">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </button>` : ''}
       </div>`;
     };
@@ -580,7 +644,7 @@ const ChatPage = {
 
   // Get participant avatars for a group conversation (max 4)
   _getParticipantAvatars(convId) {
-    const msgs = ChatStore.getMessages(convId);
+    const msgs = Bridge.getMessages(convId);
     const seen = new Map();
     msgs.forEach(msg => {
       if (msg.author === 'system') return;
@@ -599,16 +663,16 @@ const ChatPage = {
 
   // Get workspace status text
   _getWorkspaceStatus() {
-    const devices = ChatStore.getBoundDevices();
+    const devices = Bridge.getBoundDevices();
     const onlineCount = devices.filter(device => device.status === 'online').length;
-    const workspace = ChatStore.getConversations().find(c => c.scope === 'personal_workspace');
-    const draftCount = ChatStore.getWorkspaceDraftActions(workspace?.id).length;
+    const workspace = Bridge.getConversations().find(c => c.scope === 'personal_workspace');
+    const draftCount = Bridge.getWorkspaceDraftActions(workspace?.id).length;
     return `AI 在线 · ${onlineCount} 台设备在线 · ${draftCount} 条待确认`;
   },
 
   // Format time label for conversation list
   _convTimeLabel(convId) {
-    const msgs = ChatStore.getMessages(convId);
+    const msgs = Bridge.getMessages(convId);
     const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
     return TimeUtils.formatListTime(lastMsg?.createdAt);
   },
@@ -625,16 +689,29 @@ const ChatPage = {
 
   // 对齐 Vue 版 parseSharedPostMessageContent：解析消息中的帖子分享信封，得到干净文本与帖子数据
   _resolveMessageDisplay(msg, convId) {
-    const rawContent = String(msg.content ?? '');
-    const parsed = ChatStore.parseSharedPostMessageContent(rawContent, convId);
+    const rawContent = String(msg.text ?? msg.content ?? '');
+    const parsed = Bridge.parseSharedPostMessageContent(rawContent, convId);
     const attachments = (msg.attachments && msg.attachments.length)
       ? msg.attachments
-      : (parsed.attachments || []);
+      : ((parsed && parsed.attachments) || []);
     return {
-      displayContent: parsed.content || rawContent,
-      post: parsed.post || null,
+      displayContent: (parsed && parsed.content) || rawContent,
+      post: (parsed && parsed.post) || null,
       attachments,
     };
+  },
+
+  // 对齐 Vue 版 isImageResourceUrl：判断 URL 是否指向图片资源
+  _isImageResourceUrl(rawUrl) {
+    const value = String(rawUrl ?? '').trim();
+    if (!value) return false;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+      return /\.(?:png|jpe?g|webp|gif|avif|bmp|svg)(?:$|[?#])/i.test(url.pathname);
+    } catch {
+      return false;
+    }
   },
 
   // 对齐 Vue 版 MessageAttachmentCard / buildConversationPostAttachments：渲染可点击的任务卡片
@@ -655,13 +732,68 @@ const ChatPage = {
         </button>`;
       }
       if (att.type === 'webview') {
-        const cardTitle = att.title || 'H5 卡片';
-        const cardSummary = att.summary || att.url || '';
-        const cardDomain = (() => { try { return new URL(att.url || '').host; } catch { return ''; } })();
+        const url = att.url || '';
+        const cardDomain = (() => { try { return new URL(url).host; } catch { return ''; } })();
+
+        // 对齐 Vue 版 MessageAttachmentCard.vue isImageWebview：图片 URL 渲染为内联图片预览
+        if (this._isImageResourceUrl(url)) {
+          const imgTitle = att.title || '图片';
+          const cardIdx = att._cardIdx || 0;
+          return `
+        <article class="msg-post-card msg-post-card-image" data-resource-url="${this._esc(url)}" data-card-idx="${cardIdx}" style="position:relative;display:flex;width:100%;flex-direction:column;margin-top:0.5rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-surface-elevated);padding:0;overflow:hidden;box-shadow:0 8px 18px rgba(86,74,132,0.05);">
+          <button class="msg-post-card-main" data-resource-url="${this._esc(url)}" type="button" style="display:flex;width:100%;flex-direction:column;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;">
+            <img src="${this._esc(url)}" alt="${this._esc(imgTitle)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+              style="display:block;width:100%;max-width:100%;aspect-ratio:4/3;height:auto;max-height:22rem;object-fit:contain;background:#f9fafb;"
+              onerror="this.style.display='none';this.parentElement.querySelector('.msg-image-fallback').style.display='flex';" />
+            <div class="msg-image-fallback" style="display:none;width:100%;aspect-ratio:4/3;max-height:22rem;align-items:center;justify-content:center;background:var(--app-brand-soft);color:var(--app-muted);font-size:0.86rem;">图片加载失败</div>
+            <div style="display:flex;width:100%;align-items:center;gap:0.75rem;overflow:hidden;padding:0.75rem 3rem 0.85rem 0.9rem;">
+              <div style="min-width:0;flex:1;">
+                <div style="display:flex;align-items:center;gap:0.45rem;">
+                  <span style="color:var(--app-muted);font-size:0.82rem;">图片</span>
+                  ${cardDomain ? `<span style="color:var(--app-muted);font-size:0.78rem;">· ${this._esc(cardDomain)}</span>` : ''}
+                </div>
+                <div style="margin-top:0.18rem;font-size:1rem;font-weight:700;color:var(--app-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._esc(imgTitle)}</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--app-muted);"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+            </div>
+          </button>
+          <button class="msg-post-card-forward" type="button" data-action="forward" data-resource-url="${this._esc(url)}" data-card-title="${this._esc(imgTitle)}" aria-label="转发资源" style="position:absolute;right:0.8rem;bottom:1rem;display:flex;width:2.1rem;height:2.1rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:var(--app-muted);cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+          <button class="msg-post-card-more" type="button" data-action="more" data-resource-url="${this._esc(url)}" aria-label="更多操作" style="position:absolute;top:0.7rem;right:0.7rem;display:flex;width:2rem;height:2rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:color-mix(in srgb,var(--app-surface-elevated) 86%,transparent);color:var(--app-muted);cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          </button>
+        </article>`;
+        }
+
+        // 非图片：渲染为 H5 卡片 / 互动资源卡片
+        const isH5Card = att.objectKind === 'h5_card' || att.sourceSkillId === 'h5-cards' || att.artifactType === 'html'
+          || /\/[^/?#]*card[^/?#]*\.html?(?:[?#].*)?$/i.test(url) || /\/index\.html?(?:[?#].*)?$/i.test(url);
+        const cardLabel = isH5Card ? 'H5 卡片' : '互动资源';
+        const cardBtnText = isH5Card ? '查看卡片' : '打开';
+        const cardTitle = att.title || cardLabel;
+        const cardSummary = att.summary || '';
         const cardIdx = att._cardIdx || 0;
+        // 提取附件元数据用于 postMessage bridge（对齐 Vue 版 taskMetadataFromAttachment）
+        const attInput = att.input || {};
+        const attReq = attInput.requester || {};
+        const attMetaAttrs = [
+          `data-att-input-text="${this._esc(attInput.text || '')}"`,
+          `data-att-input-user-id="${this._esc(attReq.userId || '')}"`,
+          `data-att-input-phone="${this._esc(attReq.phone || '')}"`,
+          `data-att-input-display-name="${this._esc(attReq.displayName || '')}"`,
+          `data-att-task-no="${this._esc(att.taskNo || '')}"`,
+          `data-att-provider-id="${this._esc(att.providerId || '')}"`,
+          `data-att-skill-id="${this._esc(att.skillId || '')}"`,
+          `data-att-source-skill-id="${this._esc(att.sourceSkillId || '')}"`,
+          `data-att-object-kind="${this._esc(att.objectKind || '')}"`,
+          `data-att-artifact-type="${this._esc(att.artifactType || '')}"`,
+          `data-att-mime-type="${this._esc(att.mimeType || '')}"`,
+          `data-att-summary="${this._esc(cardSummary)}"`,
+        ].join(' ');
         return `
-        <article class="msg-post-card msg-post-card-webview" data-resource-url="${this._esc(att.url || '')}" data-card-idx="${cardIdx}" style="position:relative;display:flex;width:100%;flex-direction:column;margin-top:0.5rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-surface-elevated);padding:0;overflow:hidden;box-shadow:0 8px 18px rgba(86,74,132,0.05);">
-          <button class="msg-post-card-main" data-resource-url="${this._esc(att.url || '')}" type="button" style="display:flex;width:100%;flex-direction:column;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;">
+        <article class="msg-post-card msg-post-card-webview" data-resource-url="${this._esc(url)}" data-card-title="${this._esc(cardTitle)}" data-card-idx="${cardIdx}" ${attMetaAttrs} style="position:relative;display:flex;width:100%;flex-direction:column;margin-top:0.5rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-surface-elevated);padding:0;overflow:hidden;box-shadow:0 8px 18px rgba(86,74,132,0.05);">
+          <button class="msg-post-card-main" data-resource-url="${this._esc(url)}" type="button" style="display:flex;width:100%;flex-direction:column;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;">
             <div style="position:relative;display:flex;width:100%;flex-direction:column;gap:0.75rem;padding:0.95rem 3rem 1rem 1.05rem;background:linear-gradient(135deg,color-mix(in srgb,var(--app-brand) 10%,transparent),transparent 54%);">
               <div style="position:absolute;left:0;top:0;bottom:0;width:0.25rem;background:var(--app-brand);"></div>
               <div style="display:flex;min-width:0;align-items:flex-start;gap:0.75rem;">
@@ -669,21 +801,21 @@ const ChatPage = {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
                 </span>
                 <span style="min-width:0;flex:1;">
-                  <span style="display:block;font-size:0.78rem;color:var(--app-muted);">H5 卡片</span>
+                  <span style="display:block;font-size:0.78rem;color:var(--app-muted);">${this._esc(cardLabel)}</span>
                   <span style="display:block;margin-top:0.18rem;font-size:1.02rem;font-weight:800;color:var(--app-text);line-height:1.28;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._esc(cardTitle)}</span>
                   ${cardDomain ? `<span style="display:block;margin-top:0.18rem;font-size:0.8rem;color:var(--app-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._esc(cardDomain)}</span>` : ''}
                 </span>
               </div>
               ${cardSummary ? `<span style="display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:var(--app-text-secondary);font-size:0.86rem;line-height:1.5;">${this._esc(cardSummary)}</span>` : ''}
               <div style="display:flex;align-items:center;">
-                <span style="display:inline-flex;align-items:center;border-radius:0.7rem;background:var(--app-brand);padding:0.42rem 0.72rem;color:#fff;font-size:0.8rem;font-weight:700;line-height:1.2;">查看卡片</span>
+                <span style="display:inline-flex;align-items:center;border-radius:0.7rem;background:var(--app-brand);padding:0.42rem 0.72rem;color:#fff;font-size:0.8rem;font-weight:700;line-height:1.2;">${this._esc(cardBtnText)}</span>
               </div>
             </div>
           </button>
-          <button class="msg-post-card-forward" type="button" data-action="forward" data-resource-url="${this._esc(att.url || '')}" data-card-title="${this._esc(att.title || 'H5 卡片')}" aria-label="转发资源" style="position:absolute;right:0.8rem;bottom:1rem;display:flex;width:2.1rem;height:2.1rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:var(--app-muted);cursor:pointer;">
+          <button class="msg-post-card-forward" type="button" data-action="forward" data-resource-url="${this._esc(url)}" data-card-title="${this._esc(cardTitle)}" aria-label="转发资源" style="position:absolute;right:0.8rem;bottom:1rem;display:flex;width:2.1rem;height:2.1rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:var(--app-muted);cursor:pointer;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
-          <button class="msg-post-card-more" type="button" data-action="more" data-resource-url="${this._esc(att.url || '')}" aria-label="更多操作" style="position:absolute;top:0.7rem;right:0.7rem;display:flex;width:2rem;height:2rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:color-mix(in srgb,var(--app-surface-elevated) 86%,transparent);color:var(--app-muted);cursor:pointer;">
+          <button class="msg-post-card-more" type="button" data-action="more" data-resource-url="${this._esc(url)}" aria-label="更多操作" style="position:absolute;top:0.7rem;right:0.7rem;display:flex;width:2rem;height:2rem;align-items:center;justify-content:center;border:0;border-radius:999px;background:color-mix(in srgb,var(--app-surface-elevated) 86%,transparent);color:var(--app-muted);cursor:pointer;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </button>
         </article>`;
@@ -699,8 +831,8 @@ const ChatPage = {
     const isSystem = msg.author === 'system';
 
     if (isSystem) {
-      const isPlain = !/[#*_`>\[\]()]/.test(msg.content);
-      const html = isPlain ? this._esc(msg.content) : MarkdownRenderer.render(msg.content);
+      const isPlain = !/[#*_`>\[\]()]/.test(msg.text || msg.content || '');
+      const html = isPlain ? this._esc(msg.text || msg.content || '') : MarkdownRenderer.render(msg.text || msg.content || '');
       return `<div class="msg-system-row"><div class="msg-system-bubble"><div class="whitespace-pre-wrap" style="word-break:break-word;">${html.replace(/\n/g,'<br>')}</div></div></div>`;
     }
 
@@ -733,8 +865,8 @@ const ChatPage = {
     }
 
     if (isMine) {
-      const swatch = AvatarSwatch.getSwatch(AuthStore.getUserId() || 'me');
-      const initials = (AuthStore.getPhone()||'').slice(-2) || '我';
+      const swatch = AvatarSwatch.getSwatch(Bridge.getUserId() || 'me');
+      const initials = (Bridge.getPhone()||'').slice(-2) || '我';
       const { displayContent, attachments } = this._resolveMessageDisplay(msg, conv?.id);
       const isPlain = !/[#*_`>\[\]()]/.test(displayContent);
       const html = isPlain ? this._esc(displayContent) : MarkdownRenderer.render(displayContent);
@@ -921,7 +1053,7 @@ const ChatPage = {
     const activeElement = document.activeElement;
     const input = document.getElementById('composer-input');
     if (!input) return null;
-    const conversationId = ChatStore.getActiveConversationId();
+    const conversationId = Bridge.getActiveConversationId();
     this._setComposerDraft(conversationId, input.value);
     return {
       focused: activeElement === input,
@@ -949,11 +1081,11 @@ const ChatPage = {
 
   _captureViewportState() {
     const stream = document.getElementById('msg-stream');
-    const conversationId = ChatStore.getActiveConversationId();
+    const conversationId = Bridge.getActiveConversationId();
     if (!stream || !conversationId) {
       return {
         conversationId,
-        messageCount: ChatStore.getActiveMessages().length,
+        messageCount: Bridge.getActiveMessages().length,
         scrollTop: 0,
         isNearBottom: true,
       };
@@ -962,7 +1094,7 @@ const ChatPage = {
     const distanceFromBottom = maxTop - stream.scrollTop;
     return {
       conversationId,
-      messageCount: ChatStore.getActiveMessages().length,
+      messageCount: Bridge.getActiveMessages().length,
       scrollTop: stream.scrollTop,
       isNearBottom: distanceFromBottom <= 48,
     };
@@ -970,7 +1102,7 @@ const ChatPage = {
 
   _restoreViewportState(state) {
     const stream = document.getElementById('msg-stream');
-    const conversationId = ChatStore.getActiveConversationId();
+    const conversationId = Bridge.getActiveConversationId();
     if (!stream) return;
 
     const scrollToBottom = () => {
@@ -988,7 +1120,7 @@ const ChatPage = {
       return;
     }
 
-    const currentCount = ChatStore.getActiveMessages().length;
+    const currentCount = Bridge.getActiveMessages().length;
     if (currentCount !== state.messageCount) {
       if (state.isNearBottom) {
         requestAnimationFrame(scrollToBottom);
@@ -1007,29 +1139,6 @@ const ChatPage = {
     });
   },
 
-  _capturePostsPanelState() {
-    const panelBody = this.container?.querySelector('#posts-panel .pp-body');
-    const conversationId = ChatStore.getActiveConversationId();
-    return {
-      open: this.postsPanelOpen,
-      conversationId,
-      view: this.postsPanelView || 'board',
-      scrollTop: panelBody ? panelBody.scrollTop : 0,
-    };
-  },
-
-  _restorePostsPanelState(state) {
-    if (!state?.open) return;
-    const conversationId = ChatStore.getActiveConversationId();
-    if (state.conversationId !== conversationId) return;
-    if ((this.postsPanelView || 'board') !== state.view) return;
-    const panelBody = this.container?.querySelector('#posts-panel .pp-body');
-    if (!panelBody) return;
-    requestAnimationFrame(() => {
-      const maxTop = Math.max(0, panelBody.scrollHeight - panelBody.clientHeight);
-      panelBody.scrollTop = Math.min(state.scrollTop, maxTop);
-    });
-  },
 
   // ═══════════════════════════════════════════
   // EVENT BINDING
@@ -1054,7 +1163,7 @@ const ChatPage = {
     // Desktop tab = 文件/任务 show placeholder
     if (this.activeTab !== '聊天') {
       const main = this.container.querySelector('.ds-main');
-      if (main && ChatStore.getActiveConversation()) {
+      if (main && Bridge.getActiveConversation()) {
         main.innerHTML = `
           <header class="ds-header">
             <div class="ds-header-inner"><div class="ds-title">${this.activeTab}</div></div>
@@ -1071,7 +1180,7 @@ const ChatPage = {
     const backBtn = document.getElementById('mobile-chat-back');
     if (backBtn) backBtn.onclick = () => {
       UiStore.setActiveConversation(null);
-      ChatStore.setActiveConversation('');
+      Bridge.setActiveConversation('');
     };
 
     // Board button → opens group board / workspace hub
@@ -1099,7 +1208,7 @@ const ChatPage = {
       searchInput.addEventListener('input', () => {
         this.searchQuery = searchInput.value;
         if (searchClear) searchClear.style.display = this.searchQuery ? 'flex' : 'none';
-        this.render();
+        this._refreshConvList();
       });
     }
     if (searchClear) searchClear.onclick = () => {
@@ -1124,56 +1233,9 @@ const ChatPage = {
     const input = document.getElementById('composer-input');
     const sendBtn = document.getElementById('composer-send-btn');
     const counter = document.getElementById('composer-counter');
-    const conversationId = ChatStore.getActiveConversationId();
+    const conversationId = Bridge.getActiveConversationId();
 
-    // 语音模式切换按钮（对齐 Vue 版 toggleVoiceMode）
-    const voiceToggleBtn = document.getElementById('composer-voice-toggle-btn');
-    if (voiceToggleBtn) {
-      voiceToggleBtn.onclick = () => this._toggleVoiceMode();
-    }
-
-    // 语音录音按钮（对齐 Vue 版 onVoiceClick）
-    const voiceBtn = document.getElementById('composer-voice-btn');
-    if (voiceBtn) {
-      voiceBtn.onclick = () => this._onVoiceClick();
-    }
-    const voiceStopBtn = document.querySelector('.composer-voice-stop');
-    if (voiceStopBtn) {
-      voiceStopBtn.onclick = () => this._onVoiceClick();
-    }
-
-    // 语音模式下没有 textarea，跳过 input 相关绑定
-    if (!input) return;
-
-    const toggleSendBtn = () => {
-      const hasText = input.value.trim().length > 0;
-      if (sendBtn) {
-        sendBtn.disabled = !hasText;
-        sendBtn.className = `composer-send ${hasText?'enabled':'disabled'} ${ChatStore.getActiveConversation()?.type==='agent'?'agent-send':''}`;
-      }
-      if (counter) {
-        counter.textContent = `${input.value.length} / 2000`;
-      }
-    };
-
-    input.addEventListener('input', () => {
-      this._setComposerDraft(conversationId, input.value);
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-      toggleSendBtn();
-    });
-
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        this._doSend();
-      }
-    });
-
-    if (sendBtn) {
-      sendBtn.onclick = () => this._doSend();
-    }
-
+    // ── 侧边栏事件（与会话列表/搜索/新建群聊相关，不依赖 composer input）──
     // Sidebar search
     const sbSearchBtn = document.getElementById('sidebar-search-btn');
     if (sbSearchBtn) {
@@ -1202,7 +1264,7 @@ const ChatPage = {
       sbSearchInput.addEventListener('input', () => {
         this.searchQuery = sbSearchInput.value;
         if (sbSearchClear) sbSearchClear.style.display = this.searchQuery ? 'flex' : 'none';
-        this.render();
+        this._refreshConvList();
       });
     }
     if (sbSearchClear) {
@@ -1216,58 +1278,81 @@ const ChatPage = {
       };
     }
 
-    // Conversation list clicks
-    this.container.querySelectorAll('.conv-item').forEach(el => {
-      el.onclick = (e) => {
-        // 对齐 Vue 版：删除按钮点击不触发会话激活
-        if (e.target.closest('.conv-delete-btn')) return;
-        const id = el.dataset.convId;
-        ChatStore.setActiveConversation(id);
-        UiStore.setActiveConversation(id);
-        ChatStore.clearMarkRead(id);
-        this.searchOpen = false;
-        this.searchQuery = '';
-        // Also close mobile search
-        const msp = document.getElementById('mobile-search-panel');
-        if (msp) msp.style.display = 'none';
-      };
-    });
+    // 会话列表项事件
+    this._bindConvListEvents();
 
-    // 会话列表删除按钮点击（对齐 Vue 版长按删除入口）
-    this.container.querySelectorAll('.conv-delete-btn').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.convId;
-        if (id) this._openDeleteConversationDialog(id);
-      };
-    });
-
-    // Profile → me page
+    // Profile -> me page
     const profBtn = document.getElementById('sidebar-profile-btn');
     if (profBtn) profBtn.onclick = () => { window.location.hash = '#/me'; };
-
-    // Sparkle → 插入 @炎图AI助手 召唤智能助手（对齐 Vue 版 summonAgent）
-    const sparkleBtn = document.getElementById('composer-sparkle-btn');
-    if (sparkleBtn) sparkleBtn.onclick = () => {
-      const input = document.getElementById('composer-input');
-      if (!input) return;
-      const mentionText = '@炎图AI助手 ';
-      const currentText = input.value;
-      const needsSeparator = currentText.length > 0 && !/\s$/.test(currentText);
-      input.value = `${currentText}${needsSeparator ? ' ' : ''}${mentionText}`.slice(0, 2000);
-      input.focus();
-      input.selectionStart = input.value.length;
-      input.selectionEnd = input.value.length;
-      // 触发 input 事件以更新计数器和发送按钮状态
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      // 自动调整高度
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 72) + 'px';
-    };
 
     // New group button
     const newBtn = document.getElementById('sidebar-new-btn');
     if (newBtn) newBtn.onclick = () => this._openCreateGroupDialog();
+
+    // Sparkle → 插入 @炎图AI助手
+    const sparkleBtn = document.getElementById('composer-sparkle-btn');
+    if (sparkleBtn) sparkleBtn.onclick = () => {
+      const inp = document.getElementById('composer-input');
+      if (!inp) return;
+      const mentionText = '@炎图AI助手 ';
+      const currentText = inp.value;
+      const needsSeparator = currentText.length > 0 && !/\s$/.test(currentText);
+      inp.value = `${currentText}${needsSeparator ? ' ' : ''}${mentionText}`.slice(0, 2000);
+      inp.focus();
+      inp.selectionStart = inp.value.length;
+      inp.selectionEnd = inp.value.length;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 72) + 'px';
+    };
+
+    // 语音模式切换按钮
+    const voiceToggleBtn = document.getElementById('composer-voice-toggle-btn');
+    if (voiceToggleBtn) {
+      voiceToggleBtn.onclick = () => this._toggleVoiceMode();
+    }
+
+    // 语音录音按钮
+    const voiceBtn = document.getElementById('composer-voice-btn');
+    if (voiceBtn) {
+      voiceBtn.onclick = () => this._onVoiceClick();
+    }
+    const voiceStopBtn = document.querySelector('.composer-voice-stop');
+    if (voiceStopBtn) {
+      voiceStopBtn.onclick = () => this._onVoiceClick();
+    }
+
+    // 语音模式下没有 textarea，跳过 input 相关绑定
+    if (!input) return;
+
+    const toggleSendBtn = () => {
+      const hasText = input.value.trim().length > 0;
+      if (sendBtn) {
+        sendBtn.disabled = !hasText;
+        sendBtn.className = `composer-send ${hasText?'enabled':'disabled'} ${Bridge.getActiveConversation()?.type==='agent'?'agent-send':''}`;
+      }
+      if (counter) {
+        counter.textContent = `${input.value.length} / 2000`;
+      }
+    };
+
+    input.addEventListener('input', () => {
+      this._setComposerDraft(conversationId, input.value);
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      toggleSendBtn();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this._doSend();
+      }
+    });
+
+    if (sendBtn) {
+      sendBtn.onclick = () => this._doSend();
+    }
 
   },
 
@@ -1318,7 +1403,7 @@ const ChatPage = {
     const text = input.value.trim();
     if (!text) return;
 
-    const convId = ChatStore.getActiveConversationId();
+    const convId = Bridge.getActiveConversationId();
     if (!convId) { Toast.warn('请先选择一个会话'); return; }
 
     this._setComposerDraft(convId, '');
@@ -1330,12 +1415,12 @@ const ChatPage = {
     const sendBtn = document.getElementById('composer-send-btn');
     if (sendBtn) {
       sendBtn.disabled = true;
-      sendBtn.className = `composer-send disabled ${ChatStore.getActiveConversation()?.type==='agent'?'agent-send':''}`;
+      sendBtn.className = `composer-send disabled ${Bridge.getActiveConversation()?.type==='agent'?'agent-send':''}`;
     }
     const counter = document.getElementById('composer-counter');
     if (counter) counter.textContent = '0 / 2000';
 
-    ChatStore.sendUserMessage(text, convId);
+    Bridge.sendUserMessage(text, convId);
   },
 
   // ── 语音输入（对齐 Vue 版 useVoiceTextInput） ──
@@ -1584,13 +1669,13 @@ const ChatPage = {
         throw new Error('麦克风没有收到声音，请检查权限或靠近麦克风');
       }
 
-      const text = await ChatApi.transcribeAudio(audio, 'zh-CN');
+      const text = await Bridge.transcribeAudio(audio, 'zh-CN');
       this.voiceState = 'idle';
       this.voiceErrorMessage = '';
 
       // 语音识别结果追加到输入框已有内容后面，而非覆盖（用户先打字再语音时，已有文字应保留）
       this.isVoiceMode = false;
-      const convId = ChatStore.getActiveConversationId();
+      const convId = Bridge.getActiveConversationId();
       const existingDraft = this._getComposerDraft(convId);
       const separator = existingDraft && !existingDraft.endsWith(' ') ? ' ' : '';
       const combined = (existingDraft + separator + text).slice(0, 2000);
@@ -1712,55 +1797,11 @@ const ChatPage = {
   _isDesktop() {
     return window.matchMedia('(min-width: 640px)').matches;
   },
-  _parseDeliveryTarget(raw) {
-    if (!raw) return { type: 'workspace' };
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : { type: 'workspace' };
-      } catch {
-        return { type: 'workspace' };
-      }
-    }
-    return raw;
-  },
-  _isWorkspaceTask(task, conversationId) {
-    const target = this._parseDeliveryTarget(task?.deliveryTarget);
-    return (
-      task?.sourceConversationId === conversationId ||
-      target?.conversationId === conversationId ||
-      target?.type === 'workspace'
-    );
-  },
-  _workspaceSourceLabel(task, conversationId) {
-    if (!task?.sourceConversationId || task.sourceConversationId === conversationId) return 'AI 空间创建';
-    const source = ChatStore.getConversations().find(c => c.id === task.sourceConversationId);
-    return `${source?.name || '来源会话'}同步到空间`;
-  },
-  _workspaceDeliveryLabel(task) {
-    const target = this._parseDeliveryTarget(task?.deliveryTarget);
-    if (target?.type === 'workspace') return '仅在 AI 空间';
-    if (target?.type === 'both') return '群聊与 AI 空间';
-    if (target?.type === 'conversation') return '来自会话';
-    return '未设置';
-  },
-  _formatWorkspaceDueAt(value) {
-    if (!value) return '无截止时间';
-    return TimeUtils.formatSmart(value);
-  },
-  _recentWorkspaceSummary(conversationId) {
-    const msgs = ChatStore.getMessages(conversationId) || [];
-    for (let i = msgs.length - 1; i >= 0; i -= 1) {
-      const content = String(msgs[i]?.content || '').trim();
-      if (content) return content;
-    }
-    return '';
-  },
   _openDevicesPage() {
     window.location.hash = '#/devices';
   },
   _handleBindDeviceAction() {
-    const conv = ChatStore.getActiveConversation();
+    const conv = Bridge.getActiveConversation();
     if (!conv) {
       Toast.warn('请先进入会话再绑定设备');
       return;
@@ -1769,7 +1810,7 @@ const ChatPage = {
       Toast.warn('请先进入群聊再绑定设备');
       return;
     }
-    this._openDevicesPage();
+    this._openDevicesPanel();
   },
   _esc(str) {
     return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1841,7 +1882,7 @@ const ChatPage = {
     this._renderDialogContent();
 
     try {
-      const conversationId = await ChatStore.createGroupConversation(name);
+      const conversationId = await Bridge.createGroupConversation(name);
       this._closeCreateGroupDialog();
       this._activateConversation(conversationId);
       Toast.success('群聊已创建');
@@ -1861,7 +1902,7 @@ const ChatPage = {
 
   // ── 删除群聊确认弹窗（对齐 Vue 版 onDeleteConversation） ──
   _openDeleteConversationDialog(conversationId) {
-    const conv = ChatStore.getConversations().find(c => c.id === conversationId);
+    const conv = Bridge.getConversations().find(c => c.id === conversationId);
     if (!conv) return;
     // 对齐 Vue 版：个人工作空间不能删除
     if (conv.scope === 'personal_workspace') {
@@ -1927,8 +1968,8 @@ const ChatPage = {
     const id = this.deleteConversationTargetId;
     if (!id) return;
     // 对齐 Vue 版 onDeleteConversation：调用 deleteConversationFromList（纯本地删除）
-    const wasActive = ChatStore.getActiveConversationId() === id;
-    const deleted = ChatStore.deleteConversationFromList(id);
+    const wasActive = Bridge.getActiveConversationId() === id;
+    const deleted = Bridge.deleteConversationFromList(id);
     if (!deleted) {
       Toast.warn('会话删除失败');
       this._closeDeleteConversationDialog();
@@ -1936,13 +1977,13 @@ const ChatPage = {
     }
     // 对齐 Vue 版：删除的是当前活跃会话时，切换到下一个可用会话
     if (wasActive) {
-      const convs = ChatStore.getConversations();
+      const convs = Bridge.getConversations();
       const nextConv = convs.find(c => c.scope === 'personal_workspace')
         || convs.find(c => c.type === 'agent')
         || convs[0]
         || null;
       if (nextConv) {
-        ChatStore.setActiveConversation(nextConv.id);
+        Bridge.setActiveConversation(nextConv.id);
         UiStore.setActiveConversation(nextConv.id, true);
       } else {
         UiStore.resetToListView();
@@ -1952,771 +1993,235 @@ const ChatPage = {
     Toast.success('会话已删除');
   },
 
-  _memberRoleLabel(member) {
-    const role = member.role || 'member';
-    if (role === 'owner') return '群主';
-    if (role === 'admin') return '管理员';
-    if (role === 'assistant') return '助手';
-    return '成员';
-  },
-
-  _memberRoleClass(member) {
-    const role = member.role || 'member';
-    if (role === 'owner') return 'role-owner';
-    if (role === 'admin') return 'role-admin';
-    if (role === 'assistant') return 'role-assistant';
-    return 'role-member';
-  },
-
-  _memberSubtitle(member) {
-    if (member.memberKind === 'user') return member.phone ? '手机号成员' : '成员';
-    if (member.memberKind === 'phone') return '手机号成员';
-    const nodeType = member.node?.nodeType || 'node';
-    return `${nodeType}`;
-  },
-
-  _memberTitle(member) {
-    if (member.memberKind === 'user') return member.phone || member.userId || '未知成员';
-    if (member.memberKind === 'phone') return member.phone || '手机号成员';
-    return member.node?.name || `节点 ${member.nodeId || ''}`.trim();
-  },
-
-  _memberInitial(member) {
-    const title = this._memberTitle(member);
-    return title.length >= 2 ? title.slice(-2) : title || '成员';
-  },
-
-  _memberAvatarMarkup(member, fallbackText) {
-    if (member.memberKind === 'node' && member.node?.nodeType === 'AI_AGENT') {
-      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 10a3 3 0 016 0v2a3 3 0 01-6 0V10z"/><circle cx="12" cy="17" r="1.5"/></svg>`;
-    }
-    if (member.memberKind === 'node') {
-      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>`;
-    }
-    return this._esc(fallbackText);
-  },
-
-  _isSelfMember(member) {
-    const userId = AuthStore.getUserId() || '';
-    const phone = AuthStore.getPhone() || '';
-    if (!userId && !phone) return false;
-    if (member.memberKind === 'user') {
-      return Boolean((userId && member.userId === userId) || (phone && (member.phone === phone || member.userId === phone)));
-    }
-    if (member.memberKind === 'phone') {
-      return Boolean(phone && member.phone === phone);
-    }
-    return false;
-  },
-
-  _getDisplayedRoomMembers(conversationId) {
-    if (!conversationId) return [];
-    return Array.isArray(this.groupMembers) ? this.groupMembers : [];
-  },
-
-  _memberStatusText(members, loading, loaded, error) {
-    if (members.length > 0) {
-      if (loading) return `${members.length} 人 · 更新中`;
-      return `${members.length} 人`;
-    }
-    if (error) return '同步失败';
-    if (loading || !loaded) return '同步中';
-    return '暂无成员';
-  },
-
-  // ── Posts Panel ─
-  _renderPostsPanel() {
-    const conv = ChatStore.getActiveConversation();
-    const isWorkspace = conv && conv.scope === 'personal_workspace';
-    const isGroup = conv && conv.type === 'group';
-    const posts = isGroup ? ChatStore.getPosts(conv.id) : [];
-    const loading = this.postsLoading;
-    const error = this.postsError;
-    const panelView = this.postsPanelView || 'board';
-    const members = this._getDisplayedRoomMembers(conv?.id);
-    const membersLoading = this.groupMembersLoading;
-    const membersLoaded = this.groupMembersLoaded;
-    const membersError = this.groupMembersError;
-    const membersNotice = this.groupMembersNotice;
-    const inviteOpen = this.invitePanelOpen;
-    const invitePhone = this.invitePhone;
-
-    const orderedPosts = [...posts].sort((a, b) => {
-      const aScore = a.deadlineAt || a.createdAt;
-      const bScore = b.deadlineAt || b.createdAt;
-      return bScore - aScore;
-    });
-
-    const memberCount = members.length;
-    const memberPreview = members.slice(0, 5);
-    const memberStatusText = this._memberStatusText(members, membersLoading, membersLoaded, membersError);
-
-    if (isWorkspace) {
-      const allTasks = ChatStore.getPersonalTasksForCurrentUser();
-      const workspaceTasks = allTasks.filter(task => this._isWorkspaceTask(task, conv.id));
-      const outsideWorkspaceTaskCount = allTasks.filter(task => !this._isWorkspaceTask(task, conv.id)).length;
-      const pendingTasks = workspaceTasks.filter(task => task.status !== 'done' && task.status !== 'canceled');
-      const completedTasks = workspaceTasks.filter(task => task.status === 'done');
-      const canceledTasks = workspaceTasks.filter(task => task.status === 'canceled');
-      const targetGroups = ChatStore.getConversations().filter(c => c.type === 'group' && c.scope !== 'personal_workspace');
-      const draftActions = ChatStore.getWorkspaceDraftActions(conv.id);
-      const boundDevices = ChatStore.getBoundDevices();
-      const onlineDevices = boundDevices.filter(device => device.status === 'online');
-      const selectedPublishTarget = targetGroups.find(item => item.id === this.workspacePublishTargetId) || targetGroups[0] || null;
-      if (!this.workspacePublishTargetId && targetGroups[0]) {
-        this.workspacePublishTargetId = targetGroups[0].id;
-      }
-      const recentSummary = this._recentWorkspaceSummary(conv.id);
-      const fullScreenStyle = this._isDesktop()
-        ? 'width:min(30rem,100%);height:100%;border-radius:1.5rem 0 0 1.5rem;'
-        : 'width:100%;height:100%;border-radius:0;';
-
-      return `
-      <div id="posts-panel" class="posts-panel ${this.postsPanelOpen ? 'open' : ''}" style="display:${this.postsPanelOpen ? 'flex' : 'none'};">
-        <div class="pp-overlay" id="pp-overlay"></div>
-        <div class="pp-drawer" style="${fullScreenStyle}background:var(--app-page-bg);">
-          <div class="pp-header" style="padding:1rem 1rem 0.75rem;border-bottom:1px solid var(--app-border);background:var(--app-surface);">
-            <div>
-              <div class="pp-title">${this._esc(conv.name || '我的 AI 工作空间')}</div>
-              <div style="margin-top:0.3rem;font-size:0.8rem;color:var(--app-muted);">${this._esc(conv.topic || '文件、任务和设备同步')}</div>
-            </div>
-            <div class="pp-actions">
-              <button class="pp-btn pp-close-btn" id="pp-close-btn" title="关闭">&times;</button>
-            </div>
-          </div>
-          <div class="pp-body" style="padding:1rem 1rem 1.5rem;overflow-y:auto;background:var(--app-page-bg);">
-            <section style="border:1px solid var(--app-border);border-radius:1.2rem;background:var(--app-surface);padding:1rem;box-shadow:0 10px 24px rgba(36,47,90,0.05);">
-              <div style="display:flex;align-items:center;gap:0.75rem;">
-                <div style="display:flex;height:2.75rem;width:2.75rem;align-items:center;justify-content:center;border-radius:0.9rem;background:var(--app-brand-soft);color:var(--app-brand);">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                </div>
-                <div style="min-width:0;flex:1;">
-                  <div style="font-size:1rem;font-weight:600;color:var(--app-text);">正在处理</div>
-                  <div style="font-size:0.8rem;color:var(--app-muted);">当前 AI 空间</div>
-                </div>
-                <span style="display:inline-flex;height:0.65rem;width:0.65rem;border-radius:999px;background:#10b981;"></span>
-              </div>
-              <div style="margin-top:0.95rem;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0.7rem;">
-                <div style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.85rem 0.5rem;text-align:center;">
-                  <div style="font-size:1.2rem;font-weight:700;color:var(--app-brand);">${pendingTasks.length}</div>
-                  <div style="margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">空间待办</div>
-                </div>
-                <div style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.85rem 0.5rem;text-align:center;">
-                  <div style="font-size:1.2rem;font-weight:700;color:var(--app-brand);">${draftActions.length}</div>
-                  <div style="margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">待确认</div>
-                </div>
-                <div style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.85rem 0.5rem;text-align:center;">
-                  <div style="font-size:1.2rem;font-weight:700;color:var(--app-brand);">${onlineDevices.length}</div>
-                  <div style="margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">设备在线</div>
-                </div>
-              </div>
-              <div style="margin-top:0.95rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.85rem 1rem;">
-                <div style="font-size:0.8rem;font-weight:600;color:var(--app-text);">最近上下文</div>
-                <div style="margin-top:0.35rem;font-size:0.78rem;line-height:1.6;color:var(--app-muted);">${this._esc(recentSummary || '这里会显示当前 AI 空间最近生成的摘要、草稿或提醒。')}</div>
-              </div>
-              <button type="button" id="pp-workspace-open-ai-btn" style="margin-top:0.95rem;display:flex;width:100%;align-items:center;justify-content:center;gap:0.45rem;border-radius:1rem;border:1px solid var(--app-border);background:var(--app-subtle-bg);padding:0.8rem 1rem;font-size:0.86rem;font-weight:600;color:var(--app-brand);">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                打开工作台
-              </button>
-            </section>
-
-            <section style="margin-top:1rem;border:1px solid var(--app-border);border-radius:1.2rem;background:var(--app-surface);padding:1rem;box-shadow:0 10px 24px rgba(36,47,90,0.05);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-                <div>
-                  <div style="font-size:1rem;font-weight:600;color:var(--app-text);">快捷操作</div>
-                  <div style="margin-top:0.25rem;font-size:0.8rem;color:var(--app-muted);">基于当前 AI 空间继续处理</div>
-                </div>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--app-brand)" stroke-width="2"><path d="M12 3l2.5 5.5L20 10l-5.5 2.5L12 18l-2.5-5.5L4 10l5.5-2.5z"/></svg>
-              </div>
-              <div style="margin-top:0.95rem;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.7rem;">
-                <button type="button" data-workspace-action="create-task" style="display:flex;min-height:4.2rem;align-items:center;gap:0.7rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.8rem;text-align:left;">
-                  <span style="display:flex;height:2.25rem;width:2.25rem;align-items:center;justify-content:center;border-radius:0.85rem;background:var(--app-brand-soft);color:var(--app-brand);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                  </span>
-                  <span><span style="display:block;font-size:0.86rem;font-weight:600;color:var(--app-text);">新建任务</span><span style="display:block;margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">创建空间提醒</span></span>
-                </button>
-                <button type="button" data-workspace-action="summarize" style="display:flex;min-height:4.2rem;align-items:center;gap:0.7rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.8rem;text-align:left;">
-                  <span style="display:flex;height:2.25rem;width:2.25rem;align-items:center;justify-content:center;border-radius:0.85rem;background:var(--app-brand-soft);color:var(--app-brand);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                  </span>
-                  <span><span style="display:block;font-size:0.86rem;font-weight:600;color:var(--app-text);">总结对话</span><span style="display:block;margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">整理当前上下文</span></span>
-                </button>
-                <button type="button" data-workspace-action="publish-draft-quick" style="display:flex;min-height:4.2rem;align-items:center;gap:0.7rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.8rem;text-align:left;">
-                  <span style="display:flex;height:2.25rem;width:2.25rem;align-items:center;justify-content:center;border-radius:0.85rem;background:var(--app-brand-soft);color:var(--app-brand);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                  </span>
-                  <span><span style="display:block;font-size:0.86rem;font-weight:600;color:var(--app-text);">发布到群</span><span style="display:block;margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">${this._esc(selectedPublishTarget?.name || '请选择目标群')}</span></span>
-                </button>
-                <button type="button" data-workspace-action="open-devices" style="display:flex;min-height:4.2rem;align-items:center;gap:0.7rem;border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.8rem;text-align:left;">
-                  <span style="display:flex;height:2.25rem;width:2.25rem;align-items:center;justify-content:center;border-radius:0.85rem;background:var(--app-brand-soft);color:var(--app-brand);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                  </span>
-                  <span><span style="display:block;font-size:0.86rem;font-weight:600;color:var(--app-text);">投到设备</span><span style="display:block;margin-top:0.2rem;font-size:0.72rem;color:var(--app-muted);">电视或笔记本</span></span>
-                </button>
-              </div>
-            </section>
-
-            <section style="margin-top:1rem;border:1px solid var(--app-border);border-radius:1.2rem;background:var(--app-surface);padding:1rem;box-shadow:0 10px 24px rgba(36,47,90,0.05);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-                <div>
-                  <div style="font-size:1rem;font-weight:600;color:var(--app-text);">待确认</div>
-                  <div style="margin-top:0.25rem;font-size:0.8rem;color:var(--app-muted);">AI 生成但还没有发布的草稿</div>
-                </div>
-              </div>
-              ${draftActions.length ? `
-                ${targetGroups.length ? `
-                  <label style="display:block;margin-top:0.9rem;">
-                    <select id="pp-workspace-target-select" style="width:100%;height:2.6rem;border:1px solid var(--app-border);border-radius:0.9rem;background:var(--app-subtle-bg);padding:0 0.9rem;font-size:0.82rem;font-weight:600;color:var(--app-text);outline:none;">
-                      ${targetGroups.map(item => `<option value="${this._esc(item.id)}" ${this.workspacePublishTargetId === item.id ? 'selected' : ''}>发布目标：${this._esc(item.name)}</option>`).join('')}
-                    </select>
-                  </label>
-                ` : ''}
-                <div style="margin-top:0.95rem;display:flex;flex-direction:column;gap:0.7rem;">
-                  ${draftActions.map(action => `
-                    <article style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.9rem;">
-                      <div style="font-size:0.94rem;font-weight:600;line-height:1.5;color:var(--app-text);">${this._esc(action.draft.title || '待确认草稿')}</div>
-                      <div style="margin-top:0.35rem;font-size:0.78rem;line-height:1.6;color:var(--app-muted);">${this._esc(action.draft.summary || '确认内容后，可继续发布到指定群。')}</div>
-                      <div style="margin-top:0.55rem;display:flex;flex-wrap:wrap;gap:0.4rem;">
-                        <span style="border-radius:999px;background:#eef2ff;padding:0.24rem 0.55rem;font-size:0.72rem;color:var(--app-muted);">${this._esc(action.skillId)}</span>
-                        <span style="border-radius:999px;background:#eef2ff;padding:0.24rem 0.55rem;font-size:0.72rem;color:var(--app-muted);">未发布</span>
-                      </div>
-                      ${targetGroups.length ? `
-                        <button type="button" data-workspace-action="publish-draft" data-skill-id="${this._esc(action.skillId)}" style="margin-top:0.75rem;border:none;border-radius:999px;background:var(--app-brand);padding:0.42rem 0.8rem;font-size:0.76rem;font-weight:600;color:#fff;">
-                          发布到 ${this._esc(targetGroups.find(item => item.id === this.workspacePublishTargetId)?.name || targetGroups[0].name)}
-                        </button>
-                      ` : '<div style="margin-top:0.75rem;font-size:0.78rem;color:var(--app-muted);">暂无可发布的群聊</div>'}
-                    </article>
-                  `).join('')}
-                </div>
-              ` : `
-                <div style="margin-top:0.95rem;border:1px dashed var(--app-border);border-radius:1rem;padding:1rem;text-align:center;font-size:0.84rem;line-height:1.6;color:var(--app-muted);">
-                  暂无待确认草稿。让 AI 继续生成任务、公告或活动后，会先出现在这里。
-                </div>
-              `}
-            </section>
-
-            <section style="margin-top:1rem;border:1px solid var(--app-border);border-radius:1.2rem;background:var(--app-surface);padding:1rem;box-shadow:0 10px 24px rgba(36,47,90,0.05);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-                <div>
-                  <div style="font-size:1rem;font-weight:600;color:var(--app-text);">AI 空间任务</div>
-                  <div style="margin-top:0.25rem;font-size:0.8rem;color:var(--app-muted);">待办 ${pendingTasks.length} · 已完成 ${completedTasks.length} · 已取消 ${canceledTasks.length}</div>
-                </div>
-              </div>
-   
-              ${workspaceTasks.length ? `
-                <div style="margin-top:0.95rem;display:flex;flex-direction:column;gap:0.7rem;">
-                  ${workspaceTasks.slice(0, 3).map(task => {
-                    const isDone = task.status === 'done';
-                    const isCanceled = task.status === 'canceled';
-                    const iconBg = isDone
-                      ? 'background:rgba(16,185,129,0.12);color:#059669;'
-                      : isCanceled
-                        ? 'background:rgba(244,63,94,0.12);color:#e11d48;'
-                        : 'background:var(--app-brand-soft);color:var(--app-brand);';
-                    const iconSvg = isDone
-                      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>'
-                      : isCanceled
-                        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>'
-                        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
-                    const statusBadge = isDone
-                      ? '<span style="border-radius:999px;background:rgba(16,185,129,0.12);padding:0.24rem 0.55rem;font-size:0.72rem;font-weight:600;color:#059669;">已完成</span>'
-                      : isCanceled
-                        ? '<span style="border-radius:999px;background:rgba(244,63,94,0.12);padding:0.24rem 0.55rem;font-size:0.72rem;font-weight:600;color:#e11d48;">已取消</span>'
-                        : '<span style="border-radius:999px;background:var(--app-brand-soft);padding:0.24rem 0.55rem;font-size:0.72rem;font-weight:600;color:var(--app-brand);">待办</span>';
-                    return `
-                    <article style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.9rem;">
-                      <div style="display:flex;align-items:flex-start;gap:0.75rem;">
-                        <div style="margin-top:0.125rem;flex-shrink:0;width:2rem;height:2rem;border-radius:0.8rem;display:flex;align-items:center;justify-content:center;${iconBg}">${iconSvg}</div>
-                        <div style="flex:1;min-width:0;">
-                          <div style="font-size:0.94rem;font-weight:600;line-height:1.5;color:var(--app-text);">${this._esc(task.title)}</div>
-                          ${task.summary ? `<div style="margin-top:0.35rem;font-size:0.78rem;line-height:1.6;color:var(--app-muted);">${this._esc(task.summary)}</div>` : ''}
-                          <div style="margin-top:0.55rem;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
-                            ${statusBadge}
-                            <span style="border-radius:999px;background:#eef2ff;padding:0.24rem 0.55rem;font-size:0.72rem;color:var(--app-muted);">${this._esc(this._formatWorkspaceDueAt(task.dueAt))}</span>
-                            <span style="border-radius:999px;background:#eef2ff;padding:0.24rem 0.55rem;font-size:0.72rem;color:var(--app-muted);">${this._esc(this._workspaceSourceLabel(task, conv.id))}</span>
-                            <span style="border-radius:999px;background:#eef2ff;padding:0.24rem 0.55rem;font-size:0.72rem;color:var(--app-muted);">${this._esc(this._workspaceDeliveryLabel(task))}</span>
-                          </div>
-                          ${task.sourceConversationId && task.sourceConversationId !== conv.id ? `
-                            <button type="button" data-workspace-action="open-task-source" data-task-id="${this._esc(task.id)}" style="margin-top:0.7rem;display:inline-flex;align-items:center;gap:0.35rem;border:1px solid var(--app-border);border-radius:999px;background:transparent;padding:0.42rem 0.8rem;font-size:0.76rem;font-weight:600;color:var(--app-muted);">
-                              回到来源群
-                            </button>
-                          ` : ''}
-                        </div>
-                      </div>
-                      ${task.status !== 'done' && task.status !== 'canceled' ? `
-                        <div style="margin-top:0.75rem;display:flex;justify-content:flex-end;gap:0.5rem;">
-                          <button type="button" data-workspace-action="reschedule-task" data-task-id="${this._esc(task.id)}" style="border:1px solid var(--app-border);border-radius:999px;background:transparent;padding:0.42rem 0.7rem;font-size:0.76rem;color:var(--app-muted);">延后1小时</button>
-                          <button type="button" data-workspace-action="cancel-task" data-task-id="${this._esc(task.id)}" style="border:1px solid rgba(251,113,133,0.3);border-radius:999px;background:transparent;padding:0.42rem 0.7rem;font-size:0.76rem;color:#e11d48;">取消</button>
-                          <button type="button" data-workspace-action="complete-task" data-task-id="${this._esc(task.id)}" style="border:none;border-radius:999px;background:var(--app-brand);padding:0.42rem 0.8rem;font-size:0.76rem;font-weight:600;color:#fff;">完成</button>
-                        </div>
-                      ` : ''}
-                    </article>
-                  `;}).join('')}
-                  ${workspaceTasks.length > 3 ? `
-                    <button type="button" id="ws-view-more-tasks" style="margin-top:0.35rem;display:flex;align-items:center;justify-content:center;gap:0.35rem;width:100%;border:1px solid var(--app-border);border-radius:0.75rem;background:transparent;padding:0.6rem;font-size:0.8rem;font-weight:600;color:var(--app-brand);cursor:pointer;">
-                      查看全部 ${workspaceTasks.length} 条任务
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </button>
-                  ` : ''}
-                </div>
-              ` : `
-                <div style="margin-top:0.95rem;border:1px dashed var(--app-border);border-radius:1rem;padding:1rem;text-align:center;font-size:0.84rem;line-height:1.6;color:var(--app-muted);">
-                  这里暂时没有 AI 空间任务。其他群里的个人提醒会留在“任务”页，不会混进当前空间。
-                </div>
-              `}
-            </section>
-            <section style="margin-top:1rem;border:1px solid var(--app-border);border-radius:1.2rem;background:var(--app-surface);padding:1rem;box-shadow:0 10px 24px rgba(36,47,90,0.05);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-                <div>
-                  <div style="font-size:1rem;font-weight:600;color:var(--app-text);">可用设备</div>
-                  <div style="margin-top:0.25rem;font-size:0.8rem;color:var(--app-muted);">设备绑定入口与 Vue 移动端保持一致</div>
-                </div>
-                <button type="button" data-workspace-action="open-devices" style="border:1px solid var(--app-border);border-radius:999px;background:var(--app-subtle-bg);padding:0.45rem 0.8rem;font-size:0.78rem;font-weight:600;color:var(--app-muted);">管理</button>
-              </div>
-              ${boundDevices.length ? `
-                <div style="margin-top:0.95rem;display:flex;flex-direction:column;gap:0.7rem;">
-                  ${boundDevices.slice(0, 4).map(device => `
-                    <div style="border:1px solid var(--app-border);border-radius:1rem;background:var(--app-subtle-bg);padding:0.85rem 0.95rem;">
-                      <div style="font-size:0.88rem;font-weight:600;color:var(--app-text);">${this._esc(device.deviceName)}</div>
-                      <div style="margin-top:0.25rem;font-size:0.76rem;color:var(--app-muted);">${this._esc(device.boundConversationName || '当前会话')} · ${device.status === 'online' ? '在线' : '离线'}</div>
-                    </div>
-                  `).join('')}
-                </div>
-              ` : `
-                <div style="margin-top:0.95rem;border:1px dashed var(--app-border);border-radius:1rem;padding:1rem;text-align:center;font-size:0.84rem;line-height:1.6;color:var(--app-muted);">
-                  暂无可用设备。可通过“扫码/绑定设备”或此处“管理”进入设备页继续绑定。
-                </div>
-              `}
-            </section>
-          </div>
-        </div>
-      </div>`;
-    }
-
-    // ── Board View ──
-    if (panelView === 'board') {
-      return `
-      <div id="posts-panel" class="posts-panel ${this.postsPanelOpen ? 'open' : ''}" style="display:${this.postsPanelOpen ? 'flex' : 'none'};">
-        <div class="pp-overlay" id="pp-overlay"></div>
-        <div class="pp-drawer">
-          <div class="pp-header">
-            <div class="pp-title">${this._esc(conv?.name ? `${conv.name} 看板` : '群组看板')}</div>
-            <div class="pp-actions">
-              <button class="pp-btn pp-close-btn" id="pp-close-btn" title="关闭">&times;</button>
-            </div>
-          </div>
-          ${isGroup ? `
-          <div class="pp-body">
-            <!-- Banner -->
-            <div class="pp-board-banner">
-              <div class="pp-board-banner-bg"></div>
-              <div class="pp-board-banner-content">
-                <div class="pp-board-banner-text">
-                  <div class="pp-board-banner-name">${this._esc(conv.name)}</div>
-                  <div class="pp-board-banner-topic">${this._esc(conv.topic || '作业、活动与群管理')}</div>
-                </div>
-                <button class="pp-board-create-btn" id="pp-banner-create-btn" title="发布新任务">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                  发布新任务
-                </button>
-              </div>
-            </div>
-
-            <!-- Member Preview Section -->
-            <div class="pp-member-preview" id="pp-member-preview-btn">
-              <div class="pp-member-preview-main">
-                <div class="pp-member-preview-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                </div>
-                <div class="pp-member-preview-info">
-                  <div class="pp-member-preview-header">
-                    <span class="pp-member-preview-label">群成员</span>
-                    <span class="pp-member-preview-count">${memberStatusText}</span>
-                  </div>
-                  <div class="pp-member-avatars">
-                    ${memberPreview.length > 0 ? memberPreview.map((m, i) => `
-                      <div class="pp-member-avatar" style="z-index:${memberPreview.length - i}" title="${this._esc(this._memberTitle(m))}">
-                        ${this._memberAvatarMarkup(m, this._memberInitial(m))}
-                      </div>
-                    `).join('') : !membersLoading ? `<span class="pp-member-empty-hint">暂无成员</span>` : ''}
-                    ${membersLoading && memberPreview.length === 0 ? `
-                      <div class="pp-member-avatar pp-member-avatar-skel"></div>
-                      <div class="pp-member-avatar pp-member-avatar-skel"></div>
-                      <div class="pp-member-avatar pp-member-avatar-skel"></div>
-                      <div class="pp-member-avatar pp-member-avatar-skel"></div>
-                    ` : ''}
-                  </div>
-                </div>
-              </div>
-              <button class="pp-member-invite-btn" id="pp-member-invite-btn" title="邀请成员">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 8v6m3-3h-6"/><circle cx="11" cy="11" r="8"/></svg>
-              </button>
-            </div>
-            <!-- Tasks Section -->
-            <div class="pp-section">
-              <div class="pp-section-header">
-                <h2 class="pp-section-title">活跃任务</h2>
-              </div>
-              ${loading ? `<div class="pp-loading">正在加载任务...</div>` : error ? `<div class="pp-error">${this._esc(error)}</div>` : orderedPosts.length === 0 ? `
-                <div class="pp-empty">当前群组还没有任务，点击上方"发布新任务"开始创建。</div>
-              ` : orderedPosts.map(p => this._renderPostCard(p)).join('')}
-            </div>
-          </div>` : `
-          <div class="pp-body">
-            <div class="pp-empty">仅群聊支持查看任务</div>
-          </div>`}
-        </div>
-      </div>`;
-    }
-
-    // ── Members View ──
-    return `
-    <div id="posts-panel" class="posts-panel ${this.postsPanelOpen ? 'open' : ''}" style="display:${this.postsPanelOpen ? 'flex' : 'none'};">
-      <div class="pp-overlay" id="pp-overlay"></div>
-      <div class="pp-drawer">
-        <div class="pp-header">
-          <button class="pp-back-btn" id="pp-back-to-board-btn" title="返回">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
-          </button>
-          <div class="pp-title">成员管理</div>
-          <div class="pp-actions">
-            <button class="pp-btn pp-close-btn" id="pp-close-btn" title="关闭">&times;</button>
-          </div>
-        </div>
-        <div class="pp-body">
-          <div style="margin-bottom:0.95rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-            <div style="min-width:0;">
-              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.9rem;color:var(--app-muted);">${this._esc(conv?.name || '当前群组')} · ${memberCount} 人</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:0.55rem;">
-              <button class="pp-members-invite-toggle-btn" id="pp-members-invite-toggle-btn" title="邀请成员">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></svg>
-                <span>邀请</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Invite Card -->
-          ${inviteOpen ? `
-          <div class="pp-invite-card">
-            <div class="pp-invite-card-title">邀请成员</div>
-            <div class="pp-invite-input-wrap">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-              <input id="pp-invite-input" type="tel" placeholder="输入手机号" value="${this._esc(invitePhone)}">
-            </div>
-            <button class="pp-invite-confirm-btn" id="pp-invite-confirm-btn" ${!invitePhone.trim() ? 'disabled' : ''}>确认邀请</button>
-          </div>` : ''}
-
-          ${membersError ? `<div class="pp-error">${this._esc(membersError)}</div>` : membersNotice ? `<div class="pp-error" style="color:#a16207;background:#fffbeb;border-color:#fde68a;">${this._esc(membersNotice)}</div>` : ''}
-
-          <!-- Members List -->
-          <div class="pp-section">
-            <div class="pp-section-header">
-              <span class="pp-section-title">当前成员</span>
-              <span class="pp-count">${memberCount}</span>
-            </div>
-            ${membersLoading && members.length === 0 ? `
-              <div class="pp-loading">正在加载成员...</div>
-            ` : members.length === 0 ? `
-              <div class="pp-empty">暂无可展示成员</div>
-            ` : members.map(m => this._renderPostPanelMemberItem(m)).join('')}
-          </div>
-        </div>
-      </div>
-    </div>`;
-  },
-
-  _renderPostPanelMemberItem(member) {
-    const isSelf = this._isSelfMember(member);
-    const initials = this._memberInitial(member);
-    const roleLabel = this._memberRoleLabel(member);
-    const roleClass = this._memberRoleClass(member);
-    const canRemove = !isSelf && member.memberKind !== 'phone' && (member.memberKind === 'user' || member.memberKind === 'node');
-    const key = member.memberKind === 'user' ? `user:${member.userId}` : member.memberKind === 'phone' ? `phone:${member.phone}` : `node:${member.nodeId}`;
-
-    return `
-    <div class="pp-member-item" data-member-key="${key}">
-      <div class="pp-member-item-avatar">${this._memberAvatarMarkup(member, initials)}</div>
-      <div class="pp-member-item-info">
-        <div class="pp-member-item-name">
-          <span>${this._esc(this._memberTitle(member))}</span>
-          <span class="pp-role-badge ${roleClass}">${roleLabel}</span>
-          ${isSelf ? '<span class="pp-self-badge">我</span>' : ''}
-        </div>
-        <div class="pp-member-item-sub">${this._memberSubtitle(member)}</div>
-      </div>
-      ${member.memberKind === 'user' || member.memberKind === 'node' ? `
-        <button class="pp-member-remove-btn" data-member-kind="${member.memberKind}" data-member-id="${this._esc(member.memberKind === 'user' ? member.userId : member.nodeId)}" title="移除" ${canRemove ? '' : 'disabled'}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
-        </button>
-      ` : ''}
-    </div>`;
-  },
-
-  _renderPostCard(post) {
-    const statusLabel = this._postStatusLabel(post);
-    const statusClass = this._postStatusClass(post);
-    const iconSvg = this._postIconSvg(post);
-    const progress = this._postProgress(post);
-    const deadline = post.deadlineAt ? this._formatDeadline(post.deadlineAt) : '长期有效';
-
-    return `
-    <div class="pp-post-card" data-post-id="${post.id}">
-      <div class="pp-post-icon">${iconSvg}</div>
-      <div class="pp-post-body">
-        <div class="pp-post-header">
-          <span class="pp-post-status ${statusClass}">${statusLabel}</span>
-        </div>
-        <div class="pp-post-title">${this._esc(post.title)}</div>
-        <div class="pp-post-summary">${this._esc(post.summary || '')}</div>
-        <div class="pp-post-deadline">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-          <span>截止：${deadline}</span>
-        </div>
-        <div class="pp-post-progress">
-          <span class="pp-progress-pct">${progress}%</span>
-          <div class="pp-progress-bar"><div class="pp-progress-fill" style="width:${progress}%"></div></div>
-        </div>
-        <div class="pp-post-action">${post.status === 'closed' ? '查看详情' : '继续任务'}</div>
-      </div>
-    </div>`;
-  },
-
-  _postStatusLabel(post) {
-    if (post.status === 'closed') return '已完成';
-    if (post.status === 'draft') return '待开始';
-    return '进行中';
-  },
-
-  _postStatusClass(post) {
-    if (post.status === 'closed') return 'status-closed';
-    if (post.status === 'draft') return 'status-draft';
-    return 'status-active';
-  },
-
-  _postIconSvg(post) {
-    if (post.template === 'news') return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>`;
-    if (post.template === 'event') return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>`;
-    if (post.status === 'closed') return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>`;
-    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>`;
-  },
-
-  _postProgress(post) {
-    const responses = (post.responses || []).length;
-    if (post.status === 'closed') return 100;
-    if (responses <= 0) return post.status === 'draft' ? 20 : 40;
-    return Math.min(100, 40 + responses * 20);
-  },
-
-  _postDefaultSubmitLabel(post) {
-    if (!post) return '标记完成';
-    if (post.template === 'news') return '我知道了';
-    if (post.actionType === 'upload') return '标记已读';
-    if (post.actionType === 'read') return '标记已读';
-    return '标记完成';
-  },
-
-  _postResourceActionLabel(post) {
-    if (!post?.resourceUrl) return '';
-    if (post.template === 'homework') return '打开作业';
-    if (post.template === 'news') return '查看资讯';
-    return '查看说明';
-  },
-
-  _postResourceSubtitle(post) {
-    if (!post?.resourceUrl) return '';
-    if (post.resourceType === 'html') return '在线任务资源';
-    if (post.resourceType === 'link') return '链接资源';
-    return '任务附件';
-  },
-
-  _resolvePostResponsePayload(post, requestedResponseType) {
-    const actionType = post?.actionType || 'read';
-    if (actionType === 'confirm') {
-      const confirmation = requestedResponseType === 'not_going' ? 'not_going' : 'going';
-      return {
-        responseType: confirmation === 'not_going' ? 'reject' : 'accept',
-        confirmation,
-      };
-    }
-    return {
-      responseType: requestedResponseType || actionType || 'read',
-      confirmation: '',
-    };
-  },
-
-  _postResponseDisplayText(post, response) {
-    const content = String(response?.content || '').trim();
-    if (content) return content;
-    if (post?.actionType === 'confirm') {
-      if (response?.confirmation === 'not_going' || response?.responseType === 'reject') return '无法参加';
-      return '确认参加';
-    }
-    if (post?.actionType === 'upload') return '已提交作业';
-    if (post?.actionType === 'read') return '已查看';
-    return '已响应';
-  },
-
-  _creatorTemplateMeta(template) {
-    if (template === 'event') {
-      return {
-        label: '群活动',
-        desc: '组织签到、报名或参与确认',
-        defaultSummary: '请确认是否参加，并提前安排时间。',
-        resourceLabel: '活动说明链接',
-        resourcePlaceholder: 'https://example.com/event',
-      };
-    }
-    if (template === 'news') {
-      return {
-        label: '群资讯',
-        desc: '发布通知、新闻或群内公告',
-        defaultSummary: '请大家及时查看并知悉。',
-        resourceLabel: '资讯链接',
-        resourcePlaceholder: 'https://example.com/news',
-      };
-    }
-    return {
-      label: '家庭作业',
-      desc: '下发互动课本、练习题或作业任务链接',
-      defaultSummary: '请按要求完成作业并按时提交。',
-      resourceLabel: '作业链接',
-      resourcePlaceholder: 'https://works.blazegraph.site/works/8/homework/index.html',
-    };
-  },
-
-  _creatorPostTransportMeta(template, resourceUrl = '') {
-    // 对齐 Vue 版 resolveConversationPostDraft + inferResourceType
-    const url = String(resourceUrl || '').trim();
-    let resourceType;
-    if (!url) {
-      resourceType = 'none';
-    } else if (/\.html?(?:[?#].*)?$/i.test(url)) {
-      resourceType = 'html';
-    } else if (/\.(avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(url)) {
-      resourceType = 'image';
-    } else {
-      resourceType = 'link';
-    }
-    if (template === 'news') return { actionType: 'read', resourceType };
-    if (template === 'event') return { actionType: 'confirm', resourceType };
-    return { actionType: 'upload', resourceType };
-  },
-
-  _openPostResource(post) {
-    if (!post?.resourceUrl) return;
-    window.open(post.resourceUrl, '_blank', 'noopener');
-  },
-
-  _formatDeadline(ts) {
-    if (!ts) return '长期有效';
-    const d = new Date(ts);
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
-    const hour = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${month}月${day}日 ${hour}:${min}`;
-  },
-
-  async _openPostsPanel() {
-    const conv = ChatStore.getActiveConversation();
+  // ── 会话更多操作下拉菜单 ──
+  _openConvDropdown(btn, convId) {
+    this._closeConvDropdown();
+    const conv = Bridge.getConversations().find(c => c.id === convId);
     if (!conv) return;
+    if (conv.scope === 'personal_workspace' || conv.type === 'agent') return;
 
-    this.postsPanelOpen = true;
-    this.postsPanelView = 'board'; // board | members
-    this.postsLoading = true;
-    this.postsError = '';
-    this.groupMembers = [];
-    this.groupMembersLoading = true;
-    this.groupMembersLoaded = false;
-    this.groupMembersError = '';
-    this.groupMembersNotice = '';
-    this.invitePanelOpen = false;
-    this.invitePhone = '';
-    this.render();
+    const rect = btn.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'conv-dropdown-menu';
+    menu.id = 'conv-dropdown-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = rect.right - 160 + 'px';
+    menu.style.top = rect.bottom + 4 + 'px';
+    menu.innerHTML =
+      '<button class="conv-dropdown-item" data-action="hide-conv" data-conv-id="' + this._esc(convId) + '">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' +
+        '<span>不显示该聊天</span>' +
+      '</button>' +
+      '<button class="conv-dropdown-item conv-dropdown-danger" data-action="remove-conv" data-conv-id="' + this._esc(convId) + '">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
+        '<span>删除该聊天</span>' +
+      '</button>';
+    document.body.appendChild(menu);
 
-    if (conv.scope === 'personal_workspace') {
-      this.postsLoading = false;
-      this.groupMembersLoading = false;
-      this.groupMembersLoaded = false;
-      this.render();
-      this._bindPostsPanelEvents();
+    // 点击外部关闭
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) {
+        this._closeConvDropdown();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeHandler, true), 0);
+    this._convDropdownCloseHandler = closeHandler;
+
+    // 绑定菜单项点击
+    menu.querySelectorAll('.conv-dropdown-item').forEach(item => {
+      item.onclick = (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        const id = item.dataset.convId;
+        this._closeConvDropdown();
+        if (action === 'hide-conv') {
+          this._openHideConversationDialog(id);
+        } else if (action === 'remove-conv') {
+          this._openRemoveConversationDialog(id);
+        }
+      };
+    });
+  },
+
+  _closeConvDropdown() {
+    const menu = document.getElementById('conv-dropdown-menu');
+    if (menu) menu.remove();
+    if (this._convDropdownCloseHandler) {
+      document.removeEventListener('click', this._convDropdownCloseHandler, true);
+      this._convDropdownCloseHandler = null;
+    }
+  },
+
+  // "不显示该聊天"确认弹窗
+  _openHideConversationDialog(convId) {
+    const conv = Bridge.getConversations().find(c => c.id === convId);
+    if (!conv) return;
+    const name = conv.name || convId.replace(/^#/, '');
+    const dialog = document.getElementById('delete-conversation-dialog');
+    if (!dialog) return;
+    this.deleteConversationTargetId = convId;
+    this.deleteConversationTargetName = name;
+    dialog.innerHTML =
+      '<div class="modal-card dc-modal">' +
+        '<div class="dc-icon-wrap">' +
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' +
+        '</div>' +
+        '<div class="dc-content">' +
+          '<h3 class="dc-title">不显示该聊天？</h3>' +
+        '</div>' +
+        '<div class="modal-footer dc-footer">' +
+          '<button id="dc-cancel-btn" class="btn btn-secondary">取消</button>' +
+          '<button id="dc-confirm-btn" class="btn btn-danger">不显示</button>' +
+        '</div>' +
+      '</div>';
+    dialog.style.display = 'flex';
+    const cancelBtn = document.getElementById('dc-cancel-btn');
+    if (cancelBtn) cancelBtn.onclick = () => { dialog.style.display = 'none'; };
+    const confirmBtn = document.getElementById('dc-confirm-btn');
+    if (confirmBtn) confirmBtn.onclick = () => {
+      dialog.style.display = 'none';
+      this._handleHideConversation(convId);
+    };
+    dialog.onclick = (e) => {
+      if (e.target === dialog) dialog.style.display = 'none';
+    };
+  },
+
+  // "不显示该聊天"：调用已有得本地删除逻辑
+  _handleHideConversation(convId) {
+    const conv = Bridge.getConversations().find(c => c.id === convId);
+    if (!conv) return;
+    const wasActive = Bridge.getActiveConversationId() === convId;
+    const deleted = Bridge.deleteConversationFromList(convId);
+    if (!deleted) {
+      Toast.warn('操作失败');
       return;
     }
-
-    if (conv.type === 'group') {
-      try {
-        // Parallel load: posts + members
-        const [postsResult, membersResult] = await Promise.allSettled([
-          ChatStore.loadGroupPosts(conv.id),
-          ChatStore.getRoomMembers(conv.id).catch(() => []),
-        ]);
-
-        if (postsResult.status === 'rejected') {
-          this.postsError = postsResult.reason?.message || '加载失败';
-        }
-        if (membersResult.status === 'fulfilled') {
-          this.groupMembers = membersResult.value;
-          this.groupMembersLoaded = true;
-          this.groupMembersNotice = '';
-        } else {
-          this.groupMembersError = membersResult.reason?.message || '成员列表加载失败';
-          this.groupMembersNotice = '';
-        }
-      } catch (e) {
-        console.error('[ChatPage] Failed to load posts panel:', e);
-      } finally {
-        this.postsLoading = false;
-        this.groupMembersLoading = false;
-        this.render();
-        this._bindPostsPanelEvents();
+    if (wasActive) {
+      const convs = Bridge.getConversations();
+      const nextConv = convs.find(c => c.scope === 'personal_workspace')
+        || convs.find(c => c.type === 'agent')
+        || convs[0]
+        || null;
+      if (nextConv) {
+        Bridge.setActiveConversation(nextConv.id);
+        UiStore.setActiveConversation(nextConv.id, true);
+      } else {
+        UiStore.resetToListView();
       }
-    } else {
-      this.postsLoading = false;
-      this.groupMembersLoading = false;
-      this.groupMembersLoaded = false;
-      this.render();
     }
+    Toast.success('已不显示该聊天');
   },
 
-  _closePostsPanel() {
-    this.postsPanelOpen = false;
-    this.postsPanelView = 'board';
-    this.invitePanelOpen = false;
-    this.groupMembersNotice = '';
-    this.render();
+  // "删除该聊天"确认弹窗（真实接口待对接）
+  _openRemoveConversationDialog(convId) {
+    const conv = Bridge.getConversations().find(c => c.id === convId);
+    if (!conv) return;
+    const name = conv.name || convId.replace(/^#/, '');
+    const dialog = document.getElementById('delete-conversation-dialog');
+    if (!dialog) return;
+    this.deleteConversationTargetId = convId;
+    this.deleteConversationTargetName = name;
+    dialog.innerHTML =
+      '<div class="modal-card dc-modal">' +
+        '<div class="dc-icon-wrap">' +
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</div>' +
+        '<div class="dc-content">' +
+          '<h3 class="dc-title">确定删除聊天「<span class="dc-name">' + this._esc(name) + '</span>」？</h3>' +
+          '<p class="dc-hint">删除后聊天记录将被清除，且无法恢复。此操作不可撤销。</p>' +
+        '</div>' +
+        '<div class="modal-footer dc-footer">' +
+          '<button id="dc-cancel-btn" class="btn btn-secondary">取消</button>' +
+          '<button id="dc-confirm-btn" class="btn btn-danger">确定删除</button>' +
+        '</div>' +
+      '</div>';
+    dialog.style.display = 'flex';
+    const cancelBtn = document.getElementById('dc-cancel-btn');
+    if (cancelBtn) cancelBtn.onclick = () => { dialog.style.display = 'none'; };
+    const confirmBtn = document.getElementById('dc-confirm-btn');
+    if (confirmBtn) confirmBtn.onclick = () => {
+      dialog.style.display = 'none';
+      // TODO: 对接真实删除接口
+      console.log('[chat] 删除该聊天:', convId, name);
+      Toast.show('删除接口待对接', 'warn');
+    };
+    dialog.onclick = (e) => {
+      if (e.target === dialog) dialog.style.display = 'none';
+    };
   },
 
-  // 刷新 posts panel 内容（任务操作后更新卡片状态）
-  // 由于 _scheduleRender 在 postsPanelOpen 时会跳过，需手动重渲染
-  _refreshPostsPanel() {
-    if (!this.postsPanelOpen) return;
-    const panel = document.getElementById('posts-panel');
-    if (!panel) return;
-    const html = this._renderPostsPanel();
-    // 重建 panel 节点以更新内容
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    const newPanel = wrapper.firstElementChild;
-    if (newPanel) {
-      panel.replaceWith(newPanel);
-      this._bindPostsPanelEvents();
-    }
+
+
+  // ── 创建话题弹窗 ──
+  _renderTopicCreator() {
+    if (!this.topicCreatorOpen) return '';
+    const { topicCreatorTitle, topicCreatorSummary, topicCreatorSubmitting } = this;
+    return `
+    <div class="modal-overlay" id="topic-creator-overlay">
+      <div class="modal-card" style="max-width:26rem;">
+        <div class="modal-header">
+          <h3>创建话题</h3>
+          <button class="icon-btn" id="tc-close-btn" title="关闭">&times;</button>
+        </div>
+        <div class="irc-modal-body">
+          <label class="irc-field-label">话题标题 <span style="color:var(--app-danger);">*</span></label>
+          <input type="text" class="irc-field-input" id="tc-title-input"
+            value="${this._esc(topicCreatorTitle)}" placeholder="输入话题标题" maxlength="60" autocomplete="off" />
+          <label class="irc-field-label">话题描述</label>
+          <textarea class="irc-field-input irc-field-textarea" id="tc-summary-input"
+            placeholder="简要描述话题内容（可选）" maxlength="500">${this._esc(topicCreatorSummary)}</textarea>
+          <div class="irc-field-check" style="margin-top:0.75rem;cursor:default;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--app-muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span style="font-size:0.78rem;color:var(--app-muted);">创建后将自动加入，可在"聊天室"中继续讨论</span>
+          </div>
+        </div>
+        <div class="irc-modal-foot">
+          <button class="btn btn-secondary" id="tc-cancel-btn">取消</button>
+          <button class="btn btn-primary" id="tc-confirm-btn" ${(!topicCreatorTitle.trim() || topicCreatorSubmitting) ? 'disabled' : ''}>
+            ${topicCreatorSubmitting ? '创建中...' : '创建话题'}
+          </button>
+        </div>
+      </div>
+    </div>`;
   },
 
-  _switchPostsPanelToMembers() {
-    this.postsPanelView = 'members';
-    this.invitePanelOpen = false;
-    this.render();
-    this._bindPostsPanelEvents();
+  // ── 申请加入话题确认弹窗 ──
+  _renderJoinTopicConfirm() {
+    if (!this.joinTopicConfirmOpen || !this.joinTopicTarget) return '';
+    const topic = this.joinTopicTarget;
+    return `
+    <div class="modal-overlay" id="join-topic-overlay">
+      <div class="modal-card" style="max-width:24rem;">
+        <div class="modal-header">
+          <h3>申请加入话题</h3>
+          <button class="icon-btn" id="jt-close-btn" title="关闭">&times;</button>
+        </div>
+        <div class="irc-modal-body">
+          <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+            <div style="display:flex;align-items:center;justify-content:center;width:2.75rem;height:2.75rem;border-radius:0.9rem;background:var(--app-brand-soft);color:var(--app-brand);flex-shrink:0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            </div>
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:1rem;font-weight:600;color:var(--app-text);">${this._esc(topic.title)}</div>
+              ${topic.summary ? `<div style="margin-top:0.3rem;font-size:0.82rem;color:var(--app-muted);line-height:1.55;">${this._esc(topic.summary)}</div>` : ''}
+              <div style="margin-top:0.5rem;font-size:0.76rem;color:var(--app-text-muted);">by ${this._esc(topic.creator || '匿名')} · ${topic.memberCount || 0} 人参与</div>
+            </div>
+          </div>
+          <div style="margin-top:0.95rem;padding:0.75rem 0.9rem;border-radius:0.75rem;background:var(--app-subtle-bg);font-size:0.8rem;color:var(--app-text-secondary);line-height:1.55;">
+            加入后将跳转到"聊天室"中对应的话题群聊，可与其他成员实时讨论。
+          </div>
+        </div>
+        <div class="irc-modal-foot">
+          <button class="btn btn-secondary" id="jt-cancel-btn">取消</button>
+          <button class="btn btn-primary" id="jt-confirm-btn">确认加入</button>
+        </div>
+      </div>
+    </div>`;
   },
 
-  _switchPostsPanelToBoard() {
-    this.postsPanelView = 'board';
-    this.invitePanelOpen = false;
-    this.render();
-    this._bindPostsPanelEvents();
-  },
+
+
 
   // 对齐 Vue 版 MessageAttachmentCard：点击聊天中的任务卡片打开任务详情
   _bindMessagePostCards() {
@@ -2728,9 +2233,12 @@ const ChatPage = {
         mainBtn.onclick = (e) => {
           e.preventDefault();
           const resourceUrl = mainBtn.dataset.resourceUrl || card.dataset.resourceUrl;
+          const cardTitle = mainBtn.dataset.cardTitle || card.dataset.cardTitle || 'WebView';
           const postId = card.dataset.postId;
-          if (card.classList.contains('msg-post-card-webview') && resourceUrl) {
-            window.open(resourceUrl, '_blank', 'noopener');
+          // 图片和 H5 卡片统一在 iframe overlay 中打开
+          if ((card.classList.contains('msg-post-card-image') || card.classList.contains('msg-post-card-webview')) && resourceUrl) {
+            const attMeta = this._extractAttMetaFromCard(card, resourceUrl, cardTitle);
+            this._openWebviewOverlay(attMeta);
             return;
           }
           if (postId) this._openPostDetail(postId);
@@ -2758,10 +2266,41 @@ const ChatPage = {
           e.preventDefault();
           e.stopPropagation();
           const resourceUrl = moreBtn.dataset.resourceUrl || card.dataset.resourceUrl;
-          this._showAttachmentActionMenu(resourceUrl, e);
+          this._showAttachmentActionMenu(resourceUrl, e, card);
         };
       }
     });
+  },
+
+  // 从卡片 DOM 元素提取附件元数据（对齐 Vue 版 taskMetadataFromAttachment）
+  _extractAttMetaFromCard(card, url, title) {
+    const inputText = card.dataset.attInputText || '';
+    const inputUserId = card.dataset.attInputUserId || '';
+    const inputPhone = card.dataset.attInputPhone || '';
+    const inputDisplayName = card.dataset.attInputDisplayName || '';
+
+    const input = {};
+    if (inputText) input.text = inputText;
+    if (inputUserId || inputPhone || inputDisplayName) {
+      input.requester = {};
+      if (inputUserId) input.requester.userId = inputUserId;
+      if (inputPhone) input.requester.phone = inputPhone;
+      if (inputDisplayName) input.requester.displayName = inputDisplayName;
+    }
+
+    return {
+      url,
+      title,
+      summary: card.dataset.attSummary || undefined,
+      taskNo: card.dataset.attTaskNo || undefined,
+      providerId: card.dataset.attProviderId || undefined,
+      skillId: card.dataset.attSkillId || undefined,
+      sourceSkillId: card.dataset.attSourceSkillId || undefined,
+      objectKind: card.dataset.attObjectKind || undefined,
+      artifactType: card.dataset.attArtifactType || undefined,
+      mimeType: card.dataset.attMimeType || undefined,
+      input: (input.text || input.requester) ? input : undefined,
+    };
   },
 
   // 对齐 Vue 版 ForwardModal：转发资源到其他会话
@@ -2770,7 +2309,7 @@ const ChatPage = {
     const existing = document.querySelector('.forward-modal-overlay');
     if (existing) existing.remove();
 
-    const conversations = ChatStore.getConversations().filter(c => c.type !== 'agent');
+    const conversations = Bridge.getConversations().filter(c => c.type !== 'agent');
     if (!conversations.length) {
       Toast.show('没有可转发的会话', 'info');
       return;
@@ -2817,7 +2356,7 @@ const ChatPage = {
       item.onmouseleave = () => { item.style.background = 'transparent'; };
       item.onclick = () => {
         // 对齐 Vue 版 forwardTo：发送消息 + 附件到目标会话
-        ChatStore.sendUserMessage(`[转发卡片] ${cardTitle}`, conv.id, {
+        Bridge.sendUserMessage(`[转发卡片] ${cardTitle}`, conv.id, {
           attachments: [{ type: 'webview', url: resourceUrl, title: cardTitle }],
         });
         Toast.show(`已转发到 ${conv.name || conv.id}`, 'success');
@@ -2833,7 +2372,7 @@ const ChatPage = {
   },
 
   // 对齐 Vue 版 MessageAttachmentActionMenu：卡片更多操作菜单
-  _showAttachmentActionMenu(resourceUrl, evt) {
+  _showAttachmentActionMenu(resourceUrl, evt, card) {
     if (!resourceUrl) return;
     const existing = document.querySelector('.attachment-action-menu');
     if (existing) existing.remove();
@@ -2849,6 +2388,9 @@ const ChatPage = {
     const actions = [
       { id: 'open', label: '打开卡片', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>' },
       { id: 'copy_link', label: '复制链接', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' },
+      // 对齐协议 §5.3：用户显式投递到设备
+      { id: 'device_open', label: '投递到设备', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' },
+      { id: 'device_speak', label: '播报到设备', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>' },
       { id: 'save_local', label: '保存到本地', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' },
     ];
 
@@ -2863,7 +2405,12 @@ const ChatPage = {
         e.preventDefault();
         menu.remove();
         if (action.id === 'open') {
-          window.open(resourceUrl, '_blank', 'noopener');
+          // 图片和 H5 卡片统一在 iframe overlay 中打开
+          const cardTitle = card?.dataset?.cardTitle || 'H5 卡片';
+          const attMeta = card
+            ? this._extractAttMetaFromCard(card, resourceUrl, cardTitle)
+            : { url: resourceUrl, title: cardTitle };
+          this._openWebviewOverlay(attMeta);
         } else if (action.id === 'copy_link') {
           navigator.clipboard?.writeText(resourceUrl).then(() => {
             Toast.show('链接已复制', 'success');
@@ -2912,6 +2459,12 @@ const ChatPage = {
               a.remove();
               Toast.show('已尝试保存', 'info');
             });
+        } else if (action.id === 'device_open') {
+          // 对齐协议 §5.3 + §6：投递内容到设备
+          this._dispatchContentToDevice(resourceUrl, 'H5 卡片');
+        } else if (action.id === 'device_speak') {
+          // 对齐协议 §5.3 + §7：播报到设备
+          this._dispatchSpeakToDevice(resourceUrl);
         }
       };
       menu.appendChild(item);
@@ -2927,6 +2480,219 @@ const ChatPage = {
     setTimeout(() => document.addEventListener('click', closeHandler, true), 0);
   },
 
+  // ── WebView iframe overlay + postMessage Bridge（对齐协议 §4.2）──
+
+  /**
+   * 在 iframe overlay 中打开 H5 页面，并建立 postMessage Bridge
+   * 对齐协议 §4.2.1：页面加载后由宿主发送 bridge_context
+   * @param {object|string} attMeta - 附件元数据对象或 URL 字符串（向后兼容）
+   */
+  _openWebviewOverlay(attMeta) {
+    // 兼容字符串参数
+    const meta = typeof attMeta === 'string' ? { url: attMeta } : (attMeta || {});
+    const url = meta.url || '';
+    const title = meta.title || 'WebView';
+
+    // 关闭已有的 overlay
+    this._closeWebviewOverlay();
+
+    const convId = Bridge.getActiveConversationId();
+    if (!convId) {
+      Toast.show('请先选择一个会话', 'info');
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'webview-overlay';
+    overlay.className = 'webview-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:var(--app-page-bg);';
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;border-bottom:1px solid var(--app-border);background:var(--app-surface);min-height:3rem;';
+    header.innerHTML = `
+      <div style="display:flex;align-items:center;gap:0.5rem;min-width:0;">
+        <button type="button" id="webview-overlay-back" style="display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;border:0;border-radius:0.5rem;background:transparent;color:var(--app-text);cursor:pointer;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
+        </button>
+        <span style="font-size:0.9rem;font-weight:600;color:var(--app-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._esc(title || 'WebView')}</span>
+      </div>
+      <div style="display:flex;gap:0.4rem;">
+        <button type="button" id="webview-overlay-open-external" title="在外部打开" style="display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;border:0;border-radius:0.5rem;background:transparent;color:var(--app-muted);cursor:pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+        </button>
+        <button type="button" id="webview-overlay-device" title="投递到设备" style="display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;border:0;border-radius:0.5rem;background:transparent;color:var(--app-muted);cursor:pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </button>
+      </div>
+    `;
+    overlay.appendChild(header);
+
+    // 内容容器
+    const contentContainer = document.createElement('div');
+    contentContainer.style.cssText = 'flex:1;min-height:0;position:relative;';
+
+    const isImage = this._isImageResourceUrl(url);
+
+    // 对齐 Vue 版 TaskFloatingWindow.vue webviewUrl：
+    // 为 iframe URL 注入 phone 参数，使 H5 医疗卡片等页面能识别当前用户并加载其数据
+    const frameUrl = (() => {
+      const phone = Bridge.getPhone();
+      if (!phone) return url;
+      try {
+        const parsed = new URL(url);
+        if (!parsed.searchParams.has('phone')) {
+          parsed.searchParams.set('phone', phone);
+        }
+        return parsed.toString();
+      } catch {
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}phone=${encodeURIComponent(phone)}`;
+      }
+    })();
+
+    let iframe = null;
+
+    if (isImage) {
+      // 图片用 <img> 渲染，避免 iframe 跨域限制导致无法显示
+      const imgWrap = document.createElement('div');
+      imgWrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto;background:#f9fafb;';
+      const imgEl = document.createElement('img');
+      imgEl.src = url;
+      imgEl.alt = title || '图片';
+      imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+      imgEl.referrerPolicy = 'no-referrer';
+      imgEl.onerror = () => {
+        imgWrap.innerHTML = '<div style="color:var(--app-muted);font-size:0.86rem;">图片加载失败</div>';
+      };
+      imgWrap.appendChild(imgEl);
+      contentContainer.appendChild(imgWrap);
+    } else {
+      // H5 页面用 iframe 渲染（先不设置 src，等 bridge 监听器注册后再加载，
+      // 避免 H5 页面 interactive.ready 先于 message 监听到达导致丢失）
+      iframe = document.createElement('iframe');
+      iframe.style.cssText = 'width:100%;height:100%;border:0;';
+      iframe.setAttribute('allow', 'microphone; camera; autoplay; fullscreen');
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+      contentContainer.appendChild(iframe);
+    }
+    overlay.appendChild(contentContainer);
+
+    // Bridge status bar（仅 H5 页面需要）
+    let statusBar = null;
+    if (!isImage) {
+      statusBar = document.createElement('div');
+      statusBar.id = 'webview-bridge-status';
+      statusBar.style.cssText = 'padding:0.4rem 1rem;font-size:0.72rem;color:var(--app-muted);border-top:1px solid var(--app-border);background:var(--app-surface);display:flex;align-items:center;gap:0.4rem;';
+      statusBar.innerHTML = '<span style="display:inline-flex;width:6px;height:6px;border-radius:50%;background:var(--app-warning);"></span> Bridge 连接中...';
+      overlay.appendChild(statusBar);
+    }
+
+    document.body.appendChild(overlay);
+
+    // 初始化交互资源 Bridge（仅 H5 页面）
+    if (!isImage && iframe) {
+      // 对齐 Vue 版 useInteractiveResourceBridge onMounted：
+      // 先注册 message 监听器，再设置 iframe.src 开始加载，
+      // 避免 H5 页面 interactive.ready 先于监听注册到达导致丢失
+      Bridge.openInteractiveResource({
+        url,
+        title,
+        conversationId: convId,
+        summary: meta.summary,
+        taskNo: meta.taskNo,
+        providerId: meta.providerId,
+        skillId: meta.skillId,
+        sourceSkillId: meta.sourceSkillId,
+        objectKind: meta.objectKind,
+        artifactType: meta.artifactType,
+        mimeType: meta.mimeType,
+        input: meta.input,
+      }, () => iframe.contentWindow);
+
+      // iframe 加载完成时通知 bridge
+      iframe.onload = () => {
+        Bridge.onInteractiveFrameLoaded(() => iframe.contentWindow);
+      };
+
+      // 监听器注册后再设置 src，开始加载 H5 页面（使用注入 phone 参数的 URL）
+      iframe.src = frameUrl;
+    }
+
+    // 绑定按钮事件
+    document.getElementById('webview-overlay-back').onclick = () => this._closeWebviewOverlay();
+    document.getElementById('webview-overlay-open-external').onclick = () => {
+      window.open(frameUrl, '_blank', 'noopener');
+    };
+    document.getElementById('webview-overlay-device').onclick = async () => {
+      await this._dispatchContentToDevice(frameUrl, title);
+    };
+
+    // 监听 bridge 状态更新（仅 H5 页面）
+    if (!isImage && statusBar) {
+      this._webviewBridgeTimer = setInterval(() => {
+        const state = Bridge.getInteractiveBridgeState();
+        if (state.bridgeReady) {
+          statusBar.innerHTML = '<span style="display:inline-flex;width:6px;height:6px;border-radius:50%;background:#10b981;"></span> Bridge 已连接';
+        }
+      }, 1000);
+    }
+  },
+
+  _closeWebviewOverlay() {
+    const overlay = document.getElementById('webview-overlay');
+    if (overlay) overlay.remove();
+    Bridge.closeInteractiveResource();
+    if (this._webviewBridgeTimer) {
+      clearInterval(this._webviewBridgeTimer);
+      this._webviewBridgeTimer = null;
+    }
+  },
+
+  /**
+   * 投递内容到设备（对齐协议 §5.3 + §6）
+   */
+  async _dispatchContentToDevice(url, title) {
+    const convId = Bridge.getActiveConversationId();
+    if (!convId) {
+      Toast.show('请先选择一个会话', 'info');
+      return;
+    }
+    Toast.show('正在投递到设备...', 'info');
+    const result = await Bridge.dispatchContentToDevice({
+      url,
+      title,
+      conversationId: convId,
+      attachment: { url, title, type: 'webview' },
+    });
+    if (result.ok) {
+      Toast.show('已投递，等待设备响应', 'success');
+    } else {
+      Toast.show(`投递失败：${result.error || '未知错误'}`, 'error');
+    }
+  },
+
+  /**
+   * 播报到设备（对齐协议 §5.3 + §7）
+   */
+  async _dispatchSpeakToDevice(resourceUrl) {
+    const convId = Bridge.getActiveConversationId();
+    if (!convId) {
+      Toast.show('请先选择一个会话', 'info');
+      return;
+    }
+    Toast.show('正在发送播报指令...', 'info');
+    const result = await Bridge.dispatchSpeakToDevice({
+      text: '请查看大屏上的内容。',
+      conversationId: convId,
+    });
+    if (result.ok) {
+      Toast.show('播报指令已发送', 'success');
+    } else {
+      Toast.show(`播报失败：${result.error || '未知错误'}`, 'error');
+    }
+  },
+
   // 绑定失败消息的重发按钮（对齐微信交互：点击红色感叹号重发）
   _bindRetryButtons() {
     const btns = this.container.querySelectorAll('.msg-delivery.failed[data-retry-msg-id]');
@@ -2937,703 +2703,165 @@ const ChatPage = {
         const msgId = btn.dataset.retryMsgId;
         const convId = btn.dataset.retryConvId;
         if (!msgId || !convId) return;
-        ChatStore.retrySend(msgId, convId);
+        Bridge.retrySend(msgId, convId);
       };
     });
   },
 
-  _bindPostsPanelEvents() {
-    const conv = ChatStore.getActiveConversation();
-    const isWorkspace = conv && conv.scope === 'personal_workspace';
-    const panelView = this.postsPanelView || 'board';
-
-    // Close button
-    const closeBtn = document.getElementById('pp-close-btn');
-    if (closeBtn) closeBtn.onclick = () => this._closePostsPanel();
-
-    // Overlay click to close
-    const overlay = document.getElementById('pp-overlay');
-    if (overlay) overlay.onclick = () => this._closePostsPanel();
-
-    if (isWorkspace) {
-      const openAiBtn = document.getElementById('pp-workspace-open-ai-btn');
-      if (openAiBtn) openAiBtn.onclick = () => { window.location.hash = '#/ai'; };
-      const viewMoreTasksBtn = document.getElementById('ws-view-more-tasks');
-      if (viewMoreTasksBtn) viewMoreTasksBtn.onclick = () => {
-        this._closePostsPanel();
-        window.location.hash = '#/tasks';
-      };
-      const targetSelect = document.getElementById('pp-workspace-target-select');
-      if (targetSelect) {
-        targetSelect.onchange = (event) => {
-          this.workspacePublishTargetId = event.target.value;
-          this.render();
-          this._bindPostsPanelEvents();
-        };
-      }
-
-      this.container.querySelectorAll('[data-workspace-action]').forEach(btn => {
-        btn.onclick = async () => {
-          const action = btn.dataset.workspaceAction;
-          const taskId = btn.dataset.taskId;
-          const skillId = btn.dataset.skillId;
-          if (!conv) return;
-
-          if (action === 'create-task') {
-            const task = await ChatStore.createPersonalTask({
-              title: '新任务',
-              summary: '在 AI 空间快捷创建',
-              sourceConversationId: conv.id,
-              deliveryTarget: { type: 'conversation', conversationId: conv.id },
-            });
-            if (task) {
-              Toast.success('任务已创建，可在任务中心查看');
-              this._closePostsPanel();
-              window.location.hash = '#/tasks';
-            } else {
-              Toast.warn('任务创建失败，请稍后再试');
-            }
-            return;
-          }
-
-          if (action === 'summarize') {
-            this._closePostsPanel();
-            ChatStore.setActiveConversation(conv.id);
-            UiStore.setActiveConversation(conv.id);
-            ChatStore.sendUserMessage('请总结当前会话的主要内容', conv.id);
-            return;
-          }
-
-          if (action === 'open-devices') {
-            this._closePostsPanel();
-            this._openDevicesPage();
-            return;
-          }
-
-          if (action === 'publish-draft-quick' || action === 'publish-draft') {
-            const targetId = this.workspacePublishTargetId || ChatStore.getConversations().find(item => item.type === 'group' && item.scope !== 'personal_workspace')?.id;
-            const publishSkillId = skillId || draftActions[0]?.skillId;
-            if (!publishSkillId || !targetId) {
-              Toast.warn(targetId ? '暂无可发布的草稿' : '请先选择目标群聊');
-              return;
-            }
-            try {
-              await ChatStore.publishWorkspaceDraft(publishSkillId, targetId, conv.id);
-              const targetName = ChatStore.getConversations().find(item => item.id === targetId)?.name || '目标群聊';
-              Toast.success(`已发布到 ${targetName}`);
-            } catch (e) {
-              Toast.warn(e.message || '发布失败，请稍后再试');
-            }
-            return;
-          }
-
-          if (!taskId) return;
-
-          if (action === 'complete-task') {
-            const ok = await ChatStore.completePersonalTask(taskId);
-            if (!ok) { Toast.warn('任务完成失败，请稍后再试'); return; }
-            Toast.success('任务已完成');
-            this._refreshPostsPanel();
-            return;
-          }
-
-          if (action === 'cancel-task') {
-            const ok = await ChatStore.cancelPersonalTask(taskId);
-            if (!ok) { Toast.warn('任务取消失败，请稍后再试'); return; }
-            Toast.success('任务已取消');
-            this._refreshPostsPanel();
-            return;
-          }
-
-          if (action === 'reschedule-task') {
-            const task = ChatStore.getPersonalTasksForCurrentUser().find(item => item.id === taskId);
-            const base = task?.dueAt && task.dueAt > Date.now() ? task.dueAt : Date.now();
-            const ok = await ChatStore.reschedulePersonalTask(taskId, base + 60 * 60 * 1000);
-            if (!ok) { Toast.warn('任务延期失败，请稍后再试'); return; }
-            Toast.success('任务已延后1小时');
-            this._refreshPostsPanel();
-            return;
-          }
-
-          if (action === 'open-task-source') {
-            const task = ChatStore.getPersonalTasksForCurrentUser().find(item => item.id === taskId);
-            const target = this._parseDeliveryTarget(task?.deliveryTarget);
-            const conversationId =
-              target?.type === 'conversation' || target?.type === 'both'
-                ? target.conversationId
-                : task?.sourceConversationId;
-            if (!conversationId) {
-              Toast.warn('这个任务没有绑定来源群聊');
-              return;
-            }
-            this._closePostsPanel();
-            ChatStore.setActiveConversation(conversationId);
-            UiStore.setActiveConversation(conversationId);
-          }
-        };
-      });
-      return;
-    }
-
-    if (panelView === 'board') {
-      // Banner create post button
-      const bannerCreateBtn = document.getElementById('pp-banner-create-btn');
-      if (bannerCreateBtn) bannerCreateBtn.onclick = () => this._openCreatePost();
-
-      // Header create post button
-      const createBtn = document.getElementById('pp-create-btn');
-      if (createBtn) createBtn.onclick = () => this._openCreatePost();
-
-      // Member preview section → open members view
-      const memberPreviewBtn = document.getElementById('pp-member-preview-btn');
-      if (memberPreviewBtn) memberPreviewBtn.onclick = (e) => {
-        // Don't trigger if clicking invite button
-        if (e.target.closest('#pp-member-invite-btn')) return;
-        this._switchPostsPanelToMembers();
-      };
-
-      // Invite button in member preview → open members view with invite open
-      const memberInviteBtn = document.getElementById('pp-member-invite-btn');
-      if (memberInviteBtn) memberInviteBtn.onclick = () => {
-        this.invitePanelOpen = true;
-        this._switchPostsPanelToMembers();
-      };
-
-      // Post card clicks
-      this.container.querySelectorAll('.pp-post-card').forEach(card => {
-        card.onclick = () => {
-          const postId = card.dataset.postId;
-          if (postId) this._openPostDetail(postId);
-        };
-      });
-
-      const viewAllBtn = document.getElementById('pp-view-all-btn');
-      if (viewAllBtn) viewAllBtn.onclick = () => Toast.featureUnavailable();
-    } else {
-      // Members view
-      // Back to board button
-      const backBtn = document.getElementById('pp-back-to-board-btn');
-      if (backBtn) backBtn.onclick = () => this._switchPostsPanelToBoard();
-
-      // Invite toggle button
-      const inviteToggleBtn = document.getElementById('pp-members-invite-toggle-btn');
-      if (inviteToggleBtn) inviteToggleBtn.onclick = () => {
-        this.invitePanelOpen = !this.invitePanelOpen;
-        this.render();
-        this._bindPostsPanelEvents();
-      };
-
-      const refreshInlineBtn = document.getElementById('pp-members-refresh-inline-btn');
-      if (refreshInlineBtn) refreshInlineBtn.onclick = () => this._refreshPostPanelMembers();
-
-      // Invite input
-      const inviteInput = document.getElementById('pp-invite-input');
-      if (inviteInput) {
-        inviteInput.oninput = (e) => {
-          this.invitePhone = e.target.value;
-          const btn = document.getElementById('pp-invite-confirm-btn');
-          if (btn) btn.disabled = !e.target.value.trim();
-        };
-      }
-
-      // Invite confirm button
-      const inviteConfirmBtn = document.getElementById('pp-invite-confirm-btn');
-      if (inviteConfirmBtn) inviteConfirmBtn.onclick = () => this._doInviteFromPostPanel();
-
-      // Remove member buttons
-      this.container.querySelectorAll('.pp-member-remove-btn').forEach(btn => {
-        btn.onclick = () => {
-          const memberId = btn.dataset.memberId;
-          const memberKind = btn.dataset.memberKind || 'user';
-          if (memberId) this._doRemoveMemberFromPostPanel(memberId, memberKind);
-        };
-      });
-    }
-  },
-
-  async _refreshPostPanelMembers() {
-    const conv = ChatStore.getActiveConversation();
-    if (!conv) return;
-
-    this.groupMembersLoading = true;
-    this.render();
-    try {
-      const members = await ChatStore.getRoomMembers(conv.id);
-      this.groupMembers = members;
-      this.groupMembersLoaded = true;
-      this.groupMembersError = '';
-      this.groupMembersNotice = '';
-    } catch (e) {
-      console.error('[ChatPage] Failed to refresh members:', e);
-      this.groupMembersError = e.message || '刷新失败';
-      this.groupMembersNotice = '';
-    } finally {
-      this.groupMembersLoading = false;
-      this.render();
-      this._bindPostsPanelEvents();
-    }
-  },
-
-  async _doInviteFromPostPanel() {
-    const conv = ChatStore.getActiveConversation();
-    if (!conv) return;
-
-    const phone = this.invitePhone.trim();
-    if (!phone) {
-      Toast.warn('请输入手机号');
-      return;
-    }
-
-    try {
-      const members = await ChatStore.inviteRoomMember({
-        roomId: conv.id,
-        memberKind: 'phone',
-        phone,
-        role: 'member',
-      });
-      this.groupMembers = members;
-      this.groupMembersNotice = '';
-      this.groupMembersLoaded = true;
-      Toast.success('邀请成功');
-      this.invitePhone = '';
-      this.invitePanelOpen = false;
-      this.render();
-      this._bindPostsPanelEvents();
-    } catch (e) {
-      console.error('[ChatPage] Failed to invite member:', e);
-      Toast.error(e.message || '邀请失败');
-    }
-  },
-
-  async _doRemoveMemberFromPostPanel(memberId, memberKind = 'user') {
-    const conv = ChatStore.getActiveConversation();
-    if (!conv) return;
-
-    if (!confirm('确定要移除该成员吗？')) return;
-
-    try {
-      const members = await ChatStore.removeRoomMember(conv.id, memberKind, memberId);
-      this.groupMembers = members;
-      this.groupMembersLoaded = true;
-      this.groupMembersNotice = members.length ? '' : '服务端成员列表为空，已先展示本地会话记录。';
-      Toast.success('已移除');
-      this.render();
-      this._bindPostsPanelEvents();
-    } catch (e) {
-      console.error('[ChatPage] Failed to remove member:', e);
-      Toast.error(e.message || '移除失败');
-    }
-  },
 
   // ── Post Creator Modal (对齐 Vue PostCreatorFullScreen 内容) ─
-  _renderPostCreator() {
-    const conv = ChatStore.getActiveConversation();
-    const { postCreatorOpen, postCreatorSubmitting, postCreatorType, postCreatorTitle, postCreatorSummary, postCreatorDeadline, postCreatorResourceUrl, postCreatorFeedbackEnabled } = this;
 
-    if (!postCreatorOpen) return '';
 
-    const templates = {
-      homework: {
-        label: '家庭作业',
-        desc: '下发互动课本、练习题或作业任务链接',
-        icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6f44ff" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
-        accent: '#7c4dff',
-        accentSoft: 'rgba(124,77,255,0.12)',
-      },
-      event: {
-        label: '群活动',
-        desc: '组织签到、报名或参与确认',
-        icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff6c1f" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
-        accent: '#ff7a1f',
-        accentSoft: 'rgba(255,122,31,0.12)',
-      },
-      news: {
-        label: '群资讯',
-        desc: '发布通知、新闻或群内公告',
-        icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#19a863" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>`,
-        accent: '#21b36f',
-        accentSoft: 'rgba(33,179,111,0.12)',
-      },
-    };
+  // ── 话题弹窗事件绑定 ──
+  _bindTopicDialogEvents() {
+    // 创建话题弹窗
+    const tcClose = document.getElementById('tc-close-btn');
+    if (tcClose) tcClose.onclick = () => this._closeCreateTopic();
+    const tcCancel = document.getElementById('tc-cancel-btn');
+    if (tcCancel) tcCancel.onclick = () => this._closeCreateTopic();
+    const tcOverlay = document.getElementById('topic-creator-overlay');
+    if (tcOverlay) tcOverlay.onclick = (e) => { if (e.target === tcOverlay) this._closeCreateTopic(); };
+    const tcConfirm = document.getElementById('tc-confirm-btn');
+    if (tcConfirm) tcConfirm.onclick = () => this._submitCreateTopic();
+    const tcTitle = document.getElementById('tc-title-input');
+    if (tcTitle) {
+      tcTitle.oninput = () => {
+        this.topicCreatorTitle = tcTitle.value;
+        const btn = document.getElementById('tc-confirm-btn');
+        if (btn) btn.disabled = !tcTitle.value.trim() || this.topicCreatorSubmitting;
+      };
+      tcTitle.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); this._submitCreateTopic(); } };
+    }
+    const tcSummary = document.getElementById('tc-summary-input');
+    if (tcSummary) tcSummary.oninput = () => { this.topicCreatorSummary = tcSummary.value; };
 
-    const meta = this._creatorTemplateMeta(postCreatorType);
-    const titleLen = postCreatorTitle.length;
-    const summaryLen = postCreatorSummary.length;
-
-    return `
-    <div class="td-drawer-overlay" id="post-creator-page">
-      <div class="td-drawer">
-        <div class="td-drawer-header">
-          <button id="pc-close-btn" class="td-drawer-back" title="返回">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
-          </button>
-          <div class="td-drawer-title">发布任务</div>
-        </div>
-        <div class="td-drawer-body">
-        <!-- Template Picker -->
-        <div class="pc-fs-section-card" style="margin-top:0;">
-          <div class="pc-fs-section-label">任务类型</div>
-          <div class="pc-fs-template-grid">
-            ${Object.entries(templates).map(([key, tpl]) => `
-              <button class="pc-fs-template-card ${postCreatorType === key ? 'selected' : ''}" data-pc-template="${key}" style="${postCreatorType === key ? `border-color:${tpl.accent};background:${tpl.accentSoft};` : ''}">
-                <div class="pc-fs-template-icon" style="background:${tpl.accentSoft};color:${tpl.accent};">
-                  ${tpl.icon.replace('stroke="#6f44ff"', `stroke="${tpl.accent}"`).replace('stroke="#ff6c1f"', `stroke="${tpl.accent}"`).replace('stroke="#19a863"', `stroke="${tpl.accent}"`)}
-                </div>
-                <div class="pc-fs-template-label">${tpl.label}</div>
-                <div class="pc-fs-template-desc">${tpl.desc}</div>
-                ${postCreatorType === key ? `<div class="pc-fs-template-check" style="background:${tpl.accent};">✓</div>` : ''}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-
-        <!-- Title -->
-        <div class="pc-fs-section-card">
-          <div class="pc-fs-section-label">任务标题 <span class="pc-fs-required">*</span></div>
-          <div class="pc-fs-input-wrap">
-            <input id="pc-title-input" type="text" maxlength="60" placeholder="输入任务标题" value="${this._esc(postCreatorTitle)}" style="padding-right:3.2rem;">
-            <div class="pc-fs-counter" id="pc-title-counter">${titleLen}/60</div>
-          </div>
-        </div>
-
-        <!-- Summary -->
-        <div class="pc-fs-section-card">
-          <div class="pc-fs-section-label">任务内容 <span class="pc-fs-required">*</span></div>
-          <div class="pc-fs-textarea-wrap">
-            <textarea id="pc-summary-input" rows="5" maxlength="2000" placeholder="${this._esc(meta.defaultSummary)}" style="padding-bottom:1.8rem;">${this._esc(postCreatorSummary)}</textarea>
-            <div class="pc-fs-counter" id="pc-summary-counter">${summaryLen}/2000</div>
-          </div>
-        </div>
-
-        <!-- Resource URL -->
-        <div class="pc-fs-section-card">
-          <div class="pc-fs-section-label">${this._esc(meta.resourceLabel)}</div>
-          <div class="pc-fs-input-wrap">
-            <input id="pc-resource-input" type="url" placeholder="${this._esc(meta.resourcePlaceholder)}" value="${this._esc(postCreatorResourceUrl)}">
-          </div>
-          <div class="pc-fs-section-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            <span>支持链接、文档、图片等资源，方便成员查看和完成任务</span>
-          </div>
-        </div>
-
-        <!-- Deadline -->
-        <div class="pc-fs-section-card">
-          <div class="pc-fs-section-label">截止时间 <span class="pc-fs-required">*</span></div>
-          <div class="pc-fs-input-wrap">
-            <input id="pc-deadline-input" type="datetime-local" value="${this._esc(postCreatorDeadline)}">
-          </div>
-          <div class="pc-fs-section-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            <span>选择截止日期和时间后，任务将在该时间自动截止</span>
-          </div>
-        </div>
-
-        <!-- Feedback Toggle -->
-        <div class="pc-fs-section-card">
-          <button id="pc-feedback-toggle-btn" type="button" style="display:flex;width:100%;align-items:center;justify-content:space-between;border:none;background:none;padding:0;cursor:pointer;">
-            <span style="display:flex;align-items:center;gap:0.45rem;font-size:0.95rem;font-weight:700;letter-spacing:-0.02em;color:var(--app-text);">
-              允许成员提交反馈
-              <span style="display:inline-flex;height:1.1rem;width:1.1rem;align-items:center;justify-content:center;border-radius:999px;border:1px solid var(--app-border);font-size:0.68rem;color:var(--app-muted);">?</span>
-            </span>
-            <span style="position:relative;display:inline-flex;height:2rem;width:3.5rem;align-items:center;border-radius:999px;padding:0.25rem;transition:all .18s ease;background:${postCreatorFeedbackEnabled ? 'linear-gradient(135deg,#8a63ff 0%,#6f44ff 100%)' : '#d9deec'};">
-              <span style="height:1.5rem;width:1.5rem;border-radius:999px;background:#fff;box-shadow:0 4px 12px rgba(48,66,112,0.18);transform:translateX(${postCreatorFeedbackEnabled ? '1.45rem' : '0'});transition:transform .18s ease;"></span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="td-drawer-footer">
-        <button id="pc-publish-btn" class="pc-fs-publish-btn" ${postCreatorSubmitting ? 'disabled' : ''}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          ${postCreatorSubmitting ? '发布中...' : '发布任务'}
-        </button>
-      </div>
-      </div>
-    </div>`;
+    // 加入话题确认弹窗
+    const jtClose = document.getElementById('jt-close-btn');
+    if (jtClose) jtClose.onclick = () => this._closeJoinTopicConfirm();
+    const jtCancel = document.getElementById('jt-cancel-btn');
+    if (jtCancel) jtCancel.onclick = () => this._closeJoinTopicConfirm();
+    const jtOverlay = document.getElementById('join-topic-overlay');
+    if (jtOverlay) jtOverlay.onclick = (e) => { if (e.target === jtOverlay) this._closeJoinTopicConfirm(); };
+    const jtConfirm = document.getElementById('jt-confirm-btn');
+    if (jtConfirm) jtConfirm.onclick = () => this._confirmJoinTopic();
   },
 
-  // ── Task Detail Drawer (对齐 Vue TaskFullScreen 内容) ─
-  _renderTaskDetail() {
-    const { postDetailOpen, postDetailPost, postDetailResponseText, postDetailSelectedFile } = this;
-    if (!postDetailOpen || !postDetailPost) return '';
-
-    const post = postDetailPost;
-    const statusLabel = this._postStatusLabel(post);
-    const statusClass = this._postStatusClass(post);
-    const deadline = post.deadlineAt ? this._formatDeadline(post.deadlineAt) : '长期有效';
-    const responses = post.responses || [];
-    const submitLabel = this._postDefaultSubmitLabel(post);
-    const resourceLabel = this._postResourceActionLabel(post);
-    const resourceSubtitle = this._postResourceSubtitle(post);
-    const participantPreview = responses.slice(0, 5);
-    const showCloseAction = post.type === 'task' && post.status !== 'closed';
-
-    return `
-    <div class="td-drawer-overlay" id="task-detail-page">
-      <div class="td-drawer-backdrop" id="td-backdrop"></div>
-      <div class="td-drawer">
-        <div class="td-drawer-header">
-          <button id="td-back-btn" class="td-drawer-back" title="返回">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
-          </button>
-          <div class="td-drawer-title">任务详情</div>
-        </div>
-        <div class="td-drawer-body">
-          <div class="td-scroll">
-          <!-- Hero -->
-          <div class="td-hero">
-            <div class="td-hero-icon">${this._postIconSvg(post)}</div>
-            <div class="td-hero-content">
-              <div class="td-hero-title-row">
-                <div class="td-hero-title">${this._esc(post.title)}</div>
-                <span class="td-status ${statusClass}">${statusLabel}</span>
-              </div>
-              <div class="td-deadline">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                <span>截止时间：${deadline}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tip -->
-          <div class="td-tip">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:0.2rem;flex-shrink:0;"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6.4-4.8-6.4 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
-            <span>${this._esc(post.summary || '')}</span>
-          </div>
-
-          <!-- Task Content -->
-          <div class="td-section">
-            <div class="td-section-title">任务内容</div>
-            <div class="td-section-text">${this._esc(post.summary || '')}</div>
-          </div>
-
-          <!-- Participants -->
-          ${participantPreview.length ? `
-          <div class="td-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
-              <div class="td-section-title">参与成员（${responses.length}人）</div>
-              <button id="td-view-all-participants-btn" type="button" style="background:none;font-size:0.82rem;font-weight:600;color:var(--app-brand);">查看全部</button>
-            </div>
-            <div class="td-avatar-row">
-              ${participantPreview.map((item, index) => `
-                <span class="td-avatar">${this._esc((item.actorName || item.userName || '成员').slice(-2) || `成${index + 1}`)}</span>
-              `).join('')}
-              <button id="td-view-all-participants-more-btn" type="button" class="td-avatar td-avatar-more">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
-              </button>
-            </div>
-          </div>` : ''}
-
-          <!-- Attachment -->
-          ${post.resourceUrl ? `
-          <div class="td-section">
-            <div class="td-section-title">附件（1）</div>
-            <div class="td-file-item" style="margin-top:0.85rem;">
-              <div class="td-file-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </div>
-              <div style="min-width:0;">
-                <div class="td-file-title">${this._esc(post.title)}</div>
-                <div class="td-file-subtitle">${this._esc(resourceSubtitle)}</div>
-              </div>
-              <button id="td-open-resource-btn" class="td-file-action">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
-                ${this._esc(resourceLabel)}
-              </button>
-            </div>
-          </div>` : ''}
-        </div>
-
-        </div>
-        <!-- Footer -->
-        ${post.status === 'closed' ? `
-        <div class="td-drawer-footer td-footer-ended">
-          <div class="td-footer-ended">任务已结束</div>
-        </div>` : post.actionType === 'confirm' ? `
-        <div class="td-drawer-footer">
-          <div class="td-footer-confirm">
-            <button id="td-confirm-yes-btn" class="td-btn-confirm-yes">确认参加</button>
-            <button id="td-confirm-no-btn" class="td-btn-confirm-no">无法参加</button>
-          </div>
-        </div>` : `
-        <div class="td-drawer-footer">
-          <div class="td-footer-actions">
-            ${showCloseAction ? `
-            <button id="td-close-post-btn" class="td-btn-secondary">完成任务</button>
-            ` : `<div></div>`}
-            <button id="td-respond-btn" class="td-btn-primary">${this._esc(submitLabel)}</button>
-          </div>
-        </div>`}
-      </div>
-    </div>`;
-  },
-
-  _openCreatePost() {
-    const conv = ChatStore.getActiveConversation();
+  _openCreateTopic() {
+    const conv = Bridge.getActiveConversation();
     if (!conv || conv.type !== 'group') return;
-    const meta = this._creatorTemplateMeta('homework');
-
-    this.postsPanelOpen = false;
-    this.postCreatorOpen = true;
-    this.postCreatorSubmitting = false;
-    this.postCreatorType = 'homework';
-    this.postCreatorTitle = '';
-    this.postCreatorSummary = meta.defaultSummary;
-    this.postCreatorDeadline = '';
-    this.postCreatorResourceUrl = '';
-    this.postCreatorFeedbackEnabled = true;
+    this.topicCreatorOpen = true;
+    this.topicCreatorTitle = '';
+    this.topicCreatorSummary = '';
+    this.topicCreatorSubmitting = false;
     this.render();
     setTimeout(() => {
-      const input = document.getElementById('pc-title-input');
+      const input = document.getElementById('tc-title-input');
       if (input) input.focus();
     }, 50);
   },
 
-  _closePostCreator() {
-    this.postCreatorOpen = false;
-    this.postsPanelOpen = true;
+  _closeCreateTopic() {
+    this.topicCreatorOpen = false;
+    this.topicCreatorSubmitting = false;
     this.render();
   },
 
-  async _handlePostCreatorPublish() {
-    const conv = ChatStore.getActiveConversation();
+  async _submitCreateTopic() {
+    const conv = Bridge.getActiveConversation();
     if (!conv) return;
-
-    const title = this.postCreatorTitle.trim();
-    const summary = this.postCreatorSummary.trim();
-    const deadline = this.postCreatorDeadline;
-
-    if (!title) {
-      Toast.warn('请填写任务标题');
-      return;
-    }
-    if (!summary) {
-      Toast.warn('请填写任务内容');
-      return;
-    }
-    if (!deadline) {
-      Toast.warn('请选择截止时间');
-      return;
-    }
-    const deadlineAt = new Date(deadline).getTime();
-    if (!deadlineAt || isNaN(deadlineAt)) {
-      Toast.warn('截止时间格式不正确');
-      return;
-    }
-
-    this.postCreatorSubmitting = true;
+    const title = this.topicCreatorTitle.trim();
+    if (!title) { Toast.warn('请输入话题标题'); return; }
+    this.topicCreatorSubmitting = true;
     this.render();
-
     try {
-      const transportMeta = this._creatorPostTransportMeta(this.postCreatorType, this.postCreatorResourceUrl.trim());
-      await ChatStore.createGroupPost(conv.id, {
-        template: this.postCreatorType,
-        title,
-        summary,
-        deadlineAt,
-        actionType: transportMeta.actionType,
-        resourceType: transportMeta.resourceType,
-        resourceUrl: this.postCreatorResourceUrl.trim() || undefined,
-        announceInChat: true,
-      });
-      Toast.success('任务已发布');
-      this._closePostCreator();
-      // Reload posts
-      await ChatStore.loadGroupPosts(conv.id);
-      this.render();
+      const r = await Bridge.createTopic(conv.id, title, this.topicCreatorSummary.trim());
+      if (r && r.ok !== false) {
+        Toast.success('话题已创建');
+        this.topicCreatorOpen = false;
+        this.topicCreatorSubmitting = false;
+        this.render();
+      } else {
+        Toast.warn((r && r.error && r.error.message) || '创建失败');
+        this.topicCreatorSubmitting = false;
+        this.render();
+      }
     } catch (e) {
-      console.error('[ChatPage] Failed to create post:', e);
-      Toast.error(e.message || '发布失败');
-      this.postCreatorSubmitting = false;
+      Toast.error(e.message || '创建失败');
+      this.topicCreatorSubmitting = false;
       this.render();
     }
   },
 
-  _bindPostCreatorEvents() {
-    // Close button
-    const closeBtn = document.getElementById('pc-close-btn');
-    if (closeBtn) closeBtn.onclick = () => this._closePostCreator();
+  _openJoinTopicConfirm(topic) {
+    this.joinTopicConfirmOpen = true;
+    this.joinTopicTarget = topic;
+    this.render();
+  },
 
-    // Publish button
-    const publishBtn = document.getElementById('pc-publish-btn');
-    if (publishBtn) publishBtn.onclick = () => this._handlePostCreatorPublish();
+  _closeJoinTopicConfirm() {
+    this.joinTopicConfirmOpen = false;
+    this.joinTopicTarget = null;
+    this.render();
+  },
 
-    const feedbackToggleBtn = document.getElementById('pc-feedback-toggle-btn');
-    if (feedbackToggleBtn) {
-      feedbackToggleBtn.onclick = () => {
-        this.postCreatorFeedbackEnabled = !this.postCreatorFeedbackEnabled;
-        Toast.featureUnavailable();
-        this.render();
-        this._bindPostCreatorEvents();
-      };
+  async _confirmJoinTopic() {
+    const conv = Bridge.getActiveConversation();
+    const topic = this.joinTopicTarget;
+    if (!conv || !topic) return;
+    try {
+      const r = await Bridge.joinTopic(conv.id, topic.id);
+      if (r && r.ok !== false) {
+        // 话题加入成功，跳转到"聊天室"对应的话题群聊
+        const channelName = (r.data && r.data.channelName) || topic.channelName || `#topic-${topic.id}`;
+        this.joinTopicConfirmOpen = false;
+        this.joinTopicTarget = null;
+        this._navigateToChatroom(channelName, topic);
+      } else {
+        Toast.warn((r && r.error && r.error.message) || '加入失败');
+      }
+    } catch (e) {
+      Toast.error(e.message || '加入失败');
     }
+  },
 
-    // Template cards
-    this.container.querySelectorAll('.pc-fs-template-card').forEach(card => {
-      card.onclick = () => {
-        const nextType = card.dataset.pcTemplate;
-        const prevMeta = this._creatorTemplateMeta(this.postCreatorType);
-        const nextMeta = this._creatorTemplateMeta(nextType);
-        const currentSummary = this.postCreatorSummary.trim();
-        if (!currentSummary || currentSummary === prevMeta.defaultSummary) {
-          this.postCreatorSummary = nextMeta.defaultSummary;
-        }
-        this.postCreatorType = nextType;
-        this.render();
-        this._bindPostCreatorEvents();
-      };
-    });
-
-    // Title input
-    const titleInput = document.getElementById('pc-title-input');
-    if (titleInput) {
-      titleInput.oninput = () => {
-        this.postCreatorTitle = titleInput.value;
-        const counter = document.getElementById('pc-title-counter');
-        if (counter) counter.textContent = `${titleInput.value.length}/60`;
-      };
-    }
-
-    // Summary textarea
-    const summaryInput = document.getElementById('pc-summary-input');
-    if (summaryInput) {
-      summaryInput.oninput = () => {
-        this.postCreatorSummary = summaryInput.value;
-        const counter = document.getElementById('pc-summary-counter');
-        if (counter) counter.textContent = `${summaryInput.value.length}/2000`;
-      };
-    }
-
-    // Resource URL input
-    const resourceInput = document.getElementById('pc-resource-input');
-    if (resourceInput) {
-      resourceInput.oninput = (e) => {
-        this.postCreatorResourceUrl = e.target.value;
-      };
-    }
-
-    // Deadline input
-    const deadlineInput = document.getElementById('pc-deadline-input');
-    if (deadlineInput) {
-      deadlineInput.onchange = (e) => {
-        this.postCreatorDeadline = e.target.value;
-      };
-    }
+  // 跳转到聊天室，同时传递话题信息（标题/描述等）使聊天室话题列表与群聊面板一致
+  _navigateToChatroom(channelName, topic) {
+    try {
+      sessionStorage.setItem('irc_pending_channel', channelName);
+      if (topic) {
+        sessionStorage.setItem('irc_pending_topic', JSON.stringify({
+          id: topic.id,
+          title: topic.title,
+          content: topic.summary || '',
+          creator: topic.creator || '匿名',
+        }));
+      }
+      // 存储父群聊信息到频道映射表（每个频道对应各自的父群聊）
+      const conv = Bridge.getActiveConversation();
+      if (conv) {
+        try {
+          const parents = JSON.parse(sessionStorage.getItem('irc_channel_parents') || '{}');
+          parents[channelName] = { convId: conv.id, convName: conv.name };
+          sessionStorage.setItem('irc_channel_parents', JSON.stringify(parents));
+        } catch (e2) {}
+      }
+    } catch (e) {}
+    this.postsPanelOpen = false;
+    this.render();
+    window.location.hash = '#/chatroom';
   },
 
   async _openPostDetail(postId) {
-    const conv = ChatStore.getActiveConversation();
+    const conv = Bridge.getActiveConversation();
     if (!conv) return;
 
-    let posts = ChatStore.getPosts(conv.id);
+    let posts = Bridge.getPosts(conv.id);
     let post = posts.find(p => p.id === postId);
     // 对齐 Vue 版：本地未找到时从服务端加载帖子列表再查找
     if (!post) {
       try {
-        await ChatStore.loadGroupPosts(conv.id);
-        posts = ChatStore.getPosts(conv.id);
+        await Bridge.loadGroupPosts(conv.id);
+        posts = Bridge.getPosts(conv.id);
         post = posts.find(p => p.id === postId);
       } catch (e) {
         console.warn('[ChatPage] Failed to load posts for detail:', e.message);
@@ -3682,18 +2910,18 @@ const ChatPage = {
 
     try {
       if (post.actionType === 'upload') {
-        await ChatStore.submitHomeworkPostResponse(post.id, post.conversationId, {
+        await Bridge.submitHomeworkPostResponse(post.id, post.conversationId, {
           note: text,
           file,
         });
         Toast.success('响应已提交');
         this.postDetailResponseText = '';
         this.postDetailSelectedFile = null;
-        await ChatStore.loadGroupPosts(post.conversationId);
+        await Bridge.loadGroupPosts(post.conversationId);
         this._closePostDetail();
         return;
       }
-      await ChatStore.respondToGroupPost(post.id, post.conversationId, {
+      await Bridge.respondToGroupPost(post.id, post.conversationId, {
         responseType: responsePayload.responseType,
         confirmation: responsePayload.confirmation,
         content: text,
@@ -3701,7 +2929,7 @@ const ChatPage = {
       Toast.success('响应已提交');
       this.postDetailResponseText = '';
       // Reload posts to get updated responses
-      await ChatStore.loadGroupPosts(post.conversationId);
+      await Bridge.loadGroupPosts(post.conversationId);
       if (this.postsPanelOpen) this._refreshPostsPanel();
       this._closePostDetail();
     } catch (e) {
@@ -3717,9 +2945,9 @@ const ChatPage = {
 
     try {
       // 对齐 Vue 版 TaskFullScreen.closeSelectedPost：直接关闭并发送完成消息
-      await ChatStore.closeGroupPost(post.id, post.conversationId);
+      await Bridge.closeGroupPost(post.id, post.conversationId);
       Toast.success('任务已完成');
-      await ChatStore.loadGroupPosts(post.conversationId);
+      await Bridge.loadGroupPosts(post.conversationId);
       if (this.postsPanelOpen) this._refreshPostsPanel();
       this._closePostDetail();
     } catch (e) {
@@ -3774,6 +3002,9 @@ const ChatPage = {
       this.unsubUi = null;
     }
   },
+
+  ...DevicesPanelMixin,
+  ...PostsPanelMixin,
 };
 
 export default ChatPage;

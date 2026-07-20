@@ -1,8 +1,17 @@
 /* ================================================================
    AgentChat HTML 版 - 工作台页面 (匹配 PersonalWorkspaceAiPanel)
+   ----------------------------------------------------------------
+   重构说明：
+   - 本文件仅负责页面显示逻辑（渲染 + 事件绑定）。
+   - 业务逻辑（Agent 调用、任务创建、草稿发布、技能切换等）统一通过
+     Bridge → postMessage 交由 C++ 原生宿主处理，页面不再直接访问
+     stores/chatStore.js。
+   - 视图缓存与推送订阅由 Bridge 内部 state 管理，页面通过
+     Bridge.subscribe(fn) 在状态变化时重新 render。
+   - UiStore / Toast / TimeUtils 仍为纯本地工具，保持原导入不变。
    ================================================================ */
 
-import ChatStore from '../stores/chatStore.js';
+import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
@@ -15,8 +24,8 @@ const AiPage = {
   init() {
     this.container = document.getElementById('page-ai');
     this.activeSegment = 'overview';
-    this.unsub = ChatStore.subscribe(() => this.render());
-    void ChatStore.refreshBoundDevices();
+    this.unsub = Bridge.subscribe(() => this.render());
+    Bridge.refreshBoundDevices().catch(() => {});
     this.render();
   },
 
@@ -53,18 +62,18 @@ const AiPage = {
   },
 
   _renderOverview() {
-    const tasks = ChatStore.getPersonalTasksForCurrentUser();
-    const conversations = ChatStore.getConversations();
-    const execHistory = ChatStore.getExecutionHistory();
+    const tasks = Bridge.getPersonalTasksForCurrentUser();
+    const conversations = Bridge.getConversations();
+    const execHistory = Bridge.getExecutionHistory();
     const workspace = conversations.find(c => c.scope === 'personal_workspace');
-    const draftActions = ChatStore.getWorkspaceDraftActions(workspace?.id);
-    const devices = ChatStore.getBoundDevices();
-    const onlineCount = devices.filter(d => d.status === 'online').length;
+    const draftActions = Bridge.getWorkspaceDraftActions();
+    const devices = Bridge.getBoundDevices();
+    const onlineCount = devices.filter(d => d.online === true).length;
 
     let pendingCount = 0;
     tasks.forEach(t => { if (t.status !== 'done' && t.status !== 'canceled') pendingCount++; });
     conversations.filter(c => c.type === 'group').forEach(c => {
-      ChatStore.getPosts(c.id).forEach(p => { if (p.status !== 'closed') pendingCount++; });
+      Bridge.getPosts(c.id).forEach(p => { if (p.status !== 'closed') pendingCount++; });
     });
 
     return `
@@ -107,8 +116,8 @@ const AiPage = {
 
   _renderAbilitiesSummary() {
     // 对齐 Vue 版 PersonalWorkspaceAiPanel：仅显示 intent === 'query' 的工作台技能
-    const skills = ChatStore.getAgentSkills().filter(s => s.intent === 'query');
-    const enabledCount = skills.filter(s => ChatStore.isSkillEnabled(s.id)).length;
+    const skills = Bridge.getAgentSkills().filter(s => s.intent === 'query');
+    const enabledCount = skills.filter(s => Bridge.isSkillEnabled(s.id)).length;
 
     return `
     <div class="hub-card">
@@ -132,9 +141,9 @@ const AiPage = {
   },
 
   _renderDeviceSummary() {
-    const devices = ChatStore.getBoundDevices();
-    const onlineCount = devices.filter(d => d.status === 'online').length;
-    const tvCount = devices.filter(d => d.deviceType === 'tv' && d.status === 'online').length;
+    const devices = Bridge.getBoundDevices();
+    const onlineCount = devices.filter(d => d.online === true).length;
+    const tvCount = devices.filter(d => d.deviceType === 'tv' && d.online === true).length;
     const recent = devices.slice(0, 3);
     return `
     <div class="hub-card">
@@ -151,8 +160,8 @@ const AiPage = {
         : `<div class="hub-exec-list">
             ${recent.map(device => `
               <div class="hub-exec-item">
-                <span class="hub-mini-badge ${device.status === 'online' ? 'hub-kind-green' : 'hub-kind-slate'}">${device.deviceType === 'tv' ? '电视' : '设备'}</span>
-                <span class="hub-exec-title">${this._esc(device.deviceName)} · ${this._esc(device.boundConversationName || '当前会话')}</span>
+                <span class="hub-mini-badge ${device.online ? 'hub-kind-green' : 'hub-kind-slate'}">${device.deviceType === 'tv' ? '电视' : '设备'}</span>
+                <span class="hub-exec-title">${this._esc(device.name)} · ${this._esc(device.conversationName || '当前会话')}</span>
               </div>
             `).join('')}
           </div>`
@@ -161,7 +170,7 @@ const AiPage = {
   },
 
   _renderPendingDrafts(draftActions) {
-    const groups = ChatStore.getConversations().filter(c => c.type === 'group' && c.scope !== 'personal_workspace');
+    const groups = Bridge.getConversations().filter(c => c.type === 'group' && c.scope !== 'personal_workspace');
     return `
     <div class="hub-card">
       <div class="hub-card-head-row">
@@ -229,8 +238,8 @@ const AiPage = {
 
   _renderSkills() {
     // 对齐 Vue 版 PersonalWorkspaceAiPanel：仅显示 intent === 'query' 的工作台技能
-    const skills = ChatStore.getAgentSkills().filter(s => s.intent === 'query');
-    const enabledCount = skills.filter(s => ChatStore.isSkillEnabled(s.id)).length;
+    const skills = Bridge.getAgentSkills().filter(s => s.intent === 'query');
+    const enabledCount = skills.filter(s => Bridge.isSkillEnabled(s.id)).length;
     const disabledCount = skills.length - enabledCount;
 
     return `
@@ -250,7 +259,7 @@ const AiPage = {
         ? '<div class="hub-device-empty">暂无可用技能</div>'
         : `<div class="hub-skill-list">
             ${skills.map(s => {
-              const enabled = ChatStore.isSkillEnabled(s.id);
+              const enabled = Bridge.isSkillEnabled(s.id);
               return `
                 <div class="hub-skill-row ${enabled ? '' : 'hub-skill-disabled'}">
                   <div class="hub-skill-row-info">
@@ -271,7 +280,7 @@ const AiPage = {
   },
 
   _renderHistory() {
-    const execHistory = ChatStore.getExecutionHistory();
+    const execHistory = Bridge.getExecutionHistory();
     const intentLabels = {
       create_task: '创建任务', publish_news: '发布公告', create_event: '活动发起', query: '意图澄清', unknown: '通用查询',
     };
@@ -309,7 +318,7 @@ const AiPage = {
             </div>
           </div>
           <div class="hub-item-title" style="font-size:0.88rem;">${this._esc(r.title)}</div>
-          ${r.skillIds.length ? `<div class="hub-item-tags">${r.skillIds.map(sid => `<span class="hub-tag" style="border:1px solid var(--app-border);">${this._esc(sid)}</span>`).join('')}</div>` : ''}
+          ${(r.skillIds && r.skillIds.length) ? `<div class="hub-item-tags">${r.skillIds.map(sid => `<span class="hub-tag" style="border:1px solid var(--app-border);">${this._esc(sid)}</span>`).join('')}</div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -346,8 +355,8 @@ const AiPage = {
     });
     this.container.querySelectorAll('[data-action="createTask"]').forEach(el => {
       el.onclick = async () => {
-        const ws = ChatStore.getConversations().find(c => c.scope === 'personal_workspace');
-        const task = await ChatStore.createPersonalTask({
+        const ws = Bridge.getConversations().find(c => c.scope === 'personal_workspace');
+        const task = await Bridge.createPersonalTask({
           title: '新任务', summary: '在工作台快捷创建',
           sourceConversationId: ws?.id,
           deliveryTarget: ws ? { type: 'conversation', conversationId: ws.id } : { type: 'workspace' },
@@ -361,23 +370,23 @@ const AiPage = {
       };
     });
     this.container.querySelectorAll('[data-action="summarize"]').forEach(el => {
-      el.onclick = () => {
-        const ws = ChatStore.getConversations().find(c => c.scope === 'personal_workspace');
+      el.onclick = async () => {
+        const ws = Bridge.getConversations().find(c => c.scope === 'personal_workspace');
         if (!ws) { Toast.featureUnavailable(); return; }
-        ChatStore.setActiveConversation(ws.id);
+        Bridge.setActiveConversation(ws.id);
         UiStore.setActiveConversation(ws.id);
         window.location.hash = '#/chat';
-        ChatStore.sendUserMessage('请总结当前会话的主要内容', ws.id);
+        await Bridge.sendUserMessage('请总结当前会话的主要内容', ws.id);
       };
     });
     this.container.querySelectorAll('[data-action="announcement"]').forEach(el => {
-      el.onclick = () => {
-        const group = ChatStore.getConversations().find(c => c.type === 'group' && c.scope !== 'personal_workspace');
+      el.onclick = async () => {
+        const group = Bridge.getConversations().find(c => c.type === 'group' && c.scope !== 'personal_workspace');
         if (!group) { Toast.featureUnavailable(); return; }
-        ChatStore.setActiveConversation(group.id);
+        Bridge.setActiveConversation(group.id);
         UiStore.setActiveConversation(group.id);
         window.location.hash = '#/chat';
-        ChatStore.sendUserMessage('帮我生成一份群公告草稿', group.id);
+        await Bridge.sendUserMessage('帮我生成一份群公告草稿', group.id);
       };
     });
     this.container.querySelectorAll('[data-action="tv"], [data-action="scanBind"]').forEach(el => {
@@ -386,14 +395,14 @@ const AiPage = {
     this.container.querySelectorAll('[data-action="publishDraft"]').forEach(el => {
       el.onclick = async () => {
         const skillId = el.dataset.skillId;
-        const source = ChatStore.getConversations().find(c => c.scope === 'personal_workspace');
-        const target = ChatStore.getConversations().find(c => c.type === 'group' && c.scope !== 'personal_workspace');
+        const source = Bridge.getConversations().find(c => c.scope === 'personal_workspace');
+        const target = Bridge.getConversations().find(c => c.type === 'group' && c.scope !== 'personal_workspace');
         if (!skillId || !source || !target) {
           Toast.warn('当前没有可发布的目标群聊');
           return;
         }
         try {
-          await ChatStore.publishWorkspaceDraft(skillId, target.id, source.id);
+          await Bridge.publishWorkspaceDraft(skillId, target.id, source.id);
           Toast.success(`已发布到 ${target.name}`);
         } catch (e) {
           Toast.warn(e.message || '发布失败，请稍后再试');
@@ -403,21 +412,21 @@ const AiPage = {
 
     // 技能管理
     this.container.querySelectorAll('[data-action="toggleAll"]').forEach(el => {
-      el.onclick = () => {
+      el.onclick = async () => {
         // 对齐 Vue 版 onToggleAll：仅切换 intent === 'query' 的工作台技能
-        const skills = ChatStore.getAgentSkills().filter(s => s.intent === 'query');
-        const anyDisabled = skills.some(s => !ChatStore.isSkillEnabled(s.id));
+        const skills = Bridge.getAgentSkills().filter(s => s.intent === 'query');
+        const anyDisabled = skills.some(s => !Bridge.isSkillEnabled(s.id));
         if (anyDisabled) {
-          skills.forEach(s => { if (!ChatStore.isSkillEnabled(s.id)) ChatStore.toggleSkill(s.id); });
+          for (const s of skills) { if (!Bridge.isSkillEnabled(s.id)) await Bridge.toggleSkill(s.id); }
         } else {
-          skills.forEach(s => { if (ChatStore.isSkillEnabled(s.id)) ChatStore.toggleSkill(s.id); });
+          for (const s of skills) { if (Bridge.isSkillEnabled(s.id)) await Bridge.toggleSkill(s.id); }
         }
         this.render();
       };
     });
     this.container.querySelectorAll('[data-action="toggleSkill"]').forEach(el => {
-      el.onclick = () => {
-        ChatStore.toggleSkill(el.dataset.skillId);
+      el.onclick = async () => {
+        await Bridge.toggleSkill(el.dataset.skillId);
         this.render();
       };
     });

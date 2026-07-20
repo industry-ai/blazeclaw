@@ -1,9 +1,11 @@
 /* ================================================================
-   AgentChat HTML 版 - 个人中心页面 (精确匹配原 MeShell)
+   AgentChat 重构版 - 个人中心页面 (纯 UI，精确匹配原 MeShell)
+   ----------------------------------------------------------------
+   主题切换、账号信息、设备入口等 UI 渲染与事件绑定保持原样。
+   UiStore（纯本地 UI 状态）保留原调用方式。
    ================================================================ */
 
-import AuthStore from '../stores/authStore.js';
-import ChatStore from '../stores/chatStore.js';
+import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
 
@@ -20,8 +22,8 @@ const MePage = {
   render() {
     if (!this.container) return;
     const isDark = UiStore.isDark();
-    const isLoggedIn = AuthStore.isLoggedIn();
-    const phoneText = isLoggedIn ? (AuthStore.getPhone() || '--') : '未登录';
+    const isLoggedIn = Bridge.isLoggedIn();
+    const phoneText = isLoggedIn ? (Bridge.getPhone() || '--') : '未登录';
     const accountInitials = this._accountInitials();
 
     this.container.innerHTML = `
@@ -78,16 +80,6 @@ const MePage = {
           <span class="me-menu-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
         </div>
       </div>
-
-      <div class="me-logout" style="padding-top:1rem;padding-bottom:calc(5rem + env(safe-area-inset-bottom));">
-        <button id="logout-btn" class="btn btn-danger" style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid var(--app-border);border-radius:1.6rem;background:var(--app-surface);padding:1rem 1rem 1.1rem;color:var(--app-danger);box-shadow:0 16px 38px rgba(98,85,160,0.08);">
-          <span style="display:flex;align-items:center;gap:0.5rem;font-size:1rem;font-weight:600;letter-spacing:-0.03em;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span>退出当前账号</span>
-          </span>
-          <span style="margin-top:0.45rem;font-size:0.82rem;color:var(--app-muted);">退出后将无法接收新消息</span>
-        </button>
-      </div>
     </div>`;
   },
 
@@ -121,10 +113,9 @@ const MePage = {
         </div>
         <div style="margin-top:0.95rem;display:flex;align-items:center;gap:0.45rem;font-size:0.86rem;color:var(--app-muted);">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <span>主题切换直接影响聊天页、登录页和全局背景表现。</span>
+          <span>主题切换直接影响聊天页和全局背景表现。</span>
         </div>
       </div>
-      ${this._renderLogoutFooter()}
     </div>`;
   },
 
@@ -158,7 +149,7 @@ const MePage = {
               <span style="margin-left:auto;font-size:0.98rem;color:var(--app-muted);">${this._esc(phoneText)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:0.75rem;padding:0.95rem 0 0.9rem;border-top:1px solid var(--app-border);">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--app-muted);"><path d="M10 13a5 5 0 0 1 7 0l1 1a5 5 0 0 1-7 7l-1-1"/><path d="M14 11a5 5 0 0 1-7 0l-1-1a5 5 0 0 1 7-7l1 1"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--app-muted);"><circle cx="8" cy="8" r="5"/><path d="M11.5 11.5L20 20M16 16h3M18 14h2"/></svg>
               <span style="font-size:0.98rem;color:var(--app-text-secondary);">登录方式</span>
               <span style="margin-left:auto;font-size:0.98rem;color:var(--app-muted);">短信验证码</span>
             </div>
@@ -174,22 +165,7 @@ const MePage = {
           <span>当前账号安全状态良好。</span>
         </div>
       </div>
-      ${this._renderLogoutFooter()}
     </div>`;
-  },
-
-  _renderLogoutFooter() {
-    return `
-      <div class="me-logout" style="padding-top:1rem;padding-bottom:calc(5rem + env(safe-area-inset-bottom));">
-        <button id="logout-btn" class="btn btn-danger" style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid var(--app-border);border-radius:1.6rem;background:var(--app-surface);padding:1rem 1rem 1.1rem;color:var(--app-danger);box-shadow:0 16px 38px rgba(98,85,160,0.08);">
-          <span style="display:flex;align-items:center;gap:0.5rem;font-size:1rem;font-weight:600;letter-spacing:-0.03em;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span>退出当前账号</span>
-          </span>
-          <span style="margin-top:0.45rem;font-size:0.82rem;color:var(--app-muted);">退出后将无法接收新消息</span>
-        </button>
-      </div>
-    `;
   },
 
   _bindEvents() {
@@ -210,17 +186,6 @@ const MePage = {
     if (this.currentPanel === 'account') {
       document.getElementById('account-back-btn').onclick = () => { this.currentPanel = 'home'; this.render(); };
     }
-
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) {
-      logoutBtn.onclick = async () => {
-        // 对齐 Vue 版：先清理 ChatStore（依赖当前账号信息），再登出
-        await ChatStore.resetForAuthChange();
-        await AuthStore.logout();
-        UiStore.resetToListView();
-        window.location.hash = '#/login';
-      };
-    }
   },
 
   _themeSummary() {
@@ -231,7 +196,7 @@ const MePage = {
   },
 
   _accountInitials() {
-    const phone = AuthStore.getPhone() || '';
+    const phone = Bridge.getPhone() || '';
     if (phone.length >= 2) return phone.slice(-2);
     return 'AC';
   },

@@ -7,6 +7,12 @@
 
 IMPLEMENT_DYNAMIC(CTcpReceiverWnd, CDockablePane)
 
+namespace TcpReceiverSink {
+    static CTcpReceiverWnd* g_pWnd = nullptr;
+    void Set(CTcpReceiverWnd* wnd) { g_pWnd = wnd; }
+    CTcpReceiverWnd* Get() { return g_pWnd; }
+}
+
 CTcpReceiverWnd::CTcpReceiverWnd() noexcept
 	: m_currentMatchIndex(-1)
 	, m_highlightSearch(false)
@@ -26,6 +32,7 @@ BEGIN_MESSAGE_MAP(CTcpReceiverWnd, CDockablePane)
 	ON_WM_COPYDATA()
 	ON_MESSAGE(WM_TCP_RECEIVER_DATA, &CTcpReceiverWnd::OnTcpDataReceived)
 	ON_MESSAGE(WM_TCP_RECEIVER_STATUS, &CTcpReceiverWnd::OnTcpStatusChanged)
+	ON_MESSAGE(WM_TCP_RECEIVER_APPEND_LINE, &CTcpReceiverWnd::OnAppendLogLine)
 	ON_COMMAND(ID_TCPRECEIVER_CLEAR, &CTcpReceiverWnd::OnClear)
 	ON_UPDATE_COMMAND_UI(ID_TCPRECEIVER_CLEAR, &CTcpReceiverWnd::OnUpdateClear)
 	ON_EN_CHANGE(IDC_TCPRECEIVER_SEARCH, &CTcpReceiverWnd::OnSearchTextChanged)
@@ -291,6 +298,27 @@ void CTcpReceiverWnd::AddStatusLog(const CString& line)
 
 	// 添加状态日志行
 	AppendLogLine(line + _T("\r\n"), false, true);
+}
+
+void CTcpReceiverWnd::EnqueueIncomingLogLine(const CString& line)
+{
+	if (!::IsWindow(GetSafeHwnd())) return;
+
+	// 跨线程投递：SendMessage 同步等 UI 线程处理完
+	// LPARAM 携带一个由 UI 线程在 OnAppendLogLine 中负责 delete 的 CString*
+	auto* payload = new CString(line);
+	SendMessage(WM_TCP_RECEIVER_APPEND_LINE, 0, reinterpret_cast<LPARAM>(payload));
+}
+
+LRESULT CTcpReceiverWnd::OnAppendLogLine(WPARAM /*wParam*/, LPARAM lParam)
+{
+	auto* line = reinterpret_cast<CString*>(lParam);
+	if (!line) return 0;
+
+	AddStatusLog(*line + _T("\r\n"));
+
+	delete line;
+	return 0;
 }
 
 void CTcpReceiverWnd::OnClear()

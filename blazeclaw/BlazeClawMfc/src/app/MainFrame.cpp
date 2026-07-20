@@ -1079,6 +1079,9 @@ BOOL CMainFrame::CreateDockingWindows()
 		TRACE0("Failed to create TCP Receiver window\n");
 		return FALSE; // failed to create
 	}
+	// 暴露给底层代码（Connection_c::ReadMessage 等）一个全局指针，
+	// 让 RECEIVE 帧日志可以投递到 CTcpReceiverWnd 的富文本界面。
+	TcpReceiverSink::Set(GetTcpReceiverWnd());
 	SetDockingWindowIcons(theApp.m_bHiColorIcons);
 	return TRUE;
 }
