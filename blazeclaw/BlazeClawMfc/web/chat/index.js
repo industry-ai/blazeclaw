@@ -320,7 +320,9 @@
     state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
     const guiApi = window.BlazeClawChatControllerGui || {};
-    const chatControllerApi = window.BlazeClawChatController || {};
+    const chatControllerApi = window.BlazeClawChatControllerAdapter ||
+        window.BlazeClawChatController ||
+        {};
     const scriptOrderCompat =
         window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ &&
             typeof window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ === "object"
@@ -340,7 +342,7 @@
 
     function createChatController(options) {
         if (typeof chatControllerApi.createController !== "function") {
-            throw new Error("BlazeClawChatController.createController unavailable");
+            throw new Error("BlazeClawChatControllerAdapter.createController unavailable");
         }
         return chatControllerApi.createController(options);
     }
