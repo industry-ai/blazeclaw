@@ -32,6 +32,7 @@ namespace blazeclaw::core {
 		std::wstring origin = L"openclaw-original";
 		std::vector<std::wstring> diagnostics;
 		std::optional<SkillsMetadataSpec> normalizedMetadata;
+		std::optional<OpenClawOriginalExtractedRuntimeContractSpec> extractedRuntimeContract;
 		bool metadataConvertedFromClawdbot = false;
 		bool hasToolManifest = false;
 		std::filesystem::path promotedDir;

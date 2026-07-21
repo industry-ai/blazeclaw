@@ -1,30 +1,40 @@
 /* ================================================================
-   AgentChat HTML 版 - 通知中心页面 (匹配 NotificationCenterPanel)
+   AgentChat 重构版 - 通知中心页面 (匹配 NotificationCenterPanel)
+   ----------------------------------------------------------------
+   纯 UI 页面：仅负责渲染通知列表 / 空态 / 按钮与跳转。
+   业务逻辑（拉取通知源、清角标、完成任务、切换会话）通过
+   Bridge → postMessage 交由 C++ 宿主处理，本文件不再直接访问
+   stores/chatStore.js。UiStore / Toast / TimeUtils 保留不变。
    ================================================================ */
 
-import ChatStore from '../stores/chatStore.js';
+import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
 
 const NotificationsPage = {
   container: null,
+  _unsub: null,
 
   init() {
     this.container = document.getElementById('page-notifications');
     // 进入通知页后自动清零角标
-    ChatStore.setLastSeenNotificationsAt();
+    Bridge.setLastSeenNotificationsAt();
     this.render();
+    // 订阅 state 变化，实时刷新通知列表（C++ 推送新通知时自动重渲染）
+    this._unsub = Bridge.subscribe(() => this.render());
   },
 
   render() {
     if (!this.container) return;
 
     const now = Date.now();
-    const lastSeen = ChatStore.getLastSeenNotificationsAt();
-    const tasks = ChatStore.getPersonalTasksForCurrentUser();
-    const conversations = ChatStore.getConversations();
-    ChatStore.setLastSeenNotificationsAt(now);
+    const tasks = Bridge.getPersonalTasksForCurrentUser();
+    const conversations = Bridge.getConversations();
+    // 注意：不在此处调用 setLastSeenNotificationsAt(now)。
+    // render() 被 Bridge.subscribe 订阅，任何 state 变化都会触发它，
+    // 若每次 render 都重置 lastSeen，角标会立即被清零。
+    // lastSeen 仅在 init()（进入通知页）时设置一次。
 
     const sourceNames = {};
     conversations.forEach(c => { sourceNames[c.id] = c.name; });
@@ -32,7 +42,7 @@ const NotificationsPage = {
     const items = [];
 
     // 群聊邀请通知（对齐 Vue 版 groupInvitationItems）
-    ChatStore.getGroupInvitationNotifications().forEach(item => {
+    Bridge.getGroupInvitationNotifications().forEach(item => {
       const inviter = item.inviterPhone || item.inviter || '成员';
       items.push({
         key: item.id,
@@ -68,7 +78,7 @@ const NotificationsPage = {
 
     // 群任务截止
     conversations.filter(c => c.type === 'group').forEach(c => {
-      ChatStore.getPosts(c.id)
+      Bridge.getPosts(c.id)
         .filter(p => p.deadlineAt && p.deadlineAt <= now && p.deadlineAt > now - 86400000 && p.status === 'published')
         .forEach(p => {
           items.push({
@@ -83,6 +93,19 @@ const NotificationsPage = {
             dueAt: p.deadlineAt,
           });
         });
+    });
+
+    // C++ 推送的通知（系统消息/设备状态/被踢出等）
+    Bridge.getPushNotifications().forEach(item => {
+      items.push({
+        key: item.id,
+        kind: item.kind || 'system',
+        title: item.title,
+        summary: item.summary,
+        sourceName: item.sourceName || '系统',
+        conversationId: item.conversationId || '',
+        createdAt: item.createdAt,
+      });
     });
 
     items.sort((a, b) => b.createdAt - a.createdAt);
@@ -116,12 +139,12 @@ const NotificationsPage = {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
         </div>
         <div class="hub-empty-title">暂无新通知</div>
-        <div class="hub-empty-desc">新的个人提醒和群任务截止会出现在这里。<br>进入通知页后角标自动清零。</div>
+        <div class="hub-empty-desc">群聊邀请、系统消息和个人提醒会出现在这里。<br>进入通知页后角标自动清零。</div>
       </div>`;
     }
 
     return `
-    <div class="hub-notif-hint">个人提醒和群任务截止将按时间倒序出现在这里。管理任务请前往任务中心。</div>
+    <div class="hub-notif-hint">群聊邀请、系统消息和个人提醒将按时间倒序出现在这里。管理任务请前往任务中心。</div>
     <div class="hub-item-list">
       ${items.map(item => this._renderItem(item)).join('')}
     </div>`;
@@ -196,28 +219,34 @@ const NotificationsPage = {
 
         // 群聊邀请通知
         if (key && key.startsWith('group-invited:')) {
-          const invitation = ChatStore.getGroupInvitationNotifications().find(i => i.id === key);
+          const invitation = Bridge.getGroupInvitationNotifications().find(i => i.id === key);
           if (invitation) found = { conversationId: invitation.conversationId };
+        }
+
+        // C++ 推送的通知（push-notice / push-kick / push-ban 等）
+        if (!found && key && key.startsWith('push-')) {
+          const pushNotif = Bridge.getPushNotifications().find(i => i.id === key);
+          if (pushNotif) found = { conversationId: pushNotif.conversationId };
         }
 
         // 个人提醒
         if (!found) {
-          const tasks = ChatStore.getPersonalTasksForCurrentUser();
+          const tasks = Bridge.getPersonalTasksForCurrentUser();
           for (const t of tasks) {
             if (`personal:${t.id}` === key) { found = t; break; }
           }
         }
         // 群任务截止
         if (!found) {
-          for (const c of ChatStore.getConversations()) {
-            const post = ChatStore.getPosts(c.id).find(p => `deadline:${p.id}` === key);
+          for (const c of Bridge.getConversations()) {
+            const post = Bridge.getPosts(c.id).find(p => `deadline:${p.id}` === key);
             if (post) { found = { conversationId: c.id, postId: post.id }; break; }
           }
         }
         if (found) {
           const convId = found.conversationId || found.sourceConversationId;
           if (convId) {
-            ChatStore.setActiveConversation(convId);
+            Bridge.setActiveConversation(convId);
             UiStore.setActiveConversation(convId);
             window.location.hash = '#/chat';
           } else {
@@ -228,11 +257,16 @@ const NotificationsPage = {
     });
 
     this.container.querySelectorAll('[data-action="complete"]').forEach(el => {
-      el.onclick = (e) => {
+      el.onclick = async (e) => {
         e.stopPropagation();
         const key = el.dataset.key;
         const taskId = key.replace('personal:', '');
-        if (ChatStore.completePersonalTask(taskId)) Toast.success('任务已完成');
+        try {
+          await Bridge.completePersonalTask(taskId);
+          Toast.success('任务已完成');
+        } catch (err) {
+          Toast.warn('任务完成失败');
+        }
         this.render();
       };
     });
@@ -246,7 +280,12 @@ const NotificationsPage = {
   },
 
   _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
-  destroy() {},
+  destroy() {
+    if (this._unsub) {
+      this._unsub();
+      this._unsub = null;
+    }
+  },
 };
 
 export default NotificationsPage;

@@ -6,11 +6,14 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <nlohmann/json.hpp>
 
 #include "GatewayHost.h"
 #include "GatewayToolRegistry.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayEventFanoutService.h"
+#include "GatewayChatEventPayload.h"
 #include "PluginRuntimeStateService.h"
 
 namespace blazeclaw::gateway {
@@ -22,13 +25,18 @@ namespace blazeclaw::gateway {
 		// Shared declarations for helpers implemented in GatewayHostRuntimeLocalHelpers.cpp (body was
 		// GatewayHost.Handlers.RuntimeHelpers.inl). Template that must instantiate in every TU that calls it:
 		inline constexpr std::size_t kMaxChatEventsPerSession = 200;
+		// Keep this template inline in the header so all translation units can instantiate it.
 
 		template <typename T>
-		inline void PushEventWithRetentionLimit(std::deque<T>& queue, T eventState) {
+		inline std::size_t PushEventWithRetentionLimit(std::deque<T>& queue, T eventState) {
+			std::size_t droppedCount = 0;
 			queue.push_back(std::move(eventState));
 			while (queue.size() > kMaxChatEventsPerSession) {
 				queue.pop_front();
+				++droppedCount;
 			}
+
+			return droppedCount;
 		}
 
 		std::string SerializeStringArrayLocal(
@@ -96,6 +104,14 @@ namespace blazeclaw::gateway {
 			const std::uint64_t timestampMs);
 		std::string BuildChatEventJson(
 			const std::string& runId,
+			const std::string& promptRunId,
+			const std::string& responderRunId,
+			const std::string& responderId,
+			const std::string& provider,
+			const std::string& model,
+			const std::string& runtimeKind,
+			const std::string& responderLabel,
+			const std::uint32_t responderOrder,
 			const std::string& sessionKey,
 			const std::string& state,
 			const std::optional<std::string>& messageJson,
@@ -160,9 +176,16 @@ namespace blazeclaw::gateway {
 			const bool verboseOnly = true);
 		bool IsSilentReplyText(const std::string& text);
 		bool IsSilentAssistantMessageJson(const std::string& messageJson);
+		bool IsSilentAssistantMessagePayload(
+			const blazeclaw::gateway::ChatEventPayload& payload);
+		std::optional<std::string> TryBuildAssistantMessageJsonFromPayload(
+			const blazeclaw::gateway::ChatEventPayload& payload);
 		void PushHistoryMessageIfNew(
 			std::vector<std::string>& history,
 			const std::string& messageJson);
+		void PushHistoryMessageIfNewFromPayload(
+			std::vector<std::string>& history,
+			const blazeclaw::gateway::ChatEventPayload& payload);
 		bool ValidateAttachmentPayloadShape(
 			const std::optional<std::string>& paramsJson,
 			bool& hasAttachments,
@@ -231,6 +254,11 @@ namespace blazeclaw::gateway {
 			const std::vector<float>& values);
 		std::string SerializeFloatMatrixLocal(
 			const std::vector<std::vector<float>>& vectors);
+
+		// ChatEventPayload is declared only in GatewayChatEventPayload.h (included above).
+		// Do not duplicate the type in this header; all helpers consume the canonical declaration.
+		// Serializer helper for building the wire frame for a chat event from normalized payload.
+		[[nodiscard]] std::string BuildChatEventFrameFromPayload(const blazeclaw::gateway::ChatEventPayload& payload, int64_t seq);
 
 	} // namespace runtime_local
 

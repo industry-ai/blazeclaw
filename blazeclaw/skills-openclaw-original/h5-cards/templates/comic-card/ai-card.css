@@ -1,0 +1,525 @@
+/* ================================================================
+   comic-card/ai-card.css
+   Template: Video player + single-frame paginated comic strip
+   Features: unit tabs, page dots, swipe transitions, 5-device responsive
+   ================================================================ */
+
+/* ── Component: host ── */
+:host {
+  display: block;
+  max-width: 380px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "HarmonyOS Sans", "Noto Sans SC", "Roboto", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════
+   Unit Tabs
+   ═══════════════════════════════════════════════════ */
+.unit-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 10px 6px 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  background: #fafafa;
+  border-bottom: 1px solid #f3f4f6;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.unit-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.unit-tab {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  min-width: 56px;
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .unit-tab:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+  }
+}
+
+.unit-tab:active {
+  transform: scale(0.96);
+}
+
+.unit-tab.active {
+  background: var(--tab-color, #f59e0b);
+  border-color: var(--tab-color, #f59e0b);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.unit-tab-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.unit-tab.active .unit-tab-label {
+  opacity: 1;
+}
+
+.unit-tab-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Reset color for non-active tabs */
+.unit-tab:not(.active) .unit-tab-label,
+.unit-tab:not(.active) .unit-tab-title {
+  color: #6b7280;
+}
+
+/* ── Card ── */
+.comic-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+}
+
+/* ── Video area ── */
+.comic-card .video-area {
+  width: 100%;
+  background: #000;
+}
+
+.comic-card .video-area video {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+/* ── Card body ── */
+.comic-card .card-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* ── Header ── */
+.comic-card .hdr {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comic-card .title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.comic-card .subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* ── Description ── */
+.comic-card .desc {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* ── Comic viewport (single frame) ── */
+.comic-card .comic-viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  touch-action: pan-y; /* allow vertical scroll, intercept horizontal swipe */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Frame container (anchors bubbles to image) ── */
+.comic-card .frame-container {
+  position: relative;
+  width: 100%;
+}
+
+/* ── No frames state ── */
+.comic-card .no-frames {
+  padding: 32px 20px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  font-style: italic;
+}
+
+/* ── Page indicator ── */
+.comic-card .page-indicator {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+/* ── Frame image ── */
+.comic-card .frame-img {
+  width: 100%;
+  -webkit-aspect-ratio: 3 / 2;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  background: #fafafa;
+}
+
+/* ── Speech bubbles (overlaid on image) ── */
+.comic-card .bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.comic-card .bubble {
+  position: absolute;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 7px 11px;
+  border-radius: 12px;
+  max-width: 75%;
+  word-break: break-word;
+  pointer-events: auto;
+  animation: bubble-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+/* ── Point-read (点读) bubble enhancements ── */
+.comic-card .bubble.point-read {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .comic-card .bubble.point-read:hover {
+    transform: scale(1.03);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+}
+
+.comic-card .bubble.point-read:active {
+  transform: scale(0.97);
+}
+
+/* Speaker icon hint on bubbles */
+.comic-card .bubble-speaker {
+  display: inline-block;
+  font-size: 10px;
+  margin-left: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.comic-card .bubble.reading .bubble-speaker {
+  opacity: 0.7;
+}
+
+@media (hover: hover) {
+  .comic-card .bubble:hover .bubble-speaker {
+    opacity: 0.7;
+  }
+}
+
+/* Reading highlight animation */
+.comic-card .bubble.reading {
+  animation: reading-pulse 0.6s ease-in-out infinite;
+  box-shadow: 0 0 0 3px var(--c-brand, #f59e0b), 0 4px 16px rgba(245, 158, 11, 0.35) !important;
+  transform: scale(1.05) !important;
+  z-index: 10;
+}
+
+@keyframes reading-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--c-brand, #f59e0b), 0 4px 16px rgba(245,158,11,0.35); }
+  50%      { box-shadow: 0 0 0 6px var(--c-brand, #f59e0b), 0 6px 24px rgba(245,158,11,0.5); }
+}
+
+/* Stagger bubble animations */
+.comic-card .bubble:nth-child(1) { animation-delay: 0.05s; }
+.comic-card .bubble:nth-child(2) { animation-delay: 0.15s; }
+.comic-card .bubble:nth-child(3) { animation-delay: 0.25s; }
+
+@keyframes bubble-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Left bubble — top-left area */
+.comic-card .bubble.left {
+  background: rgba(239, 246, 255, 0.92);
+  color: #1e40af;
+  top: 6%;
+  left: 4%;
+  border-bottom-left-radius: 4px;
+}
+
+/* Right bubble — top-right (default, for 3+ texts) */
+.comic-card .bubble.right {
+  background: rgba(253, 242, 248, 0.92);
+  color: #9d174d;
+  top: 6%;
+  right: 4%;
+  border-bottom-right-radius: 4px;
+  text-align: right;
+}
+
+/* Right bubble — bottom-right (when only 2 texts total) */
+.comic-card .bubble.right.bottom {
+  top: auto;
+  bottom: 6%;
+}
+
+/* Center bubble — bottom-center */
+.comic-card .bubble.center {
+  background: rgba(240, 253, 244, 0.92);
+  color: #166534;
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  max-width: 85%;
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════
+   Page Dots
+   ═══════════════════════════════════════════════════ */
+.comic-card .page-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.comic-card .page-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: #d1d5db;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.25s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .comic-card .page-dot:hover {
+    background: #9ca3af;
+  }
+}
+
+.comic-card .page-dot.active {
+  background: var(--c-brand, #f59e0b);
+  width: 24px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* ═══════════════════════════════════════════════════
+   Transitions (frame switching)
+   ═══════════════════════════════════════════════════ */
+.comic-card .comic-viewport.transition-slide-left .frame-container {
+  animation: slide-in-left 0.28s ease-out;
+}
+
+.comic-card .comic-viewport.transition-slide-right .frame-container {
+  animation: slide-in-right 0.28s ease-out;
+}
+
+.comic-card .comic-viewport.transition-fade .frame-container {
+  animation: fade-in 0.25s ease-out;
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════
+   Navigation
+   ═══════════════════════════════════════════════════ */
+.comic-card .nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.comic-card .nav .nav-btn {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  transition: opacity 0.2s, background 0.2s, transform 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.comic-card .nav .nav-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.comic-card .nav .nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.comic-card .nav .nav-btn.primary {
+  background: var(--c-brand, #f59e0b);
+  color: #fff;
+  border-color: var(--c-brand, #f59e0b);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Responsive breakpoints
+   ══════════════════════════════════════════════════════════════ */
+
+/* Tablet 480px+ */
+@media (min-width: 480px) {
+  :host { max-width: 440px; }
+  .comic-card { border-radius: 18px; }
+  .comic-card .card-body { padding: 16px; gap: 14px; }
+  .comic-card .title { font-size: 18px; }
+  .comic-card .page-indicator { font-size: 13px; }
+  .comic-card .frame-img { border-radius: 12px; }
+  .comic-card .bubble { font-size: 13px; padding: 9px 14px; }
+  .comic-card .nav .nav-btn { padding: 11px 0; font-size: 15px; }
+  .unit-tabs { padding: 12px 12px 8px 12px; gap: 8px; }
+  .unit-tab { padding: 9px 16px; }
+  .unit-tab-title { font-size: 13px; }
+}
+
+/* Large screen 768px+ */
+@media (min-width: 768px) {
+  :host { max-width: 520px; }
+  .comic-card { border-radius: 20px; }
+  .comic-card .card-body { padding: 18px; gap: 16px; }
+  .comic-card .title { font-size: 20px; }
+  .comic-card .subtitle { font-size: 13px; }
+  .comic-card .page-indicator { font-size: 14px; }
+  .comic-card .frame-img { border-radius: 14px; }
+  .comic-card .bubble { font-size: 14px; padding: 10px 16px; }
+  .comic-card .video-area video { max-height: 300px; }
+  .comic-card .nav .nav-btn { padding: 12px 0; font-size: 16px; }
+  .unit-tabs { padding: 14px 14px 10px 14px; gap: 10px; }
+  .unit-tab { padding: 10px 20px; border-radius: 14px; }
+  .unit-tab-label { font-size: 11px; }
+}
+
+/* Desktop 1024px+ */
+@media (min-width: 1024px) {
+  body { background-attachment: fixed; }
+  :host { max-width: 600px; }
+  .comic-card { border-radius: 22px; }
+  .comic-card .card-body { padding: 20px; gap: 18px; }
+  .comic-card .title { font-size: 22px; }
+  .comic-card .page-indicator { font-size: 15px; }
+  .comic-card .frame-img { border-radius: 16px; }
+  .comic-card .bubble { font-size: 15px; padding: 11px 18px; border-radius: 14px; }
+  .comic-card .nav .nav-btn { padding: 13px 0; font-size: 17px; border-radius: 22px; }
+  .unit-tabs { padding: 16px 16px 12px 16px; gap: 12px; }
+  .unit-tab { padding: 12px 22px; border-radius: 16px; }
+  .page-dot { width: 10px; height: 10px; }
+  .page-dot.active { width: 28px; border-radius: 5px; }
+}
+
+/* TV 1440px+ */
+@media (min-width: 1440px) {
+  :host { max-width: 720px; }
+  .comic-card { border-radius: 24px; }
+  .comic-card .card-body { padding: 24px; gap: 20px; }
+  .comic-card .title { font-size: 24px; }
+  .comic-card .subtitle { font-size: 14px; }
+  .comic-card .page-indicator { font-size: 16px; }
+  .comic-card .frame-img { border-radius: 18px; }
+  .comic-card .bubble { font-size: 16px; padding: 12px 20px; border-radius: 16px; }
+  .comic-card .video-area video { max-height: 380px; }
+  .comic-card .nav .nav-btn { padding: 14px 0; font-size: 18px; border-radius: 24px; }
+  .unit-tabs { padding: 18px 18px 14px 18px; gap: 14px; }
+  .unit-tab { padding: 14px 24px; border-radius: 18px; }
+}
+
+/* ── Page-level ── */
+body {
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4ff 0%, #fdf2f8 50%, #f0fdf4 100%);
+  background-attachment: scroll;
+}

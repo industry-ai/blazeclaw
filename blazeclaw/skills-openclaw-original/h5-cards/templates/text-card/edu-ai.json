@@ -1,0 +1,1 @@
+{"schema_version":"1.0","card_type":"assistant_welcome","title":"教育 AI 助手","subtitle":"已就绪 · 随时为你服务","description":"我可以帮你完成：布置作业、批改作文、生成课程总结、回答学科问题。试试对我说「总结今天课程」吧！","button_text":"开始对话","target_url":"https://example.com/edu-ai","theme":"ai","layout":{"variant":"assistant_welcome","icon":"ai"}}

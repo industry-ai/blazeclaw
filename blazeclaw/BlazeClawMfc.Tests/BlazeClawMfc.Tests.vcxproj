@@ -45,6 +45,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\WebViewStartupConfigBridgeTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigSchemaServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ChatPipelineRequestNormalizationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />
@@ -70,6 +71,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleAcceptanceMatrixTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\PluginRuntimeStateServiceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillCommandsAggregationServiceContractTests.cpp" />
@@ -83,6 +86,15 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayParityBatch34ContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayWebChatPhase5ParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewaySpeechPhase56ParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeBridgeHostEndpointTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatBridgeStateStoreMigrationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatWebViewBridgeSmokeContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeDegradedStartupContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatBridgeTransportFallbackContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatWebMessageIntakeDispatchContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatListenerFallbackDiagnosticsContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeRequestTimeObservabilityContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillPortingPlanPresenceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsCatalogServiceOpenClawOriginalImportTests.cpp" />
@@ -133,6 +145,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatPipelineRequestNormalization.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\CredentialStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeLocalHelpers.cpp" />
@@ -215,6 +230,11 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayUtf8CloseReason.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayTestHooks.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeConfig.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeHttpListener.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeProtocol.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\agentchat\AgentChatBridgeStateStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNetPolicy.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
@@ -275,6 +295,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptFormatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SharedFrontmatterCompat.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ThreadPoolRuntimeService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\OpenClawOriginalImportService.cpp" />

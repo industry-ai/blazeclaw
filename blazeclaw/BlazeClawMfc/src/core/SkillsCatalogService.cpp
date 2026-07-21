@@ -960,6 +960,8 @@ namespace blazeclaw::core {
 							importResult.diagnostics;
 						entry.openClawOriginalPromotedDir =
 							importResult.promotedDir;
+					entry.openClawOriginalExtractedRuntimeContract =
+						importResult.extractedRuntimeContract;
 						entry.openClawOriginalMetadataConvertedFromClawdbot =
 							importResult.metadataConvertedFromClawdbot;
 						if (importResult.normalizedMetadata.has_value()) {

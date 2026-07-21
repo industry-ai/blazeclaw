@@ -1,0 +1,1768 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\app\FloatPaneTracker.cpp" />
+    <ClCompile Include="src\app\WebViewBridgeSupport.cpp" />
+    <ClCompile Include="src\app\WebViewStartupConfigBridge.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewToolLifecycleInstrumentation.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewLifecyclePushRouter.cpp" />
+    <ClCompile Include="src\app\webview_routers\WebViewOpenClawShimRouter.cpp" />
+    <ClCompile Include="src\app\config_bridge\EmailConfigHandler.cpp" />
+    <ClCompile Include="src\app\CBridge.cpp" />
+    <ClCompile Include="src\app\VoiceRecorder.cpp" />
+    <ClCompile Include="src\app\CMgrMessage.cpp" />
+    <ClCompile Include="src\app\EventTransport.cpp" />
+    <ClCompile Include="src\app\Connection_c.cpp" />
+    <ClCompile Include="src\app\FileView.cpp" />
+    <ClCompile Include="src\app\WebViewOnlyChildFrame.cpp" />
+    <ClCompile Include="src\app\SharedTabsDocTemplate.cpp" />
+    <ClCompile Include="src\app\SharedDocWebViewChildFrame.cpp" />
+    <ClCompile Include="src\app\SharedDocMarkdownChildFrame.cpp" />
+    <ClCompile Include="src\app\SharedDocAgentChatChildFrame.cpp" />
+    <ClCompile Include="src\app\IoData_cFactory.cpp" />
+    <ClCompile Include="src\app\Logger.cpp" />
+    <ClCompile Include="src\app\LoginDlg.cpp" />
+    <ClCompile Include="src\app\LogSinks.cpp" />
+    <ClCompile Include="src\app\SettingsDialog.cpp" />
+    <ClCompile Include="src\app\NewTabDialog.cpp" />
+    <ClCompile Include="src\app\OutputWnd.cpp" />
+    <ClCompile Include="src\app\pch.cpp" />
+    <ClCompile Include="src\app\PropertiesWnd.cpp" />
+    <ClCompile Include="src\app\qrcodegen.cpp" />
+    <ClCompile Include="src\app\QRCodeLoginDlg.cpp" />
+    <ClCompile Include="src\app\QRCodeLoginService.cpp" />
+    <ClCompile Include="src\app\TaskQueue.cpp" />
+    <ClCompile Include="src\app\TlsAuthClient.cpp" />
+    <ClCompile Include="src\app\ViewTree.cpp" />
+    <ClCompile Include="src\core\diagnostics\CDiagnosticsReportBuilder.cpp" />
+    <ClCompile Include="src\core\diagnostics\DiagnosticsRegressionComparator.cpp" />
+    <ClCompile Include="src\core\FeatureRegistry.cpp" />
+    <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
+    <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
+    <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
+    <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-fbank.cc" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-functions.cc" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\feature-window.cc" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\fftsg.c" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\mel-computations.cc" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\online-feature.cc" />
+    <ClCompile Include="..\FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank\kaldi-native-fbank\csrc\rfft.cc" />
+    <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
+    <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
+    <ClCompile Include="src\\core\\tools\\ToolProcessRunner.cpp" />
+    <ClCompile Include="src\\core\\tools\\ToolArgumentValidators.cpp" />
+    <ClCompile Include="src\\core\\skills\\HooksGovernanceEmitter.cpp" />
+    <ClCompile Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.cpp" />
+    <ClCompile Include="src\\core\\bootstrap\\StartupPolicyResolver.cpp" />
+    <ClCompile Include="src\\core\\bootstrap\\StartupFixtureValidator.cpp" />
+    <ClCompile Include="src\core\filesystem\SafeOpenSync.cpp" />
+    <ClCompile Include="src\core\SubagentRegistryService.cpp" />
+    <ClCompile Include="src\core\HookCatalogService.cpp" />
+    <ClCompile Include="src\core\HookEventService.cpp" />
+    <ClCompile Include="src\core\HookExecutionService.cpp" />
+    <ClCompile Include="src\core\SharedFrontmatterCompat.cpp" />
+    <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
+    <ClCompile Include="src\core\OperatorDiagnosticsAssembler.cpp" />
+    <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
+    <ClCompile Include="src\core\OpenClawOriginalImportService.cpp" />
+    <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
+    <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />
+    <ClCompile Include="src\core\startup\ServiceStartupPhaseModule.cpp" />
+    <ClCompile Include="src\core\ServiceManager.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\TokenizerBridge.cpp" />
+    <ClCompile Include="src\gateway\executors\EmailScheduleExecutor.cpp" />
+    <ClCompile Include="src\gateway\executors\LobsterExecutor.cpp" />
+    <ClCompile Include="src\gateway\executors\PythonProcessExecutor.cpp" />
+    <ClCompile Include="src\gateway\executors\WeatherLookupExecutor.cpp" />
+    <ClCompile Include="src\gateway\PluginHostAdapter.cpp" />
+    <ClCompile Include="src\gateway\PluginRuntimeStateService.cpp" />
+    <ClCompile Include="src\gateway\TaskDeltaSchemaValidator.cpp" />
+    <ClCompile Include="src\gateway\TaskDeltaLegacyAdapter.cpp" />
+    <ClCompile Include="src\gateway\TaskDeltaRepository.cpp" />
+    <ClCompile Include="src\gateway\RuntimeSequencingPolicy.cpp" />
+    <ClCompile Include="src\gateway\RuntimeToolCallNormalizer.cpp" />
+    <ClCompile Include="src\gateway\RuntimeTranscriptGuard.cpp" />
+    <ClCompile Include="src\gateway\ToolEventRecipientPolicy.cpp" />
+    <ClCompile Include="src\gateway\TransportRecipientRegistry.cpp" />
+    <ClCompile Include="src\gateway\FailureClassifier.cpp" />
+    <ClCompile Include="src\gateway\RunLoopBudget.cpp" />
+    <ClCompile Include="src\gateway\CompactionCoordinator.cpp" />
+    <ClCompile Include="src\gateway\ToolResultTruncationCoordinator.cpp" />
+    <ClCompile Include="src\gateway\ContextEnginePolicySelector.cpp" />
+    <ClCompile Include="src\gateway\RecoveryPolicyEngine.cpp" />
+    <ClCompile Include="src\gateway\RunSummaryBuilder.cpp" />
+    <ClCompile Include="src\gateway\BranchDecisionDiagnostics.cpp" />
+    <ClCompile Include="src\gateway\SendPolicyResolver.cpp" />
+    <ClCompile Include="src\gateway\ToolPolicyPipeline.cpp" />
+    <ClCompile Include="src\gateway\TranscriptPolicyResolver.cpp" />
+    <ClCompile Include="src\gateway\python\EmbeddedPythonRuntimeHost.cpp" />
+    <ClCompile Include="src\gateway\python\ExternalPythonRuntimeHost.cpp" />
+    <ClCompile Include="src\gateway\python\PythonRuntimeDispatcher.cpp" />
+    <ClCompile Include="src\gateway\python\PythonRuntimeSelector.cpp" />
+    <ClCompile Include="src\gateway\ApprovalTokenStore.cpp" />
+    <ClCompile Include="src\gateway\ExtensionLifecycleManager.cpp" />
+    <ClCompile Include="tests\CMgrMessageTests.cpp" />
+    <ClCompile Include="tests\VoiceRecorderRingArtifactIntegrationTests.cpp" />
+    <ClCompile Include="src\agentchat\AgentChatBridgeConfig.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\agentchat\AgentChatBridgeHost.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\agentchat\AgentChatBridgeHttpListener.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\agentchat\AgentChatBridgeProtocol.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\agentchat\AgentChatBridgeStateStore.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\agentchat\AgentChatNativeRunner.cpp">
+      <Filter>agent-chat-bridge</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\config_bridge\ConfigBridgeUtils.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\config\ConfigLoader.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\config\ConfigLoaderSkillEntryNormalizationHelpers.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\config\ConfigLoaderSpeechNormalizationHelpers.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\ConfigSchemaService.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawAgentChatView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawMarkdownView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawMFCApp.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawMFCDoc.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawMFCView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BlazeClawMFCViewTextHelpers.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SkillView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DashboardBridgeHost.cpp">
+      <Filter>app\dashboard</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DashboardWnd.cpp">
+      <Filter>app\dashboard</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillCommandInvocationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillCommandsAggregationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\config_bridge\SkillConfigHandler.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsAgentCommandDescriptorPolicy.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCatalogService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsCommandService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsConfigEval.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillSecurityScanService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsEligibilityService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsEnvOverrideService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFacade.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsInstallService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsPromptFormatterCompat.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsPromptService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsSyncService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SkillsWatchService.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatBridgeTransportFallbackContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatListenerFallbackDiagnosticsContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\AIChatView.cpp">
+      <Filter>others</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiKeyDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CNetwork_c.cpp">
+      <Filter>network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronCliGatewayShim.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronHygiene.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronJsonCompat.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronModels.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronNormalize.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronOpsService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\CronParityContractTests.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronRuntimeOutcomeAdapter.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronStoreService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CronTasksDialog.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronTimerService.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cron\CronTimerServiceTestHooks.cpp">
+      <Filter>cron</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsAuthProfileService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsCatalogService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsModelRoutingService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsSandboxService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsShellRuntimeService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsToolPolicyService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsTranscriptSafetyService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\AgentsWorkspaceService.cpp">
+      <Filter>agents</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\calendarbar.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TcpReceiverWnd.cpp" />
+    <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayEventFanoutService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHandshakePolicy.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentSessionMutation.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.AgentToolSurface.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ConfigDiagnostics.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.RegistryIntrospection.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.SpeechRecognition.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.Surface.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.SupplementaryCatalog.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolsShared.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostCronProductionAdapter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostEx.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostModelHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostProtocolHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostProtocolIngressPipeline.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRouter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeLocalHelpers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHttpAuthService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonBuilder.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonSerializers.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayJsonUtils.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayLifecycleEventEmitter.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayMethodSurfaceAudit.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNetPolicy.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeCanvasCapabilityService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeCatalogService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodePairingService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodePendingActionQueue.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayNodeWakeService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolContract.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolJson.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayRequestParams.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayRequestPolicyGuard.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewaySessionUtilsService.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayStaticRegistration.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayTestHooks.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayToolRegistry.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayUtf8CloseReason.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp">
+      <Filter>gateway</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp">
+      <Filter>models</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatAbortCoordinator.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatControlPlaneService.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatHistoryPolicy.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ChatInputEdit.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatOrchestrationPolicy.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\ChatProviderRuntimeService.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\ThreadPoolRuntimeService.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatRoutePolicy.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatRunPipelineOrchestrator.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatRunStages.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\ChatRuntimeOrchestrationCoordinator.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\ChatTranscriptStore.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ChatView.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\chat-controller.cpp">
+      <Filter>core-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\speech_bridge\SpeechBridgeCoordinator.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SpeechCudaCompatibilityGuardTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SpeechRecognitionModelLayoutDetectionTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SpeechRecognitionOfflineOptimizationTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SpeechRecognitionRealtimeStreamingTests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\MainFrame.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\AudioRingBuffer.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp">
+      <Filter>STT</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\AuthProfilePolicyService.cpp">
+      <Filter>network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ChildFrm.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Client.cpp">
+      <Filter>network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\webview_routers\WebViewGatewayRpcRouter.cpp">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\webview_routers\WebViewSpeechRpcRouter.cpp">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\gateway\GatewayHostChatPipelineRouteDeps.cpp" />
+    <ClCompile Include="src\gateway\ChatPipelineRequestNormalization.cpp" />
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsContractTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\GatewayChatMultiActiveModelsThreadPoolTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ChatMessage.cpp" />
+    <ClCompile Include="src\app\CChatRoomBridge.cpp" />
+    <ClCompile Include="src\app\CChannel.cpp" />
+    <ClCompile Include="src\app\CMgrChannels.cpp" />
+    <ClCompile Include="src\app\COperator.cpp" />
+    <ClCompile Include="src\app\CPeer.cpp" />
+    <ClCompile Include="src\app\CTopic.cpp" />
+    <ClCompile Include="src\app\agent-chat\CIrcChatTransport.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\agent-chat\IrcMessageParser.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\app\CBridge.h" />
+    <ClInclude Include="src\app\FloatPaneTracker.h" />
+    <ClInclude Include="src\app\WebViewBridgeSupport.h" />
+    <ClInclude Include="src\app\WebView2Availability.h" />
+    <ClInclude Include="src\app\WebViewStartupConfigBridge.h" />
+    <ClInclude Include="src\app\VoiceRecorder.h" />
+    <ClInclude Include="src\app\CMgrMessage.h" />
+    <ClInclude Include="src\app\EventTransport.h" />
+    <ClInclude Include="src\app\Connection_c.h" />
+    <ClInclude Include="src\app\FileView.h" />
+    <ClInclude Include="src\app\SettingsDialog.h" />
+    <ClInclude Include="src\app\WebViewOnlyChildFrame.h" />
+    <ClInclude Include="src\app\SharedTabsDocTemplate.h" />
+    <ClInclude Include="src\app\SharedDocWebViewChildFrame.h" />
+    <ClInclude Include="src\app\SharedDocMarkdownChildFrame.h" />
+    <ClInclude Include="src\app\SharedDocAgentChatChildFrame.h" />
+    <ClInclude Include="src\app\framework.h" />
+    <ClInclude Include="src\app\IoData_c.h" />
+    <ClInclude Include="src\app\IoData_cFactory.h" />
+    <ClInclude Include="src\app\Logger.h" />
+    <ClInclude Include="src\app\LoginDlg.h" />
+    <ClInclude Include="src\app\LogSinks.h" />
+    <ClInclude Include="src\app\NewTabDialog.h" />
+    <ClInclude Include="src\app\OutputWnd.h" />
+    <ClInclude Include="src\app\pch.h" />
+    <ClInclude Include="src\app\PropertiesWnd.h" />
+    <ClInclude Include="src\app\qrcodegen.hpp" />
+    <ClInclude Include="src\app\QRCodeLoginDlg.h" />
+    <ClInclude Include="src\app\QRCodeLoginService.h" />
+    <ClInclude Include="src\app\Resource.h" />
+    <ClInclude Include="src\app\targetver.h" />
+    <ClInclude Include="src\app\TaskQueue.h" />
+    <ClInclude Include="src\app\TlsAuthClient.h" />
+    <ClInclude Include="src\app\ViewTree.h" />
+    <ClInclude Include="src\core\diagnostics\CDiagnosticsReportBuilder.h" />
+    <ClInclude Include="src\core\diagnostics\DiagnosticsSnapshot.h" />
+    <ClInclude Include="src\core\FeatureRegistry.h" />
+    <ClInclude Include="src\core\AcpSpawnService.h" />
+    <ClInclude Include="src\core\EmbeddingsService.h" />
+    <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
+    <ClInclude Include="src\core\PiEmbeddedService.h" />
+    <ClInclude Include="src\core\RetrievalMemoryService.h" />
+    <ClInclude Include="src\core\runtime\pch.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
+    <ClInclude Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.h" />
+    <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
+    <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
+    <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
+    <ClInclude Include="src\\core\\skills\\HooksGovernanceEmitter.h" />
+    <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
+    <ClInclude Include="src\\core\\bootstrap\\StartupPolicyResolver.h" />
+    <ClInclude Include="src\\core\\bootstrap\\StartupFixtureValidator.h" />
+    <ClInclude Include="src\core\filesystem\SafeOpenSync.h" />
+    <ClInclude Include="src\core\SubagentRegistryService.h" />
+    <ClInclude Include="src\core\HookCatalogService.h" />
+    <ClInclude Include="src\core\HookEventService.h" />
+    <ClInclude Include="src\core\HookExecutionService.h" />
+    <ClInclude Include="src\core\SharedFrontmatterCompat.h" />
+    <ClInclude Include="src\core\MarkdownFrontmatterCompat.h" />
+    <ClInclude Include="src\core\OpenClawOriginalImportService.h" />
+    <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
+    <ClInclude Include="src\core\ServiceLifecycleStartupCoordinator.h" />
+    <ClInclude Include="src\core\startup\ServiceStartupPhaseModule.h" />
+    <ClInclude Include="src\core\ServiceManager.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
+    <ClInclude Include="src\gateway\IChatRunStage.h" />
+    <ClInclude Include="src\gateway\TaskDeltaSchemaValidator.h" />
+    <ClInclude Include="src\gateway\TaskDeltaLegacyAdapter.h" />
+    <ClInclude Include="src\gateway\TaskDeltaRepository.h" />
+    <ClInclude Include="src\gateway\RuntimeSequencingPolicy.h" />
+    <ClInclude Include="src\gateway\RuntimeToolCallNormalizer.h" />
+    <ClInclude Include="src\gateway\RuntimeTranscriptGuard.h" />
+    <ClInclude Include="src\gateway\ToolEventRecipientPolicy.h" />
+    <ClInclude Include="src\gateway\TransportRecipientRegistry.h" />
+    <ClInclude Include="src\gateway\FailureClassifier.h" />
+    <ClInclude Include="src\gateway\RunLoopBudget.h" />
+    <ClInclude Include="src\gateway\CompactionCoordinator.h" />
+    <ClInclude Include="src\gateway\ToolResultTruncationCoordinator.h" />
+    <ClInclude Include="src\gateway\ContextEnginePolicySelector.h" />
+    <ClInclude Include="src\gateway\RecoveryPolicyEngine.h" />
+    <ClInclude Include="src\gateway\RunSummaryBuilder.h" />
+    <ClInclude Include="src\gateway\BranchDecisionDiagnostics.h" />
+    <ClInclude Include="src\gateway\IGatewayHostRuntime.h" />
+    <ClInclude Include="src\gateway\SendPolicyResolver.h" />
+    <ClInclude Include="src\gateway\ToolPolicyPipeline.h" />
+    <ClInclude Include="src\gateway\TranscriptPolicyResolver.h" />
+    <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
+    <ClInclude Include="src\gateway\executors\PythonProcessExecutor.h" />
+    <ClInclude Include="src\gateway\python\EmbeddedPythonRuntimeHost.h" />
+    <ClInclude Include="src\gateway\python\ExternalPythonRuntimeHost.h" />
+    <ClInclude Include="src\gateway\python\IPythonRuntimeHost.h" />
+    <ClInclude Include="src\gateway\python\PythonRuntimeDispatcher.h" />
+    <ClInclude Include="src\gateway\python\PythonRuntimeSelector.h" />
+    <ClInclude Include="src\gateway\PluginHostAdapter.h" />
+    <ClInclude Include="src\gateway\PluginRuntimeStateService.h" />
+    <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
+    <ClInclude Include="src\agentchat\AgentChatBridgeConfig.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatBridgeHost.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatBridgeHttpListener.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatBridgeProtocol.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatBridgeStateStore.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatNativeRunner.h">
+      <Filter>agent-chat-bridge</Filter>
+    </ClInclude>
+    <ClInclude Include="src\config\ConfigModels.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="src\config\ConfigLoader.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\ConfigSchemaService.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BlazeClawAgentChatView.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BlazeClawMarkdownView.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BlazeClawMFCApp.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BlazeClawMFCDoc.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BlazeClawMFCView.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SkillView.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DashboardWnd.h">
+      <Filter>app\dashboard</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DashboardBridgeHost.h">
+      <Filter>app\dashboard</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillCommandInvocationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillCommandsAggregationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCatalogService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsCommandService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsConfigEval.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsContracts.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillSecurityScanService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsEligibilityService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsEnvOverrideService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFacade.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFrontmatterCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsGatewayPublicationCoordinator.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsInstallService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsPromptFormatterCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsPromptService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsSkillContractCompat.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsSyncService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SkillsWatchService.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\AIChatView.h">
+      <Filter>others</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CNetwork_c.h">
+      <Filter>network</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronHygiene.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronJsonCompat.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronModels.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronNormalize.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronOpsService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronStoreService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CronTasksDialog.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cron\CronTimerService.h">
+      <Filter>cron</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsAuthProfileService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsCatalogService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsModelRoutingService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsSandboxService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsShellRuntimeService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsToolPolicyService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsTranscriptSafetyService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\AgentsWorkspaceService.h">
+      <Filter>agents</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\calendarbar.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TcpReceiverWnd.h" />
+    <ClInclude Include="src\gateway\GatewayAgentRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayEventFanoutService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHandshakePolicy.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHost.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\GatewayHostBindingCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostCronProductionAdapter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostEx.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersAgentSessionMutation.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersAgentToolSurface.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersRegistryIntrospection.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostModelHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostProtocolHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostProtocolIngressPipeline.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRouter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeBootstrapCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeLocalHelpers.Types.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHttpAuthService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonBuilder.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonSerializers.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayJsonUtils.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\bootstrap\\GatewayManagedConfigReloader.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayMethodDispatcher.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNetPolicy.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeCanvasCapabilityService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeCatalogService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodePairingService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodePendingActionQueue.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayNodeWakeService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayPersistencePaths.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolCodec.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolContract.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolJson.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolModels.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRequestParams.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRequestPolicyGuard.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\bootstrap\\GatewayRuntimeBootstrapCoordinator.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayRuntimeContext.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySessionRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySessionUtilsService.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewaySkillRootResolver.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayStaticRegistration.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayTestHooks.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayToolRegistry.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayUtf8CloseReason.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayWebSocketTransport.h">
+      <Filter>gateway</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h">
+      <Filter>models</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\runtime\\CChatRuntime.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatAbortCoordinator.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatControlPlaneService.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatHistoryPolicy.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ChatInputEdit.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatRoutePolicy.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatRunStageContext.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatRunStages.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\ChatTranscriptStore.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ChatUiStartupResolver.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ChatView.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\chat-controller.h">
+      <Filter>core-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechModelLayoutProbe.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionContracts.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechRecognitionRuntime.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\MainFrame.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\AudioRingBuffer.h">
+      <Filter>STT</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\AuthProfilePolicyService.h">
+      <Filter>network</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ChildFrm.h">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Client.h">
+      <Filter>network</Filter>
+    </ClInclude>
+    <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewGatewayRpcRouter.h">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewSpeechRpcRouter.h">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\webview_routers\WebViewRouterContext.h">
+      <Filter>core-chat\webview_routers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gateway\GatewayHostChatPipelineRouteDeps.h" />
+    <ClInclude Include="src\gateway\ChatPipelineRequestNormalization.h" />
+    <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
+    <ClInclude Include="src\core\ThreadPoolRuntimeService.h" />
+    <ClInclude Include="src\app\ChatMessage.h" />
+    <ClInclude Include="src\app\CChatRoomBridge.h" />
+    <ClInclude Include="src\app\CChannel.h" />
+    <ClInclude Include="src\app\CMgrChannels.h" />
+    <ClInclude Include="src\app\COperator.h" />
+    <ClInclude Include="src\app\CPeer.h" />
+    <ClInclude Include="src\app\CTopic.h" />
+    <ClInclude Include="src\app\agent-chat\CIrcChatTransport.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\agent-chat\WorkerThread.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\agent-chat\IrcMessageParser.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\app\res\fileview_hc.bmp" />
+    <Image Include="src\app\res\main.bmp" />
+    <Image Include="src\app\res\BlazeClaw.MFCDoc.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\BlazeClaw.MFC.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\dashboar.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="src\app\res\dashboard_cron_wnd.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="src\app\res\dashboard_cron_wnd_hc.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="src\app\res\dashboard_wnd.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="res\dashboard_wnd.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="res\dashboard_wnd_hc.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="src\app\res\dashboard_wnd_hc.ico">
+      <Filter>app\dashboard</Filter>
+    </Image>
+    <Image Include="src\app\res\buttons.bmp">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\classview.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\classview_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\explorer.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\explorer_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\filelarge.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\info.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\fileview.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\filesmall.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\menuimages.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\menuimages_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\nav_large.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\nav_large_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\properties.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\properties_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\Toolbar256.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\Toolbar.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\pages.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\pages_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\pages_small.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\pages_small_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\sort_hc.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\sort.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\writesmall.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\writelarge.bmp">
+      <Filter>app\res\res</Filter>
+    </Image>
+    <Image Include="src\app\res\properties_wnd_hc.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\properties_wnd.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\output_wnd_hc.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\output_wnd.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\class_view_hc.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\class_view.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\file_view_hc.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\file_view.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\icon3.ico">
+      <Filter>app\res</Filter>
+    </Image>
+    <Image Include="src\app\res\icon2.ico">
+      <Filter>app\res</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime.dll" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\onnxruntime_providers_shared.dll" />
+    <None Include="..\docs\readme.md" />
+    <None Include="src\app\res\ribbon.mfcribbon-ms" />
+    <None Include="tools\freeze_sherpa_no_output_baseline.py" />
+    <None Include="tools\Invoke-Catch2CiWithSummary.ps1" />
+    <None Include="tools\speech\Invoke-SherpaProviderBenchmarkSummary.ps1" />
+    <None Include="tools\speech\New-SherpaCpuFallbackTuningMatrix.ps1" />
+    <None Include="tools\speech\New-SherpaFirstTokenValidationChecklist.ps1" />
+    <None Include="tools\speech\Test-SherpaFirstTokenBenchmarkSummary.ps1" />
+    <None Include="web\chat\devices-controller.js" />
+    <None Include="web\chat\files-controller.js" />
+    <None Include="packages.config" />
+    <None Include="web\chat\instances-controller.js" />
+    <None Include="web\chat\nodes-controller.js" />
+    <None Include="web\chat\observability-controller.js" />
+    <None Include="web\chat\tools-controller.js" />
+    <None Include="web\chat\usage-controller.js" />
+    <None Include="src\config\blazeclaw.conf">
+      <Filter>config</Filter>
+    </None>
+    <None Include="blazeclaw.conf">
+      <Filter>config</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\agentBridgeTransport.js">
+      <Filter>agent-chat-bridge</Filter>
+    </None>
+    <None Include="web\chat\dashboard-host-bootstrap.js">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_channels.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_devices.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_dreaming.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_files.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_instances.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_nodes.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_overview.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_skills.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_tools.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\dashboard_usage.html">
+      <Filter>app\dashboard</Filter>
+    </None>
+    <None Include="web\chat\skills-controller.js">
+      <Filter>skills</Filter>
+    </None>
+    <None Include="tools\.tmp_sherpa_no_output_baseline.json">
+      <Filter>STT</Filter>
+    </None>
+    <None Include="SHERPA_ZIPFORMER_FIRST_TOKEN_LATENCY_PLAN.md">
+      <Filter>STT</Filter>
+    </None>
+    <None Include="CRON_CLI_UNAVAILABLE_ROOT_CAUSE_AND_ENABLE_PLAN.md">
+      <Filter>cron</Filter>
+    </None>
+    <None Include="web\chat\cron-controller.js">
+      <Filter>cron</Filter>
+    </None>
+    <None Include="web\chat\scope-errors.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\agents-controller.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\agents-toggle.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\channels-controller.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\channels-state-contract.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\chat-composer.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\chat-controller.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\chat-events.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\config-form-coerce.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\config-form-utils.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\controller-utils.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\dashboard.html">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\dashboard_cron.html">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\dashboard-host.css">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\dreaming-controller.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\index.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\index.html">
+      <Filter>web\agent-chat\html</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\css\main.css">
+      <Filter>web\agent-chat\html\css</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\css\variables.css">
+      <Filter>web\agent-chat\html\css</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\app.js">
+      <Filter>web\agent-chat\html\js</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\config.js">
+      <Filter>web\agent-chat\html\js</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\utils\authErrorMessage.js">
+      <Filter>web\agent-chat\html\js\utils</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\utils\avatar.js">
+      <Filter>web\agent-chat\html\js\utils</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\utils\markdown.js">
+      <Filter>web\agent-chat\html\js\utils</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\utils\time.js">
+      <Filter>web\agent-chat\html\js\utils</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\utils\toast.js">
+      <Filter>web\agent-chat\html\js\utils</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\transport\httpIrcTransport.js">
+      <Filter>web\agent-chat\html\js\transport</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\transport\mockTransport.js">
+      <Filter>web\agent-chat\html\js\transport</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\transport\transportFactory.js">
+      <Filter>web\agent-chat\html\js\transport</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\transport\webSocketTransport.js">
+      <Filter>web\agent-chat\html\js\transport</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\stores\authStore.js">
+      <Filter>web\agent-chat\html\js\stores</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\stores\chatStore.js">
+      <Filter>web\agent-chat\html\js\stores</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\stores\uiStore.js">
+      <Filter>web\agent-chat\html\js\stores</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\ai.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\auth.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\chat.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\devices.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\me.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\notifications.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\pages\tasks.js">
+      <Filter>web\agent-chat\html\js\pages</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\authApi.js">
+      <Filter>web\agent-chat\html\js\api</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\chatApi.js">
+      <Filter>web\agent-chat\html\js\api</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\httpClient.js">
+      <Filter>web\agent-chat\html\js\api</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\html\js\api\postApi.js">
+      <Filter>web\agent-chat\html\js\api</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\blazeclaw-agent-bridge.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\blazeclaw-agent-push-bridge.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\blazeclaw-agent-server.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\blazeclaw-runner.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\blazeclaw-shared.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\chat-bridge.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\chat-bridge-dev.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\collaboration-relay.spec.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\collaboration-relay.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\cos-object-key.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\cos-object-key.spec.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\cos-upload.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\html-server.mjs">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-agent-bridge.spec.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-agent-bridge.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-agent-push-bridge.spec.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-agent-push-bridge.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-agent-server.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-runner.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\openclaw-shared.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\tts-bridge.spec.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="web\agent-chat-vanilla\server\tts-bridge.ts">
+      <Filter>web\agent-chat\server</Filter>
+    </None>
+    <None Include="tools\compare_sherpa_baseline.py">
+      <Filter>STT</Filter>
+    </None>
+    <None Include="web\chat\dist\index.html">
+      <Filter>app\res\res</Filter>
+    </None>
+    <None Include="src\gateway\GatewayHost.Handlers.RuntimeHelpers.inl">
+      <Filter>gateway</Filter>
+    </None>
+    <None Include="web\chat\chat-controller-gui.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\index.css">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\index.html">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\chat-controller-adapter.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="agent-chat-bridge">
+      <UniqueIdentifier>{b6dafb51-e221-4e36-88f3-fa40fa6c19ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="config">
+      <UniqueIdentifier>{828be5ac-5241-44d8-972d-d156ecb7c9b7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app">
+      <UniqueIdentifier>{5b9a50c0-109c-4186-a4dc-84ab743606bb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\res">
+      <UniqueIdentifier>{3e9fb80b-450a-4e23-a3f4-f34a456df7a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="agent-chat">
+      <UniqueIdentifier>{591d8147-d4ce-4186-9e6e-0d4b817aa16c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\dashboard">
+      <UniqueIdentifier>{b339135a-da5e-40a1-81f5-78c6911ff23f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="skills">
+      <UniqueIdentifier>{fcf97d0f-9fac-49bb-9201-33c188c091d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="STT">
+      <UniqueIdentifier>{4043f7e6-d03e-4d1d-8d30-ee6a8bce7232}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="others">
+      <UniqueIdentifier>{e75aa253-2d1f-4937-8444-a12a41b1a74d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network">
+      <UniqueIdentifier>{b12c692f-664c-4d1a-80ce-21e05dd6565c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="cron">
+      <UniqueIdentifier>{b531b7ce-f837-41af-8d5b-6cf5e0f49c9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="agents">
+      <UniqueIdentifier>{e6c3d0bf-8c0c-43ae-84df-33df17280b7a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gateway">
+      <UniqueIdentifier>{05aafd43-9306-4c74-9a9d-1d287727c3ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web">
+      <UniqueIdentifier>{d4a227ba-e03f-4159-b16a-3c4921dcb669}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\chat">
+      <UniqueIdentifier>{edea6a80-de3c-43d6-b477-77ba753cee16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat">
+      <UniqueIdentifier>{600be986-6eb6-446c-8ec3-a441aa38bce4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html">
+      <UniqueIdentifier>{4fbf039d-91dc-4488-bbed-d4ec038c3504}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\css">
+      <UniqueIdentifier>{f601a29f-7b8f-4853-b651-ee246926551f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js">
+      <UniqueIdentifier>{a1a0f66e-2a75-475e-b8fe-3ab68638c24c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js\utils">
+      <UniqueIdentifier>{11baa795-5e08-43c0-8260-5824553a07e8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js\transport">
+      <UniqueIdentifier>{77083819-9bff-42b7-b0bc-0d0ddba7e9d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js\stores">
+      <UniqueIdentifier>{4a90fe4d-ccf8-4dcf-9bc1-4488692ea552}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js\pages">
+      <UniqueIdentifier>{29619344-dd9d-4f20-b0a2-6adb8f41560e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\html\js\api">
+      <UniqueIdentifier>{fcadf000-dd15-440e-919a-00fec4fc8b0c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="web\agent-chat\server">
+      <UniqueIdentifier>{524b1c15-8890-4476-8ca8-f5d10f943b7f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="models">
+      <UniqueIdentifier>{d06842b2-0ade-417a-8e8a-f4115c2d863c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core-chat">
+      <UniqueIdentifier>{cee01b41-ca92-410d-a3aa-18a06826c8cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core-chat\webview_routers">
+      <UniqueIdentifier>{bf0087c2-b593-4643-8897-1005d5af85e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{3ff0feb6-e339-4f12-8b55-4f1f2e2cf6ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\res\res">
+      <UniqueIdentifier>{0b35a48c-020b-4fd0-9067-2fe06ed4d6f2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\app\BlazeClawMFC.rc">
+      <Filter>app\res</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

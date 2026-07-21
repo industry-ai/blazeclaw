@@ -3140,239 +3140,90 @@ namespace blazeclaw::gateway::protocol {
 		bool ValidateChatSendParams(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue) {
+			struct ChatSendFieldSpec {
+				const char* name;
+				JsonFieldKind kind;
+				const char* kindText;
+			};
+
+			static constexpr ChatSendFieldSpec kChatSendFieldSpecs[] = {
+				{ "sessionKey", JsonFieldKind::String, "a string" },
+				{ "message", JsonFieldKind::String, "a string" },
+				{ "bodyForCommands", JsonFieldKind::String, "a string" },
+				{ "bodyForAgent", JsonFieldKind::String, "a string" },
+				{ "idempotencyKey", JsonFieldKind::String, "a string" },
+				{ "forceError", JsonFieldKind::Boolean, "boolean" },
+				{ "attachments", JsonFieldKind::Array, "an array" },
+				{ "deliver", JsonFieldKind::Boolean, "boolean" },
+				{ "detached", JsonFieldKind::Boolean, "boolean" },
+				{ "originatingChannel", JsonFieldKind::String, "a string" },
+				{ "originatingTo", JsonFieldKind::String, "a string" },
+				{ "clientMode", JsonFieldKind::String, "a string" },
+				{ "clientConnectionId", JsonFieldKind::String, "a string" },
+				{ "hasConnectedClient", JsonFieldKind::Boolean, "boolean" },
+				{ "mainKey", JsonFieldKind::String, "a string" },
+				{ "clientCaps", JsonFieldKind::Array, "an array" },
+				{ "pushLifecycle", JsonFieldKind::Boolean, "boolean" },
+				{ "inlineInvocationAuthorizedSender", JsonFieldKind::Boolean, "boolean" },
+				{ "inlineInvocationSenderIsOwner", JsonFieldKind::Boolean, "boolean" },
+				{ "allowInlineToolImmediateExecution", JsonFieldKind::Boolean, "boolean" },
+				{ "channelId", JsonFieldKind::String, "a string" },
+				{ "from", JsonFieldKind::String, "a string" },
+				{ "to", JsonFieldKind::String, "a string" },
+				{ "skipWhenConfigEmpty", JsonFieldKind::Boolean, "boolean" },
+				{ "configEmpty", JsonFieldKind::Boolean, "boolean" },
+				{ "isStopLikeInbound", JsonFieldKind::Boolean, "boolean" },
+				{ "abortCutoffTimestampMs", JsonFieldKind::Number, "number" },
+				{ "inboundTimestampMs", JsonFieldKind::Number, "number" },
+				{ "responseMode", JsonFieldKind::String, "a string" },
+				{ "requestedResponders", JsonFieldKind::Array, "an array" },
+				{ "threadingMode", JsonFieldKind::String, "a string" }
+			};
+
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "chat.send", fieldKinds)) {
 				return false;
 			}
 
-			if (!RequireFieldKindIfPresent(
+			for (const ChatSendFieldSpec& fieldSpec : kChatSendFieldSpecs) {
+				if (!RequireFieldKindIfPresent(
+					fieldKinds,
+					fieldSpec.name,
+					fieldSpec.kind,
+					issue,
+					"chat.send",
+					fieldSpec.kindText)) {
+					return false;
+				}
+			}
+
+			if (!ValidateCronEnumStringField(
+				request,
 				fieldKinds,
-				"sessionKey",
-				JsonFieldKind::String,
-				issue,
 				"chat.send",
-				"a string") ||
-				!RequireFieldKindIfPresent(
+				"responseMode",
+				{ "single", "multi_active" },
+				issue) ||
+				!ValidateCronEnumStringField(
+					request,
 					fieldKinds,
-					"message",
-					JsonFieldKind::String,
-					issue,
 					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"bodyForCommands",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"bodyForAgent",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"idempotencyKey",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"forceError",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"attachments",
-					JsonFieldKind::Array,
-					issue,
-					"chat.send",
-					"an array") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"deliver",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"detached",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"originatingChannel",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"originatingTo",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"clientMode",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"clientConnectionId",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"hasConnectedClient",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"mainKey",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"clientCaps",
-					JsonFieldKind::Array,
-					issue,
-					"chat.send",
-					"an array") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"pushLifecycle",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"inlineInvocationAuthorizedSender",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"inlineInvocationSenderIsOwner",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"allowInlineToolImmediateExecution",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"channelId",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"from",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"to",
-					JsonFieldKind::String,
-					issue,
-					"chat.send",
-					"a string") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"skipWhenConfigEmpty",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"configEmpty",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"isStopLikeInbound",
-					JsonFieldKind::Boolean,
-					issue,
-					"chat.send",
-					"boolean") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"abortCutoffTimestampMs",
-					JsonFieldKind::Number,
-					issue,
-					"chat.send",
-					"number") ||
-				!RequireFieldKindIfPresent(
-					fieldKinds,
-					"inboundTimestampMs",
-					JsonFieldKind::Number,
-					issue,
-					"chat.send",
-					"number")) {
+					"threadingMode",
+					{ "thread_pool" },
+					issue)) {
 				return false;
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (field == "sessionKey" ||
-					field == "message" ||
-					field == "bodyForCommands" ||
-					field == "bodyForAgent" ||
-					field == "idempotencyKey" ||
-					field == "forceError" ||
-					field == "attachments" ||
-					field == "deliver" ||
-					field == "detached" ||
-					field == "originatingChannel" ||
-					field == "originatingTo" ||
-					field == "clientMode" ||
-					field == "clientConnectionId" ||
-					field == "hasConnectedClient" ||
-					field == "mainKey" ||
-					field == "clientCaps" ||
-					field == "pushLifecycle" ||
-					field == "inlineInvocationAuthorizedSender" ||
-					field == "inlineInvocationSenderIsOwner" ||
-					field == "allowInlineToolImmediateExecution" ||
-					field == "channelId" ||
-					field == "from" ||
-					field == "to" ||
-					field == "skipWhenConfigEmpty" ||
-					field == "configEmpty" ||
-					field == "isStopLikeInbound" ||
-					field == "abortCutoffTimestampMs" ||
-					field == "inboundTimestampMs") {
+				bool isAllowedField = false;
+				for (const ChatSendFieldSpec& fieldSpec : kChatSendFieldSpecs) {
+					if (field == fieldSpec.name) {
+						isAllowedField = true;
+						break;
+					}
+				}
+
+				if (isAllowedField) {
 					continue;
 				}
 

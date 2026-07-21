@@ -21,6 +21,267 @@
     };
 
     const NEEDS_APPROVAL_QUEUE_TIMEOUT_MS = 1500;
+    const UI_OP_CHAT_REQUEST_SEND_DEDUP_WINDOW_MS = 1000;
+
+    function isSpeechPreviewRunId(runId) {
+        return String(runId || "").trim().startsWith("speech-preview-");
+    }
+
+    function isSpeechFinalRunId(runId) {
+        return String(runId || "").trim().startsWith("speech-final-");
+    }
+
+    function hasSpeechFinalAuthority(sessionState) {
+        const source = sessionState && typeof sessionState === "object"
+            ? sessionState
+            : {};
+        return isSpeechFinalRunId(source.finalRunId) ||
+            isSpeechFinalRunId(source.runId);
+    }
+
+    function isRecordingSpeechStage(stage, runId) {
+        const normalizedStage = String(stage || "").trim();
+        const previewRun = isSpeechPreviewRunId(runId);
+        if (normalizedStage === "recording" ||
+            normalizedStage === "start_stream" ||
+            normalizedStage === "streaming") {
+            return previewRun;
+        }
+        return normalizedStage === "queued" && previewRun;
+    }
+
+    function buildSpeechStatusText(capability, sessionState) {
+        if (!capability) {
+            return "speech: unavailable";
+        }
+
+        const parts = [];
+        if (capability.loaded !== true) {
+            parts.push("loading");
+        } else {
+            parts.push(capability.sttReady
+                ? "stt ready"
+                : (capability.sttSupported ? "stt unavailable" : "stt unsupported"));
+            if (capability.transcriptSupportsSegments) {
+                parts.push("segments");
+                parts.push(capability.transcriptSupportsInterim ? "interim" : "final-only");
+            } else {
+                parts.push("final-only");
+            }
+            if (capability.streamingPreviewEnabled === false) {
+                parts.push("preview=off");
+            }
+            parts.push(capability.ttsSupported ? "tts available" : "tts off");
+            const capabilityEffectiveProvider = String(capability.effectiveExecutionProvider || "").trim();
+            if (capabilityEffectiveProvider) {
+                parts.push(`provider=${capabilityEffectiveProvider}`);
+            }
+            const capabilityCudaReason = String(capability.cudaExecutionProviderReason || "").trim();
+            if (capabilityEffectiveProvider === "cuda") {
+                parts.push("cuda=active");
+            } else if (capabilityCudaReason && capabilityCudaReason !== "none") {
+                parts.push(`cuda=${capabilityCudaReason}`);
+            } else if (capability.cudaExecutionProviderAvailable === false &&
+                capability.cudaExecutionProviderEnabled === false) {
+                parts.push("cuda=unavailable");
+            }
+        }
+
+        if (capability.error) {
+            parts.push(`capErr=${String(capability.error)}`);
+        }
+
+        if (sessionState && sessionState.stage) {
+            const stage = String(sessionState.stage).trim();
+            if (stage) {
+                parts.push(`stage=${stage}`);
+            }
+            if (sessionState.segmentText) {
+                const stageImpliesFinal =
+                    stage === "segment_finalized" ||
+                    stage === "stopped" ||
+                    stage === "completed" ||
+                    stage === "failed" ||
+                    stage === "cancelled";
+                const suffix = (sessionState.segmentFinal || stageImpliesFinal)
+                    ? "final"
+                    : "interim";
+                parts.push(`segment=${suffix}`);
+            } else if (sessionState.text) {
+                const textFinal =
+                    stage === "segment_finalized" ||
+                    stage === "stopped" ||
+                    stage === "completed" ||
+                    stage === "failed" ||
+                    stage === "cancelled";
+                parts.push(`segment=${textFinal ? "final" : "interim"}`);
+            }
+            if (sessionState.errorCode) {
+                parts.push(`err=${String(sessionState.errorCode)}`);
+            }
+            const sessionEffectiveProvider = String(sessionState.effectiveExecutionProvider || "").trim();
+            if (sessionEffectiveProvider &&
+                sessionEffectiveProvider !== String(capability.effectiveExecutionProvider || "").trim()) {
+                parts.push(`sessionProvider=${sessionEffectiveProvider}`);
+            }
+            const sessionCudaReason = String(sessionState.cudaExecutionProviderReason || "").trim();
+            if (sessionCudaReason && sessionCudaReason !== "none") {
+                parts.push(`sessionCuda=${sessionCudaReason}`);
+            }
+        }
+
+        return `speech: ${parts.join(" | ")}`;
+    }
+
+    function buildSpeechLivePreviewView(capability, sessionState) {
+        if (!sessionState) {
+            return {
+                visible: false,
+                modeClass: "status",
+                label: "",
+                text: "",
+            };
+        }
+
+        const stage = String(sessionState.stage || "").trim();
+        const runId = String(sessionState.runId || "").trim();
+        const text = String(sessionState.segmentText || sessionState.text || "").trim();
+        const errorMessage = String(sessionState.errorMessage || "").trim();
+        const previewDisabled = capability && capability.streamingPreviewEnabled === false;
+        const finalAuthorityActive = hasSpeechFinalAuthority(sessionState);
+        const recording = isRecordingSpeechStage(stage, runId);
+
+        const liveStages = new Set(["recording", "start_stream", "streaming", "queued", "stopped", "transcribing"]);
+        const finalizingStages = new Set(["segment_finalized", "completed", "failed", "cancelled"]);
+        if (!recording && !finalizingStages.has(stage) && !liveStages.has(stage)) {
+            return {
+                visible: false,
+                modeClass: "status",
+                label: "",
+                text: "",
+            };
+        }
+
+        let label = "speech";
+        let modeClass = "status";
+        if (recording) {
+            label = previewDisabled ? "speech (recording)" : "speech preview";
+            modeClass = previewDisabled ? "status" : "preview";
+        } else if (stage === "segment_finalized" || stage === "completed") {
+            label = finalAuthorityActive ? "speech final" : "speech";
+            modeClass = "final";
+        } else if (stage === "failed") {
+            label = "speech error";
+            modeClass = "error";
+        }
+
+        const noSpeechTriage = sessionState.noSpeechTriage && typeof sessionState.noSpeechTriage === "object"
+            ? sessionState.noSpeechTriage
+            : null;
+        const noSpeechDetected = String(sessionState.errorCode || "").trim() === "no_speech_detected";
+        const finalNoSpeechFailed = stage === "failed" && noSpeechDetected;
+        if (finalNoSpeechFailed && noSpeechTriage) {
+            const energyAvg = Number.isFinite(Number(noSpeechTriage.sherpaChunkEnergyAvgPermille))
+                ? Number(noSpeechTriage.sherpaChunkEnergyAvgPermille)
+                : 0;
+            const voiced = Number.isFinite(Number(noSpeechTriage.sherpaVoicedChunkCount))
+                ? Number(noSpeechTriage.sherpaVoicedChunkCount)
+                : 0;
+            const nearZero = Number.isFinite(Number(noSpeechTriage.sherpaNearZeroSamplePermille))
+                ? Number(noSpeechTriage.sherpaNearZeroSamplePermille)
+                : 0;
+            const health = Number.isFinite(Number(noSpeechTriage.sherpaInputHealthIndex))
+                ? Number(noSpeechTriage.sherpaInputHealthIndex)
+                : 0;
+            const channelIndex = Number.isFinite(Number(noSpeechTriage.captureChannelIndex))
+                ? Number(noSpeechTriage.captureChannelIndex)
+                : 0;
+            const channelEnergy = Number.isFinite(Number(noSpeechTriage.captureChannelEnergyPermille))
+                ? Number(noSpeechTriage.captureChannelEnergyPermille)
+                : 0;
+            const triageText =
+                ` [triage: health=${health}, energyAvg=${energyAvg}, voiced=${voiced}, nearZero=${nearZero}, ch=${channelIndex}, chEnergy=${channelEnergy}]`;
+            return {
+                visible: true,
+                modeClass: "status",
+                label: "speech status",
+                text: (text || errorMessage || "No speech detected") + triageText,
+            };
+        }
+
+        return {
+            visible: true,
+            modeClass,
+            label,
+            text: previewDisabled &&
+                (liveStages.has(stage) || finalizingStages.has(stage))
+                ? (text || errorMessage || "Preview is off; final transcription will run after stop.")
+                : (text || errorMessage || "Speak now"),
+        };
+    }
+
+    function buildApprovalFailureGuideText(entry) {
+        const item = entry && typeof entry === "object"
+            ? entry
+            : {};
+        if (!item.missingDependency &&
+            !item.remediation &&
+            !item.installHint &&
+            !item.configHint &&
+            !(item.readinessKnown && !item.readinessReady)) {
+            return "";
+        }
+
+        const missingParts = [];
+        if (item.missingDependency) {
+            missingParts.push(String(item.missingDependency));
+        }
+        if (item.readinessKnown &&
+            !item.readinessReady &&
+            item.readinessMissingDependency) {
+            const readinessMissing = String(item.readinessMissingDependency);
+            if (!missingParts.includes(readinessMissing)) {
+                missingParts.push(readinessMissing);
+            }
+        }
+        const missingSummary = missingParts.length
+            ? `missing=${missingParts.join("|")} · `
+            : "";
+        let remediation = "Repair dependency/configuration and retry approval.";
+        if (item.remediation) {
+            remediation = String(item.remediation);
+        } else if (item.readinessRemediation) {
+            remediation = String(item.readinessRemediation);
+        }
+        const executionDetails = item.installHint || item.configHint
+            ? `${item.installHint ? ` install: ${String(item.installHint)}` : ""}${item.configHint ? ` config: ${String(item.configHint)}` : ""}`
+            : "";
+        const precheckDetails = (item.readinessKnown && !item.readinessReady)
+            ? ` precheck: ${item.readinessCode ? `code=${String(item.readinessCode)} · ` : ""}${item.readinessMessage ? String(item.readinessMessage) : "Email backend is not ready."}`
+            : "";
+        return `[backend stack incomplete] ${missingSummary}${remediation}${executionDetails}${precheckDetails}`;
+    }
+
+    function normalizeGuiDerivedState() {
+        const capability = state.speechCapabilities && typeof state.speechCapabilities === "object"
+            ? state.speechCapabilities
+            : null;
+        const sessionState = state.speechSessionState && typeof state.speechSessionState === "object"
+            ? state.speechSessionState
+            : null;
+
+        state.speechStatusText = buildSpeechStatusText(capability, sessionState);
+        state.speechLivePreviewView = buildSpeechLivePreviewView(capability, sessionState);
+
+        if (Array.isArray(state.approvalQueue)) {
+            for (const item of state.approvalQueue) {
+                if (!item || typeof item !== "object") {
+                    continue;
+                }
+                item.failureGuideText = buildApprovalFailureGuideText(item);
+            }
+        }
+    }
 
     const statusEl = document.getElementById("status");
     const speechStatusEl = document.getElementById("speechStatus");
@@ -58,7 +319,46 @@
     state.agentsTabsEl = document.getElementById("agentsTabs");
     state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
+    const guiApi = window.BlazeClawChatControllerGui || {};
+    const chatControllerApi = window.BlazeClawChatControllerAdapter || {};
+    const scriptOrderCompat =
+        window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ &&
+            typeof window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ === "object"
+            ? window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__
+            : null;
+
+    if (scriptOrderCompat && scriptOrderCompat.ok !== true) {
+        const missing = Array.isArray(scriptOrderCompat.missing)
+            ? scriptOrderCompat.missing
+            : [];
+        if (window.console && typeof window.console.warn === "function") {
+            window.console.warn(
+                "[chat-script-order] compatibility check reported missing modules:",
+                missing.join(", "));
+        }
+    }
+
+    function createChatController(options) {
+        if (typeof chatControllerApi.createController !== "function") {
+            throw new Error("BlazeClawChatControllerAdapter.createController unavailable");
+        }
+        return chatControllerApi.createController(options);
+    }
+    const guiModule = typeof guiApi.createGuiModule === "function"
+        ? guiApi.createGuiModule({
+            state,
+            scanApprovalTokenFromText,
+            harvestApprovalTokensFromText,
+            resolveApprovalToken,
+            controllerProvider: () => controller,
+        })
+        : null;
+
     function setStatus(text) {
+        if (guiModule && typeof guiModule.setStatus === "function") {
+            guiModule.setStatus(text);
+            return;
+        }
         if (!statusEl) {
             return;
         }
@@ -67,6 +367,10 @@
     }
 
     function renderSpeechStatus() {
+        if (guiModule && typeof guiModule.renderSpeechStatus === "function") {
+            guiModule.renderSpeechStatus();
+            return;
+        }
         if (!speechStatusEl) {
             return;
         }
@@ -184,6 +488,10 @@
     }
 
     function renderSpeechLivePreview() {
+        if (guiModule && typeof guiModule.renderSpeechLivePreview === "function") {
+            guiModule.renderSpeechLivePreview();
+            return;
+        }
         if (!speechLivePreviewEl || !speechLivePreviewLabelEl || !speechLivePreviewTextEl) {
             return;
         }
@@ -289,6 +597,10 @@
     }
 
     function renderApprovalQueue() {
+        if (guiModule && typeof guiModule.renderApprovalQueue === "function") {
+            guiModule.renderApprovalQueue();
+            return;
+        }
         if (!approvalQueueEl) {
             return;
         }
@@ -496,6 +808,338 @@
         renderApprovalQueue();
     }
 
+    function applyNormalizedStatePatch(statePatch) {
+        const patch = statePatch && typeof statePatch === "object"
+            ? statePatch
+            : null;
+        if (!patch) {
+            return;
+        }
+
+        const speechPatch = patch.speech && typeof patch.speech === "object"
+            ? patch.speech
+            : null;
+        if (speechPatch) {
+            if (speechPatch.capabilities && typeof speechPatch.capabilities === "object") {
+                state.speechCapabilities = {
+                    ...(state.speechCapabilities && typeof state.speechCapabilities === "object"
+                        ? state.speechCapabilities
+                        : {}),
+                    ...speechPatch.capabilities,
+                };
+            }
+
+            if (speechPatch.session && typeof speechPatch.session === "object") {
+                state.speechSessionState = {
+                    ...(state.speechSessionState && typeof state.speechSessionState === "object"
+                        ? state.speechSessionState
+                        : {}),
+                    ...speechPatch.session,
+                };
+            }
+        }
+
+        const approvalPatch = patch.approval && typeof patch.approval === "object"
+            ? patch.approval
+            : null;
+        if (approvalPatch) {
+            const token = String(approvalPatch.approvalToken || "").trim();
+            if (token) {
+                upsertApprovalToken(token, "Email scheduling approval required");
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                const item = queue.find((entry) => String(entry && entry.token || "").trim() === token);
+                if (item) {
+                    item.errorMessage = String(approvalPatch.errorMessage || "").trim();
+                    item.remediation = String(approvalPatch.remediation || "").trim();
+                    item.missingDependency = String(approvalPatch.missingDependency || "").trim();
+                    item.installHint = String(approvalPatch.installHint || "").trim();
+                    item.configHint = String(approvalPatch.configHint || "").trim();
+                    item.failureBucket = String(approvalPatch.failureBucket || "").trim();
+                    item.readinessKnown = Boolean(approvalPatch.readinessKnown);
+                    item.readinessReady = Boolean(approvalPatch.readinessReady);
+                    item.readinessCode = String(approvalPatch.readinessCode || "").trim();
+                    item.readinessMessage = String(approvalPatch.readinessMessage || "").trim();
+                    item.readinessRemediation = String(approvalPatch.readinessRemediation || "").trim();
+                    item.readinessMissingDependency = String(approvalPatch.readinessMissingDependency || "").trim();
+                    item.readinessInstallHint = String(approvalPatch.readinessInstallHint || "").trim();
+                    item.readinessConfigHint = String(approvalPatch.readinessConfigHint || "").trim();
+                    item.readinessBucket = String(approvalPatch.readinessBucket || "").trim();
+                }
+            }
+        }
+
+        const sessionPatch = patch.session && typeof patch.session === "object"
+            ? patch.session
+            : null;
+        if (sessionPatch) {
+            if (Array.isArray(sessionPatch.options)) {
+                state.sessionOptions = sessionPatch.options.slice();
+            } else if (Array.isArray(sessionPatch.sessionOptions)) {
+                state.sessionOptions = sessionPatch.sessionOptions.slice();
+            }
+
+            const activeSessionKey = String(
+                sessionPatch.activeSessionKey ||
+                sessionPatch.sessionKey ||
+                "").trim();
+            if (activeSessionKey) {
+                state.sessionKey = activeSessionKey;
+            }
+        }
+
+        const modelPatch = patch.models && typeof patch.models === "object"
+            ? patch.models
+            : null;
+        if (modelPatch) {
+            if (Array.isArray(modelPatch.options)) {
+                state.modelOptions = modelPatch.options.slice();
+            } else if (Array.isArray(modelPatch.modelOptions)) {
+                state.modelOptions = modelPatch.modelOptions.slice();
+            }
+
+            const selectedModel = String(
+                modelPatch.selectedModel ||
+                modelPatch.activeModel ||
+                "").trim();
+            if (selectedModel) {
+                state.selectedModel = selectedModel;
+            }
+
+            const thinkingLevel = String(
+                modelPatch.thinkingLevel ||
+                modelPatch.thinking ||
+                "").trim();
+            if (thinkingLevel) {
+                state.thinkingLevel = thinkingLevel;
+            }
+
+            if (Array.isArray(modelPatch.thinkingOptions)) {
+                state.thinkingOptions = modelPatch.thinkingOptions.slice();
+            }
+        }
+
+        const chatStreamPatch = patch.chatStream && typeof patch.chatStream === "object"
+            ? patch.chatStream
+            : null;
+        if (chatStreamPatch) {
+            const activeRunId = String(chatStreamPatch.activeRunId || "").trim();
+            state.runId = activeRunId || state.runId;
+            if (typeof chatStreamPatch.streamText === "string") {
+                state.streamText = chatStreamPatch.streamText;
+            }
+        }
+    }
+
+    function applyNormalizedUiOps(uiOps) {
+        function resolveUiOpResponderLabel(data) {
+            const source = data && typeof data === "object" ? data : {};
+            const explicit = String(source.responderLabel || source.modelLabel || "").trim();
+            if (explicit) {
+                return explicit;
+            }
+
+            const provider = String(
+                source.provider ||
+                state.gatewayLifecycleProvider ||
+                ""
+            ).trim().toLowerCase();
+            const model = String(
+                source.model ||
+                state.gatewayLifecycleModel ||
+                state.selectedModel ||
+                ""
+            ).trim();
+            const runtimeKind = String(
+                source.runtimeKind ||
+                state.gatewayLifecycleRuntimeKind ||
+                ""
+            ).trim().toLowerCase();
+            const resolvedRuntime = runtimeKind || (provider === "deepseek" ? "remote" : "local");
+            const modelPart = model || "(unknown-model)";
+
+            if (!provider && !model) {
+                return "Responder: unknown";
+            }
+            if (!provider) {
+                return `Responder: ${resolvedRuntime} ${modelPart}`;
+            }
+            return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
+        }
+
+        const operations = Array.isArray(uiOps) ? uiOps : [];
+        for (const item of operations) {
+            if (!item || typeof item !== "object") {
+                continue;
+            }
+
+            const op = String(item.op || "").trim();
+            const data = item.data && typeof item.data === "object"
+                ? item.data
+                : {};
+
+            if (op === "chat.set_status") {
+                const message = String(data.message || data.text || "").trim();
+                if (message) {
+                    setStatus(message);
+                }
+                continue;
+            }
+
+            if (op === "chat.update_stream") {
+                const text = String(data.text || "");
+                if (!text) {
+                    continue;
+                }
+                const responderLabel = resolveUiOpResponderLabel(data);
+                addOrReplaceStream(text, {
+                    runId: data.runId,
+                    promptRunId: data.promptRunId,
+                    responderRunId: data.responderRunId,
+                    responderId: data.responderId,
+                    responderLabel,
+                    responderOrder: data.responderOrder,
+                    responseMode: data.responseMode || "multi_active",
+                    state: "delta",
+                });
+                continue;
+            }
+
+            if (op === "chat.finalize_stream") {
+                const text = String(data.text || "");
+                const responderLabel = resolveUiOpResponderLabel(data);
+                if (text) {
+                    addOrReplaceStream(text, {
+                        runId: data.runId,
+                        promptRunId: data.promptRunId,
+                        responderRunId: data.responderRunId,
+                        responderId: data.responderId,
+                        responderLabel,
+                        responderOrder: data.responderOrder,
+                        responseMode: data.responseMode || "multi_active",
+                        state: "delta",
+                    });
+                }
+                finalizeStream({
+                    runId: data.runId,
+                    promptRunId: data.promptRunId,
+                    responderRunId: data.responderRunId,
+                    responderId: data.responderId,
+                    responderLabel,
+                    responderOrder: data.responderOrder,
+                    responseMode: data.responseMode || "multi_active",
+                    terminalState: data.terminalState,
+                    text,
+                });
+                continue;
+            }
+
+            if (op === "chat.complete_prompt_group") {
+                if (guiModule && typeof guiModule.completePromptGroup === "function") {
+                    guiModule.completePromptGroup({
+                        promptRunId: data.promptRunId,
+                        terminalState: data.terminalState,
+                        responseMode: data.responseMode || "multi_active",
+                    });
+                }
+                continue;
+            }
+
+            if (op === "speech.set_status") {
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate(data);
+                }
+                continue;
+            }
+
+            if (op === "speech.set_preview") {
+                if (typeof controller.applySpeechLifecycleUpdate === "function") {
+                    controller.applySpeechLifecycleUpdate(data);
+                }
+                continue;
+            }
+
+            if (op === "approval.queue_update") {
+                const token = String(data.approvalToken || "").trim();
+                if (token) {
+                    upsertApprovalToken(token, "Email scheduling approval required");
+                }
+                continue;
+            }
+
+            if (op === "approval.status_update") {
+                const token = String(data.approvalToken || "").trim();
+                if (!token) {
+                    continue;
+                }
+
+                upsertApprovalToken(token, "Email scheduling approval required");
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                const entry = queue.find((row) => String(row && row.token || "").trim() === token);
+                if (!entry) {
+                    continue;
+                }
+
+                const ok = Boolean(data.ok);
+                const approve = Boolean(data.approve);
+                const status = String(data.status || "").trim();
+                const errorCode = String(data.errorCode || "").trim();
+                entry.status = ok
+                    ? (approve ? "approved" : "denied")
+                    : (approve ? "failed" : "denied");
+                if (status === "expired") {
+                    entry.status = "failed";
+                    entry.title = "Approval token expired";
+                } else {
+                    entry.title = ok
+                        ? (approve ? "Email approval executed" : "Email approval denied")
+                        : (approve
+                            ? (errorCode ? `Email approval failed (${errorCode})` : "Email approval failed")
+                            : "Email approval denied");
+                }
+
+                entry.errorMessage = String(data.errorMessage || "").trim();
+                entry.remediation = String(data.remediation || "").trim();
+                entry.missingDependency = String(data.missingDependency || "").trim();
+                entry.installHint = String(data.installHint || "").trim();
+                entry.configHint = String(data.configHint || "").trim();
+                entry.failureBucket = String(data.failureBucket || "").trim();
+                entry.readinessKnown = Boolean(data.readinessKnown);
+                entry.readinessReady = Boolean(data.readinessReady);
+                entry.readinessCode = String(data.readinessCode || "").trim();
+                entry.readinessMessage = String(data.readinessMessage || "").trim();
+                entry.readinessRemediation = String(data.readinessRemediation || "").trim();
+                entry.readinessMissingDependency = String(data.readinessMissingDependency || "").trim();
+                entry.readinessInstallHint = String(data.readinessInstallHint || "").trim();
+                entry.readinessConfigHint = String(data.readinessConfigHint || "").trim();
+                entry.readinessBucket = String(data.readinessBucket || "").trim();
+                continue;
+            }
+
+            if (op === "chat.request_send") {
+                const message = String(data.message || "").trim();
+                if (!message) {
+                    continue;
+                }
+
+                const dedupKey = `${String(data.runId || "").trim()}::${message}`;
+                const nowMs = Date.now();
+                if (state.lastUiOpChatRequestSend &&
+                    state.lastUiOpChatRequestSend.key === dedupKey &&
+                    Number.isFinite(Number(state.lastUiOpChatRequestSend.atMs)) &&
+                    (nowMs - Number(state.lastUiOpChatRequestSend.atMs)) <= UI_OP_CHAT_REQUEST_SEND_DEDUP_WINDOW_MS) {
+                    continue;
+                }
+
+                state.lastUiOpChatRequestSend = {
+                    key: dedupKey,
+                    atMs: nowMs,
+                };
+                setInputValue(message);
+                void controller.send(false);
+            }
+        }
+    }
+
     function scanApprovalTokenFromText(text) {
         const raw = String(text || "");
         if (!raw) {
@@ -600,6 +1244,10 @@
     }
 
     function renderDetachedNotices() {
+        if (guiModule && typeof guiModule.renderDetachedNotices === "function") {
+            guiModule.renderDetachedNotices();
+            return;
+        }
         if (!detachedNoticesEl) {
             return;
         }
@@ -672,6 +1320,10 @@
     }
 
     function renderAssistantIdentity() {
+        if (guiModule && typeof guiModule.renderAssistantIdentity === "function") {
+            guiModule.renderAssistantIdentity();
+            return;
+        }
         if (!assistantIdentityEl) {
             return;
         }
@@ -689,10 +1341,18 @@
     }
 
     function scrollBottom() {
+        if (guiModule && typeof guiModule.scrollBottom === "function") {
+            guiModule.scrollBottom();
+            return;
+        }
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     function renderMessagesFromStructuredTranscript(streamTextOverride) {
+        if (guiModule && typeof guiModule.renderMessagesFromStructuredTranscript === "function") {
+            guiModule.renderMessagesFromStructuredTranscript(streamTextOverride);
+            return;
+        }
         if (!structuredTranscriptRenderEnabled || !controller) {
             return;
         }
@@ -744,6 +1404,10 @@
     }
 
     function addMessage(text, kind) {
+        if (guiModule && typeof guiModule.addMessage === "function") {
+            guiModule.addMessage(text, kind);
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             const stream = String(state.streamText || "").trim();
             renderMessagesFromStructuredTranscript(stream);
@@ -761,6 +1425,10 @@
     }
 
     function clearMessages() {
+        if (guiModule && typeof guiModule.clearMessages === "function") {
+            guiModule.clearMessages();
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             renderMessagesFromStructuredTranscript("");
             return;
@@ -778,6 +1446,10 @@
     }
 
     function setInputValue(text) {
+        if (guiModule && typeof guiModule.setInputValue === "function") {
+            guiModule.setInputValue(text);
+            return;
+        }
         if (state.inputEl) {
             state.inputEl.value = String(text || "");
         }
@@ -944,6 +1616,10 @@
     }
 
     function addOrReplaceStream(text) {
+        if (guiModule && typeof guiModule.addOrReplaceStream === "function") {
+            guiModule.addOrReplaceStream(text);
+            return;
+        }
         if (!text || controller.isSilentReplyText(text)) {
             return;
         }
@@ -970,6 +1646,10 @@
     }
 
     function finalizeStream() {
+        if (guiModule && typeof guiModule.finalizeStream === "function") {
+            guiModule.finalizeStream();
+            return;
+        }
         if (structuredTranscriptRenderEnabled) {
             renderMessagesFromStructuredTranscript("");
             return;
@@ -2705,6 +3385,8 @@
                 : "Attach";
         }
 
+        normalizeGuiDerivedState();
+
         renderAssistantIdentity();
         renderSpeechStatus();
         renderSpeechLivePreview();
@@ -2957,7 +3639,7 @@
         }
     }
 
-    const controller = window.BlazeClawChatController.createController({
+    const controller = createChatController({
         state,
         addMessage,
         addOrReplaceStream,
@@ -3185,7 +3867,7 @@
                     runId: stablePreviewRunId,
                     generation: pollGeneration,
                     stage,
-                        intervalMs: liveSpeechPollIntervalMs,
+                    intervalMs: liveSpeechPollIntervalMs,
                     hasAudioArtifact: Boolean(audioArtifact),
                     hasAudioPath: Boolean(audioPath),
                     clickToPreviewRequestMs: speechFirstTokenTrace && speechFirstTokenTrace.clickAtMs
@@ -3490,8 +4172,8 @@
     }
 
     if (resolveAssistantRegressionChecksEnabled() &&
-        typeof window.BlazeClawChatController.runRegressionChecks === "function") {
-        window.BlazeClawChatController.runRegressionChecks()
+        typeof chatControllerApi.runRegressionChecks === "function") {
+        chatControllerApi.runRegressionChecks()
             .then((result) => {
                 if (result && result.ok) {
                     console.log("[assistant-regression] passed:", result.checks);
@@ -4055,6 +4737,8 @@
             addOrReplaceStream,
             upsertApprovalToken,
             onNeedsApprovalEvent: scheduleNeedsApprovalQueueWatch,
+            applyStatePatch: applyNormalizedStatePatch,
+            applyUiOps: applyNormalizedUiOps,
         })
         : {
             handleChatEvents() {

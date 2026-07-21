@@ -1,0 +1,1 @@
+{"schema_version":"1.0","card_type":"health_advice","title":"服药提醒 · 阿莫西林","subtitle":"医疗 AI 助手 · 李医生随访","description":"每日 3 次，每次 1 粒，饭后服用。请勿与牛奶同服，两次用药间隔至少 6 小时。本次疗程剩余 5 天，下次服药时间：今天 18:30。","button_text":"确认已服药","target_url":"https://health.example.com/medication/confirm","theme":"health","layout":{"variant":"health_advice","icon":"health"}}

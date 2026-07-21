@@ -3,6 +3,7 @@
 docs/
 docs.old/
 *.tmp/
+*.tmp
 
 bin/
 obj/

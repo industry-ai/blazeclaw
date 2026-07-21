@@ -1,10 +1,15 @@
 #pragma once
 
+#include <string>
+#include <optional>
+#include <cstdint>
+
 #include "GatewayProtocolCodec.h"
+#include "GatewayChatEventPayload.h"
 
 namespace blazeclaw::gateway {
 
-	class GatewayEventFanoutService {
+class GatewayEventFanoutService {
 	public:
 		struct ChatLifecycleEvent {
 			std::string runId;
@@ -21,6 +26,10 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] std::string BuildChatEventFrame(
 			const std::string& eventPayloadObjectJson,
 			std::uint64_t seq) const;
+
+		// NOTE: payload-based overload removed to avoid header/ABI coupling. Callers
+		// should serialize normalized payloads via ToWireJson() and use the
+		// string-based overload below.
 		[[nodiscard]] std::string BuildCronEventFrame(
 			const std::string& cronPayloadObjectJson,
 			std::uint64_t seq) const;

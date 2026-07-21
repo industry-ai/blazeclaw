@@ -1,24 +1,20 @@
 /* ================================================================
-   AgentChat HTML 版 - 全局配置
-   对应原版 .env 和 getAuthConfig() / getChatConfig()
+   全局配置
+   ----------------------------------------------------------------
+   通信方式：通过 chrome.webview.postMessage 与 C++ 原生宿主通信
    ================================================================ */
 
 const AppConfig = (() => {
-  // ── 服务器配置 ──
   const defaults = {
-    authHost: '139.224.189.70',
-    authPort: 9443,
-    chatHttpBase: 'http://localhost:8787',
-    blazeclawBridgeUrl: 'http://localhost:8788',
-    openclawBridgeUrl: 'http://localhost:8788',
+    // 当前默认 AI 模型（仅用于页面展示）
+    currentAi: 'openclaw',
+    // 调试相关
     webSmsLoginEnabled: false,
     debugSmsCode: '123456',
     debugSessionId: '',
-    forceMockChat: false,
   };
 
   function _env(key, fallback) {
-    // HTML 版从 <meta> 标签或 window.__APP_CONFIG__ 读取配置
     if (window.__APP_CONFIG__ && window.__APP_CONFIG__[key] !== undefined) {
       return window.__APP_CONFIG__[key];
     }
@@ -27,30 +23,10 @@ const AppConfig = (() => {
     return fallback;
   }
 
-  function getAuthConfig() {
-    return {
-      host: _env('authHost', defaults.authHost),
-      port: Number(_env('authPort', defaults.authPort)),
-      webSmsLoginEnabled: _env('webSmsLoginEnabled', defaults.webSmsLoginEnabled),
-      debugSmsCode: _env('debugSmsCode', defaults.debugSmsCode),
-      debugSessionId: _env('debugSessionId', defaults.debugSessionId),
-    };
+  function getCurrentAi() {
+    return String(_env('currentAi', defaults.currentAi)).trim().toLowerCase();
   }
 
-  function getChatConfig() {
-    const authCfg = getAuthConfig();
-    const host = authCfg.host || defaults.authHost;
-    const port = authCfg.port || defaults.authPort;
-    return {
-      httpBaseUrl: _env('chatHttpBase', defaults.chatHttpBase),
-      blazeclawBridgeUrl: _env('blazeclawBridgeUrl', defaults.blazeclawBridgeUrl),
-      openclawBridgeUrl: _env('openclawBridgeUrl', defaults.openclawBridgeUrl),
-      wsUrl: _env('chatWsUrl', ''), // 默认为空，使用 HTTP IRC 模式
-      forceMockChat: _env('forceMockChat', defaults.forceMockChat),
-    };
-  }
-
-  // ── 便捷方法 ──
   function isWebSmsLoginEnabled() {
     return _env('webSmsLoginEnabled', defaults.webSmsLoginEnabled);
   }
@@ -63,30 +39,7 @@ const AppConfig = (() => {
     return _env('debugSessionId', defaults.debugSessionId);
   }
 
-  /**
-   * 更新服务器配置（持久化到 localStorage）
-   */
-  async function setServerConfig(host, port) {
-    localStorage.setItem('auth.host', host.trim());
-    localStorage.setItem('auth.port', String(port));
-  }
-
-  async function getServerConfig() {
-    const host = (localStorage.getItem('auth.host') || '').trim() || defaults.authHost;
-    const port = Number(localStorage.getItem('auth.port')) || defaults.authPort;
-    return { host, port };
-  }
-
-  return {
-    defaults,
-    getAuthConfig,
-    getChatConfig,
-    isWebSmsLoginEnabled,
-    getDebugSmsCode,
-    getDebugSessionId,
-    setServerConfig,
-    getServerConfig,
-  };
+  return { defaults, getCurrentAi, isWebSmsLoginEnabled, getDebugSmsCode, getDebugSessionId };
 })();
 
 export default AppConfig;

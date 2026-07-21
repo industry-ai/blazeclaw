@@ -84,6 +84,39 @@ namespace blazeclaw::core {
 			return servicemanager_text::Utf8ToWideLocal(value);
 		}
 
+		std::string WideToUtf8Local(const std::wstring& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int required = WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0,
+				nullptr,
+				nullptr);
+			if (required <= 0) {
+				return {};
+			}
+
+			std::string output(static_cast<std::size_t>(required), '\0');
+			WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				required,
+				nullptr,
+				nullptr);
+			return output;
+		}
+
+		std::uint64_t CurrentEpochMs();
+
 		bool IsLlamaLocalModelId(const std::string& modelId) {
 			return servicemanager_text::IsLlamaLocalModelId(modelId);
 		}
@@ -204,6 +237,37 @@ namespace blazeclaw::core {
 			}
 		}
 
+		std::uint64_t Fnv1a64(const std::string& value) {
+			constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+			constexpr std::uint64_t kPrime = 1099511628211ULL;
+			std::uint64_t hash = kOffset;
+			for (const unsigned char ch : value) {
+				hash ^= static_cast<std::uint64_t>(ch);
+				hash *= kPrime;
+			}
+			return hash;
+		}
+
+		std::string BuildHexLower(std::uint64_t value) {
+			std::ostringstream out;
+			out << std::hex << std::nouppercase << value;
+			return out.str();
+		}
+
+		std::string BuildNormalizedPromptPreview(
+			const std::wstring& normalizedPrompt,
+			const std::size_t maxChars) {
+			if (maxChars == 0) {
+				return {};
+			}
+
+			const std::wstring truncated =
+				normalizedPrompt.size() > maxChars
+				? normalizedPrompt.substr(0, maxChars)
+				: normalizedPrompt;
+			return WideToUtf8Local(truncated);
+		}
+
 		void AppendStartupTrace(const char* stage) {
 			CServiceBootstrapCoordinator coordinator;
 			coordinator.AppendStartupTrace(stage);
@@ -320,6 +384,43 @@ namespace blazeclaw::core {
 			}
 
 			return value.substr(0, maxChars - 24) + "...(truncated)";
+		}
+
+		std::string LastNonEmptyLine(const std::string& text) {
+			std::string line;
+			for (std::size_t i = text.size(); i > 0; --i) {
+				const char ch = text[i - 1];
+				if (ch == '\n' || ch == '\r') {
+					if (!line.empty()) {
+						std::reverse(line.begin(), line.end());
+						return blazeclaw::gateway::json::Trim(line);
+					}
+					continue;
+				}
+
+				line.push_back(ch);
+			}
+
+			if (line.empty()) {
+				return {};
+			}
+
+			std::reverse(line.begin(), line.end());
+			return blazeclaw::gateway::json::Trim(line);
+		}
+
+		std::optional<nlohmann::json> TryParseTrailingJsonObject(const std::string& text) {
+			const std::string candidate = LastNonEmptyLine(text);
+			if (candidate.empty()) {
+				return std::nullopt;
+			}
+
+			nlohmann::json parsed = nlohmann::json::parse(candidate, nullptr, false);
+			if (!parsed.is_object()) {
+				return std::nullopt;
+			}
+
+			return parsed;
 		}
 
 		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
@@ -696,6 +797,90 @@ namespace blazeclaw::core {
 			return inboxSignal && replySignal;
 		}
 
+		std::string TrimAsciiLocal(const std::string& value) {
+			const auto first = std::find_if_not(
+				value.begin(),
+				value.end(),
+				[](const unsigned char ch) {
+					return std::isspace(ch) != 0;
+				});
+			const auto last = std::find_if_not(
+				value.rbegin(),
+				value.rend(),
+				[](const unsigned char ch) {
+					return std::isspace(ch) != 0;
+				}).base();
+
+			if (first >= last) {
+				return {};
+			}
+
+			return std::string(first, last);
+		}
+
+		std::optional<std::string> TryExtractImageGeneratorPrompt(
+			const std::string& commandBodyNormalized) {
+			const std::string trimmed = TrimAsciiLocal(commandBodyNormalized);
+			if (trimmed.empty() || trimmed.front() == '/') {
+				return std::nullopt;
+			}
+
+			const std::string lower = ToLowerAscii(trimmed);
+			const bool hasImageGenerator =
+				lower.find("image-generator") != std::string::npos ||
+				lower.find("image generator") != std::string::npos;
+			if (!hasImageGenerator) {
+				return std::nullopt;
+			}
+
+			const std::wstring wide = Utf8ToWideLocal(trimmed);
+			const bool hasInvokeSignal =
+				ContainsAnyFragment(
+					lower,
+					{ "call", "invoke", "use", "run", "with" }) ||
+				ContainsAnyWideFragment(
+					wide,
+					{ L"调用", L"使用", L"用", L"请用" });
+			if (!hasInvokeSignal) {
+				return std::nullopt;
+			}
+
+			std::string prompt;
+			const std::size_t generatePos = lower.find("生成");
+			if (generatePos != std::string::npos) {
+				prompt = TrimAsciiLocal(trimmed.substr(generatePos + std::string("生成").size()));
+			}
+
+			if (prompt.empty()) {
+				const std::size_t tokenPos = lower.find("image-generator");
+				if (tokenPos != std::string::npos) {
+					prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image-generator").size()));
+				}
+			}
+
+			if (prompt.empty()) {
+				const std::size_t tokenPos = lower.find("image generator");
+				if (tokenPos != std::string::npos) {
+					prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image generator").size()));
+				}
+			}
+
+			if (!prompt.empty()) {
+				while (!prompt.empty() &&
+					(prompt.front() == '`' ||
+						prompt.front() == '"' ||
+						prompt.front() == '\'' ||
+						prompt.front() == ',' ||
+						prompt.front() == ':' ||
+						prompt.front() == ';')) {
+					prompt.erase(prompt.begin());
+				}
+				prompt = TrimAsciiLocal(prompt);
+			}
+
+			return prompt;
+		}
+
 		bool LooksLikeTwoHourUrgencyAnyLanguage(const std::string& message) {
 			const std::string lower = ToLowerAscii(message);
 			const std::wstring wide = Utf8ToWideLocal(message);
@@ -714,9 +899,537 @@ namespace blazeclaw::core {
 			return trimmed.front() == L'{' && trimmed.back() == L'}';
 		}
 
+		std::wstring NormalizeInlineTriggerText(const std::wstring& input) {
+			std::wstring normalized;
+			normalized.reserve(input.size());
+			bool previousSpace = false;
+			for (const auto ch : input) {
+				const wchar_t lowered =
+					static_cast<wchar_t>(std::towlower(ch));
+				const bool isAlphaNum =
+					(lowered >= L'a' && lowered <= L'z') ||
+					(lowered >= L'0' && lowered <= L'9') ||
+					(lowered >= 0x4E00 && lowered <= 0x9FFF);
+				if (isAlphaNum) {
+					normalized.push_back(lowered);
+					previousSpace = false;
+					continue;
+				}
+
+				if (!previousSpace) {
+					normalized.push_back(L' ');
+					previousSpace = true;
+				}
+			}
+
+			return Trim(normalized);
+		}
+
+		bool ContainsNormalizedTriggerHint(
+			const std::wstring& normalizedPrompt,
+			const std::wstring& triggerHint) {
+			const std::wstring normalizedHint =
+				NormalizeInlineTriggerText(triggerHint);
+			if (normalizedHint.empty()) {
+				return false;
+			}
+
+			const std::wstring promptNoSpace = [&normalizedPrompt]() {
+				std::wstring value;
+				value.reserve(normalizedPrompt.size());
+				for (const auto ch : normalizedPrompt) {
+					if (ch != L' ') {
+						value.push_back(ch);
+					}
+				}
+				return value;
+			}();
+			const std::wstring hintNoSpace = [&normalizedHint]() {
+				std::wstring value;
+				value.reserve(normalizedHint.size());
+				for (const auto ch : normalizedHint) {
+					if (ch != L' ') {
+						value.push_back(ch);
+					}
+				}
+				return value;
+			}();
+
+			if (promptNoSpace.empty() || hintNoSpace.empty()) {
+				return false;
+			}
+
+			if (normalizedPrompt == normalizedHint) {
+				return true;
+			}
+
+			if (promptNoSpace == hintNoSpace) {
+				return true;
+			}
+
+			if (normalizedPrompt.find(normalizedHint) != std::wstring::npos) {
+				return true;
+			}
+
+			return promptNoSpace.find(hintNoSpace) != std::wstring::npos;
+		}
+
+		enum class GeneratedTriggerMatchMode {
+			None = 0,
+			SpaceStrippedContains = 1,
+			Contains = 2,
+			NormalizedExact = 3,
+			Exact = 4,
+		};
+
+		struct GeneratedTriggerHintMatchResult {
+			GeneratedTriggerMatchMode mode = GeneratedTriggerMatchMode::None;
+			int score = 0;
+			std::wstring normalizedHint;
+			std::size_t normalizedHintNoSpaceLength = 0;
+		};
+
+		struct GeneratedOpenClawRoutingDecisionDiagnostics {
+			std::wstring normalizedPrompt;
+			std::size_t candidateCountConsidered = 0;
+			std::wstring matchedSkillKey;
+			std::wstring matchedTriggerHint;
+			GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+		};
+
+		std::wstring RemoveWideSpaces(const std::wstring& value) {
+			std::wstring collapsed;
+			collapsed.reserve(value.size());
+			for (const auto ch : value) {
+				if (ch != L' ') {
+					collapsed.push_back(ch);
+				}
+			}
+			return collapsed;
+		}
+
+		GeneratedTriggerHintMatchResult EvaluateGeneratedTriggerHintMatch(
+			const std::wstring& normalizedPrompt,
+			const std::wstring& triggerHint) {
+			GeneratedTriggerHintMatchResult result;
+			if (!ContainsNormalizedTriggerHint(normalizedPrompt, triggerHint)) {
+				return result;
+			}
+
+			result.normalizedHint = NormalizeInlineTriggerText(triggerHint);
+			if (result.normalizedHint.empty() || normalizedPrompt.empty()) {
+				return result;
+			}
+
+			const std::wstring promptNoSpace = RemoveWideSpaces(normalizedPrompt);
+			const std::wstring hintNoSpace = RemoveWideSpaces(result.normalizedHint);
+			if (promptNoSpace.empty() || hintNoSpace.empty()) {
+				return result;
+			}
+
+			result.normalizedHintNoSpaceLength = hintNoSpace.size();
+			if (normalizedPrompt == result.normalizedHint) {
+				result.mode = GeneratedTriggerMatchMode::Exact;
+				result.score = 400;
+				return result;
+			}
+
+			if (promptNoSpace == hintNoSpace) {
+				result.mode = GeneratedTriggerMatchMode::NormalizedExact;
+				result.score = 300;
+				return result;
+			}
+
+			if (normalizedPrompt.find(result.normalizedHint) != std::wstring::npos) {
+				result.mode = GeneratedTriggerMatchMode::Contains;
+				result.score = 200;
+				return result;
+			}
+
+			if (promptNoSpace.find(hintNoSpace) != std::wstring::npos) {
+				result.mode = GeneratedTriggerMatchMode::SpaceStrippedContains;
+				result.score = 100;
+				return result;
+			}
+
+			return result;
+		}
+
+		std::string GeneratedTriggerMatchModeToTelemetry(
+			const GeneratedTriggerMatchMode mode) {
+			switch (mode) {
+			case GeneratedTriggerMatchMode::Exact:
+				return "exact";
+			case GeneratedTriggerMatchMode::NormalizedExact:
+				return "normalized-exact";
+			case GeneratedTriggerMatchMode::Contains:
+				return "contains";
+			case GeneratedTriggerMatchMode::SpaceStrippedContains:
+				return "space-stripped contains";
+			default:
+				return "none";
+			}
+		}
+
+		std::wstring NormalizeOpenClawGeneratedToolToken(
+			const std::wstring& rawToken) {
+			std::wstring token;
+			token.reserve(rawToken.size());
+			for (const auto ch : rawToken) {
+				const wchar_t lowered =
+					static_cast<wchar_t>(std::towlower(ch));
+				const bool alphaNum =
+					(lowered >= L'a' && lowered <= L'z') ||
+					(lowered >= L'0' && lowered <= L'9');
+				if (alphaNum) {
+					token.push_back(lowered);
+					continue;
+				}
+
+				if (lowered == L'-' || lowered == L'_' || lowered == L'.' ||
+					lowered == L'/' || lowered == L'\\') {
+					if (!token.empty() && token.back() != L'_') {
+						token.push_back(L'_');
+					}
+				}
+			}
+
+			while (!token.empty() && token.front() == L'_') {
+				token.erase(token.begin());
+			}
+			while (!token.empty() && token.back() == L'_') {
+				token.pop_back();
+			}
+
+			if (token.empty()) {
+				token = L"openclaw_skill";
+			}
+
+			return token;
+		}
+
+		std::string BuildGeneratedOpenClawToolName(
+			const OpenClawOriginalExtractedRuntimeContractSpec& extracted,
+			const std::wstring& fallbackSkillName) {
+			std::wstring key = Trim(extracted.skillKey);
+			if (key.empty()) {
+				key = Trim(fallbackSkillName);
+			}
+
+			const std::wstring normalizedToken =
+				NormalizeOpenClawGeneratedToolToken(key);
+			return ToNarrow(normalizedToken) + ".openclaw.generated";
+		}
+
+		bool IsGeneratedOpenClawToolId(const std::string& toolId) {
+			const std::string trimmed =
+				blazeclaw::gateway::json::Trim(toolId);
+			return !trimmed.empty() &&
+				trimmed.size() >= std::string(".openclaw.generated").size() &&
+				trimmed.rfind(".openclaw.generated") ==
+				(trimmed.size() - std::string(".openclaw.generated").size());
+		}
+
+		const SkillsCatalogEntry* FindGeneratedOpenClawCatalogEntryByToolId(
+			const std::vector<SkillsCatalogEntry>& catalogEntries,
+			const std::string& toolId) {
+			for (const auto& entry : catalogEntries) {
+				if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+					!entry.openClawOriginalActivationState.has_value() ||
+					entry.openClawOriginalActivationState.value() !=
+					SkillsOpenClawOriginalActivationState::ToolEnabled ||
+					!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
+					!entry.openClawOriginalExtractedRuntimeContract->complete) {
+					continue;
+				}
+
+				const std::string generatedToolName =
+					BuildGeneratedOpenClawToolName(
+						entry.openClawOriginalExtractedRuntimeContract.value(),
+						entry.skillName);
+				if (generatedToolName == toolId) {
+					return &entry;
+				}
+			}
+
+			return nullptr;
+		}
+
+		std::optional<blazeclaw::gateway::ToolExecuteResultV2>
+			TryExecuteGeneratedOpenClawConstantOutputTool(
+				const std::vector<SkillsCatalogEntry>& catalogEntries,
+				const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+			if (!IsGeneratedOpenClawToolId(request.tool)) {
+				return std::nullopt;
+			}
+
+			const SkillsCatalogEntry* matchedEntry =
+				FindGeneratedOpenClawCatalogEntryByToolId(catalogEntries, request.tool);
+			if (matchedEntry == nullptr) {
+				return std::nullopt;
+			}
+
+			const auto& extracted =
+				matchedEntry->openClawOriginalExtractedRuntimeContract.value();
+			if (!extracted.output.has_value()) {
+				return std::nullopt;
+			}
+
+			const auto startedAtMs = CurrentEpochMs();
+			blazeclaw::gateway::ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.errorCode.clear();
+			result.errorMessage.clear();
+			result.correlationId = request.correlationId;
+			result.startedAtMs = startedAtMs;
+
+			nlohmann::json payload = nlohmann::json::object();
+			const auto& output = extracted.output.value();
+			const std::string outputKind = ToNarrow(Trim(output.kind));
+			const std::string outputTitle = ToNarrow(Trim(output.title));
+			const std::string outputUrl = ToNarrow(Trim(output.url));
+
+			if (!outputKind.empty()) {
+				payload["kind"] = outputKind;
+			}
+			if (!outputTitle.empty()) {
+				payload["title"] = outputTitle;
+			}
+			if (!outputUrl.empty()) {
+				payload["url"] = outputUrl;
+			}
+
+			if (!outputKind.empty() || !outputUrl.empty()) {
+				nlohmann::json outputItem = nlohmann::json::object();
+				if (!outputKind.empty()) {
+					outputItem["type"] = outputKind;
+				}
+				if (!outputTitle.empty()) {
+					outputItem["title"] = outputTitle;
+				}
+				if (!outputUrl.empty()) {
+					outputItem["url"] = outputUrl;
+				}
+				payload["outputs"] = nlohmann::json::array({ outputItem });
+			}
+
+			const std::wstring rawJsonPayload = Trim(output.jsonPayload);
+			if (!rawJsonPayload.empty()) {
+				const std::string rawPayload = ToNarrow(rawJsonPayload);
+				const auto parsed = nlohmann::json::parse(
+					rawPayload,
+					nullptr,
+					false);
+				if (!parsed.is_discarded()) {
+					payload["contractPayload"] = parsed;
+				}
+				else {
+					payload["contractPayloadRaw"] = rawPayload;
+				}
+			}
+
+			payload["source"] = "openclaw.generated.runtime-contract";
+			payload["skill"] = ToNarrow(matchedEntry->skillName);
+			result.result = payload.dump();
+
+			result.completedAtMs = CurrentEpochMs();
+			result.latencyMs = result.completedAtMs >= result.startedAtMs
+				? (result.completedAtMs - result.startedAtMs)
+				: 0;
+			return result;
+		}
+
+		struct GeneratedOpenClawOutputTuple {
+			std::string kind;
+			std::string title;
+			std::string url;
+		};
+
+		std::optional<GeneratedOpenClawOutputTuple>
+			ExtractGeneratedOpenClawOutputKindTitleAndUrl(
+				const blazeclaw::gateway::ToolExecuteResultV2& result) {
+			const std::string trimmedResult =
+				blazeclaw::gateway::json::Trim(result.result);
+			if (trimmedResult.empty()) {
+				return std::nullopt;
+			}
+
+			auto readKindTitleAndUrl = [](const nlohmann::json& node)
+				-> std::optional<GeneratedOpenClawOutputTuple> {
+				if (!node.is_object()) {
+					return std::nullopt;
+				}
+
+				std::string kind;
+				const auto typeIt = node.find("type");
+				if (typeIt != node.end() && typeIt->is_string()) {
+					kind = blazeclaw::gateway::json::Trim(
+						typeIt->get<std::string>());
+				}
+				const auto kindIt = node.find("kind");
+				if (kind.empty() && kindIt != node.end() && kindIt->is_string()) {
+					kind = blazeclaw::gateway::json::Trim(
+						kindIt->get<std::string>());
+				}
+
+				const auto urlIt = node.find("url");
+				if (urlIt == node.end() || !urlIt->is_string()) {
+					return std::nullopt;
+				}
+
+				std::string title;
+				const auto titleIt = node.find("title");
+				if (titleIt != node.end() && titleIt->is_string()) {
+					title = blazeclaw::gateway::json::Trim(
+						titleIt->get<std::string>());
+				}
+				return GeneratedOpenClawOutputTuple{
+					.kind = kind,
+					.title = title,
+					.url = blazeclaw::gateway::json::Trim(urlIt->get<std::string>()),
+				};
+			};
+
+			if (trimmedResult.front() == '{' && trimmedResult.back() == '}') {
+				const auto parsed = nlohmann::json::parse(
+					trimmedResult,
+					nullptr,
+					false);
+				if (!parsed.is_discarded() && parsed.is_object()) {
+					if (const auto direct = readKindTitleAndUrl(parsed);
+						direct.has_value() && !direct->url.empty()) {
+						return direct;
+					}
+
+					const auto outputsIt = parsed.find("outputs");
+					if (outputsIt != parsed.end() && outputsIt->is_array()) {
+						for (const auto& item : *outputsIt) {
+							if (const auto nested = readKindTitleAndUrl(item);
+								nested.has_value() && !nested->url.empty()) {
+								return nested;
+							}
+						}
+					}
+				}
+			}
+
+			if (trimmedResult.rfind("http://", 0) == 0 ||
+				trimmedResult.rfind("https://", 0) == 0) {
+				return GeneratedOpenClawOutputTuple{
+					.kind = std::string(),
+					.title = std::string(),
+					.url = trimmedResult,
+				};
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::string> ResolveGeneratedOpenClawToolTargetFromTriggerHints(
+			const std::vector<SkillsCatalogEntry>& catalogEntries,
+			const std::string& commandBodyNormalized,
+			GeneratedOpenClawRoutingDecisionDiagnostics* diagnostics = nullptr) {
+			GeneratedOpenClawRoutingDecisionDiagnostics localDiagnostics;
+			GeneratedOpenClawRoutingDecisionDiagnostics& activeDiagnostics =
+				diagnostics == nullptr ? localDiagnostics : *diagnostics;
+			activeDiagnostics = GeneratedOpenClawRoutingDecisionDiagnostics{};
+
+			activeDiagnostics.normalizedPrompt =
+				NormalizeInlineTriggerText(Utf8ToWideLocal(commandBodyNormalized));
+			const std::wstring& normalizedPrompt = activeDiagnostics.normalizedPrompt;
+			if (normalizedPrompt.empty()) {
+				return std::nullopt;
+			}
+
+			struct CandidateMatch {
+				int score = 0;
+				std::size_t hintLength = 0;
+				std::wstring skillKey;
+				std::wstring triggerHint;
+				std::string generatedToolName;
+				GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+			};
+
+			std::optional<CandidateMatch> bestMatch;
+
+			for (const auto& entry : catalogEntries) {
+				if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+					!entry.openClawOriginalActivationState.has_value() ||
+					entry.openClawOriginalActivationState.value() !=
+					SkillsOpenClawOriginalActivationState::ToolEnabled ||
+					!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
+					!entry.openClawOriginalExtractedRuntimeContract->complete) {
+					continue;
+				}
+
+				const auto& extracted =
+					entry.openClawOriginalExtractedRuntimeContract.value();
+				if (extracted.triggerHints.empty()) {
+					continue;
+				}
+
+				const std::string generatedToolName =
+					BuildGeneratedOpenClawToolName(
+						extracted,
+						entry.skillName);
+				if (generatedToolName.empty()) {
+					continue;
+				}
+
+				for (const auto& triggerHint : extracted.triggerHints) {
+					++activeDiagnostics.candidateCountConsidered;
+					const auto matchResult = EvaluateGeneratedTriggerHintMatch(
+						normalizedPrompt,
+						triggerHint);
+					if (matchResult.mode == GeneratedTriggerMatchMode::None) {
+						continue;
+					}
+
+					CandidateMatch candidate;
+					candidate.score = matchResult.score;
+					candidate.hintLength = matchResult.normalizedHintNoSpaceLength;
+					candidate.skillKey = extracted.skillKey.empty()
+						? entry.skillName
+						: extracted.skillKey;
+					candidate.triggerHint = triggerHint;
+					candidate.generatedToolName = generatedToolName;
+					candidate.matchMode = matchResult.mode;
+
+					const bool shouldReplace = !bestMatch.has_value() ||
+						candidate.score > bestMatch->score ||
+						(candidate.score == bestMatch->score &&
+							candidate.hintLength > bestMatch->hintLength) ||
+						(candidate.score == bestMatch->score &&
+							candidate.hintLength == bestMatch->hintLength &&
+							candidate.skillKey < bestMatch->skillKey);
+					if (shouldReplace) {
+						bestMatch = candidate;
+					}
+				}
+			}
+
+			if (bestMatch.has_value()) {
+				activeDiagnostics.matchedSkillKey = bestMatch->skillKey;
+				activeDiagnostics.matchedTriggerHint = bestMatch->triggerHint;
+				activeDiagnostics.matchMode = bestMatch->matchMode;
+				return bestMatch->generatedToolName;
+			}
+
+			return std::nullopt;
+		}
+
 		std::optional<std::string> BuildInlineArgsForResolvedTool(
 			const std::string& resolvedToolId,
 			const std::string& commandBodyNormalized) {
+			if (resolvedToolId == "image-generator.generate") {
+				nlohmann::json params = nlohmann::json::object();
+				params["prompt"] = TryExtractImageGeneratorPrompt(commandBodyNormalized)
+					.value_or(commandBodyNormalized);
+				return params.dump();
+			}
+
 			if (resolvedToolId != "imap_smtp_email.imap.search") {
 				return std::nullopt;
 			}
@@ -742,6 +1455,21 @@ namespace blazeclaw::core {
 		std::optional<std::string> BuildInlineFriendlyTextForResolvedTool(
 			const std::string& resolvedToolId,
 			const blazeclaw::gateway::ToolExecuteResultV2& result) {
+			if (IsGeneratedOpenClawToolId(resolvedToolId)) {
+				const auto output =
+					ExtractGeneratedOpenClawOutputKindTitleAndUrl(result);
+				if (output.has_value()) {
+					std::string formatted = "url=" + output->url;
+					if (!output->title.empty()) {
+						formatted = "title=" + output->title + "; " + formatted;
+					}
+					if (!output->kind.empty()) {
+						formatted = "type=" + output->kind + "; " + formatted;
+					}
+					return formatted;
+				}
+			}
+
 			if (resolvedToolId != "imap_smtp_email.imap.search") {
 				return std::nullopt;
 			}
@@ -1080,6 +1808,203 @@ namespace blazeclaw::core {
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					now.time_since_epoch())
 				.count());
+		}
+
+		void RegisterImageGeneratorRuntimeTools(
+			blazeclaw::gateway::GatewayHost& host,
+			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
+			const auto skillRoot = toolPolicy.imageGeneratorSkillRoot;
+			for (const auto& spec : tools::BuildImageGeneratorToolRuntimeSpecs()) {
+				host.RegisterRuntimeToolV2(
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = spec.id,
+						.label = spec.label,
+						.category = "image",
+						.enabled = true,
+					},
+					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+						blazeclaw::gateway::ToolExecuteResultV2 result;
+						result.tool = request.tool.empty() ? spec.id : request.tool;
+						result.correlationId = request.correlationId;
+						result.startedAtMs = CurrentEpochMs();
+
+						if (!skillRoot.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "skill_runtime_missing";
+							result.errorMessage = "image-generator skill root not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+						if (!std::filesystem::exists(scriptPath)) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "script_missing";
+							result.errorMessage = "image-generator script not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						nlohmann::json params = nlohmann::json::object();
+						if (request.argsJson.has_value() && !request.argsJson->empty()) {
+							try {
+								params = nlohmann::json::parse(request.argsJson.value());
+							}
+							catch (...) {
+								result.executed = false;
+								result.status = "error";
+								result.errorCode = "invalid_args_json";
+								result.errorMessage = "argsJson is not valid JSON";
+								result.completedAtMs = CurrentEpochMs();
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+						}
+
+						if (params.is_string()) {
+							params = nlohmann::json::object(
+								{ { "prompt", params.get<std::string>() } });
+						}
+
+						if (!params.is_object()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "tool args must be a JSON object";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::string argsErrorCode;
+						std::string argsErrorMessage;
+						const auto cliArgs = tools::BuildImageGeneratorCliArgs(
+							spec,
+							params,
+							argsErrorCode,
+							argsErrorMessage);
+						if (!cliArgs.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = argsErrorCode.empty()
+								? "invalid_arguments"
+								: argsErrorCode;
+							result.errorMessage = argsErrorMessage.empty()
+								? "tool arguments are invalid"
+								: argsErrorMessage;
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::uint64_t timeoutMs = 180000;
+						if (request.deadlineEpochMs.has_value()) {
+							const std::uint64_t now = CurrentEpochMs();
+							if (request.deadlineEpochMs.value() <= now) {
+								result.executed = false;
+								result.status = "timed_out";
+								result.errorCode = "deadline_exceeded";
+								result.errorMessage = "request deadline already elapsed";
+								result.completedAtMs = now;
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+
+							timeoutMs = request.deadlineEpochMs.value() - now;
+						}
+
+						const auto process = tools::ExecutePythonSkillProcess(
+							scriptPath,
+							cliArgs.value(),
+							timeoutMs);
+
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+						if (!process.started) {
+							result.executed = false;
+							result.status = "error";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "process_start_failed"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "failed to start image-generator process"
+								: process.errorMessage;
+							return result;
+						}
+
+						if (process.timedOut) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "deadline_exceeded"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "image-generator execution timed out"
+								: process.errorMessage;
+							return result;
+						}
+
+						if (process.exitCode != 0) {
+							result.executed = false;
+							result.status = "script_runtime_error";
+							result.result = process.output;
+							result.errorCode = "script_runtime_error";
+							result.errorMessage = process.output.empty()
+								? "image-generator process exited non-zero"
+								: TruncateDiagnosticText(process.output);
+							return result;
+						}
+
+						nlohmann::json outputEnvelope = nlohmann::json::object();
+						if (const auto generatedJson = TryParseTrailingJsonObject(process.output);
+							generatedJson.has_value()) {
+							outputEnvelope = generatedJson.value();
+						}
+						else {
+							outputEnvelope["success"] = true;
+							outputEnvelope["raw"] = process.output;
+						}
+
+						const std::string localPath = outputEnvelope.value("local_path", "");
+						const std::string cosKey = outputEnvelope.value("cos_key", "");
+						const auto uploadScript =
+							skillRoot.value().parent_path() / L"upload-to-oss" / L"main.py";
+						if (!localPath.empty() &&
+							!cosKey.empty() &&
+							std::filesystem::exists(uploadScript)) {
+							const auto uploadResult = tools::ExecutePythonSkillProcess(
+								uploadScript,
+								{ "upload", localPath, "image-generator/" + cosKey },
+								60000);
+							outputEnvelope["uploadExecuted"] = uploadResult.started;
+							if (uploadResult.started &&
+								!uploadResult.timedOut &&
+								uploadResult.exitCode == 0) {
+								const std::string uploadedUrl = LastNonEmptyLine(uploadResult.output);
+								if (!uploadedUrl.empty()) {
+									outputEnvelope["url"] = uploadedUrl;
+								}
+							}
+							else {
+								outputEnvelope["uploadError"] = TruncateDiagnosticText(uploadResult.output);
+							}
+						}
+
+						result.executed = true;
+						result.status = "ok";
+						result.errorCode.clear();
+						result.errorMessage.clear();
+						result.result = outputEnvelope.dump();
+						return result;
+					});
+			}
 		}
 
 
@@ -2408,6 +3333,7 @@ namespace blazeclaw::core {
 				.imapSmtpSkillRoot = toolPolicy.imapSmtpSkillRoot,
 				.baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot,
 				.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
+				.imageGeneratorSkillRoot = toolPolicy.imageGeneratorSkillRoot,
 				.openClawWebBrowsingSkillRoot =
 					toolPolicy.openClawWebBrowsingSkillRoot,
 				.webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot,
@@ -2435,6 +3361,11 @@ namespace blazeclaw::core {
 					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
 					RegisterBaiduSearchRuntimeTools(host, injectedPolicy);
 				},
+				.registerImageGenerator = [](
+					blazeclaw::gateway::GatewayHost& host,
+					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
+					RegisterImageGeneratorRuntimeTools(host, injectedPolicy);
+				},
 			});
 	}
 
@@ -2458,6 +3389,18 @@ namespace blazeclaw::core {
 				resolvedSkillInvocation->command.dispatch.kind.c_str(),
 				L"tool") != 0 ||
 			resolvedSkillInvocation->command.dispatch.toolName.empty()) {
+			if (const auto generatedTarget =
+				ResolveGeneratedOpenClawToolTargetFromTriggerHints(
+					m_skillsCatalog.entries,
+					canonicalCommandBody);
+				generatedTarget.has_value()) {
+				return generatedTarget.value();
+			}
+
+			if (TryExtractImageGeneratorPrompt(canonicalCommandBody).has_value()) {
+				return std::string("image-generator.generate");
+			}
+
 			if (LooksLikeInboxIntentAnyLanguage(canonicalCommandBody) ||
 				LooksLikeInboxReplyUrgencyIntent(canonicalCommandBody)) {
 				return std::string("imap_smtp_email.imap.search");
@@ -2472,9 +3415,122 @@ namespace blazeclaw::core {
 	std::optional<std::string> ServiceManager::ResolveSkillInvocationPromptRewrite(
 		const std::string& commandBodyNormalized) const
 	{
-		return m_skillCommandInvocationService.RewriteInvocationPromptUtf8(
-			commandBodyNormalized,
-			m_skillsCommands.commands);
+		const std::string canonicalCommandBody =
+			CanonicalizeForRouting(commandBodyNormalized);
+		const auto slashRewrite =
+			m_skillCommandInvocationService.RewriteInvocationPromptUtf8(
+				canonicalCommandBody,
+				m_skillsCommands.commands);
+		if (slashRewrite.has_value()) {
+			return slashRewrite;
+		}
+
+		const auto imagePrompt =
+			TryExtractImageGeneratorPrompt(canonicalCommandBody);
+		if (!imagePrompt.has_value()) {
+			return std::nullopt;
+		}
+
+		if (imagePrompt->empty()) {
+			return std::string("/skill image-generator");
+		}
+
+		return std::string("/skill image-generator ") + imagePrompt.value();
+	}
+
+	std::optional<std::string> ServiceManager::ResolveSkillInvocationMissReason(
+		const std::string& commandBodyNormalized,
+		const std::optional<std::string>& resolvedToolTarget) const
+	{
+		const std::string canonicalCommandBody =
+			CanonicalizeForRouting(commandBodyNormalized);
+
+		if (resolvedToolTarget.has_value()) {
+			const auto runtimeTools = m_gatewayHost.ListRuntimeTools();
+			const auto toolIt = std::find_if(
+				runtimeTools.begin(),
+				runtimeTools.end(),
+				[&resolvedToolTarget](const blazeclaw::gateway::ToolCatalogEntry& tool) {
+					return tool.enabled &&
+						blazeclaw::gateway::json::Trim(tool.id) ==
+						blazeclaw::gateway::json::Trim(resolvedToolTarget.value());
+				});
+			if (toolIt == runtimeTools.end()) {
+				return std::string("runtime_tool_not_registered");
+			}
+
+			return std::nullopt;
+		}
+
+		const auto resolvedSkillInvocation =
+			m_skillCommandInvocationService.ResolveInvocation(
+				ToWide(canonicalCommandBody),
+				m_skillsCommands.commands);
+		if (resolvedSkillInvocation.has_value() &&
+			(!resolvedSkillInvocation->command.dispatch.enabled ||
+				_wcsicmp(
+					resolvedSkillInvocation->command.dispatch.kind.c_str(),
+					L"tool") != 0 ||
+				resolvedSkillInvocation->command.dispatch.toolName.empty())) {
+			return std::string("skill_missing_command_dispatch");
+		}
+
+		if (canonicalCommandBody.empty() || canonicalCommandBody.front() != '/') {
+			return std::string("invocation_not_slash_command");
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<std::string>
+		ServiceManager::BuildGeneratedOpenClawRoutingDecisionTelemetry(
+			const std::string& commandBodyNormalized) const
+	{
+		const std::string canonicalCommandBody =
+			CanonicalizeForRouting(commandBodyNormalized);
+
+		GeneratedOpenClawRoutingDecisionDiagnostics diagnostics;
+		const std::optional<std::string> resolvedGeneratedToolTarget =
+			ResolveGeneratedOpenClawToolTargetFromTriggerHints(
+				m_skillsCatalog.entries,
+				canonicalCommandBody,
+				&diagnostics);
+
+		if (diagnostics.normalizedPrompt.empty() &&
+			diagnostics.candidateCountConsidered == 0 &&
+			!resolvedGeneratedToolTarget.has_value()) {
+			return std::nullopt;
+		}
+
+		const std::string normalizedPromptUtf8 =
+			WideToUtf8Local(diagnostics.normalizedPrompt);
+		const std::string normalizedPromptPreview =
+			BuildNormalizedPromptPreview(diagnostics.normalizedPrompt, 96);
+		const std::string normalizedPromptHash =
+			BuildHexLower(Fnv1a64(normalizedPromptUtf8));
+
+		return std::string("{") +
+			"\"normalizedPromptPreview\":" +
+			blazeclaw::gateway::JsonString(normalizedPromptPreview) +
+			",\"normalizedPromptHash\":" +
+			blazeclaw::gateway::JsonString(normalizedPromptHash) +
+			",\"candidateCountConsidered\":" +
+			std::to_string(diagnostics.candidateCountConsidered) +
+			",\"matchMode\":" +
+			blazeclaw::gateway::JsonString(
+				GeneratedTriggerMatchModeToTelemetry(diagnostics.matchMode)) +
+			",\"matchedSkillKey\":" +
+			blazeclaw::gateway::JsonString(
+				WideToUtf8Local(diagnostics.matchedSkillKey)) +
+			",\"matchedTriggerHint\":" +
+			blazeclaw::gateway::JsonString(
+				WideToUtf8Local(diagnostics.matchedTriggerHint)) +
+			",\"resolvedGeneratedToolTarget\":" +
+			(resolvedGeneratedToolTarget.has_value()
+				? blazeclaw::gateway::JsonString(
+					resolvedGeneratedToolTarget.value())
+				: std::string("null")) +
+			"}";
 	}
 
 	bool ServiceManager::ShouldLoadSkillCommandsForInlineActions(
@@ -2602,13 +3658,24 @@ namespace blazeclaw::core {
 			inlineArgs = normalizedInlineArgs.value();
 		}
 		const blazeclaw::gateway::ToolExecuteResultV2 toolResult =
-			m_gatewayHost.ExecuteRuntimeToolV2(
-				blazeclaw::gateway::ToolExecuteRequestV2{
+			[&]() {
+				const blazeclaw::gateway::ToolExecuteRequestV2 executeRequest{
 					.tool = resolvedSkillInvocationToolTarget.value(),
-				 .argsJson = std::optional<std::string>(inlineArgs),
+					.argsJson = std::optional<std::string>(inlineArgs),
 					.correlationId = request.runId,
 					.deadlineEpochMs = std::nullopt,
-				});
+				};
+
+				if (const auto generatedResult =
+					TryExecuteGeneratedOpenClawConstantOutputTool(
+						m_skillsCatalog.entries,
+						executeRequest);
+					generatedResult.has_value()) {
+					return generatedResult.value();
+				}
+
+				return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
+			}();
 
 		if (!toolResult.executed) {
 			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{

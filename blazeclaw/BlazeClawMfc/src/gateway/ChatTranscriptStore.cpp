@@ -110,7 +110,7 @@ namespace blazeclaw::gateway {
 			const std::string messageId =
 				"msg-" + std::to_string(timestampMs) +
 				"-" + std::to_string(++sequence);
-			const std::string messageJson = BuildChatMessageJson(
+			const std::string serializedMessageJson = BuildChatMessageJson(
 				messageId,
 				effectiveRole,
 				params.message,
@@ -151,7 +151,7 @@ namespace blazeclaw::gateway {
 					(params.idempotencyKey.empty()
 						? std::string()
 						: (",\"idempotencyKey\":" + JsonString(params.idempotencyKey))) +
-					",\"message\":" + messageJson + "}";
+					",\"message\":" + serializedMessageJson + "}";
 				output << line << "\n";
 				output.flush();
 				if (!output.good()) {
@@ -183,7 +183,7 @@ namespace blazeclaw::gateway {
 			return ChatTranscriptStore::AppendResult{
 				.ok = true,
 				.messageId = messageId,
-				.messageJson = messageJson,
+				.messageJson = serializedMessageJson,
 				.error = {},
 			};
 		}

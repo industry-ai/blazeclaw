@@ -81,6 +81,8 @@ static constexpr uint32_t kMaxPayloadSize = 64u * 1024u; // 64 KiB
     X(CosDelete, 213, 1) \
     X(CosList, 214, 1) \
     X(CosResult, 215, 1) \
+    X(IrcMessageReq, 221, 1) \
+    X(IrcMessageResp, 222, 1) \
     /* Node Bind messages (230-231) - 扫码绑定 */ \
     X(NodeBindReq, 230, 1) \
     X(NodeBindResp, 231, 1)

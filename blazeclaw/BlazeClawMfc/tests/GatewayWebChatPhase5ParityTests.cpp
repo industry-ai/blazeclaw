@@ -128,3 +128,74 @@ TEST_CASE(
 	REQUIRE(eventsJs.find("controller.scheduleHistoryReconcile") != std::string::npos);
 	REQUIRE(eventsJs.find("seenToolLifecycleKeys") != std::string::npos);
 }
+
+TEST_CASE(
+	"Phase 8 compatibility parity: controller preserves legacy export via delegation facade",
+	"[parity][phase8][web][compat]")
+{
+	const auto controllerPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	const std::string controllerJs = ReadTextFile(ResolveProjectPath(controllerPath));
+
+	REQUIRE(controllerJs.find("createControllerLegacyImplementation") != std::string::npos);
+	REQUIRE(controllerJs.find("createControllerCompatibilityFacade") != std::string::npos);
+	REQUIRE(controllerJs.find("__compatFacadeVersion") != std::string::npos);
+	REQUIRE(controllerJs.find("window.BlazeClawChatController") != std::string::npos);
+}
+
+TEST_CASE(
+	"Phase 8 compatibility parity: index integration uses controller API adapter",
+	"[parity][phase8][web][integration]")
+{
+	const auto indexJsPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.js";
+	const std::string indexJs = ReadTextFile(ResolveProjectPath(indexJsPath));
+
+	REQUIRE(indexJs.find("const chatControllerApi = window.BlazeClawChatController || {}") != std::string::npos);
+	REQUIRE(indexJs.find("function createChatController(options)") != std::string::npos);
+	REQUIRE(indexJs.find("const controller = createChatController({") != std::string::npos);
+	REQUIRE(indexJs.find("chatControllerApi.runRegressionChecks()") != std::string::npos);
+}
+
+TEST_CASE(
+	"Phase 8 compatibility parity: script-order verification is checked before index boot",
+	"[parity][phase8][web][script-order]")
+{
+	const auto indexHtmlPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.html";
+	const auto indexJsPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"index.js";
+
+	const std::string indexHtml = ReadTextFile(ResolveProjectPath(indexHtmlPath));
+	const std::string indexJs = ReadTextFile(ResolveProjectPath(indexJsPath));
+
+	REQUIRE(indexHtml.find("__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__") != std::string::npos);
+	REQUIRE(indexHtml.find("BlazeClawChatControllerGui") != std::string::npos);
+	REQUIRE(indexHtml.find("BlazeClawChatEvents") != std::string::npos);
+	REQUIRE(indexHtml.find("BlazeClawChatComposer") != std::string::npos);
+	REQUIRE(indexJs.find("scriptOrderCompat") != std::string::npos);
+}
+
+TEST_CASE(
+	"Phase 9 parity: multi-active responder labeling keeps cached run labels and event order",
+	"[parity][phase9][web][multi-active]")
+{
+	const auto eventsPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-events.js";
+	const std::string eventsJs = ReadTextFile(ResolveProjectPath(eventsPath));
+
+	REQUIRE(eventsJs.find("resolveResponderLabel") != std::string::npos);
+	REQUIRE(eventsJs.find("state.runResponderLabels") != std::string::npos);
+	REQUIRE(eventsJs.find("runLabels instanceof Map") != std::string::npos);
+	REQUIRE(eventsJs.find("for (const event of events)") != std::string::npos);
+}

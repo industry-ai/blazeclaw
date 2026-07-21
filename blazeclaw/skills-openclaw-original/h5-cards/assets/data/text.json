@@ -1,0 +1,29 @@
+
+{
+    "dialogues": [
+        {
+            "image": 1,
+            "texts": ["Hi, I'm Meimei.", "I'm Feifei.", "We are twins."]
+        },
+        {
+            "image": 2,
+            "texts": ["I have big eyes.", "Me too."]
+        },
+        {
+            "image": 3,
+            "texts": ["I have a small nose.", "Me too."]
+        },
+        {
+            "image": 4,
+            "texts": ["I have a small mouth.", "Me too."]
+        },
+        {
+            "image": 5,
+            "texts": ["We look the same.", "I know!"]
+        },
+        {
+            "image": 6,
+            "texts": ["Now I have long hair.", "I have short hair.", "We are different now."]
+        }
+    ]
+}

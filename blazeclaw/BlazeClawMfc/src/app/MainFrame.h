@@ -7,6 +7,7 @@
 #include "PropertiesWnd.h"
 #include "DashboardWnd.h"
 #include "CalendarBar.h"
+#include "TcpReceiverWnd.h"
 #include "Resource.h"
 #include <vector>
 #include <atomic>
@@ -47,6 +48,7 @@ public:
 	void AddToolStatusLine(const CString& line);
 	void AddToolStatusBlock(const CString& text);
 	void RefreshSkillView();
+	CTcpReceiverWnd* GetTcpReceiverWnd() { return &m_wndTcpReceiver; }
 
 	// Overrides
 public:
@@ -92,6 +94,7 @@ protected:  // control bar embedded members
 	CMFCShellTreeCtrl m_wndTree;
 	CCalendarBar      m_wndCalendar;
 	CMFCCaptionBar    m_wndCaptionBar;
+	CTcpReceiverWnd   m_wndTcpReceiver;
 
 	// Generated message map functions
 protected:
@@ -134,6 +137,10 @@ protected:
 	afx_msg void OnUpdateViewDashboardUsageWindow(CCmdUI* pCmdUI);
 	afx_msg void OnViewDashboardDevicesWindow();
 	afx_msg void OnUpdateViewDashboardDevicesWindow(CCmdUI* pCmdUI);
+	
+	afx_msg void OnViewTcpReceiverWindow();
+	afx_msg void OnUpdateViewTcpReceiverWindow(CCmdUI* pCmdUI);
+	afx_msg void OnShowTcpReceiver();
 
 	afx_msg void OnViewCaptionBar();
 	afx_msg void OnUpdateViewCaptionBar(CCmdUI* pCmdUI);
@@ -257,4 +264,5 @@ public:
 	afx_msg void OnEditChat();
 	afx_msg void OnEditDashboard();
 	afx_msg void OnUpdateEditDashboard(CCmdUI* pCmdUI);
+	afx_msg void OnEditCronTasks();
 };

@@ -39,9 +39,61 @@
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
         const upsertApprovalToken = opts.upsertApprovalToken || function () { };
         const onNeedsApprovalEvent = opts.onNeedsApprovalEvent || function () { };
+        const applyStatePatch = opts.applyStatePatch || function () { };
+        const applyUiOps = opts.applyUiOps || function () { };
 
         state.seenChatTerminalRuns = state.seenChatTerminalRuns || new Set();
         state.seenToolLifecycleKeys = state.seenToolLifecycleKeys || new Set();
+
+        function buildResponderMetadata(event, fallback) {
+            const source = event && typeof event === "object"
+                ? event
+                : {};
+            const metadata = {
+                runId: String(source.runId || "").trim(),
+                promptRunId: String(source.promptRunId || source.parentRunId || "").trim(),
+                responderRunId: String(source.responderRunId || source.runId || "").trim(),
+                responderId: String(source.responderId || source.responder || "").trim(),
+                responderLabel: String(
+                    source.responderLabel ||
+                    source.label ||
+                    source.responderName ||
+                    ""
+                ).trim(),
+                modelLabel: String(source.modelLabel || "").trim(),
+                responderOrder: Number.isFinite(Number(source.responderOrder))
+                    ? Number(source.responderOrder)
+                    : Number.MAX_SAFE_INTEGER,
+                responseMode: String(source.responseMode || "multi_active").trim() || "multi_active",
+                terminalState: String(source.state || fallback || "").trim().toLowerCase(),
+                state: String(source.state || fallback || "").trim().toLowerCase(),
+            };
+
+            if (!metadata.promptRunId && metadata.runId) {
+                metadata.promptRunId = `${metadata.runId}.prompt`;
+            }
+            if (!metadata.responderRunId && metadata.runId) {
+                metadata.responderRunId = metadata.runId;
+            }
+
+            if (!metadata.responderLabel) {
+                metadata.responderLabel = String(
+                    metadata.modelLabel ||
+                    resolveResponderLabel(source) ||
+                    metadata.responderId ||
+                    "Responder"
+                ).trim();
+            }
+            if (!metadata.modelLabel) {
+                metadata.modelLabel = metadata.responderLabel;
+            }
+
+            if (!Number.isFinite(metadata.responderOrder)) {
+                metadata.responderOrder = Number.MAX_SAFE_INTEGER;
+            }
+
+            return metadata;
+        }
 
         function normalizeFinalAssistantMessage(message) {
             if (!message || typeof message !== "object") {
@@ -181,9 +233,81 @@
             upsertApprovalToken(approvalToken, "Email scheduling approval required");
         }
 
+        function applyNormalizedControllerEnvelope(message) {
+            if (!message || typeof message !== "object") {
+                return;
+            }
+
+            const responsePayload =
+                message.payload && typeof message.payload === "object"
+                    ? message.payload
+                    : message;
+            if (!responsePayload || typeof responsePayload !== "object") {
+                return;
+            }
+
+            const statePatch =
+                responsePayload.statePatch && typeof responsePayload.statePatch === "object"
+                    ? responsePayload.statePatch
+                    : null;
+            if (statePatch) {
+                applyStatePatch(statePatch);
+            }
+
+            if (Array.isArray(responsePayload.uiOps) && responsePayload.uiOps.length > 0) {
+                applyUiOps(responsePayload.uiOps);
+            }
+        }
+
         function normalizeSessionKeyLocal(value) {
             const trimmed = String(value || "").trim();
             return trimmed || "main";
+        }
+
+        function resolveResponderLabel(event) {
+            const source = event && typeof event === "object"
+                ? event
+                : {};
+            const runId = String(source.runId || "").trim();
+            const runLabels = state.runResponderLabels; 
+
+            if (runId && runLabels instanceof Map) { 
+                const known = runLabels.get(runId);  // get the cached label for this runId if available
+                if (known)  return known;
+            }
+
+            const provider = String(
+                source.provider ||
+                state.gatewayLifecycleProvider ||
+                "").trim().toLowerCase();
+
+            let model = String(
+                source.model ||
+                state.gatewayLifecycleModel ||
+                state.selectedModel ||
+                "").trim();
+
+            const runtimeKind = String(
+                source.runtimeKind ||
+                state.gatewayLifecycleRuntimeKind ||
+                "").trim().toLowerCase();
+
+            if (provider === "deepseek" && model) {
+                if (!model.startsWith("deepseek/")) {
+                    model = model.replace(/^deepseek[-_]/i, "");    // remove any leading "deepseek-" or "deepseek_" prefix
+                    model = `deepseek/${model}`; // prepend "deepseek/" to the model name
+                }
+            }
+
+            // Determine the runtime kind based on the provider if not explicitly provided
+            const resolvedRuntime = runtimeKind || (provider === "deepseek" ? "remote" : "local");
+            const modelPart = model || "(unknown-model)";
+
+            if (!provider && !model)    return "Responder: unknown";
+
+            if (!provider)  return `Responder: ${resolvedRuntime} ${modelPart}`;
+
+            return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
         }
 
         function handleChatEvents(events) {
@@ -234,7 +358,7 @@
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
                         if (otherFinal && text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             shouldReconcile = true;
                         }
@@ -244,7 +368,7 @@
                         const approvalMessage = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(approvalMessage || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             const approvalToken = String(event.approvalToken || "").trim();
                             const nextAction = String(event.approvalNextAction || "").trim();
@@ -255,13 +379,15 @@
                             if (nextAction) {
                                 fallback += ` nextAction=${nextAction}`;
                             }
-                            addMessage(fallback, "peer");
-                        }
+                            addMessage(fallback, "peer", {
+                                modelLabel: resolveResponderLabel(event),
+                                responderLabel: resolveResponderLabel(event),
+                            });                        }
                     } else if (event.state === "aborted") {
                         const otherAborted = normalizeAbortedAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherAborted || event.message);
                         if (text && !controller.isSilentReplyText(text)) {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         } else {
                             shouldReconcile = true;
                         }
@@ -283,20 +409,28 @@
 
                 if (event.state === "delta") {
                     const next = controller.parseTextFromMessage(event.message);
+                    state.streamResponderLabel = resolveResponderLabel(event);
                     controller.applyDeltaText(next);
                     continue;
                 }
 
                 if (event.state === "final" || event.state === "completed") {
                     const terminalState = event.state === "completed" ? "completed" : "final";
-                    const normalizedFinal = normalizeFinalAssistantMessage(event.message);
-                    const text = controller.consumeTerminalText(normalizedFinal || event.message);
+                    // defensively normalize the final message to ensure it is an assistant message
+                    // const normalizedFinal = normalizeFinalAssistantMessage(event.message);
+                    // const text = controller.consumeTerminalText(normalizedFinal || event.message);
+                    const normalizedFinal = normalizeFinalAssistantMessage(event.message ||
+                        event.errorMessage || "defensive JS\r\ndefensive JS - normalizedFinal\r\n");
+                    const text = controller.consumeTerminalText(normalizedFinal || event.message ||
+                        event.errorMessage || "defensive JS\r\ndefensive JS - text\r\n");
                     let shouldReconcile = false;
                     if (text) {
+                        const resolvedModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState,
+                            modelLabel: resolvedModelLabel,
                         });
 
                         const streamedThisTurn =
@@ -304,13 +438,18 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurn) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, terminalState);
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState,
+                                text,
+                            });
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
-                        finalizeStream();
+                        finalizeStream(buildResponderMetadata(event, terminalState));
                         shouldReconcile = true;
                     }
 
@@ -342,10 +481,12 @@
                     }
 
                     if (text) {
+                        const approvalModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState: "needs_approval",
+                            modelLabel: approvalModelLabel,
                         });
 
                         const streamedThisTurnApproval =
@@ -353,13 +494,18 @@
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnApproval) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, "needs_approval");
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState: "needs_approval",
+                                text,
+                            });
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
-                        finalizeStream();
+                        finalizeStream(buildResponderMetadata(event, "needs_approval"));
                         controller.scheduleHistoryReconcile();
                     }
 
@@ -375,20 +521,27 @@
                     const text = controller.consumeTerminalText(normalizedAborted || event.message);
                     let shouldReconcile = false;
                     if (text) {
+                        const abortedModelLabel = resolveResponderLabel(event);
                         controller.commitStreamTranscriptFinal({
                             runId,
                             text,
                             terminalState: "aborted",
+                            modelLabel: abortedModelLabel,
                         });
                         const streamedThisTurnAborted =
                             (typeof controller.hasBufferedAssistantStream === "function" &&
                                 controller.hasBufferedAssistantStream()) ||
                             Boolean(state.streamText);
                         if (streamedThisTurnAborted) {
-                            addOrReplaceStream(text);
-                            finalizeStream();
+                            const responderMetadata = buildResponderMetadata(event, "aborted");
+                            addOrReplaceStream(text, responderMetadata);
+                            finalizeStream({
+                                ...responderMetadata,
+                                terminalState: "aborted",
+                                text,
+                            });
                         } else {
-                            addMessage(text, "peer");
+                            addMessage(text, "peer", {modelLabel: resolveResponderLabel(event)});
                         }
                     } else {
                         shouldReconcile = true;
@@ -405,7 +558,7 @@
                 }
 
                 if (event.state === "error") {
-                    addMessage(event.errorMessage || "chat error", "error");
+                    addMessage(event.errorMessage || "chat error", "error", {modelLabel: resolveResponderLabel(event)});
                     if (runId) {
                         controller.markTerminalRun(runId, "error");
                     }
@@ -436,6 +589,10 @@
                 if (typeof message.runtimeKind === "string") {
                     runtimeKind = message.runtimeKind;
                 }
+
+                state.gatewayLifecycleProvider = provider;
+                state.gatewayLifecycleModel = model;
+                state.gatewayLifecycleRuntimeKind = runtimeKind;
 
                 const details = [];
                 if (runtimeKind) {
@@ -510,6 +667,8 @@
 
             if (message.channel === "blazeclaw.gateway.rpc.result") {
                 controller.handleRpcResult(message);
+                applyNormalizedControllerEnvelope(message);
+                updateComposerState();
                 return;
             }
 

@@ -16,6 +16,7 @@
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
 #include "SettingsDialog.h"
+#include "CronTasksDialog.h"
 #include "BlazeClawMFCView.h"
 #include "BlazeClawMarkdownView.h"
 #include "SharedTabsDocTemplate.h"
@@ -169,6 +170,12 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(ID_VIEW_DASHBOARD_DEVICES_WND, &CMainFrame::OnViewDashboardDevicesWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_DASHBOARD_DEVICES_WND, &CMainFrame::OnUpdateViewDashboardDevicesWindow)
 
+	ON_COMMAND(ID_VIEW_TCP_RECEIVER_WND, &CMainFrame::OnViewTcpReceiverWindow)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_TCP_RECEIVER_WND, &CMainFrame::OnUpdateViewTcpReceiverWindow)
+
+	ON_COMMAND(ID_EDIT_LOG, &CMainFrame::OnShowTcpReceiver)
+	ON_UPDATE_COMMAND_UI(ID_EDIT_LOG, &CMainFrame::OnUpdateViewTcpReceiverWindow)
+
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
 	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
@@ -211,6 +218,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(ID_EDIT_CHAT, &CMainFrame::OnEditChat)
 	ON_COMMAND(ID_EDIT_DASHBOARD, &CMainFrame::OnEditDashboard)
 	ON_UPDATE_COMMAND_UI(ID_EDIT_DASHBOARD, &CMainFrame::OnUpdateEditDashboard)
+	ON_COMMAND(ID_EDIT_DOC, &CMainFrame::OnEditCronTasks)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() noexcept
@@ -472,6 +480,10 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	DockPane(&m_wndDashboard_usage);
 	m_wndDashboard_devices.EnableDocking(CBRS_ALIGN_ANY);
 	DockPane(&m_wndDashboard_devices);
+
+	m_wndTcpReceiver.EnableDocking(CBRS_ALIGN_ANY);
+	DockPane(&m_wndTcpReceiver);
+	m_wndTcpReceiver.ShowPane(FALSE, FALSE, FALSE);
 
 	m_wndDashboard_dreaming.ShowPane(FALSE, FALSE, FALSE);
 	m_wndDashboard_nodes.ShowPane(FALSE, FALSE, FALSE);
@@ -1059,6 +1071,17 @@ BOOL CMainFrame::CreateDockingWindows()
 		return FALSE; // failed to create
 	}
 
+	CString strTcpReceiverWnd;
+	bNameValid = strTcpReceiverWnd.LoadString(IDS_TCP_RECEIVER_WND);
+	ASSERT(bNameValid);
+	if (!m_wndTcpReceiver.Create(strTcpReceiverWnd, this, CRect(0, 0, 512, 1024), TRUE, ID_VIEW_TCP_RECEIVER_WND, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_RIGHT | CBRS_FLOAT_MULTI))
+	{
+		TRACE0("Failed to create TCP Receiver window\n");
+		return FALSE; // failed to create
+	}
+	// 暴露给底层代码（Connection_c::ReadMessage 等）一个全局指针，
+	// 让 RECEIVE 帧日志可以投递到 CTcpReceiverWnd 的富文本界面。
+	TcpReceiverSink::Set(GetTcpReceiverWnd());
 	SetDockingWindowIcons(theApp.m_bHiColorIcons);
 	return TRUE;
 }
@@ -1620,6 +1643,51 @@ void CMainFrame::OnUpdateViewDashboardDevicesWindow(CCmdUI* pCmdUI)
 		::IsWindowVisible(m_wndDashboard_devices.GetSafeHwnd()) != FALSE;
 	pCmdUI->SetCheck(isVisible);
 }
+
+void CMainFrame::OnViewTcpReceiverWindow()
+{
+	m_wndTcpReceiver.ShowPane(TRUE, FALSE, TRUE);
+	m_wndTcpReceiver.SetFocus();
+}
+
+void CMainFrame::OnShowTcpReceiver()
+{
+	TRACE(_T("[CMainFrame::OnShowTcpReceiver] called\n"));
+	
+	HWND hwnd = m_wndTcpReceiver.GetSafeHwnd();
+	TRACE(_T("[CMainFrame::OnShowTcpReceiver] m_wndTcpReceiver.m_hWnd = %p\n"), hwnd);
+	
+	if (hwnd == nullptr)
+	{
+		TRACE0("[CMainFrame::OnShowTcpReceiver] Window not created yet!\n");
+		AfxMessageBox(_T("TCP Receiver window not initialized!"), MB_OK | MB_ICONERROR);
+		return;
+	}
+	
+	BOOL bVisible = ::IsWindowVisible(hwnd);
+	TRACE(_T("[CMainFrame::OnShowTcpReceiver] IsWindowVisible = %d\n"), bVisible);
+	
+	m_wndTcpReceiver.ShowPane(TRUE, FALSE, TRUE);
+	m_wndTcpReceiver.SetFocus();
+	
+	TRACE(_T("[CMainFrame::OnShowTcpReceiver] After ShowPane, IsWindowVisible = %d\n"), ::IsWindowVisible(m_wndTcpReceiver.GetSafeHwnd()));
+}
+
+void CMainFrame::OnUpdateViewTcpReceiverWindow(CCmdUI* pCmdUI)
+{
+	if (pCmdUI == nullptr)
+	{
+		return;
+	}
+
+	pCmdUI->Enable(TRUE);
+
+	const bool isVisible =
+		m_wndTcpReceiver.GetSafeHwnd() != nullptr &&
+		::IsWindowVisible(m_wndTcpReceiver.GetSafeHwnd()) != FALSE;
+	pCmdUI->SetCheck(isVisible);
+}
+
 void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {
 	CMDIFrameWndEx::OnSettingChange(uFlags, lpszSection);
@@ -2474,6 +2542,12 @@ void CMainFrame::OnEditDashboard()
 	}
 
 	m_isSwitchFloatDock = false;
+}
+
+void CMainFrame::OnEditCronTasks()
+{
+	CCronTasksDialog dlg(this);
+	dlg.DoModal();
 }
 
 void CMainFrame::ActivateDashboardPane(CDashboardWnd& targetPane)

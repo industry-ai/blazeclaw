@@ -96,6 +96,10 @@ namespace blazeclaw::gateway {
 		std::string openClawOriginalActivationState;
 		std::string openClawOriginalOrigin;
 		std::vector<std::string> openClawOriginalImportDiagnostics;
+		std::vector<std::string> openClawOriginalTriggerHints;
+		std::string openClawOriginalOutputKind;
+		std::string openClawOriginalOutputTitle;
+		std::string openClawOriginalOutputUrl;
 		bool openClawOriginalMetadataConvertedFromClawdbot = false;
 		bool openClawOriginalMissingToolManifest = false;
 		std::string browserGroup;
@@ -104,7 +108,7 @@ namespace blazeclaw::gateway {
 		std::string browserVariantLabel;
 	};
 
-		// Native recording bridge result/ops are declared on the GatewayHost class below
+	// Native recording bridge result/ops are declared on the GatewayHost class below
 
 	struct SkillsCatalogGatewayState {
 		std::vector<SkillsCatalogGatewayEntry> entries;
@@ -263,6 +267,7 @@ namespace blazeclaw::gateway {
 	namespace handlers::runtime {
 		struct RuntimeSurfaceHandlers;
 		struct ChatPipelineHandlers;
+		struct ChatPipelineRouteDeps;
 		struct RuntimeOrchestrationStreamingHandlers;
 	}
 
@@ -671,6 +676,7 @@ namespace blazeclaw::gateway {
 		friend struct handlers::supplementary_catalog::SupplementaryCatalogHandlers;
 		friend struct handlers::runtime::RuntimeSurfaceHandlers;
 		friend struct handlers::runtime::ChatPipelineHandlers;
+		friend struct handlers::runtime::ChatPipelineRouteDeps;
 		friend struct handlers::runtime::RuntimeOrchestrationStreamingHandlers;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(
@@ -689,6 +695,21 @@ namespace blazeclaw::gateway {
 
 		struct ChatRunState {
 			std::string runId;
+			std::string promptRunId;
+			std::string responderRunId;
+			std::string responderId;
+			std::string provider;
+			std::string model;
+			std::string runtimeKind;
+			std::string responderLabel;
+			std::uint32_t responderOrder = 0;
+			std::string taskId;
+			std::uint64_t taskEnqueueAtMs = 0;
+			std::uint64_t taskStartAtMs = 0;
+			std::uint64_t taskCompletedAtMs = 0;
+			std::uint64_t taskQueueWaitMs = 0;
+			std::uint64_t taskRunDurationMs = 0;
+			std::string taskExecutionState = "queued";
 			std::string sessionKey;
 			std::string idempotencyKey;
 			std::string userMessage;
@@ -711,6 +732,8 @@ namespace blazeclaw::gateway {
 			std::string errorContextJson;
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
+			bool detached = false;
+			bool suppressHistory = false;
 			bool terminalEventEnqueued = false;
 			bool pushLifecycleRequested = false;
 			bool toolEventsAllowed = false;
@@ -741,9 +764,23 @@ namespace blazeclaw::gateway {
 
 		struct ChatEventState {
 			std::string runId;
+			std::string promptRunId;
+			std::string responderRunId;
+			std::string responderId;
+			std::string provider;
+			std::string model;
+			std::string runtimeKind;
+			std::string responderLabel;
+			std::uint32_t responderOrder = 0;
 			std::string sessionKey;
 			std::string state;
-			std::optional<std::string> messageJson;
+			// Transitional structured message object for compatibility paths.
+			// Primary runtime data should flow through `payload`.
+			std::optional<nlohmann::json> messageObject;
+
+			// Transition from storing pre-serialized JSON to normalized payloads.
+			std::optional<blazeclaw::gateway::ChatEventPayload> payload;
+
 			std::optional<std::string> errorMessage;
 			bool approvalRequired = false;
 			std::optional<std::string> approvalToken;

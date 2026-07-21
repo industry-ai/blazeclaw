@@ -182,6 +182,13 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::optional<std::string>
 			ResolveSkillInvocationPromptRewrite(
 				const std::string& commandBodyNormalized) const;
+		[[nodiscard]] std::optional<std::string>
+			ResolveSkillInvocationMissReason(
+				const std::string& commandBodyNormalized,
+				const std::optional<std::string>& resolvedToolTarget) const;
+		[[nodiscard]] std::optional<std::string>
+			BuildGeneratedOpenClawRoutingDecisionTelemetry(
+				const std::string& commandBodyNormalized) const;
 		[[nodiscard]] bool ShouldLoadSkillCommandsForInlineActions(
 			bool allowTextCommands,
 			const std::string& commandBodyNormalized) const;

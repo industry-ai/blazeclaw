@@ -409,11 +409,22 @@
 #define IDC_EDIT_SPEECH_STORAGE_ROOT    41020
 #define IDC_STATIC_SPEECH_MODEL_PATH    41021
 #define IDC_EDIT_SPEECH_MODEL_PATH      41022
+#define IDD_CRON_TASKS_DIALOG           41040
+#define IDC_LIST_CRON_TASKS            41041
+#define IDC_STATIC_CRON_COUNT           41042
+#define IDC_BUTTON_CRON_SELECT_ALL      41043
+#define IDC_BUTTON_CRON_DESELECT_ALL    41044
+#define IDC_BUTTON_CRON_DELETE          41045
+#define IDC_BUTTON_CRON_REFRESH         41046
 #define IDS_DEEPSEEK_DIALOG_TITLE       42000
 #define IDS_DEEPSEEK_DIALOG_LABEL       42001
 #define IDS_DEEPSEEK_STORED_MARKER      42002
 #define IDS_BTN_SHOW                    42012
 #define IDS_BTN_HIDE                    42013
+#define IDS_TCP_RECEIVER_WND            42020
+#define ID_VIEW_TCP_RECEIVER_WND        42030
+#define ID_TCPRECEIVER_CLEAR           42031
+#define IDC_TCPRECEIVER_SEARCH         42032
 
 // Next default values for new objects
 // 

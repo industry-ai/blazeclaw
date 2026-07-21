@@ -8,11 +8,43 @@
 
 namespace {
 
+	std::string WideToUtf8(const std::wstring& value) {
+		if (value.empty()) {
+			return {};
+		}
+
+		const int required = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (required <= 0) {
+			return {};
+		}
+
+		std::string output(static_cast<std::size_t>(required), '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			required,
+			nullptr,
+			nullptr);
+		return output;
+	}
+
 	void WriteTextFile(const std::filesystem::path& path, const std::wstring& content) {
 		std::filesystem::create_directories(path.parent_path());
-		std::wofstream output(path);
+		std::ofstream output(path, std::ios::binary);
 		REQUIRE(output.is_open());
-		output << content;
+		const std::string utf8 = WideToUtf8(content);
+		output.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
 	}
 
 	std::filesystem::path CreateWorkspaceRoot(const std::string& suffix) {
@@ -105,6 +137,13 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 		});
 	REQUIRE(entryIt != snapshot.entries.end());
 	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	if (entryIt->openClawOriginalActivationState.value() !=
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled) {
+		INFO("activation diagnostics begin");
+		for (const auto& diagnostic : entryIt->openClawOriginalImportDiagnostics) {
+			INFO(std::string("diag: ") + WideToUtf8(diagnostic));
+		}
+	}
 	REQUIRE(
 		entryIt->openClawOriginalActivationState.value() ==
 		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
@@ -113,6 +152,111 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 	REQUIRE_FALSE(entryIt->openClawOriginalPromotedDir.empty());
 	REQUIRE(std::filesystem::exists(entryIt->openClawOriginalPromotedDir / "SKILL.md"));
 	REQUIRE(entryIt->metadata.has_value());
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
+TEST_CASE("SkillsCatalogService imports family-tree style quoted trigger skill as tool-enabled generated contract", "[skills][catalog][openclaw-original][fixture][family-tree]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("family_tree_fixture");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"family-tree";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: family-tree\n"
+		L"description: Family tree skill routing\n"
+		L"---\n"
+		L"# Family Tree\n"
+		L"\n"
+		L"> \"郭家的族谱\"\n"
+		L"> \"张三和李四是什么关系\"\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"type\":\"webview\",\"title\":\"族谱树\",\"url\":\"https://corp.blazegraph.site/family-tree/dist/index.html#/tree?text=郭家的族谱\"}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService service;
+	const auto snapshot = service.LoadCatalog(workspaceRoot, config);
+
+	const auto entryIt = std::find_if(
+		snapshot.entries.begin(),
+		snapshot.entries.end(),
+		[](const blazeclaw::core::SkillsCatalogEntry& entry) {
+			return entry.skillName == L"family-tree" &&
+				entry.sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal;
+		});
+	REQUIRE(entryIt != snapshot.entries.end());
+	REQUIRE(entryIt->validFrontmatter);
+	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalActivationState.value() ==
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract.has_value());
+	REQUIRE(
+		std::find(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			std::wstring(L"郭家的族谱")) !=
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
+	REQUIRE_FALSE(
+		std::any_of(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			[](const std::wstring& hint) {
+				const std::wstring lowered = [&hint]() {
+					std::wstring copy = hint;
+					std::transform(
+						copy.begin(),
+						copy.end(),
+						copy.begin(),
+						[](const wchar_t ch) {
+							return static_cast<wchar_t>(std::towlower(ch));
+						});
+					return copy;
+				}();
+				return lowered == L"type" ||
+					lowered == L"url" ||
+					lowered == L"title" ||
+					lowered == L"q" ||
+					lowered.find(L"https://") != std::wstring::npos ||
+					lowered.find(L"corp.blazegraph.site") != std::wstring::npos;
+			}));
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->kind ==
+		L"webview");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->title ==
+		L"族谱树");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->url.find(
+			L"https://corp.blazegraph.site/family-tree/dist/index.html#/tree") ==
+		0);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(
+					L"tool-enabled via generated manifestless runtime contract") !=
+					std::wstring::npos;
+			}));
 
 	std::filesystem::remove_all(workspaceRoot);
 }
@@ -213,6 +357,110 @@ TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[s
 			entryIt->openClawOriginalImportDiagnostics.end(),
 			[](const std::wstring& diagnostic) {
 				return diagnostic.find(L"missing tool manifest") != std::wstring::npos;
+			}));
+
+	std::filesystem::remove_all(workspaceRoot);
+}
+
+TEST_CASE("SkillsCatalogService imports manifestless h5-ppt style skill as non-fatal discovered entry", "[skills][catalog][openclaw-original][fixture][h5-ppt]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+	const auto workspaceRoot = CreateWorkspaceRoot("h5_ppt_fixture");
+
+	const auto skillDir =
+		workspaceRoot /
+		"blazeclaw" /
+		"skills-openclaw-original" /
+		"h5-ppt";
+	WriteTextFile(
+		skillDir / "SKILL.md",
+		L"---\n"
+		L"name: h5-ppt\n"
+		L"description: Return fixed URL for h5-ppt intents.\n"
+		L"tags: h5-ppt\n"
+		L"---\n"
+		L"# 炎图科技PPT\n"
+		L"\n"
+		L"Trigger scenarios:\n"
+		L"- 路演h5\n"
+		L"- 打开路演h5\n"
+		L"\n"
+		L"Output:\n"
+		L"```json\n"
+		L"{\"outputs\":[{\"type\":\"webview\",\"title\":\"炎图科技PPT\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
+		L"```\n");
+
+	blazeclaw::config::AppConfig config;
+	config.skills.openclawOriginal.enabled = true;
+	config.skills.openclawOriginal.autoImportTools = true;
+	config.skills.openclawOriginal.promoteToManaged = false;
+	config.skills.limits.maxCandidatesPerRoot = 32;
+	config.skills.limits.maxSkillsLoadedPerSource = 32;
+	config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+	blazeclaw::core::SkillsCatalogService service;
+	const auto snapshot = service.LoadCatalog(workspaceRoot, config);
+
+	const auto entryIt = std::find_if(
+		snapshot.entries.begin(),
+		snapshot.entries.end(),
+		[](const blazeclaw::core::SkillsCatalogEntry& entry) {
+			return entry.skillName == L"h5-ppt" &&
+				entry.sourceKind == blazeclaw::core::SkillsSourceKind::OpenClawOriginal;
+		});
+	REQUIRE(entryIt != snapshot.entries.end());
+	REQUIRE(entryIt->validFrontmatter);
+	REQUIRE(entryIt->openClawOriginalActivationState.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalActivationState.value() ==
+		blazeclaw::core::SkillsOpenClawOriginalActivationState::ToolEnabled);
+	REQUIRE(entryIt->metadata.has_value());
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->skillKey ==
+		L"h5-ppt");
+	REQUIRE_FALSE(
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.empty());
+	REQUIRE(
+		std::find(
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.begin(),
+			entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end(),
+			std::wstring(L"路演h5")) !=
+		entryIt->openClawOriginalExtractedRuntimeContract->triggerHints.end());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output.has_value());
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->kind ==
+		L"webview");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->title ==
+		L"炎图科技PPT");
+	REQUIRE(
+		entryIt->openClawOriginalExtractedRuntimeContract->output->url ==
+		L"https://static.blazegraph.site/h5-ppt/index.html");
+	REQUIRE(entryIt->openClawOriginalExtractedRuntimeContract->complete);
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(
+					L"tool-enabled via generated manifestless runtime contract") !=
+					std::wstring::npos;
+			}));
+	REQUIRE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(L"missing tool manifest") != std::wstring::npos;
+			}));
+	REQUIRE_FALSE(
+		std::any_of(
+			entryIt->openClawOriginalImportDiagnostics.begin(),
+			entryIt->openClawOriginalImportDiagnostics.end(),
+			[](const std::wstring& diagnostic) {
+				return diagnostic.find(L"malformed metadata") != std::wstring::npos;
 			}));
 
 	std::filesystem::remove_all(workspaceRoot);

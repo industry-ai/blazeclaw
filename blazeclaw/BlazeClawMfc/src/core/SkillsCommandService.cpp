@@ -639,6 +639,25 @@ namespace blazeclaw::core {
 						.promptTemplate = L"Bundle prompt template",
 						.sourceFilePath = L"skills/bundle-command-sample/SKILL.md",
 					},
+					SkillsCommandSpec{
+						.name = L"Image Generator",
+						.skillName = L"image-generator",
+						.description = L"image generator tool-dispatch command",
+						.dispatch = SkillsCommandDispatch{
+							.enabled = true,
+							.kind = L"tool",
+							.toolName = L"image-generator.generate",
+							.argMode = L"raw",
+						},
+						.sourceFilePath = L"skills/image-generator/SKILL.md",
+					},
+					SkillsCommandSpec{
+						.name = L"Image Generator Missing Dispatch",
+						.skillName = L"image-generator-missing-dispatch",
+						.description = L"image-generator command without dispatch metadata",
+						.dispatch = SkillsCommandDispatch{},
+						.sourceFilePath = L"skills/image-generator-missing-dispatch/SKILL.md",
+					},
 				};
 			}
 		};
@@ -669,6 +688,42 @@ namespace blazeclaw::core {
 
 		if (commandSourceSnapshot.commandSourceContributionCount == 0) {
 			outError = L"S3 commands fixture failed: expected command-source contribution diagnostics counter.";
+			return false;
+		}
+
+		const auto imageGeneratorCommand = std::find_if(
+			commandSourceSnapshot.commands.begin(),
+			commandSourceSnapshot.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.skillName == L"image-generator";
+			});
+		if (imageGeneratorCommand == commandSourceSnapshot.commands.end() ||
+			!imageGeneratorCommand->dispatch.enabled ||
+			imageGeneratorCommand->dispatch.toolName != L"image-generator.generate") {
+			outError = L"S3 commands fixture failed: expected image-generator command dispatch binding.";
+			return false;
+		}
+
+		const auto bindings = BuildEmbeddedToolBindings(commandSourceSnapshot);
+		const auto hasImageGeneratorBinding = std::any_of(
+			bindings.begin(),
+			bindings.end(),
+			[](const EmbeddedToolBinding& item) {
+				return item.toolName == "image-generator.generate";
+			});
+		if (!hasImageGeneratorBinding) {
+			outError = L"S3 commands fixture failed: expected embedded tool binding for image-generator.generate.";
+			return false;
+		}
+
+		const auto hasMissingDispatchBinding = std::any_of(
+			bindings.begin(),
+			bindings.end(),
+			[](const EmbeddedToolBinding& item) {
+				return item.toolName == "image-generator-missing-dispatch";
+			});
+		if (hasMissingDispatchBinding) {
+			outError = L"S3 commands fixture failed: missing-dispatch command must not produce embedded tool binding.";
 			return false;
 		}
 

@@ -25,6 +25,7 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string Endpoint() const;
 		[[nodiscard]] std::size_t ConnectionCount() const noexcept;
+		[[nodiscard]] std::size_t OutboundBacklogCount() const noexcept;
 		[[nodiscard]] std::uint64_t HandshakeTimeoutCount() const noexcept;
 		[[nodiscard]] std::uint64_t IdleTimeoutCloseCount() const noexcept;
 		[[nodiscard]] std::uint64_t InvalidUtf8CloseCount() const noexcept;

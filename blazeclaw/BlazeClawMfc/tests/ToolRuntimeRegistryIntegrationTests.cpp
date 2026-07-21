@@ -1,5 +1,7 @@
 #include "core/tools/CToolRuntimeRegistry.h"
 #include "core/tools/ToolArgumentValidators.h"
+#include "core/SkillsCatalogService.h"
+#include "config/ConfigModels.h"
 #include "gateway/GatewayRequestParams.h"
 #include "gateway/GatewayHost.h"
 #include "gateway/GatewayToolRegistry.h"
@@ -12,6 +14,91 @@
 #include <fstream>
 
 namespace {
+	std::string WideToUtf8(const std::wstring& value) {
+		if (value.empty()) {
+			return {};
+		}
+
+		const int required = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (required <= 0) {
+			return {};
+		}
+
+		std::string output(static_cast<std::size_t>(required), '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			required,
+			nullptr,
+			nullptr);
+		return output;
+	}
+
+	void WriteTextFile(const std::filesystem::path& path, const std::wstring& content) {
+		std::filesystem::create_directories(path.parent_path());
+		std::ofstream output(path, std::ios::binary);
+		REQUIRE(output.is_open());
+		const std::string utf8 = WideToUtf8(content);
+		output.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
+	}
+
+	std::filesystem::path CreateWorkspaceRoot(const std::string& suffix) {
+		const auto root = std::filesystem::temp_directory_path() /
+			("blazeclaw_generated_openclaw_collision_" + suffix + "_" + std::to_string(std::rand()));
+		std::filesystem::create_directories(root);
+		return root;
+	}
+
+	class ScopedOpenClawOriginalDirOverride {
+	public:
+		explicit ScopedOpenClawOriginalDirOverride(const wchar_t* variableName)
+			: m_variableName(variableName == nullptr ? L"" : variableName) {
+			if (m_variableName.empty()) {
+				return;
+			}
+
+			wchar_t* current = nullptr;
+			size_t length = 0;
+			if (_wdupenv_s(&current, &length, m_variableName.c_str()) == 0 &&
+				current != nullptr) {
+				m_hadOriginalValue = true;
+				m_originalValue = current;
+				free(current);
+			}
+
+			_wputenv_s(m_variableName.c_str(), L"");
+		}
+
+		~ScopedOpenClawOriginalDirOverride() {
+			if (m_variableName.empty()) {
+				return;
+			}
+
+			if (m_hadOriginalValue) {
+				_wputenv_s(m_variableName.c_str(), m_originalValue.c_str());
+			}
+			else {
+				_wputenv_s(m_variableName.c_str(), L"");
+			}
+		}
+
+	private:
+		std::wstring m_variableName;
+		bool m_hadOriginalValue = false;
+		std::wstring m_originalValue;
+	};
+
 	class ScopedEnvVar {
 	public:
 		ScopedEnvVar(const char* name, const char* value)
@@ -38,6 +125,64 @@ namespace {
 		std::string m_original;
 		bool m_hadOriginal;
 	};
+
+	blazeclaw::core::SkillsCatalogSnapshot LoadOpenClawCollisionFixtureCatalog(
+		const std::filesystem::path& workspaceRoot) {
+		const auto familySkillDir =
+			workspaceRoot /
+			"blazeclaw" /
+			"skills-openclaw-original" /
+			"family-tree";
+		WriteTextFile(
+			familySkillDir / "SKILL.md",
+			L"---\n"
+			L"name: family-tree\n"
+			L"description: Family tree skill routing\n"
+			L"---\n"
+			L"# Family Tree\n"
+			L"\n"
+			L"> \"郭家的族谱\"\n"
+			L"> \"张三和李四是什么关系\"\n"
+			L"\n"
+			L"Output:\n"
+			L"```json\n"
+			L"{\"type\":\"webview\",\"title\":\"族谱树\",\"url\":\"https://corp.blazegraph.site/family-tree/dist/index.html#/tree?text=郭家的族谱\"}\n"
+			L"```\n");
+
+		const auto h5SkillDir =
+			workspaceRoot /
+			"blazeclaw" /
+			"skills-openclaw-original" /
+			"h5-ppt";
+		WriteTextFile(
+			h5SkillDir / "SKILL.md",
+			L"---\n"
+			L"name: h5-ppt\n"
+			L"description: Return fixed URL for h5-ppt intents.\n"
+			L"tags: h5-ppt\n"
+			L"---\n"
+			L"# 炎图科技PPT\n"
+			L"\n"
+			L"Trigger scenarios:\n"
+			L"- 路演h5\n"
+			L"- 打开路演h5\n"
+			L"\n"
+			L"Output:\n"
+			L"```json\n"
+			L"{\"outputs\":[{\"type\":\"webview\",\"title\":\"炎图科技PPT\",\"url\":\"https://static.blazegraph.site/h5-ppt/index.html\"}]}\n"
+			L"```\n");
+
+		blazeclaw::config::AppConfig config;
+		config.skills.openclawOriginal.enabled = true;
+		config.skills.openclawOriginal.autoImportTools = true;
+		config.skills.openclawOriginal.promoteToManaged = false;
+		config.skills.limits.maxCandidatesPerRoot = 32;
+		config.skills.limits.maxSkillsLoadedPerSource = 32;
+		config.skills.limits.maxSkillFileBytes = 64 * 1024;
+
+		blazeclaw::core::SkillsCatalogService catalogService;
+		return catalogService.LoadCatalog(workspaceRoot, config);
+	}
 }
 
 TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtime][registry]") {
@@ -687,6 +832,173 @@ TEST_CASE("Skill invocation includes inbox intent alias contract", "[skills][dis
 	REQUIRE(source.find("imap_smtp_email.imap.search") != std::string::npos);
 }
 
+TEST_CASE("OpenClaw generated invocation resolves via extracted trigger metadata", "[skills][dispatch][openclaw-original][generated][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("ResolveGeneratedOpenClawToolTargetFromTriggerHints") != std::string::npos);
+	REQUIRE(source.find("ContainsNormalizedTriggerHint") != std::string::npos);
+	REQUIRE(source.find("GeneratedTriggerMatchMode") != std::string::npos);
+	REQUIRE(source.find("candidate.score") != std::string::npos);
+	REQUIRE(source.find("candidate.hintLength") != std::string::npos);
+	REQUIRE(source.find("BuildGeneratedOpenClawToolName") != std::string::npos);
+	REQUIRE(source.find("triggerHints") != std::string::npos);
+}
+
+TEST_CASE("OpenClaw generated invocation includes constant-output and URL-friendly formatting", "[skills][dispatch][openclaw-original][generated][response][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("TryExecuteGeneratedOpenClawConstantOutputTool") != std::string::npos);
+	REQUIRE(source.find("openclaw.generated.runtime-contract") != std::string::npos);
+	REQUIRE(source.find("ExtractGeneratedOpenClawOutputKindTitleAndUrl") != std::string::npos);
+	REQUIRE(source.find("type=") != std::string::npos);
+	REQUIRE(source.find("title=") != std::string::npos);
+	REQUIRE(source.find("url=") != std::string::npos);
+}
+
+TEST_CASE("OpenClaw generated invocation includes h5-ppt end-to-end route/response contract", "[skills][dispatch][openclaw-original][generated][h5-ppt][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("NormalizeInlineTriggerText") != std::string::npos);
+	REQUIRE(source.find("ContainsNormalizedTriggerHint") != std::string::npos);
+	REQUIRE(source.find("TryExecuteGeneratedOpenClawConstantOutputTool") != std::string::npos);
+	REQUIRE(source.find("source\"] = \"openclaw.generated.runtime-contract\"") != std::string::npos);
+	REQUIRE(source.find("title=") != std::string::npos);
+	REQUIRE(source.find("url=") != std::string::npos);
+}
+
+TEST_CASE("OpenClaw generated resolver prevents family-tree and h5-ppt trigger collisions", "[skills][dispatch][openclaw-original][generated][collision]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("GeneratedTriggerMatchMode") != std::string::npos);
+	REQUIRE(source.find("candidate.score > bestMatch->score") != std::string::npos);
+	REQUIRE(source.find("candidate.hintLength > bestMatch->hintLength") != std::string::npos);
+	REQUIRE(source.find("candidate.skillKey < bestMatch->skillKey") != std::string::npos);
+	REQUIRE(source.find("BuildGeneratedOpenClawRoutingDecisionTelemetry") != std::string::npos);
+	REQUIRE(source.find("normalizedPromptHash") != std::string::npos);
+	REQUIRE(source.find("candidateCountConsidered") != std::string::npos);
+
+	const auto coordinatorPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"GatewayHostBindingCoordinator.cpp";
+	const auto coordinatorPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"GatewayHostBindingCoordinator.cpp";
+	std::ifstream coordinatorIn(coordinatorPathPrimary.string());
+	if (!coordinatorIn.is_open()) {
+		coordinatorIn.open(coordinatorPathFallback.string());
+	}
+	REQUIRE(coordinatorIn.is_open());
+
+	const std::string coordinatorSource(
+		(std::istreambuf_iterator<char>(coordinatorIn)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(coordinatorSource.find("generatedRoutingDiagnostics") != std::string::npos);
+
+	const auto importServicePathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"OpenClawOriginalImportService.cpp";
+	const auto importServicePathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"OpenClawOriginalImportService.cpp";
+	std::ifstream importIn(importServicePathPrimary.string());
+	if (!importIn.is_open()) {
+		importIn.open(importServicePathFallback.string());
+	}
+	REQUIRE(importIn.is_open());
+
+	const std::string importSource(
+		(std::istreambuf_iterator<char>(importIn)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(importSource.find("inFenceBlock") != std::string::npos);
+	REQUIRE(importSource.find("looksLikeTriggerCandidate") != std::string::npos);
+	REQUIRE(importSource.find("rejectedSchemaTokens") != std::string::npos);
+}
+
 TEST_CASE("Runtime recovery enforces email-intent cross-skill guard", "[tools][runtime][fallback][contract]") {
 	const auto normalizerPathPrimary =
 		std::filesystem::path("BlazeClawMfc") /
@@ -739,6 +1051,7 @@ TEST_CASE("Routing telemetry emits language and intent metadata", "[skills][gate
 	REQUIRE(source.find("detectedLanguage") != std::string::npos);
 	REQUIRE(source.find("normalizedIntent") != std::string::npos);
 	REQUIRE(source.find("fallbackReason") != std::string::npos);
+	REQUIRE(source.find("generatedRoutingDiagnostics") != std::string::npos);
 	REQUIRE(source.find("intent_not_matched") != std::string::npos);
 }
 

@@ -484,6 +484,23 @@ namespace blazeclaw::config {
 		LlamaRuntimeConfig llama;
 	};
 
+	struct ChatMultiActiveConfig {
+		bool enabled = true;
+		std::wstring threadingMode = L"thread_pool";
+		std::uint32_t maxActiveResponders = 4;
+		std::uint32_t poolMinThreads = 2;
+		std::uint32_t poolMaxThreads = 6;
+		std::uint32_t poolQueueCapacity = 128;
+		std::uint32_t poolDequeueTimeoutMs = 50;
+		std::uint32_t perResponderTimeoutMs = 90000;
+		std::uint32_t cancelDrainTimeoutMs = 3000;
+		std::uint32_t maxQueuedEventsPerSession = 1000;
+		std::uint32_t pollMinIntervalMs = 60;
+		std::uint32_t pollMaxBatchEvents = 50;
+		std::wstring abortPolicy = L"cancel_all_children";
+		bool abortWaitForDrain = true;
+	};
+
 	struct SpeechRecognitionConfig {
 		bool enabled = false;
 		bool cudaEnabled = true;
@@ -533,11 +550,46 @@ namespace blazeclaw::config {
 		bool verboseMetrics = false;
 	};
 
+	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+	// Add explicit runtime mode to config model
+	struct AgentChatRuntimeConfig {
+		std::wstring mode = L"auto"; // legacy | native | auto
+		bool enableOpenClawAliases = true;
+		bool uiInProcessAgentPath = true;
+		bool httpPushIngress = true;
+		bool allowNonLoopbackHttpBind = false;
+		bool legacyRollbackEnabled = true;
+		bool nodeStartupDeprecated = false;
+		bool nodeRemovalApproved = false;
+		std::wstring bindAddress = L"127.0.0.1";
+		std::uint16_t port = 8788;
+		std::wstring pushChatHost = L"127.0.0.1";
+		std::uint16_t pushChatPort = 8765;
+		std::uint32_t pushTimeoutMs = 30000;
+		std::wstring runnerChatHost = L"127.0.0.1";
+		std::uint16_t runnerChatPort = 8765;
+		std::wstring stateRoot;
+		std::wstring legacyStateRoot;
+		bool legacyStateMigrationEnabled = true;
+	};
+
+	enum class AgentChatRuntimeMode { Legacy, Native, Auto };
+
+	// resolve from `static_cast<CBlazeClawMFCApp*>(AfxGetApp())->Config().agentChatRuntime.mode`
+	//-------------------------------------------------------------------
+
 	struct AppConfig {
 		GatewayConfig gateway;
 		AgentConfig agent;
+		//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+		// Add explicit runtime mode to config model
+		AgentChatRuntimeConfig	agentChatRuntime;	
+		//-------------------------------------------------------------------
 		ChatUiConfig chat;
 		LocalModelConfig localModel;
+		ChatMultiActiveConfig multiActive;
 		SpeechRecognitionConfig speechRecognition;
 		AgentsConfig agents;
 		AcpRuntimeConfig acp;

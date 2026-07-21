@@ -474,7 +474,15 @@ std::string SerializeSkillCatalogEntry(
 		EscapeJsonLocal(entry.openClawOriginalOrigin) +
 		"\",\"openclawOriginalImportDiagnostics\":" +
 		SerializeStringArrayLocal(entry.openClawOriginalImportDiagnostics) +
-		",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
+		",\"openclawOriginalTriggerHints\":" +
+		SerializeStringArrayLocal(entry.openClawOriginalTriggerHints) +
+		",\"openclawOriginalOutputKind\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputKind) +
+		"\",\"openclawOriginalOutputTitle\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputTitle) +
+		"\",\"openclawOriginalOutputUrl\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOutputUrl) +
+		"\",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
 		std::string(entry.openClawOriginalMetadataConvertedFromClawdbot
 			? "true"
 			: "false") +
@@ -672,6 +680,20 @@ std::string BuildAssistantDeltaMessageJson(const std::string& text) {
 		"\"}";
 }
 
+// Adapter: construct assistant delta JSON from normalized payload.
+std::string BuildAssistantDeltaMessageJsonFromPayload(const blazeclaw::gateway::ChatEventPayload& p) {
+	if (p.assistantDelta.has_value()) {
+		return BuildAssistantDeltaMessageJson(p.assistantDelta.value());
+	}
+	if (p.messageObject.has_value()) {
+		return p.messageObject.value().dump();
+	}
+	if (p.userMessage.has_value()) {
+		return BuildUserMessageJson(p.userMessage.value(), false, static_cast<std::uint64_t>(p.timestampMs));
+	}
+	return std::string();
+}
+
 std::string BuildUserMessageJson(
 	const std::string& text,
 	const bool hasAttachments,
@@ -706,6 +728,14 @@ std::string BuildUserMessageJson(
 
 std::string BuildChatEventJson(
 	const std::string& runId,
+	const std::string& promptRunId,
+	const std::string& responderRunId,
+	const std::string& responderId,
+	const std::string& provider,
+	const std::string& model,
+	const std::string& runtimeKind,
+	const std::string& responderLabel,
+	const std::uint32_t responderOrder,
 	const std::string& sessionKey,
 	const std::string& state,
 	const std::optional<std::string>& messageJson,
@@ -721,7 +751,23 @@ std::string BuildChatEventJson(
 	std::string payload =
 		"{\"runId\":\"" +
 		EscapeJsonLocal(runId) +
-		"\",\"sessionKey\":\"" +
+		"\",\"promptRunId\":\"" +
+		EscapeJsonLocal(promptRunId.empty() ? runId : promptRunId) +
+		"\",\"responderRunId\":\"" +
+		EscapeJsonLocal(responderRunId.empty() ? runId : responderRunId) +
+		"\",\"responderId\":\"" +
+		EscapeJsonLocal(responderId) +
+		"\",\"provider\":\"" +
+		EscapeJsonLocal(provider) +
+		"\",\"model\":\"" +
+		EscapeJsonLocal(model) +
+		"\",\"runtimeKind\":\"" +
+		EscapeJsonLocal(runtimeKind) +
+		"\",\"responderLabel\":\"" +
+		EscapeJsonLocal(responderLabel) +
+		"\",\"responderOrder\":" +
+		std::to_string(static_cast<std::uint64_t>(responderOrder)) +
+		",\"sessionKey\":\"" +
 		EscapeJsonLocal(sessionKey) +
 		"\",\"state\":\"" +
 		EscapeJsonLocal(state) +
@@ -1744,6 +1790,36 @@ bool IsSilentAssistantMessageJson(const std::string& messageJson) {
 		std::string::npos;
 }
 
+bool IsSilentAssistantMessagePayload(
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	if (payload.assistantDelta.has_value()) {
+		return IsSilentReplyText(payload.assistantDelta.value());
+	}
+
+	if (payload.messageObject.has_value()) {
+		return IsSilentAssistantMessageJson(payload.messageObject.value().dump());
+	}
+
+	return false;
+}
+
+std::optional<std::string> TryBuildAssistantMessageJsonFromPayload(
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	if (payload.messageObject.has_value()) {
+		return payload.messageObject.value().dump();
+	}
+
+	if (payload.assistantDelta.has_value()) {
+		return BuildAssistantDeltaMessageJson(payload.assistantDelta.value());
+	}
+
+	if (payload.userMessage.has_value()) {
+		return BuildUserMessageJson(payload.userMessage.value(), false, payload.timestampMs);
+	}
+
+	return std::nullopt;
+}
+
 void PushHistoryMessageIfNew(
 	std::vector<std::string>& history,
 	const std::string& messageJson) {
@@ -1759,6 +1835,18 @@ void PushHistoryMessageIfNew(
 			history.begin(),
 			history.begin() + static_cast<std::ptrdiff_t>(overflow));
 	}
+}
+
+void PushHistoryMessageIfNewFromPayload(
+	std::vector<std::string>& history,
+	const blazeclaw::gateway::ChatEventPayload& payload) {
+	const std::optional<std::string> messageJson =
+		TryBuildAssistantMessageJsonFromPayload(payload);
+	if (!messageJson.has_value()) {
+		return;
+	}
+
+	PushHistoryMessageIfNew(history, messageJson.value());
 }
 
 bool ValidateAttachmentPayloadShape(

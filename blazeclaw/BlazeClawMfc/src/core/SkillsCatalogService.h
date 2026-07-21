@@ -65,6 +65,7 @@ namespace blazeclaw::core {
 		std::optional<SkillsOpenClawOriginalActivationState> openClawOriginalActivationState;
 		std::wstring openClawOriginalOrigin;
 		std::vector<std::wstring> openClawOriginalImportDiagnostics;
+		std::optional<OpenClawOriginalExtractedRuntimeContractSpec> openClawOriginalExtractedRuntimeContract;
 		std::filesystem::path openClawOriginalPromotedDir;
 		bool openClawOriginalMetadataConvertedFromClawdbot = false;
 	};

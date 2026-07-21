@@ -1,0 +1,1 @@
+{"schema_version":"1.0","card_type":"assistant_welcome","title":"医疗 AI 助手","subtitle":"已就绪 · 李医生随访团队","description":"我可以帮你：定时用药提醒、复诊预约、健康报告解读、饮食运动建议。对我说「今天药吃了吗」试试！","button_text":"开始对话","target_url":"https://example.com/medical-ai","theme":"health","layout":{"variant":"assistant_welcome","icon":"ai"}}

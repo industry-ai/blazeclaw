@@ -257,6 +257,24 @@ namespace blazeclaw::config {
 			return L"onnx";
 		}
 
+		std::wstring NormalizeMultiActiveThreadingMode(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"thread_pool") {
+				return normalized;
+			}
+
+			return L"thread_pool";
+		}
+
+		std::wstring NormalizeMultiActiveAbortPolicy(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"cancel_all_children") {
+				return normalized;
+			}
+
+			return L"cancel_all_children";
+		}
+
 		std::wstring NormalizeLocalModelRolloutStage(
 			const std::wstring& raw) {
 			const std::wstring normalized = ToLowerTrim(raw);
@@ -508,6 +526,119 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			// 2026/06/28, jicheng, add dual mode support for agent chat bridge
+			// Add explicit runtime mode to config model
+			if (trimmedLine.rfind(L"agentchat.runtime.mode=", 0) == 0) {
+				const std::wstring raw = ToLowerTrim(trimmedLine.substr(23));
+				outConfig.agentChatRuntime.mode =
+					(raw == L"legacy" || raw == L"native" || raw == L"auto") ? raw : L"auto";
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.bind=", 0) == 0) {
+				outConfig.agentChatRuntime.bindAddress = Trim(trimmedLine.substr(23));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.port=", 0) == 0) {
+				// parse uint16 safely
+				try {
+					outConfig.agentChatRuntime.port =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(23))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.openclawAliases=", 0) == 0) {
+				outConfig.agentChatRuntime.enableOpenClawAliases =
+					ParseBool(trimmedLine.substr(34), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushChatHost=", 0) == 0) {
+				outConfig.agentChatRuntime.pushChatHost = Trim(trimmedLine.substr(29));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushChatPort=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.pushChatPort =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(29))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.pushTimeoutMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.pushTimeoutMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(30))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.runnerChatHost=", 0) == 0) {
+				outConfig.agentChatRuntime.runnerChatHost = Trim(trimmedLine.substr(31));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.runnerChatPort=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.runnerChatPort =
+						static_cast<std::uint16_t>(std::stoi(Trim(trimmedLine.substr(31))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.stateRoot=", 0) == 0) {
+				outConfig.agentChatRuntime.stateRoot = Trim(trimmedLine.substr(28));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyStateRoot=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyStateRoot = Trim(trimmedLine.substr(34));
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyStateMigrationEnabled=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyStateMigrationEnabled =
+					ParseBool(trimmedLine.substr(45), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.openclawAliases=", 0) == 0) {
+				outConfig.agentChatRuntime.enableOpenClawAliases =
+					ParseBool(trimmedLine.substr(23), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.uiInProcessAgentPath=", 0) == 0) {
+				outConfig.agentChatRuntime.uiInProcessAgentPath =
+					ParseBool(trimmedLine.substr(28), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.httpPushIngress=", 0) == 0) {
+				outConfig.agentChatRuntime.httpPushIngress =
+					ParseBool(trimmedLine.substr(23), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"native.allowNonLoopbackHttpBind=", 0) == 0) {
+				outConfig.agentChatRuntime.allowNonLoopbackHttpBind =
+					ParseBool(trimmedLine.substr(32), false);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.legacyRollbackEnabled=", 0) == 0) {
+				outConfig.agentChatRuntime.legacyRollbackEnabled =
+					ParseBool(trimmedLine.substr(40), true);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.nodeStartupDeprecated=", 0) == 0) {
+				outConfig.agentChatRuntime.nodeStartupDeprecated =
+					ParseBool(trimmedLine.substr(39), false);
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.runtime.nodeRemovalApproved=", 0) == 0) {
+				outConfig.agentChatRuntime.nodeRemovalApproved =
+					ParseBool(trimmedLine.substr(36), false);
+				continue;
+			}
+			//-------------------------------------------------------------------
+
 			if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {
 				outConfig.chat.mode =
 					NormalizeChatUiMode(trimmedLine.substr(13));
@@ -676,6 +807,112 @@ namespace blazeclaw::config {
 				outConfig.localModel.llama.verboseMetrics = ParseBool(
 					trimmedLine.substr(37),
 					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.enabled=", 0) == 0) {
+				outConfig.multiActive.enabled = ParseBool(
+					trimmedLine.substr(25),
+					outConfig.multiActive.enabled);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.threadingMode=", 0) == 0) {
+				outConfig.multiActive.threadingMode = NormalizeMultiActiveThreadingMode(
+					trimmedLine.substr(31));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.maxActiveResponders=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(37), value) && value > 0) {
+					outConfig.multiActive.maxActiveResponders = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.poolMinThreads=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(32), value) && value > 0) {
+					outConfig.multiActive.poolMinThreads = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.poolMaxThreads=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(32), value) && value > 0) {
+					outConfig.multiActive.poolMaxThreads = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.poolQueueCapacity=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(34), value) && value > 0) {
+					outConfig.multiActive.poolQueueCapacity = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.poolDequeueTimeoutMs=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(37), value)) {
+					outConfig.multiActive.poolDequeueTimeoutMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.perResponderTimeoutMs=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(38), value) && value > 0) {
+					outConfig.multiActive.perResponderTimeoutMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.cancelDrainTimeoutMs=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(36), value)) {
+					outConfig.multiActive.cancelDrainTimeoutMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.maxQueuedEventsPerSession=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(42), value) && value > 0) {
+					outConfig.multiActive.maxQueuedEventsPerSession = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.pollMinIntervalMs=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(34), value)) {
+					outConfig.multiActive.pollMinIntervalMs = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.pollMaxBatchEvents=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(35), value) && value > 0) {
+					outConfig.multiActive.pollMaxBatchEvents = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.abortPolicy=", 0) == 0) {
+				outConfig.multiActive.abortPolicy = NormalizeMultiActiveAbortPolicy(
+					trimmedLine.substr(29));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.multiActive.abortWaitForDrain=", 0) == 0) {
+				outConfig.multiActive.abortWaitForDrain = ParseBool(
+					trimmedLine.substr(35),
+					outConfig.multiActive.abortWaitForDrain);
 				continue;
 			}
 
@@ -2159,6 +2396,72 @@ namespace blazeclaw::config {
 
 		if (outConfig.localModel.maxTokens == 0) {
 			outConfig.localModel.maxTokens = 256;
+		}
+
+		outConfig.multiActive.threadingMode = NormalizeMultiActiveThreadingMode(
+			outConfig.multiActive.threadingMode);
+		outConfig.multiActive.abortPolicy = NormalizeMultiActiveAbortPolicy(
+			outConfig.multiActive.abortPolicy);
+		outConfig.multiActive.maxActiveResponders =
+			(std::clamp)(
+				outConfig.multiActive.maxActiveResponders,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 16 });
+		outConfig.multiActive.poolMinThreads =
+			(std::clamp)(
+				outConfig.multiActive.poolMinThreads,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 64 });
+		outConfig.multiActive.poolMaxThreads =
+			(std::clamp)(
+				outConfig.multiActive.poolMaxThreads,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 256 });
+		if (outConfig.multiActive.poolMaxThreads < outConfig.multiActive.poolMinThreads) {
+			outConfig.multiActive.poolMaxThreads = outConfig.multiActive.poolMinThreads;
+		}
+		outConfig.multiActive.poolQueueCapacity =
+			(std::clamp)(
+				outConfig.multiActive.poolQueueCapacity,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 4096 });
+		outConfig.multiActive.poolDequeueTimeoutMs =
+			(std::clamp)(
+				outConfig.multiActive.poolDequeueTimeoutMs,
+				std::uint32_t{ 0 },
+				std::uint32_t{ 60000 });
+		outConfig.multiActive.perResponderTimeoutMs =
+			(std::clamp)(
+				outConfig.multiActive.perResponderTimeoutMs,
+				std::uint32_t{ 1000 },
+				std::uint32_t{ 900000 });
+		outConfig.multiActive.cancelDrainTimeoutMs =
+			(std::clamp)(
+				outConfig.multiActive.cancelDrainTimeoutMs,
+				std::uint32_t{ 0 },
+				std::uint32_t{ 120000 });
+		outConfig.multiActive.maxQueuedEventsPerSession =
+			(std::clamp)(
+				outConfig.multiActive.maxQueuedEventsPerSession,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 200000 });
+		outConfig.multiActive.pollMinIntervalMs =
+			(std::clamp)(
+				outConfig.multiActive.pollMinIntervalMs,
+				std::uint32_t{ 0 },
+				std::uint32_t{ 5000 });
+		outConfig.multiActive.pollMaxBatchEvents =
+			(std::clamp)(
+				outConfig.multiActive.pollMaxBatchEvents,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 1000 });
+
+		if (!outConfig.multiActive.enabled) {
+			// Compatibility fallback: when multi-active is disabled, force legacy
+			// single-responder semantics regardless of other multi-active knobs.
+			outConfig.multiActive.maxActiveResponders = 1;
+			outConfig.multiActive.poolMinThreads = 1;
+			outConfig.multiActive.poolMaxThreads = 1;
 		}
 
 		outConfig.localModel.llama.gpuLayers =

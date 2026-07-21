@@ -32,10 +32,17 @@ namespace blazeclaw::core::tools {
 		std::string label;
 	};
 
+	struct ImageGeneratorToolRuntimeSpec {
+		std::string id;
+		std::string label;
+		std::string script;
+	};
+
 	std::vector<ImapSmtpToolRuntimeSpec> BuildImapSmtpToolRuntimeSpecs();
 	std::vector<BraveSearchToolRuntimeSpec> BuildBraveSearchToolRuntimeSpecs();
 	std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs();
 	std::vector<ContentPolishingToolRuntimeSpec> BuildContentPolishingToolRuntimeSpecs();
+	std::vector<ImageGeneratorToolRuntimeSpec> BuildImageGeneratorToolRuntimeSpecs();
 
 	bool IsBraveSearchWebToolId(const std::string& toolId);
 	bool IsBraveFetchContentToolId(const std::string& toolId);
@@ -71,6 +78,12 @@ namespace blazeclaw::core::tools {
 
 	std::optional<std::vector<std::string>> BuildBraveSearchCliArgs(
 		const BraveSearchToolRuntimeSpec& spec,
+		const nlohmann::json& params,
+		std::string& errorCode,
+		std::string& errorMessage);
+
+	std::optional<std::vector<std::string>> BuildImageGeneratorCliArgs(
+		const ImageGeneratorToolRuntimeSpec& spec,
 		const nlohmann::json& params,
 		std::string& errorCode,
 		std::string& errorMessage);

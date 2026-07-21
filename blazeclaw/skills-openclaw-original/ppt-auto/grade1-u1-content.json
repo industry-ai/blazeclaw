@@ -1,0 +1,158 @@
+{
+  "title": "一年级英语 Unit 1 - Hello!",
+  "author": "AI PPT",
+  "subject": "英语",
+  "slides": [
+    {
+      "bgColor": "#FFF8E1",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 0.15, "fill": "#FF9800" },
+        { "type": "rect", "x": 0, "y": 5.35, "w": 10, "h": 0.15, "fill": "#FF9800" },
+        { "type": "rect", "x": 0, "y": 1.8, "w": 10, "h": 3.2, "fill": "#FFF3E0", "line": "#FF9800", "lineSize": 2 }
+      ],
+      "texts": [
+        { "text": "Unit 1", "x": 0.5, "y": 0.3, "w": 9, "h": 0.8, "fontSize": 20, "color": "#E65100", "bold": true, "align": "center" },
+        { "text": "Hello!", "x": 0.5, "y": 1.0, "w": 9, "h": 0.8, "fontSize": 54, "color": "#FF6F00", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "一年级英语上册", "x": 0.5, "y": 2.2, "w": 9, "h": 0.7, "fontSize": 28, "color": "#E65100", "align": "center" },
+        { "text": "让我们一起快乐学英语吧！", "x": 0.5, "y": 3.2, "w": 9, "h": 0.7, "fontSize": 22, "color": "#BF360C", "align": "center" },
+        { "text": "新起点 . 新伙伴", "x": 0.5, "y": 4.2, "w": 9, "h": 0.6, "fontSize": 18, "color": "#8D6E63", "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#E8F5E9",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#4CAF50" }
+      ],
+      "texts": [
+        { "text": "学习目标", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "认识新朋友，用英语打招呼！", "x": 1.5, "y": 1.5, "w": 7, "h": 0.6, "fontSize": 18, "color": "#2E7D32", "align": "center" },
+        { "text": "学会说 Hello / Hi", "x": 1.5, "y": 2.3, "w": 7, "h": 0.6, "fontSize": 20, "color": "#333333", "bold": true },
+        { "text": "学会说 Goodbye / Bye", "x": 1.5, "y": 3.1, "w": 7, "h": 0.6, "fontSize": 20, "color": "#333333", "bold": true },
+        { "text": "学会问和答 What's your name?", "x": 1.5, "y": 3.9, "w": 7, "h": 0.6, "fontSize": 20, "color": "#333333", "bold": true },
+        { "text": "学唱英语歌曲！", "x": 1.5, "y": 4.7, "w": 7, "h": 0.6, "fontSize": 20, "color": "#333333", "bold": true }
+      ]
+    },
+    {
+      "bgColor": "#E3F2FD",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#2196F3" }
+      ],
+      "texts": [
+        { "text": "打招呼 - Greetings", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "Hello -> 你好 / 喂", "x": 1, "y": 1.6, "w": 8, "h": 0.8, "fontSize": 32, "color": "#1565C0", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "Hi -> 嗨 / 你好", "x": 1, "y": 2.5, "w": 8, "h": 0.8, "fontSize": 32, "color": "#1976D2", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "Goodbye -> 再见", "x": 1, "y": 3.4, "w": 8, "h": 0.8, "fontSize": 32, "color": "#1E88E5", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "Bye -> 拜拜", "x": 1, "y": 4.3, "w": 8, "h": 0.8, "fontSize": 32, "color": "#2196F3", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "跟我读！", "x": 7.5, "y": 0.3, "w": 2.2, "h": 0.5, "fontSize": 14, "color": "#FFFFFF", "bold": true, "align": "center", "bgColor": "#FF9800", "valign": "middle" }
+      ]
+    },
+    {
+      "bgColor": "#FCE4EC",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#E91E63" },
+        { "type": "rect", "x": 0.5, "y": 1.6, "w": 4.2, "h": 3.2, "fill": "#FFFFFF", "line": "#F48FB1", "lineSize": 2, "radius": 0.2 },
+        { "type": "rect", "x": 5.3, "y": 1.6, "w": 4.2, "h": 3.2, "fill": "#FFFFFF", "line": "#F48FB1", "lineSize": 2, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "对话练习 - Let's Talk!", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 28, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "小明", "x": 1.2, "y": 1.8, "w": 2.8, "h": 0.5, "fontSize": 18, "color": "#E91E63", "bold": true, "align": "center" },
+        { "text": "Hello!", "x": 0.8, "y": 2.4, "w": 3.6, "h": 0.8, "fontSize": 36, "color": "#333333", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "Hi!", "x": 5.6, "y": 2.4, "w": 3.6, "h": 0.8, "fontSize": 36, "color": "#333333", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "小红", "x": 6, "y": 1.8, "w": 2.8, "h": 0.5, "fontSize": 18, "color": "#E91E63", "bold": true, "align": "center" },
+        { "text": "Goodbye!", "x": 0.8, "y": 3.5, "w": 3.6, "h": 0.8, "fontSize": 30, "color": "#333333", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "Bye-bye!", "x": 5.6, "y": 3.5, "w": 3.6, "h": 0.8, "fontSize": 30, "color": "#333333", "bold": true, "align": "center", "fontFace": "Arial" }
+      ]
+    },
+    {
+      "bgColor": "#F3E5F5",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#9C27B0" }
+      ],
+      "texts": [
+        { "text": "自我介绍 - My Name", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 28, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "What's your name?", "x": 1, "y": 1.6, "w": 8, "h": 0.8, "fontSize": 32, "color": "#6A1B9A", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "你叫什么名字？", "x": 1, "y": 2.3, "w": 8, "h": 0.5, "fontSize": 18, "color": "#8E24AA", "align": "center" },
+        { "text": "My name is ...", "x": 1, "y": 3.0, "w": 8, "h": 0.8, "fontSize": 32, "color": "#7B1FA2", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "我的名字是……", "x": 1, "y": 3.7, "w": 8, "h": 0.5, "fontSize": 18, "color": "#9C27B0", "align": "center" },
+        { "text": "同桌互练：问对方名字吧！", "x": 1, "y": 4.5, "w": 8, "h": 0.6, "fontSize": 20, "color": "#CE93D8", "bold": true, "align": "center", "bgColor": "#F3E5F5", "valign": "middle" }
+      ]
+    },
+    {
+      "bgColor": "#FFF8E1",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#FF9800" },
+        { "type": "rect", "x": 0.5, "y": 1.5, "w": 9, "h": 3.8, "fill": "#FFFFFF", "line": "#FFB74D", "lineSize": 1.5, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "课堂小游戏 - Game Time!", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 28, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "游戏规则：老师说 Hello/Hi，小朋友跟着说！", "x": 1, "y": 1.7, "w": 8, "h": 0.7, "fontSize": 16, "color": "#E65100", "align": "center", "bold": true },
+        { "text": "老师说：Hello!", "x": 1.5, "y": 2.5, "w": 7, "h": 0.6, "fontSize": 22, "color": "#333333", "bold": true },
+        { "text": "小朋友说：Hello!", "x": 1.5, "y": 3.2, "w": 7, "h": 0.6, "fontSize": 22, "color": "#333333", "bold": true },
+        { "text": "老师说：Goodbye!", "x": 1.5, "y": 3.9, "w": 7, "h": 0.6, "fontSize": 22, "color": "#333333", "bold": true },
+        { "text": "小朋友说：Bye-bye!", "x": 1.5, "y": 4.6, "w": 7, "h": 0.6, "fontSize": 22, "color": "#333333", "bold": true }
+      ]
+    },
+    {
+      "bgColor": "#E0F7FA",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#00BCD4" }
+      ],
+      "texts": [
+        { "text": "学唱歌曲 - Hello Song!", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 28, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "Hello, hello, hello!", "x": 1.5, "y": 1.6, "w": 7, "h": 0.7, "fontSize": 26, "color": "#006064", "bold": true, "align": "center" },
+        { "text": "Hello, how are you?", "x": 1.5, "y": 2.3, "w": 7, "h": 0.7, "fontSize": 26, "color": "#00838F", "bold": true, "align": "center" },
+        { "text": "I'm fine, I'm fine.", "x": 1.5, "y": 3.0, "w": 7, "h": 0.7, "fontSize": 26, "color": "#0097A7", "bold": true, "align": "center" },
+        { "text": "I'm fine, thank you!", "x": 1.5, "y": 3.7, "w": 7, "h": 0.7, "fontSize": 26, "color": "#00ACC1", "bold": true, "align": "center" },
+        { "text": "全班一起唱！", "x": 3, "y": 4.6, "w": 4, "h": 0.6, "fontSize": 20, "color": "#FFFFFF", "bold": true, "bgColor": "#FF6600", "align": "center", "valign": "middle", "borderColor": "#E65100", "borderSize": 1 }
+      ]
+    },
+    {
+      "bgColor": "#FFF3E0",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#FF5722" },
+        { "type": "rect", "x": 0.3, "y": 1.5, "w": 9.4, "h": 3.8, "fill": "#FFFFFF", "line": "#FFAB91", "lineSize": 1.5, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "课堂练习 - Let's Practice!", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 28, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "选一选，圈出正确的答案：", "x": 0.8, "y": 1.7, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true },
+        { "text": "1. 早上见到同学，你应该说：", "x": 0.8, "y": 2.3, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#333333" },
+        { "text": "A. Goodbye    B. Hello    C. Bye", "x": 0.8, "y": 2.8, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "2. 放学了，对老师说：", "x": 0.8, "y": 3.4, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#333333" },
+        { "text": "A. Hello    B. Hi    C. Goodbye", "x": 0.8, "y": 3.9, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "3. 你想知道对方名字，问：", "x": 0.8, "y": 4.5, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#333333" },
+        { "text": "A. What's your name?    B. Hello    C. Goodbye", "x": 0.8, "y": 5.0, "w": 8.4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true }
+      ]
+    },
+    {
+      "bgColor": "#E8F5E9",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#4CAF50" },
+        { "type": "rect", "x": 0.5, "y": 1.5, "w": 9, "h": 3.5, "fill": "#FFFFFF", "line": "#A5D6A7", "lineSize": 1.5, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "总结与归纳", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "今天学到的单词和句子：", "x": 1, "y": 1.7, "w": 8, "h": 0.5, "fontSize": 18, "color": "#388E3C", "bold": true },
+        { "text": "Hello -> 你好", "x": 1.5, "y": 2.3, "w": 3, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "Hi -> 嗨", "x": 5.5, "y": 2.3, "w": 3, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "Goodbye -> 再见", "x": 1.5, "y": 2.9, "w": 3, "h": 0.5, "fontSize": 20, "color": "#2E7D32", "bold": true },
+        { "text": "Bye -> 拜拜", "x": 5.5, "y": 2.9, "w": 3, "h": 0.5, "fontSize": 20, "color": "#2E7D32", "bold": true },
+        { "text": "What's your name? -> 你叫什么名字？", "x": 1.5, "y": 3.5, "w": 7, "h": 0.5, "fontSize": 20, "color": "#388E3C", "bold": true },
+        { "text": "My name is ... -> 我的名字是……", "x": 1.5, "y": 4.1, "w": 7, "h": 0.5, "fontSize": 20, "color": "#43A047", "bold": true }
+      ]
+    },
+    {
+      "bgColor": "#F3E5F5",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#9C27B0" }
+      ],
+      "texts": [
+        { "text": "课后作业", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "1. 听录音，跟读 Hello, Hi, Goodbye, Bye 各5遍", "x": 0.8, "y": 1.6, "w": 8.4, "h": 0.6, "fontSize": 18, "color": "#4A148C" },
+        { "text": "2. 用英语向爸妈打招呼：Hello! / Goodbye!", "x": 0.8, "y": 2.3, "w": 8.4, "h": 0.6, "fontSize": 18, "color": "#6A1B9A" },
+        { "text": "3. 练习自我介绍：My name is ...", "x": 0.8, "y": 3.0, "w": 8.4, "h": 0.6, "fontSize": 18, "color": "#7B1FA2" },
+        { "text": "4. 唱 Hello Song 给家人听", "x": 0.8, "y": 3.7, "w": 8.4, "h": 0.6, "fontSize": 18, "color": "#8E24AA" },
+        { "text": "加油！你真棒！", "x": 2.5, "y": 4.5, "w": 5, "h": 0.6, "fontSize": 22, "color": "#FFFFFF", "bold": true, "align": "center", "bgColor": "#FF9800", "valign": "middle", "borderColor": "#E65100", "borderSize": 1 }
+      ]
+    }
+  ]
+}

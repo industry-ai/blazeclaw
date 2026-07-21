@@ -1,0 +1,153 @@
+{
+  "title": "日历 Calendar",
+  "author": "AI PPT",
+  "subject": "日历学习",
+  "slides": [
+    {
+      "bgColor": "#E3F2FD",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 0.15, "fill": "#1565C0" },
+        { "type": "rect", "x": 0, "y": 5.35, "w": 10, "h": 0.15, "fill": "#1565C0" },
+        { "type": "rect", "x": 0.8, "y": 1.5, "w": 8.4, "h": 3.2, "fill": "#FFFFFF", "line": "#64B5F6", "lineSize": 3, "radius": 0.3 }
+      ],
+      "texts": [
+        { "text": "日历", "x": 0.5, "y": 0.25, "w": 9, "h": 0.9, "fontSize": 42, "color": "#1565C0", "bold": true, "align": "center" },
+        { "text": "Calendar", "x": 0.5, "y": 0.9, "w": 9, "h": 0.6, "fontSize": 28, "color": "#42A5F5", "bold": true, "align": "center", "fontFace": "Arial" },
+        { "text": "认识日历 · 学习时间", "x": 0.5, "y": 1.8, "w": 9, "h": 0.7, "fontSize": 24, "color": "#1976D2", "align": "center" },
+        { "text": "一年有 12 个月", "x": 1.5, "y": 2.6, "w": 7, "h": 0.6, "fontSize": 22, "color": "#333333", "bold": true, "align": "center" },
+        { "text": "一个月有 30 或 31 天", "x": 1.5, "y": 3.2, "w": 7, "h": 0.6, "fontSize": 22, "color": "#555555", "bold": true, "align": "center" },
+        { "text": "一年有 365 天 / 366 天", "x": 1.5, "y": 3.8, "w": 7, "h": 0.6, "fontSize": 22, "color": "#777777", "bold": true, "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#FFF8E1",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#FF9800" }
+      ],
+      "texts": [
+        { "text": "12 个月份", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 32, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "January (一月)", "x": 0.6, "y": 1.5, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "February (二月)", "x": 5.4, "y": 1.5, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "March (三月)", "x": 0.6, "y": 2.1, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true },
+        { "text": "April (四月)", "x": 5.4, "y": 2.1, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true },
+        { "text": "May (五月)", "x": 0.6, "y": 2.7, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "June (六月)", "x": 5.4, "y": 2.7, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "July (七月)", "x": 0.6, "y": 3.3, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true },
+        { "text": "August (八月)", "x": 5.4, "y": 3.3, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true },
+        { "text": "September (九月)", "x": 0.6, "y": 3.9, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "October (十月)", "x": 5.4, "y": 3.9, "w": 4, "h": 0.5, "fontSize": 18, "color": "#E65100", "bold": true },
+        { "text": "November (十一月)", "x": 0.6, "y": 4.5, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true },
+        { "text": "December (十二月)", "x": 5.4, "y": 4.5, "w": 4, "h": 0.5, "fontSize": 18, "color": "#333333", "bold": true }
+      ]
+    },
+    {
+      "bgColor": "#E8F5E9",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#4CAF50" },
+        { "type": "rect", "x": 0.5, "y": 1.5, "w": 9, "h": 3.8, "fill": "#FFFFFF", "line": "#A5D6A7", "lineSize": 2, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "星期 - Days of the Week", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "Monday (周一)", "x": 0.8, "y": 1.7, "w": 4, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "Tuesday (周二)", "x": 5.2, "y": 1.7, "w": 4, "h": 0.5, "fontSize": 20, "color": "#2E7D32", "bold": true },
+        { "text": "Wednesday (周三)", "x": 0.8, "y": 2.3, "w": 4, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "Thursday (周四)", "x": 5.2, "y": 2.3, "w": 4, "h": 0.5, "fontSize": 20, "color": "#2E7D32", "bold": true },
+        { "text": "Friday (周五)", "x": 0.8, "y": 2.9, "w": 4, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "Saturday (周六)", "x": 5.2, "y": 2.9, "w": 4, "h": 0.5, "fontSize": 20, "color": "#2E7D32", "bold": true },
+        { "text": "Sunday (周日)", "x": 0.8, "y": 3.5, "w": 4, "h": 0.5, "fontSize": 20, "color": "#1B5E20", "bold": true },
+        { "text": "一周有 7 天", "x": 1, "y": 4.2, "w": 8, "h": 0.5, "fontSize": 18, "color": "#388E3C", "bold": true, "align": "center" },
+        { "text": "Saturday 和 Sunday 是周末！", "x": 1, "y": 4.6, "w": 8, "h": 0.5, "fontSize": 18, "color": "#F44336", "bold": true, "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#FCE4EC",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#E91E63" }
+      ],
+      "texts": [
+        { "text": "每月天数小口诀", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "一月大，二月小", "x": 0.8, "y": 1.6, "w": 8, "h": 0.6, "fontSize": 22, "color": "#C62828", "bold": true, "align": "center" },
+        { "text": "三月大，四月小", "x": 0.8, "y": 2.2, "w": 8, "h": 0.6, "fontSize": 22, "color": "#D32F2F", "bold": true, "align": "center" },
+        { "text": "五月大，六月小", "x": 0.8, "y": 2.8, "w": 8, "h": 0.6, "fontSize": 22, "color": "#E53935", "bold": true, "align": "center" },
+        { "text": "七月大，八月大", "x": 0.8, "y": 3.4, "w": 8, "h": 0.6, "fontSize": 22, "color": "#F44336", "bold": true, "align": "center" },
+        { "text": "九月小，十月大", "x": 0.8, "y": 4.0, "w": 8, "h": 0.6, "fontSize": 22, "color": "#EF5350", "bold": true, "align": "center" },
+        { "text": "十一月小，十二月大", "x": 0.8, "y": 4.6, "w": 8, "h": 0.6, "fontSize": 22, "color": "#E57373", "bold": true, "align": "center" },
+        { "text": "大=31天  小=30天  二月=28/29天", "x": 1, "y": 5.1, "w": 8, "h": 0.4, "fontSize": 14, "color": "#AD1457", "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#E0F7FA",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#00BCD4" },
+        { "type": "rect", "x": 0.3, "y": 1.4, "w": 9.4, "h": 1.8, "fill": "#B2EBF2", "radius": 0.2 },
+        { "type": "rect", "x": 0.3, "y": 3.4, "w": 9.4, "h": 1.8, "fill": "#B2EBF2", "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "季节与月份", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "春天 - Spring", "x": 0.6, "y": 1.5, "w": 4.3, "h": 0.5, "fontSize": 20, "color": "#006064", "bold": true },
+        { "text": "3月 / 4月 / 5月", "x": 5, "y": 1.5, "w": 4.5, "h": 0.5, "fontSize": 18, "color": "#00838F" },
+        { "text": "春暖花开，万物复苏", "x": 5, "y": 2.1, "w": 4.5, "h": 0.5, "fontSize": 16, "color": "#0097A7" },
+        { "text": "夏天 - Summer", "x": 0.6, "y": 2.3, "w": 4.3, "h": 0.5, "fontSize": 20, "color": "#006064", "bold": true },
+        { "text": "6月 / 7月 / 8月", "x": 5, "y": 2.3, "w": 4.5, "h": 0.5, "fontSize": 18, "color": "#00838F" },
+        { "text": "烈日炎炎，暑假来啦", "x": 5, "y": 2.8, "w": 4.5, "h": 0.5, "fontSize": 16, "color": "#0097A7" },
+        { "text": "秋天 - Autumn/Fall", "x": 0.6, "y": 3.5, "w": 4.3, "h": 0.5, "fontSize": 20, "color": "#006064", "bold": true },
+        { "text": "9月 / 10月 / 11月", "x": 5, "y": 3.5, "w": 4.5, "h": 0.5, "fontSize": 18, "color": "#00838F" },
+        { "text": "秋高气爽，丰收季节", "x": 5, "y": 4.1, "w": 4.5, "h": 0.5, "fontSize": 16, "color": "#0097A7" },
+        { "text": "冬天 - Winter", "x": 0.6, "y": 4.3, "w": 4.3, "h": 0.5, "fontSize": 20, "color": "#006064", "bold": true },
+        { "text": "12月 / 1月 / 2月", "x": 5, "y": 4.3, "w": 4.5, "h": 0.5, "fontSize": 18, "color": "#00838F" },
+        { "text": "白雪皑皑，新年快乐", "x": 5, "y": 4.8, "w": 4.5, "h": 0.5, "fontSize": 16, "color": "#0097A7" }
+      ]
+    },
+    {
+      "bgColor": "#F3E5F5",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#9C27B0" },
+        { "type": "roundRect", "x": 0.3, "y": 1.5, "w": 9.4, "h": 1, "fill": "#FFFFFF", "line": "#CE93D8", "lineSize": 1, "radius": 0.15 },
+        { "type": "roundRect", "x": 0.3, "y": 2.7, "w": 9.4, "h": 1, "fill": "#FFFFFF", "line": "#CE93D8", "lineSize": 1, "radius": 0.15 },
+        { "type": "roundRect", "x": 0.3, "y": 3.9, "w": 9.4, "h": 1, "fill": "#FFFFFF", "line": "#CE93D8", "lineSize": 1, "radius": 0.15 }
+      ],
+      "texts": [
+        { "text": "重要节日", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "1月1日 - 元旦 (New Year's Day)", "x": 1, "y": 1.6, "w": 8, "h": 0.7, "fontSize": 20, "color": "#4A148C", "bold": true, "align": "center" },
+        { "text": "6月1日 - 儿童节 (Children's Day)", "x": 1, "y": 2.8, "w": 8, "h": 0.7, "fontSize": 20, "color": "#4A148C", "bold": true, "align": "center" },
+        { "text": "10月1日 - 国庆节 (National Day)", "x": 1, "y": 4.0, "w": 8, "h": 0.7, "fontSize": 20, "color": "#4A148C", "bold": true, "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#FFF3E0",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#FF5722" },
+        { "type": "rect", "x": 0.5, "y": 1.5, "w": 4.2, "h": 3.8, "fill": "#FFFFFF", "line": "#FFAB91", "lineSize": 2, "radius": 0.15 },
+        { "type": "rect", "x": 5.3, "y": 1.5, "w": 4.2, "h": 3.8, "fill": "#FFFFFF", "line": "#FFAB91", "lineSize": 2, "radius": 0.15 }
+      ],
+      "texts": [
+        { "text": "日历小问答", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "一年有几个月？", "x": 0.8, "y": 1.7, "w": 3.6, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true, "align": "center" },
+        { "text": "答案：12个月", "x": 0.8, "y": 2.3, "w": 3.6, "h": 0.5, "fontSize": 16, "color": "#555555", "align": "center" },
+        { "text": "一周有几天？", "x": 5.6, "y": 1.7, "w": 3.6, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true, "align": "center" },
+        { "text": "答案：7天", "x": 5.6, "y": 2.3, "w": 3.6, "h": 0.5, "fontSize": 16, "color": "#555555", "align": "center" },
+        { "text": "哪个月天数最少？", "x": 0.8, "y": 3.0, "w": 3.6, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true, "align": "center" },
+        { "text": "答案：2月 (28/29天)", "x": 0.8, "y": 3.6, "w": 3.6, "h": 0.5, "fontSize": 16, "color": "#555555", "align": "center" },
+        { "text": "周末是哪两天？", "x": 5.6, "y": 3.0, "w": 3.6, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true, "align": "center" },
+        { "text": "答案：周六和周日", "x": 5.6, "y": 3.6, "w": 3.6, "h": 0.5, "fontSize": 16, "color": "#555555", "align": "center" },
+        { "text": "2026年是什么年？", "x": 0.8, "y": 4.3, "w": 3.6, "h": 0.5, "fontSize": 18, "color": "#BF360C", "bold": true, "align": "center" },
+        { "text": "答案：平年 (365天)", "x": 0.8, "y": 4.8, "w": 3.6, "h": 0.5, "fontSize": 16, "color": "#555555", "align": "center" }
+      ]
+    },
+    {
+      "bgColor": "#E8F5E9",
+      "shapes": [
+        { "type": "rect", "x": 0, "y": 0, "w": 10, "h": 1.2, "fill": "#4CAF50" },
+        { "type": "rect", "x": 0.5, "y": 1.5, "w": 9, "h": 3.5, "fill": "#FFFFFF", "line": "#A5D6A7", "lineSize": 1.5, "radius": 0.2 }
+      ],
+      "texts": [
+        { "text": "总结与回顾", "x": 0.5, "y": 0.15, "w": 9, "h": 0.9, "fontSize": 30, "color": "#FFFFFF", "bold": true, "align": "center" },
+        { "text": "一年有 12 个月", "x": 1.5, "y": 1.7, "w": 7, "h": 0.5, "fontSize": 19, "color": "#1B5E20", "bold": true },
+        { "text": "一周有 7 天", "x": 1.5, "y": 2.3, "w": 7, "h": 0.5, "fontSize": 19, "color": "#2E7D32", "bold": true },
+        { "text": "月份口诀：一三五七八十腊，三十一天永不差", "x": 1.5, "y": 2.9, "w": 7, "h": 0.5, "fontSize": 17, "color": "#388E3C", "bold": true },
+        { "text": "平年二月28天，闰年二月29天", "x": 1.5, "y": 3.5, "w": 7, "h": 0.5, "fontSize": 17, "color": "#43A047", "bold": true },
+        { "text": "学会看日历，做时间的小主人！", "x": 1.5, "y": 4.2, "w": 7, "h": 0.5, "fontSize": 20, "color": "#F44336", "bold": true, "align": "center" }
+      ]
+    }
+  ]
+}

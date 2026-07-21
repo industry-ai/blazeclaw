@@ -9,6 +9,7 @@
 - Use human-readable UTF-8 characters in source code instead of escaped byte sequences in BlazeClaw files.
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands. Always validate with: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
+- Prefer controlling runtime behavior via `blazeclaw.conf` (config-file control) rather than ad-hoc runtime toggles.
 
 ### Speech Recognition
 - For BlazeClaw speech recognition work, treat `BlazeClawMfc/blazeclaw.conf` as the current used config file; the active STT path is Sherpa Zipformer (`speech.storageRoot=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en`), while Qwen3 ASR is obsolete unless explicitly reselected.

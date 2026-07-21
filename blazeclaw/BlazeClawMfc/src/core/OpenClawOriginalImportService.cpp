@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <fstream>
+#include <set>
 
 namespace blazeclaw::core {
 
@@ -100,6 +101,467 @@ namespace blazeclaw::core {
 			}
 		}
 
+		std::wstring ReadUtf8FileToWide(
+			const std::filesystem::path& path,
+			std::vector<std::wstring>& diagnostics) {
+			std::ifstream input(path, std::ios::binary);
+			if (!input.is_open()) {
+				diagnostics.push_back(
+					L"failed to read SKILL.md for extracted runtime contract");
+				return {};
+			}
+
+			const std::string content(
+				(std::istreambuf_iterator<char>(input)),
+				std::istreambuf_iterator<char>());
+			if (content.empty()) {
+				diagnostics.push_back(
+					L"empty SKILL.md content while extracting runtime contract");
+				return {};
+			}
+
+			const auto maybeUtf16Le = [&content]() -> std::optional<std::wstring> {
+				if (content.size() < 4 || (content.size() % 2) != 0) {
+					return std::nullopt;
+				}
+
+				std::size_t zeroHighByteCount = 0;
+				for (std::size_t i = 1; i < content.size(); i += 2) {
+					if (content[i] == '\0') {
+						++zeroHighByteCount;
+					}
+				}
+
+				if (zeroHighByteCount < (content.size() / 4)) {
+					return std::nullopt;
+				}
+
+				std::wstring decoded;
+				decoded.reserve(content.size() / 2);
+				for (std::size_t i = 0; i + 1 < content.size(); i += 2) {
+					const auto low = static_cast<unsigned char>(content[i]);
+					const auto high = static_cast<unsigned char>(content[i + 1]);
+					decoded.push_back(static_cast<wchar_t>((high << 8) | low));
+				}
+				return decoded;
+			};
+
+			if (const auto utf16 = maybeUtf16Le(); utf16.has_value()) {
+				return utf16.value();
+			}
+
+			return Utf8ToWide(content);
+		}
+
+		std::wstring ExtractMarkdownBody(const std::wstring& markdown) {
+			if (markdown.empty()) {
+				return {};
+			}
+
+			const std::size_t firstFence = markdown.find(L"---");
+			if (firstFence == std::wstring::npos || firstFence != 0) {
+				return markdown;
+			}
+
+			const std::size_t secondFence = markdown.find(L"\n---", firstFence + 3);
+			if (secondFence == std::wstring::npos) {
+				return markdown;
+			}
+
+			const std::size_t bodyStart = secondFence + 4;
+			if (bodyStart >= markdown.size()) {
+				return {};
+			}
+
+			return Trim(markdown.substr(bodyStart));
+		}
+
+		std::optional<std::wstring> ExtractFirstUrl(const std::wstring& value) {
+			if (value.empty()) {
+				return std::nullopt;
+			}
+
+			std::size_t begin = value.find(L"https://");
+			if (begin == std::wstring::npos) {
+				begin = value.find(L"http://");
+			}
+			if (begin == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			std::size_t end = begin;
+			while (end < value.size()) {
+				const wchar_t ch = value[end];
+				if (std::iswspace(ch) != 0 || ch == L'`' || ch == L'"' || ch == L'\'' || ch == L')' || ch == L']') {
+					break;
+				}
+				++end;
+			}
+
+			if (end <= begin) {
+				return std::nullopt;
+			}
+
+			return value.substr(begin, end - begin);
+		}
+
+		std::optional<std::wstring> ExtractJsonStringField(
+			const std::wstring& text,
+			const std::wstring& fieldName) {
+			if (text.empty() || fieldName.empty()) {
+				return std::nullopt;
+			}
+
+			const std::wstring key = L"\"" + fieldName + L"\"";
+			const std::size_t keyPos = text.find(key);
+			if (keyPos == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::size_t colonPos = text.find(L':', keyPos + key.size());
+			if (colonPos == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::size_t quoteBegin = text.find(L'"', colonPos + 1);
+			if (quoteBegin == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::size_t quoteEnd = text.find(L'"', quoteBegin + 1);
+			if (quoteEnd == std::wstring::npos || quoteEnd <= quoteBegin + 1) {
+				return std::nullopt;
+			}
+
+			return text.substr(quoteBegin + 1, quoteEnd - quoteBegin - 1);
+		}
+
+		std::optional<std::wstring> ExtractJsonFenceBlock(const std::wstring& body) {
+			const std::size_t fenceStart = ToLower(body).find(L"```json");
+			if (fenceStart == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::size_t payloadStart = body.find(L'\n', fenceStart);
+			if (payloadStart == std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::size_t fenceEnd = body.find(L"```", payloadStart + 1);
+			if (fenceEnd == std::wstring::npos || fenceEnd <= payloadStart + 1) {
+				return std::nullopt;
+			}
+
+			return Trim(body.substr(payloadStart + 1, fenceEnd - payloadStart - 1));
+		}
+
+		std::vector<std::wstring> ExtractTriggerHints(const std::wstring& body) {
+			std::set<std::wstring> unique;
+			const std::set<std::wstring> rejectedSchemaTokens = {
+				L"type",
+				L"url",
+				L"title",
+				L"q",
+				L"query",
+				L"output",
+				L"outputs",
+				L"json",
+				L"webview",
+				L"http",
+				L"https",
+			};
+
+			auto normalizeForQuality = [](const std::wstring& value) {
+				std::wstring normalized;
+				normalized.reserve(value.size());
+				bool previousSpace = false;
+				for (const auto ch : value) {
+					const wchar_t lowered =
+						static_cast<wchar_t>(std::towlower(ch));
+					const bool isAlphaNum =
+						(lowered >= L'a' && lowered <= L'z') ||
+						(lowered >= L'0' && lowered <= L'9') ||
+						(lowered >= 0x4E00 && lowered <= 0x9FFF);
+					if (isAlphaNum) {
+						normalized.push_back(lowered);
+						previousSpace = false;
+						continue;
+					}
+
+					if (!previousSpace) {
+						normalized.push_back(L' ');
+						previousSpace = true;
+					}
+				}
+
+				return Trim(normalized);
+			};
+
+			auto looksLikeTriggerCandidate =
+				[&rejectedSchemaTokens, &normalizeForQuality](const std::wstring& value) {
+					if (value.empty() || value.size() > 128) {
+						return false;
+					}
+
+					const std::wstring lowered = ToLower(value);
+					if (lowered.find(L"http://") != std::wstring::npos ||
+						lowered.find(L"https://") != std::wstring::npos ||
+						lowered.find(L".html") != std::wstring::npos ||
+						lowered.find(L"#/") != std::wstring::npos ||
+						lowered.find(L"=") != std::wstring::npos ||
+						lowered.find(L"://") != std::wstring::npos ||
+						lowered.find(L"\"type\"") != std::wstring::npos ||
+						lowered.find(L"\"url\"") != std::wstring::npos ||
+						lowered.find(L"\"title\"") != std::wstring::npos) {
+						return false;
+					}
+
+					const std::wstring normalized = normalizeForQuality(value);
+					if (normalized.empty() || normalized.size() < 3) {
+						return false;
+					}
+
+					bool hasCjk = false;
+					std::size_t alphaNumCount = 0;
+					std::size_t tokenCount = 0;
+					bool insideToken = false;
+					for (const auto ch : normalized) {
+						if (ch >= 0x4E00 && ch <= 0x9FFF) {
+							hasCjk = true;
+						}
+						const bool alphaNum =
+							(ch >= L'a' && ch <= L'z') ||
+							(ch >= L'0' && ch <= L'9') ||
+							(ch >= 0x4E00 && ch <= 0x9FFF);
+						if (alphaNum) {
+							++alphaNumCount;
+							if (!insideToken) {
+								insideToken = true;
+								++tokenCount;
+							}
+						}
+						else {
+							insideToken = false;
+						}
+					}
+
+					if (alphaNumCount < 3) {
+						return false;
+					}
+
+					if (!hasCjk && tokenCount < 2 && alphaNumCount < 8) {
+						return false;
+					}
+
+					if (tokenCount == 1 && rejectedSchemaTokens.find(normalized) !=
+						rejectedSchemaTokens.end()) {
+						return false;
+					}
+
+					return true;
+				};
+
+			auto isTriggerSectionHeader = [](const std::wstring& line) {
+				const std::wstring lowered = ToLower(line);
+				return lowered.find(L"trigger") != std::wstring::npos ||
+					lowered.find(L"scenario") != std::wstring::npos ||
+					lowered.find(L"example") != std::wstring::npos ||
+					lowered.find(L"input") != std::wstring::npos ||
+					lowered.find(L"触发") != std::wstring::npos ||
+					lowered.find(L"示例") != std::wstring::npos ||
+					lowered.find(L"输入") != std::wstring::npos;
+			};
+
+			auto isOutputSectionHeader = [](const std::wstring& line) {
+				const std::wstring lowered = ToLower(line);
+				return lowered.find(L"output") != std::wstring::npos ||
+					lowered.find(L"result") != std::wstring::npos ||
+					lowered.find(L"response") != std::wstring::npos ||
+					lowered.find(L"输出") != std::wstring::npos ||
+					lowered.find(L"返回") != std::wstring::npos;
+			};
+
+			auto registerCandidate = [&unique, &looksLikeTriggerCandidate](
+				const std::wstring& raw) {
+				std::wstring candidate = Trim(raw);
+				if (candidate.empty()) {
+					return;
+				}
+
+				while (!candidate.empty() &&
+					(candidate.front() == L'"' ||
+						candidate.front() == L'\'' ||
+						candidate.front() == L'“' ||
+						candidate.front() == L'‘')) {
+					candidate.erase(candidate.begin());
+				}
+				while (!candidate.empty() &&
+					(candidate.back() == L'"' ||
+						candidate.back() == L'\'' ||
+						candidate.back() == L'”' ||
+						candidate.back() == L'’')) {
+					candidate.pop_back();
+				}
+
+				candidate = Trim(candidate);
+				if (looksLikeTriggerCandidate(candidate)) {
+					unique.insert(candidate);
+				}
+			};
+
+			auto collectAsciiQuotedCandidates =
+				[&registerCandidate](const std::wstring& text, const wchar_t quoteChar) {
+					std::size_t localCursor = 0;
+					while (localCursor < text.size()) {
+						const std::size_t left = text.find(quoteChar, localCursor);
+						if (left == std::wstring::npos) {
+							break;
+						}
+						const std::size_t right = text.find(quoteChar, left + 1);
+						if (right == std::wstring::npos) {
+							break;
+						}
+
+						registerCandidate(text.substr(left + 1, right - left - 1));
+						localCursor = right + 1;
+					}
+				};
+			std::size_t lineBegin = 0;
+			bool inFenceBlock = false;
+			bool inTriggerSection = false;
+			while (lineBegin < body.size()) {
+				const std::size_t lineEnd = body.find(L'\n', lineBegin);
+				const std::size_t len = lineEnd == std::wstring::npos
+					? body.size() - lineBegin
+					: lineEnd - lineBegin;
+				std::wstring line = Trim(body.substr(lineBegin, len));
+				if (line.rfind(L"```", 0) == 0) {
+					inFenceBlock = !inFenceBlock;
+					if (lineEnd == std::wstring::npos) {
+						break;
+					}
+					lineBegin = lineEnd + 1;
+					continue;
+				}
+				if (inFenceBlock) {
+					if (lineEnd == std::wstring::npos) {
+						break;
+					}
+					lineBegin = lineEnd + 1;
+					continue;
+				}
+
+				if (isOutputSectionHeader(line)) {
+					inTriggerSection = false;
+				}
+				if (isTriggerSectionHeader(line)) {
+					inTriggerSection = true;
+				}
+
+				if (line.size() > 2 && (line.rfind(L"- ", 0) == 0 || line.rfind(L"* ", 0) == 0)) {
+					line = Trim(line.substr(2));
+					if (inTriggerSection) {
+						registerCandidate(line);
+						collectAsciiQuotedCandidates(line, L'"');
+						collectAsciiQuotedCandidates(line, L'\'');
+					}
+				}
+
+				if (line.size() > 1 && line.front() == L'>') {
+					std::wstring quoted = Trim(line.substr(1));
+					inTriggerSection = true;
+					registerCandidate(quoted);
+					collectAsciiQuotedCandidates(quoted, L'"');
+					collectAsciiQuotedCandidates(quoted, L'\'');
+				}
+
+				if (inTriggerSection && !line.empty() &&
+					line.rfind(L"#", 0) != 0 &&
+					line.rfind(L">", 0) != 0 &&
+					line.rfind(L"- ", 0) != 0 &&
+					line.rfind(L"* ", 0) != 0) {
+					collectAsciiQuotedCandidates(line, L'"');
+					collectAsciiQuotedCandidates(line, L'\'');
+				}
+
+				if (lineEnd == std::wstring::npos) {
+					break;
+				}
+				lineBegin = lineEnd + 1;
+			}
+
+			return std::vector<std::wstring>(unique.begin(), unique.end());
+		}
+
+		OpenClawOriginalExtractedRuntimeContractSpec BuildExtractedRuntimeContract(
+			const OpenClawOriginalImportRequest& request,
+			const std::optional<SkillsMetadataSpec>& normalizedMetadata,
+			std::vector<std::wstring>& diagnostics) {
+			OpenClawOriginalExtractedRuntimeContractSpec contract;
+			if (normalizedMetadata.has_value()) {
+				contract.skillKey = Trim(normalizedMetadata->skillKey);
+			}
+			if (contract.skillKey.empty() && request.frontmatter.has_value()) {
+				contract.skillKey = Trim(request.frontmatter->name);
+			}
+
+			const std::wstring markdown = ReadUtf8FileToWide(request.skillFile, diagnostics);
+			const std::wstring body = ExtractMarkdownBody(markdown);
+			contract.triggerHints = ExtractTriggerHints(body);
+
+			auto output = OpenClawOriginalExtractedOutputSpec{};
+			const auto jsonBlock = ExtractJsonFenceBlock(body);
+			if (jsonBlock.has_value()) {
+				output.jsonPayload = jsonBlock.value();
+				if (const auto type = ExtractJsonStringField(output.jsonPayload, L"type"); type.has_value()) {
+					output.kind = type.value();
+				}
+				if (const auto title = ExtractJsonStringField(output.jsonPayload, L"title"); title.has_value()) {
+					output.title = title.value();
+				}
+				if (const auto url = ExtractJsonStringField(output.jsonPayload, L"url"); url.has_value()) {
+					output.url = url.value();
+				}
+			}
+
+			if (output.url.empty()) {
+				if (const auto url = ExtractFirstUrl(body); url.has_value()) {
+					output.url = url.value();
+				}
+			}
+
+			if (output.kind.empty() && !output.url.empty()) {
+				output.kind = L"webview";
+			}
+			if (output.kind.empty() && jsonBlock.has_value()) {
+				output.kind = L"json";
+			}
+
+			if (!output.kind.empty() || !output.url.empty() || !output.jsonPayload.empty()) {
+				contract.output = output;
+			}
+
+			if (contract.triggerHints.empty()) {
+				contract.diagnostics.push_back(
+					L"extracted runtime contract missing trigger hints");
+			}
+			if (!contract.output.has_value()) {
+				contract.diagnostics.push_back(
+					L"extracted runtime contract missing output payload");
+			}
+			if (contract.skillKey.empty()) {
+				contract.diagnostics.push_back(
+					L"extracted runtime contract missing normalized skill key");
+			}
+
+			contract.complete =
+				!contract.skillKey.empty() &&
+				!contract.triggerHints.empty() &&
+				contract.output.has_value();
+
+			return contract;
+		}
+
 	} // namespace
 
 	std::filesystem::path OpenClawOriginalImportService::ResolveManagedPromotionDir(
@@ -150,6 +612,14 @@ namespace blazeclaw::core {
 
 		result.normalizedMetadata =
 			ResolveOpenClawMetadataCompat(request.frontmatter.value());
+		result.extractedRuntimeContract = BuildExtractedRuntimeContract(
+			request,
+			result.normalizedMetadata,
+			result.diagnostics);
+		for (const auto& contractDiagnostic :
+			result.extractedRuntimeContract->diagnostics) {
+			result.diagnostics.push_back(contractDiagnostic);
+		}
 		result.activationState = OpenClawOriginalImportActivationState::Imported;
 
 		const auto toolManifestPath = request.skillDir / L"tool-manifest.json";
@@ -187,8 +657,17 @@ namespace blazeclaw::core {
 			}
 		}
 
-		if (result.hasToolManifest && appConfig.skills.openclawOriginal.autoImportTools) {
+		const bool hasGeneratedInvokableContract =
+			result.extractedRuntimeContract.has_value() &&
+			result.extractedRuntimeContract->complete;
+
+		if ((result.hasToolManifest || hasGeneratedInvokableContract) &&
+			appConfig.skills.openclawOriginal.autoImportTools) {
 			result.activationState = OpenClawOriginalImportActivationState::ToolEnabled;
+			if (!result.hasToolManifest && hasGeneratedInvokableContract) {
+				result.diagnostics.push_back(
+					L"tool-enabled via generated manifestless runtime contract");
+			}
 		}
 
 		if (appConfig.skills.openclawOriginal.promoteToManaged) {

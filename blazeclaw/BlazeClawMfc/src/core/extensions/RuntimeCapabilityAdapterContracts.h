@@ -20,6 +20,7 @@ namespace blazeclaw::core::extensions {
 		std::optional<std::filesystem::path> imapSmtpSkillRoot;
 		std::optional<std::filesystem::path> baiduSearchSkillRoot;
 		std::optional<std::filesystem::path> braveSearchSkillRoot;
+		std::optional<std::filesystem::path> imageGeneratorSkillRoot;
 		std::optional<std::filesystem::path> openClawWebBrowsingSkillRoot;
 		bool braveRequireApiKey = false;
 		bool braveApiKeyPresent = false;

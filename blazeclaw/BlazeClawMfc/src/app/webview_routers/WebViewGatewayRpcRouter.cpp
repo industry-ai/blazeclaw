@@ -2,12 +2,17 @@
 #include "WebViewGatewayRpcRouter.h"
 #include "WebViewRouterContext.h"
 #include "WebViewToolLifecycleInstrumentation.h"
+#include "../chat-controller.h"
 #include "../BlazeClawMFCApp.h"
 #include "../EventTransport.h"
 #include "../../gateway/GatewayJsonUtils.h"
 #include "../../gateway/GatewayProtocolModels.h"
 
 namespace blazeclaw::webview_routers {
+
+	//  ## IMPORTANT NOTE :
+	//  In this code path, WebView host and gateway are in the same native process, so this is more precisely
+	//	intra-process communication (in-process message dispatch), not inter-process IPC or RPC.
 
 	bool WebViewGatewayRpcRouter::RouteMessage(
 		const WebViewRouterContext& context,
@@ -39,6 +44,22 @@ namespace blazeclaw::webview_routers {
 		// Delegate speech methods to WebViewSpeechRpcRouter
 		if (IsSpeechMethod(method)) {
 			return false; // Let the speech router handle this
+		}
+
+		// Dispatch native chat-controller bridge methods directly to native controller scaffold.
+		if (blazeclaw::app::chatcontroller::IsNativeChatControllerBridgeMethod(method)) {
+			const blazeclaw::gateway::protocol::RequestFrame request{
+				.id = correlationId,
+				.method = method,
+				.paramsJson = paramsJson,
+			};
+
+			const auto response = blazeclaw::app::chatcontroller::DispatchNativeChatControllerBridgeRequest(request);
+			if (context.buildBridgeRpcResultJson) {
+				const std::string responseJson = context.buildBridgeRpcResultJson(response, correlationId);
+				context.eventTransport->EmitTopic(BridgeEventTopic::RpcResult, responseJson);
+			}
+			return true;
 		}
 
 		// Tool lifecycle instrumentation: emit start event

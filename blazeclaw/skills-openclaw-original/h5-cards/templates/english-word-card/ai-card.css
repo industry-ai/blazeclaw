@@ -1,0 +1,380 @@
+/* ================================================================
+   english-word-card/ai-card.css
+   Template: Sticky note card with tape + ribbon + word + image
+   Interactive: click to speak English, show Chinese meaning
+   ================================================================ */
+
+/* ── Component: host ── */
+:host {
+  display: block;
+  max-width: 380px;
+  margin: 0 auto;
+  font-family: "Patrick Hand", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", cursive, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Sticky Note Card ── */
+.abc-card {
+  background:
+    linear-gradient(#d0d0d0 1px, transparent 1px),
+    #fffef9;
+  background-size: 100% 20px;
+  border-radius: 10px;
+  border: 1px solid #e5e0d5;
+  padding: 6px 10px 10px 10px;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Tape decoration ── */
+.abc-card .tape-decor {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px dotted #ccc;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  opacity: 0.8;
+  z-index: 2;
+}
+
+/* ── Ribbon badge ── */
+.abc-card .abc-ribbon {
+  position: absolute;
+  top: -10px;
+  left: -5px;
+  background: #8e44ad;
+  color: white;
+  padding: 4px 15px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 18px;
+  transform: rotate(-2deg);
+  z-index: 10;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Card body ── */
+.abc-card .abc-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* ── Word + Image row ── */
+.abc-card .abc-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+}
+
+/* ── Word area (left side) ── */
+.abc-card .abc-word-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* ── Big English word (word layout) ── */
+.abc-card .big-word {
+  font-size: 52px;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  color: #2c3e50;
+  text-shadow: 2px 2px 0 rgba(255,255,255,.8), 3px 3px 0 rgba(0,0,0,.08);
+  transition: transform 0.15s;
+}
+
+.abc-card .big-word:active {
+  transform: scale(0.95);
+}
+
+/* ── Chinese meaning (hidden until click) ── */
+.abc-card .word-zh {
+  font-size: 18px;
+  color: #8e44ad;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+
+.abc-card .word-zh.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Image ── */
+.abc-card .abc-img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.1));
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+
+.abc-card .abc-img:active {
+  transform: scale(0.9);
+}
+
+@media (hover: hover) {
+  .abc-card .abc-img:hover {
+    transform: scale(1.05);
+  }
+}
+
+/* ── Button ── */
+.abc-card .actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.abc-card .btn {
+  display: inline-block;
+  padding: 8px 28px;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.abc-card .btn.primary {
+  background: #8e44ad;
+  color: #fff;
+}
+
+.abc-card .btn.primary:active {
+  opacity: 0.8;
+}
+
+/* ── Shadow (跟读) button ── */
+.abc-card .btn.shadow {
+  background: transparent;
+  color: var(--c-brand, #8e44ad);
+  border: 2px solid var(--c-brand, #8e44ad);
+  padding: 6px 26px;
+}
+
+.abc-card .btn.shadow:active {
+  background: var(--c-soft, #ede9fe);
+  opacity: 1;
+}
+
+.abc-card .btn.shadow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Shadow feedback ── */
+.abc-card .shadow-feedback {
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 28px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  margin-top: 6px;
+}
+
+.abc-card .shadow-feedback.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.abc-card .shadow-feedback.listening {
+  color: #8e44ad;
+  animation: shadowPulse 1.2s ease-in-out infinite;
+}
+
+.abc-card .shadow-feedback.correct {
+  color: #16a34a;
+}
+
+.abc-card .shadow-feedback.incorrect {
+  color: #dc2626;
+}
+
+.abc-card .shadow-feedback.timeout {
+  color: #d97706;
+}
+
+/* ── Playback button (inside feedback) ── */
+.abc-card .btn-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: rgba(142, 68, 173, 0.12);
+  color: #8e44ad;
+  vertical-align: middle;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+@media (hover: hover) {
+  .abc-card .btn-play:hover {
+    background: rgba(142, 68, 173, 0.20);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+    transform: translateY(-1px);
+  }
+}
+
+.abc-card .btn-play:active {
+  transform: scale(0.96);
+  background: rgba(142, 68, 173, 0.25);
+}
+
+/* ── AI Rating display ── */
+.abc-card .shadow-feedback.ai-rating-wrapper {
+  pointer-events: auto; text-align: left; font-weight: normal; color: inherit; animation: none;
+}
+.abc-card .ai-rating {
+  background: #fafaf5; border: 1px solid #e8e4d8; border-radius: 12px;
+  padding: 12px 14px; margin-top: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.abc-card .rating-overall {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e8e4d8;
+}
+.abc-card .overall-score { font-size: 42px; font-weight: 700; color: #8e44ad; line-height: 1; }
+.abc-card .overall-meta { display: flex; flex-direction: column; gap: 2px; }
+.abc-card .overall-label { font-size: 13px; color: #777; font-weight: 500; }
+.abc-card .overall-stars { font-size: 16px; letter-spacing: 1px; }
+.abc-card .rating-dim { margin-bottom: 6px; }
+.abc-card .dim-head { display: flex; justify-content: space-between; align-items: center; }
+.abc-card .dim-label { font-size: 13px; color: #555; font-weight: 600; }
+.abc-card .dim-score { font-size: 16px; font-weight: 700; color: #8e44ad; }
+.abc-card .dim-bar { height: 5px; background: #e8e0f0; border-radius: 3px; margin: 3px 0; overflow: hidden; }
+.abc-card .dim-bar-fill { height: 100%; background: linear-gradient(90deg, #a78bfa, #8e44ad); border-radius: 3px; transition: width 0.6s ease; }
+.abc-card .dim-comment { font-size: 12px; color: #888; display: block; line-height: 1.4; }
+.abc-card .feedback-text { font-size: 14px; color: #444; line-height: 1.6; margin: 10px 0 0; font-weight: 500; padding-top: 8px; border-top: 1px solid #e8e4d8; }
+.abc-card .rating-suggestions { margin-top: 8px; background: #f3eff9; border-radius: 8px; padding: 8px 10px; }
+.abc-card .suggestion-label { font-size: 12px; font-weight: 700; color: #8e44ad; display: block; margin-bottom: 2px; }
+.abc-card .suggestion-text { font-size: 13px; color: #555; line-height: 1.5; margin: 0; }
+.abc-card .rating-actions { display: flex; justify-content: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e8e4d8; }
+.abc-card .rating-actions .btn-play { margin-left: 0; vertical-align: baseline; }
+
+/* ── Pulse animation ── */
+@keyframes shadowPulse {
+  0%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+  50% { opacity: 0.5; transform: translateY(0) scale(1.08); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Responsive breakpoints
+   ══════════════════════════════════════════════════════════════ */
+
+/* Tablet 480px+ */
+@media (min-width: 480px) {
+  :host { max-width: 420px; }
+  .abc-card { border-radius: 12px; }
+  .abc-card .abc-ribbon { font-size: 20px; padding: 5px 18px; top: -11px; }
+  .abc-card .abc-row { gap: 32px; }
+  .abc-card .big-word { font-size: 60px; }
+  .abc-card .word-zh { font-size: 20px; }
+  .abc-card .abc-img { width: 100px; height: 100px; }
+  .abc-card .btn { padding: 9px 32px; font-size: 16px; }
+  .abc-card .btn.shadow { padding: 7px 28px; font-size: 16px; border-width: 2px; }
+  .abc-card .shadow-feedback { font-size: 16px; }
+  .abc-card .btn-play { font-size: 14px; padding: 5px 16px; }
+  .abc-card .actions { gap: 12px; }
+}
+
+/* Large screen 768px+ */
+@media (min-width: 768px) {
+  :host { max-width: 460px; }
+  .abc-card { border-radius: 14px; padding: 8px 14px 14px 14px; }
+  .abc-card .abc-ribbon { font-size: 22px; padding: 6px 22px; top: -12px; }
+  .abc-card .abc-row { gap: 40px; }
+  .abc-card .big-word { font-size: 68px; }
+  .abc-card .word-zh { font-size: 22px; }
+  .abc-card .abc-img { width: 110px; height: 110px; }
+  .abc-card .btn { padding: 10px 36px; font-size: 17px; }
+  .abc-card .btn.shadow { padding: 8px 30px; font-size: 17px; }
+  .abc-card .shadow-feedback { font-size: 17px; }
+  .abc-card .btn-play { font-size: 14px; padding: 6px 18px; }
+  .abc-card .actions { gap: 14px; }
+}
+
+/* Desktop 1024px+ */
+@media (min-width: 1024px) {
+  :host { max-width: 500px; }
+  .abc-card { border-radius: 16px; padding: 10px 18px 18px 18px; }
+  .abc-card .abc-ribbon { font-size: 24px; padding: 7px 26px; top: -13px; left: -6px; }
+  .abc-card .abc-row { gap: 48px; }
+  .abc-card .big-word { font-size: 78px; }
+  .abc-card .word-zh { font-size: 24px; }
+  .abc-card .abc-img { width: 120px; height: 120px; }
+  .abc-card .btn { padding: 11px 40px; font-size: 18px; }
+  .abc-card .btn.shadow { padding: 9px 34px; font-size: 18px; }
+  .abc-card .shadow-feedback { font-size: 18px; }
+  .abc-card .btn-play { font-size: 15px; padding: 6px 20px; }
+  .abc-card .actions { gap: 16px; }
+}
+
+/* TV 1440px+ */
+@media (min-width: 1440px) {
+  :host { max-width: 560px; }
+  .abc-card { border-radius: 18px; padding: 12px 22px 22px 22px; }
+  .abc-card .abc-ribbon { font-size: 28px; padding: 8px 30px; top: -15px; left: -8px; }
+  .abc-card .abc-row { gap: 56px; }
+  .abc-card .big-word { font-size: 88px; }
+  .abc-card .word-zh { font-size: 26px; }
+  .abc-card .abc-img { width: 140px; height: 140px; }
+  .abc-card .btn { padding: 13px 48px; font-size: 20px; }
+  .abc-card .btn.shadow { padding: 10px 40px; font-size: 20px; }
+  .abc-card .shadow-feedback { font-size: 19px; }
+  .abc-card .btn-play { font-size: 16px; padding: 7px 22px; }
+  .abc-card .actions { gap: 18px; }
+}
+
+/* ── Page-level: standalone index.html only (ignored inside Shadow DOM) ── */
+body {
+  padding-top: 20px;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}

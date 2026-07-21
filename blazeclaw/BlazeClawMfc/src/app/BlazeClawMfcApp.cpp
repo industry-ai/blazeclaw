@@ -16,6 +16,7 @@
 #include "SharedDocMarkdownChildFrame.h"
 #include "SharedDocAgentChatChildFrame.h"
 #include "AIChatView.h"
+#include "ChatUiRuntimeSwitch.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 #include "../core/runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
@@ -497,6 +498,18 @@ namespace {
 			config.chat.mode.c_str());
 		AppendMainFrameStatusLine(modeLine);
 
+		CString nativePathLine;
+		nativePathLine.Format(
+			L"[Chat] startup.config.nativePath - enabled=%s macro=BLAZECLAW_ENABLE_NATIVE_CHAT_PATH",
+			blazeclaw::app::chatui::kNativeChatPathEnabled ? L"true" : L"false");
+		AppendMainFrameStatusLine(nativePathLine);
+
+		if (!blazeclaw::app::chatui::kNativeChatPathEnabled &&
+			config.chat.mode == L"native") {
+			AppendMainFrameStatusLine(
+				L"[Chat] startup.config.mode.override - chat.mode=native ignored because native path is compile-time disabled.");
+		}
+
 		CString agentsLine;
 		if (config.agents.controlPlaneEnabled.has_value())
 		{
@@ -825,6 +838,12 @@ namespace {
 	CRuntimeClass* ResolveChatRuntimeViewClass(
 		const blazeclaw::config::AppConfig& config) {
 		if (config.chat.mode == L"native") {
+			if (!blazeclaw::app::chatui::kNativeChatPathEnabled) {
+				TRACE(
+					"[Startup][chat.ui.mode.override] chat.mode=native requested but BLAZECLAW_ENABLE_NATIVE_CHAT_PATH=0; forcing WebView path.\n");
+				return RUNTIME_CLASS(CBlazeClawMFCView);
+			}
+
 			return RUNTIME_CLASS(CChatView);
 		}
 
@@ -1246,6 +1265,7 @@ bool CBlazeClawMFCApp::EnsureServiceRunning(std::string* outError) {
 	return error.empty();
 }
 
+// This function is the app-level gateway request guard + recovery wrapper.
 blazeclaw::gateway::protocol::ResponseFrame CBlazeClawMFCApp::RouteGatewayRequest(
 	const blazeclaw::gateway::protocol::RequestFrame& request) {
 	std::string startupError;

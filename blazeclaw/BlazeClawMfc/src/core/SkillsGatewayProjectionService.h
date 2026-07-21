@@ -44,6 +44,24 @@ namespace blazeclaw::core {
 				commandRetryPolicyHint = ToNarrow(command->dispatch.retryPolicyHint);
 				commandRequiresApproval = command->dispatch.requiresApproval;
 			}
+			else if (
+				entry.sourceKind == SkillsSourceKind::OpenClawOriginal &&
+				entry.openClawOriginalActivationState.has_value() &&
+				entry.openClawOriginalActivationState.value() ==
+				SkillsOpenClawOriginalActivationState::ToolEnabled &&
+				entry.openClawOriginalExtractedRuntimeContract.has_value() &&
+				entry.openClawOriginalExtractedRuntimeContract->complete) {
+				const auto& extracted =
+					entry.openClawOriginalExtractedRuntimeContract.value();
+				commandToolName = BuildGeneratedOpenClawCommandToolName(
+					extracted,
+					entry.skillName);
+				commandName = BuildGeneratedOpenClawCommandName(
+					extracted,
+					entry.skillName);
+				commandArgMode = "raw";
+				commandResultSchema = "openclaw.generated.runtime-contract";
+			}
 
 			std::string installKind;
 			std::string installCommand;
@@ -227,6 +245,20 @@ namespace blazeclaw::core {
 				ToNarrow(entry.openClawOriginalOrigin);
 			gatewayEntry.openClawOriginalImportDiagnostics =
 				UniqueNarrowValues(entry.openClawOriginalImportDiagnostics);
+			if (entry.openClawOriginalExtractedRuntimeContract.has_value()) {
+				const auto& extracted =
+					entry.openClawOriginalExtractedRuntimeContract.value();
+				gatewayEntry.openClawOriginalTriggerHints =
+					UniqueNarrowValues(extracted.triggerHints);
+				if (extracted.output.has_value()) {
+					gatewayEntry.openClawOriginalOutputKind =
+						ToNarrow(TrimWide(extracted.output->kind));
+					gatewayEntry.openClawOriginalOutputTitle =
+						ToNarrow(TrimWide(extracted.output->title));
+					gatewayEntry.openClawOriginalOutputUrl =
+						ToNarrow(TrimWide(extracted.output->url));
+				}
+			}
 			gatewayEntry.openClawOriginalMetadataConvertedFromClawdbot =
 				entry.openClawOriginalMetadataConvertedFromClawdbot;
 			gatewayEntry.openClawOriginalMissingToolManifest = std::any_of(
@@ -489,6 +521,70 @@ namespace blazeclaw::core {
 			}
 
 			return nullptr;
+		}
+
+		[[nodiscard]] static std::wstring NormalizeToolTokenWide(
+			const std::wstring& raw) {
+			std::wstring token;
+			token.reserve(raw.size());
+			for (const wchar_t ch : raw) {
+				const wchar_t lowered = static_cast<wchar_t>(std::towlower(ch));
+				const bool alphaNum =
+					(lowered >= L'a' && lowered <= L'z') ||
+					(lowered >= L'0' && lowered <= L'9');
+				if (alphaNum) {
+					token.push_back(lowered);
+					continue;
+				}
+
+				if (lowered == L'-' || lowered == L'_' || lowered == L'.' ||
+					lowered == L'/' || lowered == L'\\') {
+					if (!token.empty() && token.back() != L'_') {
+						token.push_back(L'_');
+					}
+				}
+			}
+
+			while (!token.empty() && token.front() == L'_') {
+				token.erase(token.begin());
+			}
+			while (!token.empty() && token.back() == L'_') {
+				token.pop_back();
+			}
+
+			if (token.empty()) {
+				token = L"openclaw_skill";
+			}
+
+			return token;
+		}
+
+		[[nodiscard]] static std::string BuildGeneratedOpenClawCommandToolName(
+			const OpenClawOriginalExtractedRuntimeContractSpec& extracted,
+			const std::wstring& fallbackSkillName) {
+			std::wstring key = TrimWide(extracted.skillKey);
+			if (key.empty()) {
+				key = TrimWide(fallbackSkillName);
+			}
+			const std::wstring normalized = NormalizeToolTokenWide(key);
+			return ToNarrow(normalized) + ".openclaw.generated";
+		}
+
+		[[nodiscard]] static std::string BuildGeneratedOpenClawCommandName(
+			const OpenClawOriginalExtractedRuntimeContractSpec& extracted,
+			const std::wstring& fallbackSkillName) {
+			if (extracted.output.has_value()) {
+				const std::wstring title = TrimWide(extracted.output->title);
+				if (!title.empty()) {
+					return ToNarrow(title);
+				}
+			}
+
+			std::wstring key = TrimWide(extracted.skillKey);
+			if (key.empty()) {
+				key = TrimWide(fallbackSkillName);
+			}
+			return ToNarrow(key);
 		}
 	};
 

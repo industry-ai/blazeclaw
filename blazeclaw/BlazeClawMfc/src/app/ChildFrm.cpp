@@ -19,6 +19,7 @@
 #include "ChildFrm.h"
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
+#include "ChatUiRuntimeSwitch.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -65,7 +66,10 @@ BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT /*lpcs*/, CCreateContext* pConte
 	if (pContext == nullptr || pContext->m_pCurrentDoc == nullptr)
 		return FALSE;
 
-	if (!m_wndSplitter.CreateStatic(this, 1, 2))
+	constexpr int kSplitterColumnCount =
+		blazeclaw::app::chatui::kNativeChatPathEnabled ? 2 : 1;
+
+	if (!m_wndSplitter.CreateStatic(this, 1, kSplitterColumnCount))
 	{
 		TRACE0("[CChildFrame] OnCreateClient: CreateStatic failed\n");
 		return FALSE;
@@ -78,15 +82,22 @@ BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT /*lpcs*/, CCreateContext* pConte
 		return FALSE;
 	}
 
-	if (!m_wndSplitter.CreateView(0, 1, RUNTIME_CLASS(CChatView), CSize(100, 100), pContext))
+	if (blazeclaw::app::chatui::kNativeChatPathEnabled)
 	{
-		TRACE0("[CChildFrame] OnCreateClient: CreateView(Chat) failed\n");
-		m_wndSplitter.DestroyWindow();
-		return FALSE;
-	}
+		if (!m_wndSplitter.CreateView(0, 1, RUNTIME_CLASS(CChatView), CSize(100, 100), pContext))
+		{
+			TRACE0("[CChildFrame] OnCreateClient: CreateView(Chat) failed\n");
+			m_wndSplitter.DestroyWindow();
+			return FALSE;
+		}
 
-	m_wndSplitter.SetColumnInfo(0, 700, 100);
-	m_wndSplitter.SetColumnInfo(1, 320, 240);
+		m_wndSplitter.SetColumnInfo(0, 700, 100);
+		m_wndSplitter.SetColumnInfo(1, 320, 240);
+	}
+	else
+	{
+		m_wndSplitter.SetColumnInfo(0, 1024, 100);
+	}
 	// Do NOT call RecalcLayout here — it asserts inside winsplit.cpp (line 2350) when called
 	// during CreateView WM_SIZE re-entrancy before the splitter HWND is fully initialized.
 	// The framework calls MoveWindow on the client area after OnCreateClient returns, which
@@ -111,6 +122,13 @@ void CChildFrame::OnSize(UINT nType, int cx, int cy)
 		return;
 	if (m_wndSplitter.GetPane(0, 0) == nullptr)
 		return;
+
+	if (!blazeclaw::app::chatui::kNativeChatPathEnabled)
+	{
+		m_wndSplitter.SetColumnInfo(0, cx, 0);
+		m_wndSplitter.RecalcLayout();
+		return;
+	}
 
 	// If chat view is hidden (from SkillView), expand WebView to full width
 	if (m_bHideChatView)
@@ -180,6 +198,12 @@ void CChildFrame::OnFilePrintPreview()
 void CChildFrame::HideChatView()
 {
 	TRACE(_T("[CChildFrame::HideChatView] ENTER\n"));
+
+	if (!blazeclaw::app::chatui::kNativeChatPathEnabled)
+	{
+		m_bHideChatView = TRUE;
+		return;
+	}
 
 	if (!m_bSplitterReady)
 	{

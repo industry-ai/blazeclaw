@@ -15,6 +15,7 @@ namespace blazeclaw::core {
 			std::optional<std::filesystem::path> imapSmtpSkillRoot;
 			std::optional<std::filesystem::path> baiduSearchSkillRoot;
 			std::optional<std::filesystem::path> braveSearchSkillRoot;
+		std::optional<std::filesystem::path> imageGeneratorSkillRoot;
 			std::optional<std::filesystem::path> openClawWebBrowsingSkillRoot;
 			std::optional<std::filesystem::path> webBrowsingSkillRoot;
 			bool braveRequireApiKey = false;
@@ -36,6 +37,9 @@ namespace blazeclaw::core {
 			std::function<void(
 				blazeclaw::gateway::GatewayHost&,
 				const ToolRuntimePolicySettings&)> registerBaiduSearch;
+		std::function<void(
+			blazeclaw::gateway::GatewayHost&,
+			const ToolRuntimePolicySettings&)> registerImageGenerator;
 		};
 
 		void RegisterAll(

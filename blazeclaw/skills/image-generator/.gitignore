@@ -1,0 +1,11 @@
+# 生成的图片
+outputs/
+
+
+
+# Python
+__pycache__/
+*.pyc
+
+# 外部模型
+models/

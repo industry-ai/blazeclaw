@@ -205,9 +205,9 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
         color: #f0cf8a;
     }
 
-    .speech-live-preview.final .speech-live-preview-label {
-        color: #a8e8a8;
-    }
+.speech-live-preview.final .speech-live-preview-label {
+    color: #a8e8a8;
+}
 
 .speech-live-preview.error {
     border-left-color: #ff9a9a;
@@ -226,6 +226,19 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
     word-break: break-word;
 }
 
+.msg-responder-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9cc8ff;
+    margin-bottom: 4px;
+    opacity: 0.95;
+}
+
+.msg-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .self {
     align-self: flex-end;
     background: #2d5f2f;
@@ -239,6 +252,152 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
 .error {
     align-self: flex-start;
     background: #7a1f1f;
+}
+
+.multi-response-group {
+    align-self: flex-start;
+    width: min(94%, 860px);
+    border: 1px solid #3a3a3a;
+    border-left: 3px solid #4f4f4f;
+    border-radius: 10px;
+    background: #212121;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .multi-response-group.pending {
+        border-left-color: #88a7d9;
+    }
+
+    .multi-response-group.success {
+        border-left-color: #8cd98c;
+    }
+
+    .multi-response-group.failure {
+        border-left-color: #ff9a9a;
+    }
+
+    .multi-response-group.approval {
+        border-left-color: #ffd48a;
+    }
+
+    .multi-response-group.mixed {
+        border-left-color: #d8b1ff;
+    }
+
+.multi-response-group-header {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+}
+
+.multi-response-group-title {
+    color: #dcecff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.multi-response-group-badge {
+    border: 1px solid #4a4a4a;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    color: #cdd9ea;
+    background: #2c2c2c;
+    text-transform: lowercase;
+}
+
+.multi-response-group-summary {
+    justify-self: end;
+    font-size: 11px;
+    color: #a9c2df;
+}
+
+.multi-response-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.responder-card {
+    border: 1px solid #3e3e3e;
+    border-radius: 8px;
+    background: #262626;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    .responder-card.pending,
+    .responder-card.streaming {
+        border-left: 3px solid #7fb4ff;
+    }
+
+    .responder-card.success {
+        border-left: 3px solid #8cd98c;
+    }
+
+    .responder-card.failure {
+        border-left: 3px solid #ff9a9a;
+    }
+
+    .responder-card.approval {
+        border-left: 3px solid #ffd48a;
+    }
+
+.responder-card-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.responder-card-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #dbe8f9;
+}
+
+.responder-card-status {
+    border: 1px solid #4a4a4a;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 10px;
+    color: #d0d0d0;
+    background: #303030;
+    text-transform: lowercase;
+}
+
+    .responder-card-status.streaming,
+    .responder-card-status.pending {
+        color: #b8d9ff;
+        border-color: #4f7dad;
+    }
+
+    .responder-card-status.success {
+        color: #bce8bc;
+        border-color: #4d8a4d;
+    }
+
+    .responder-card-status.failure {
+        color: #ffb6b6;
+        border-color: #9a5858;
+    }
+
+    .responder-card-status.approval {
+        color: #ffdca0;
+        border-color: #9a7b45;
+    }
+
+.responder-card-content {
+    color: #e4e4e4;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .tool-timeline {
@@ -335,31 +494,29 @@ body:not(.blazeclaw-dashboard-host) .agents-control-plane {
     border-top: 1px solid #2b2b2b;
     border-bottom: 1px solid #2b2b2b;
     background: #171717;
-    padding: 8px 10px;
+    padding: 10px 10px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    max-height: 180px;
+    gap: 8px;
+    min-height: 120px;
+    max-height: 280px;
     overflow: auto;
 }
-
-    .approval-queue[hidden] {
-        display: none;
-    }
 
 .approval-card {
     border: 1px solid #3a3a3a;
     border-left: 3px solid #ffd48a;
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 10px 10px;
+    min-height: 88px;
     font-size: 12px;
+    line-height: 1.45;
     color: #f0e2c2;
     background: #232323;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
-
     .approval-card .meta {
         color: #bfbfbf;
         font-size: 11px;
