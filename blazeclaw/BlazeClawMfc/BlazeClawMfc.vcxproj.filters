@@ -665,6 +665,9 @@
     <ClCompile Include="src\app\agent-chat\IrcMessageParser.cpp">
       <Filter>agent-chat</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\agent-chat\NetworkClientAdapter.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1241,6 +1244,9 @@
       <Filter>agent-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\agent-chat\ITransport.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\agent-chat\NetworkClientAdapter.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
   </ItemGroup>
