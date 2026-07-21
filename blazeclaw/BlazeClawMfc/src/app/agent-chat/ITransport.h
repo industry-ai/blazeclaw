@@ -4,6 +4,8 @@
 #include <functional>
 #include <string>
 
+#include "TransportConfig.h"
+
 namespace blazeclaw::irc {
 
     struct IrcPushEvent; // Reuse existing type from CIrcChatTransport.h for now.
@@ -105,6 +107,15 @@ namespace blazeclaw::irc {
         virtual void SetPushCallback(IrcPushCallback callback) = 0;
         virtual void SetConnectionStateCallback(
             ConnectionStateCallback callback) = 0;
+
+        // Inject transport behavior (backoff/heartbeat/callback affinity).
+        // Call before Initialize when overriding defaults or blazeclaw.conf.
+        virtual void SetTransportConfig(const TransportConfig& config) = 0;
+        virtual TransportConfig GetTransportConfig() const = 0;
+
+        // Optional executor used when callbackDispatchMode == ExternalExecutor
+        // (e.g. post to MFC UI/main thread). Ignored for other modes.
+        virtual void SetCallbackExecutor(CallbackExecutor executor) = 0;
 
         virtual Diagnostics GetDiagnostics() const = 0;
     };

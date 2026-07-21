@@ -1249,6 +1249,12 @@
     <ClInclude Include="src\app\agent-chat\NetworkClientAdapter.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\agent-chat\PushDispatcher.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\agent-chat\TransportConfig.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

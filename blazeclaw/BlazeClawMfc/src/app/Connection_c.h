@@ -133,6 +133,24 @@ public:
     using DisconnectCallback = std::function<void()>;
     void SetDisconnectCallback(DisconnectCallback callback);
 
+    // Config-driven heartbeat knobs (applied before StartHeartbeat).
+    void SetHeartbeatInterval(std::chrono::milliseconds interval) {
+        if (interval.count() > 0) {
+            heartbeat_interval_ms_ = interval;
+        }
+    }
+    void SetHeartbeatStep(std::chrono::milliseconds step) {
+        if (step.count() > 0) {
+            heartbeat_step_ms_ = step;
+        }
+    }
+    std::chrono::milliseconds GetHeartbeatInterval() const {
+        return heartbeat_interval_ms_;
+    }
+    std::chrono::milliseconds GetHeartbeatStep() const {
+        return heartbeat_step_ms_;
+    }
+
     // Start a background thread to receive push messages
     bool StartPushReceiver();
     void StopPushReceiver();
@@ -225,6 +243,7 @@ mutable std::mutex async_mutex_;
     std::atomic<bool> heartbeat_running_{ false };
     std::thread heartbeat_thread_;
     std::chrono::milliseconds heartbeat_interval_ms_{ blazeclaw::net::kHeartbeatIntervalMs };
+    std::chrono::milliseconds heartbeat_step_ms_{ blazeclaw::net::kHeartbeatStepMs };
 
     bool send_all(const char* data, int len);
     // 接收:recv 超时由 socket 层 SO_RCVTIMEO 控制(Connect() 里 setsockopt),

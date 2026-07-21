@@ -88,4 +88,10 @@ namespace blazeclaw::net {
         CNetwork_c::Instance().SetConnectionStateCallback(std::move(callback));
     }
 
+    void CNetworkClientAdapter::SetHeartbeatConfig(
+        std::chrono::milliseconds interval,
+        std::chrono::milliseconds step) {
+        CNetwork_c::Instance().SetHeartbeatConfig(interval, step);
+    }
+
 } // namespace blazeclaw::net

@@ -572,6 +572,15 @@ namespace blazeclaw::config {
 		std::wstring stateRoot;
 		std::wstring legacyStateRoot;
 		bool legacyStateMigrationEnabled = true;
+
+		// IRC transport knobs (CIrcChatTransport / Connection heartbeat).
+		// Prefer blazeclaw.conf control over hardcoded NetworkTimeouts defaults.
+		std::uint32_t transportInitialReconnectBackoffMs = 1000;
+		std::uint32_t transportMaxReconnectBackoffMs = 30000;
+		std::uint32_t transportHeartbeatIntervalMs = 20000;
+		std::uint32_t transportHeartbeatStepMs = 30000;
+		// dispatcher | caller | external
+		std::wstring transportCallbackDispatchMode = L"dispatcher";
 	};
 
 	enum class AgentChatRuntimeMode { Legacy, Native, Auto };

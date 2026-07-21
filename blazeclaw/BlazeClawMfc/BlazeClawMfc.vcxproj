@@ -131,6 +131,8 @@
     <ClInclude Include="src\app\agent-chat\IrcMessageParser.h" />
     <ClInclude Include="src\app\agent-chat\ITransport.h" />
     <ClInclude Include="src\app\agent-chat\NetworkClientAdapter.h" />
+    <ClInclude Include="src\app\agent-chat\PushDispatcher.h" />
+    <ClInclude Include="src\app\agent-chat\TransportConfig.h" />
     <ClInclude Include="src\app\agent-chat\WorkerThread.h" />
     <ClInclude Include="src\app\AudioRingBuffer.h" />
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />

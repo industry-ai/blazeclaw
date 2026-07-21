@@ -36,6 +36,9 @@ namespace blazeclaw::net {
         void SetTcpPushCallback(PushCallback callback) override;
         void SetTlsPushCallback(PushCallback callback) override;
         void SetConnectionStateCallback(ConnectionStateCallback callback) override;
+        void SetHeartbeatConfig(
+            std::chrono::milliseconds interval,
+            std::chrono::milliseconds step) override;
     };
 
 } // namespace blazeclaw::net

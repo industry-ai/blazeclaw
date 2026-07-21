@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -82,6 +83,10 @@ public:
     // Set connection state change callback (called when TCP/TLS connection goes down)
     using ConnectionStateCallback = std::function<void(bool is_tcp, bool is_connected)>;
     void SetConnectionStateCallback(ConnectionStateCallback callback);
+
+    // Apply config-driven app-layer heartbeat intervals to both connections.
+    void SetHeartbeatConfig(std::chrono::milliseconds interval,
+                            std::chrono::milliseconds step);
 
     // Get references to underlying connections (for setting disconnect callbacks, etc.)
     CConnection_c& GetTcpConnection() { return tcp_connection_; }

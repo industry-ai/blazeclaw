@@ -295,3 +295,14 @@ void CNetwork_c::SetConnectionStateCallback(ConnectionStateCallback callback) {
     connection_state_callback_ = std::move(callback);
 }
 
+void CNetwork_c::SetHeartbeatConfig(std::chrono::milliseconds interval,
+                                    std::chrono::milliseconds step) {
+    tcp_connection_.SetHeartbeatInterval(interval);
+    tcp_connection_.SetHeartbeatStep(step);
+    tls_connection_.SetHeartbeatInterval(interval);
+    tls_connection_.SetHeartbeatStep(step);
+    LOG_INFO("[CNetwork_c] Heartbeat config applied: interval={}ms step={}ms",
+             static_cast<long long>(interval.count()),
+             static_cast<long long>(step.count()));
+}
+

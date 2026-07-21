@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -57,6 +58,12 @@ namespace blazeclaw::net {
         virtual void SetTlsPushCallback(PushCallback callback) = 0;
         virtual void SetConnectionStateCallback(
             ConnectionStateCallback callback) = 0;
+
+        // Optional: apply app-layer heartbeat knobs to underlying connections.
+        // Default no-op so fakes/mocks need not implement it.
+        virtual void SetHeartbeatConfig(
+            std::chrono::milliseconds /*interval*/,
+            std::chrono::milliseconds /*step*/) {}
     };
 
 } // namespace blazeclaw::net

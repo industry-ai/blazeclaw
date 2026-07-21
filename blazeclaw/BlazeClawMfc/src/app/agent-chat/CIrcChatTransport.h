@@ -11,9 +11,16 @@
 #include "../AppProtoHeader.h"
 #include "../NetworkTimeouts.h"
 #include "ITransport.h"
+#include "TransportConfig.h"
 #include "WorkerThread.h"
 
+namespace blazeclaw::net {
+class INetworkClient;
+}
+
 namespace blazeclaw::irc {
+
+class PushDispatcher;
 
 enum class IrcPushEventType {
     Unknown = 0,
@@ -54,7 +61,12 @@ using IrcPushCallback = std::function<void(const IrcPushEvent&)>;
 
 class CIrcChatTransport : public ITransport {
 public:
-    CIrcChatTransport() = default;
+    CIrcChatTransport();
+    explicit CIrcChatTransport(
+        std::shared_ptr<blazeclaw::net::INetworkClient> network_client);
+    CIrcChatTransport(
+        std::shared_ptr<blazeclaw::net::INetworkClient> network_client,
+        TransportConfig config);
     ~CIrcChatTransport() noexcept override;
 
     CIrcChatTransport(const CIrcChatTransport&) = delete;
@@ -67,7 +79,13 @@ public:
         return instance;
     }
 
+    // Idempotent lifecycle: repeated Initialize calls are safe and become no-op
+    // after the first successful initialization.
     bool Initialize() override;
+
+    // Idempotent lifecycle: repeated Shutdown calls are safe and become no-op
+    // after initialization has already been torn down.
+    // Callers should invoke Shutdown before process exit / CRT teardown.
     void Shutdown() override;
     void StartReceivers() override;
     void StopReceivers() override;
@@ -106,6 +124,10 @@ public:
     void SetPushCallback(IrcPushCallback callback) override;
     void SetConnectionStateCallback(std::function<void(bool is_tcp, bool is_connected)> callback) override;
 
+    void SetTransportConfig(const TransportConfig& config) override;
+    TransportConfig GetTransportConfig() const override;
+    void SetCallbackExecutor(CallbackExecutor executor) override;
+
     ITransport::Diagnostics GetDiagnostics() const override;
 
     static IrcPushEvent ParseIrcMessage(const std::string& payload);
@@ -115,10 +137,20 @@ public:
                                           const std::string& message);
 
 private:
+    bool EnsureCallbacksRegisteredLocked();
+
+    // Load TransportConfig from blazeclaw.conf / AppConfig when not explicitly injected.
+    void RefreshTransportConfigFromAppIfNeeded();
+    void ApplyTransportConfigLocked();
+
+    // Route consumer callbacks according to CallbackDispatchMode.
+    // Reconnect scheduling stays on the network callback thread and must not
+    // wait on UI/dispatcher delivery.
+    void DispatchCallback(std::function<void()> task);
 
     // 自动重连：收到 (is_connected=false) 时调度重连，避免阻塞回调线程。
     // 重连后再次调用 StartReceivers 重新挂上 push 回调。
-    // 退避策略：每次失败 backoff *= 2，上限 30s；成功后重置为 1s。
+    // 退避策略：每次失败 backoff *= 2，上限由 TransportConfig 控制；成功后重置。
     void ScheduleAutoReconnect(bool is_tcp);
 
     // 重连线程循环：在 ScheduleAutoReconnect 起的线程里跑
@@ -126,11 +158,22 @@ private:
 
     std::atomic<bool> reconnect_running_{ false };
     blazeclaw::app::WorkerThread reconnect_worker_;
-    std::chrono::milliseconds reconnect_backoff_{ blazeclaw::net::kInitialReconnectBackoff };  // 当前 backoff
+    std::chrono::milliseconds reconnect_backoff_{ blazeclaw::net::kInitialReconnectBackoff };
 
+    mutable std::mutex lifecycle_mutex_;
     std::atomic<bool> initialized_{ false };
+    bool callbacks_registered_{ false };
+    bool receivers_started_{ false };
     mutable std::mutex callbacks_mutex_;
     IrcPushCallback push_callback_;
+
+    std::shared_ptr<blazeclaw::net::INetworkClient> network_client_;
+    std::unique_ptr<PushDispatcher> push_dispatcher_;
+
+    mutable std::mutex config_mutex_;
+    TransportConfig transport_config_{};
+    bool transport_config_overridden_{ false };
+    CallbackExecutor callback_executor_;
 
     std::atomic<bool> heartbeat_running_{ false };
     blazeclaw::app::WorkerThread heartbeat_worker_;
