@@ -10,6 +10,7 @@
 
 #include "../AppProtoHeader.h"
 #include "../NetworkTimeouts.h"
+#include "ITransport.h"
 #include "WorkerThread.h"
 
 namespace blazeclaw::irc {
@@ -51,10 +52,10 @@ struct IrcPushEvent {
 
 using IrcPushCallback = std::function<void(const IrcPushEvent&)>;
 
-class CIrcChatTransport {
+class CIrcChatTransport : public ITransport {
 public:
     CIrcChatTransport() = default;
-    ~CIrcChatTransport() noexcept;
+    ~CIrcChatTransport() noexcept override;
 
     CIrcChatTransport(const CIrcChatTransport&) = delete;
     CIrcChatTransport& operator=(const CIrcChatTransport&) = delete;
@@ -66,53 +67,46 @@ public:
         return instance;
     }
 
-    bool Initialize();
-    void Shutdown();
-    void StartReceivers();
-    void StopReceivers();
+    bool Initialize() override;
+    void Shutdown() override;
+    void StartReceivers() override;
+    void StopReceivers() override;
 
-    bool SendIrcMessageTcp(const std::string& payload, std::string* response = nullptr);
-    bool SendIrcMessageTls(const std::string& payload, std::string* response = nullptr);
+    bool SendIrcMessageTcp(const std::string& payload, std::string* response = nullptr) override;
+    bool SendIrcMessageTls(const std::string& payload, std::string* response = nullptr) override;
 
-    bool SendPrivmsg(const std::string& channel, const std::string& message);
-    bool SendPrivmsgNoWait(const std::string& channel, const std::string& message);
+    bool SendPrivmsg(const std::string& channel, const std::string& message) override;
+    bool SendPrivmsgNoWait(const std::string& channel, const std::string& message) override;
 
     // Agent 身份发送 PRIVMSG，session_id=0（前端据此识别为服务端/Agent 消息）
     // from: 服务端回显时的发送者标识（如 "炎图AI助手"）
     bool SendPrivmsgAsAgentNoWait(const std::string& channel, const std::string& message,
-                                  const std::string& from = "炎图AI助手");
+                                  const std::string& from = "炎图AI助手") override;
 
-    bool SendIrcCommandTcp(const std::string& channel, const std::string& cmd, const std::string& message = "");
-    bool SendIrcCommandTcpNoWait(const std::string& channel, const std::string& cmd, const std::string& message = "");
+    bool SendIrcCommandTcp(const std::string& channel, const std::string& cmd, const std::string& message = "") override;
+    bool SendIrcCommandTcpNoWait(const std::string& channel, const std::string& cmd, const std::string& message = "") override;
 
-    std::string SendCommandTcp(const std::string& body);
-    std::string SendCommandTls(const std::string& body);
-    bool SendCommandNoWait(const std::string& body);
-    bool SendCommandTlsNoWait(const std::string& body);
+    std::string SendCommandTcp(const std::string& body) override;
+    std::string SendCommandTls(const std::string& body) override;
+    bool SendCommandNoWait(const std::string& body) override;
+    bool SendCommandTlsNoWait(const std::string& body) override;
 
-    bool SendJoin(const std::string& channel);
-    bool SendPart(const std::string& channel, const std::string& reason = "");
-    bool SendKick(const std::string& channel, const std::string& target, const std::string& reason = "");
-    bool SendMode(const std::string& channel, const std::string& mode);
-    bool SendTopic(const std::string& channel, const std::string& topic);
+    bool SendJoin(const std::string& channel) override;
+    bool SendPart(const std::string& channel, const std::string& reason = "") override;
+    bool SendKick(const std::string& channel, const std::string& target, const std::string& reason = "") override;
+    bool SendMode(const std::string& channel, const std::string& mode) override;
+    bool SendTopic(const std::string& channel, const std::string& topic) override;
 
-    bool SendJoinNoWait(const std::string& channel);
-    bool SendPartNoWait(const std::string& channel, const std::string& reason = "");
-    bool SendKickNoWait(const std::string& channel, const std::string& target, const std::string& reason = "");
-    bool SendModeNoWait(const std::string& channel, const std::string& mode);
-    bool SendTopicNoWait(const std::string& channel, const std::string& topic);
+    bool SendJoinNoWait(const std::string& channel) override;
+    bool SendPartNoWait(const std::string& channel, const std::string& reason = "") override;
+    bool SendKickNoWait(const std::string& channel, const std::string& target, const std::string& reason = "") override;
+    bool SendModeNoWait(const std::string& channel, const std::string& mode) override;
+    bool SendTopicNoWait(const std::string& channel, const std::string& topic) override;
 
-    void SetPushCallback(IrcPushCallback callback);
-    void SetConnectionStateCallback(std::function<void(bool is_tcp, bool is_connected)> callback);
+    void SetPushCallback(IrcPushCallback callback) override;
+    void SetConnectionStateCallback(std::function<void(bool is_tcp, bool is_connected)> callback) override;
 
-    struct Diagnostics {
-        uint64_t messages_sent_tcp = 0;
-        uint64_t messages_sent_tls = 0;
-        uint64_t push_events = 0;
-        bool tcp_connected = false;
-        bool tls_connected = false;
-    };
-    Diagnostics GetDiagnostics() const;
+    ITransport::Diagnostics GetDiagnostics() const override;
 
     static IrcPushEvent ParseIrcMessage(const std::string& payload);
 

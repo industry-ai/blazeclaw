@@ -724,8 +724,8 @@ void CIrcChatTransport::SetConnectionStateCallback(std::function<void(bool, bool
     connection_state_callback_ = std::move(callback);
 }
 
-CIrcChatTransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
-    Diagnostics diag;
+ITransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
+    ITransport::Diagnostics diag;
     diag.messages_sent_tcp = messages_sent_tcp_.load();
     diag.messages_sent_tls = messages_sent_tls_.load();
     diag.push_events = push_events_.load();
