@@ -127,7 +127,9 @@
     <ClInclude Include="src\agentchat\AgentChatNativeRunner.h" />
     <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
     <ClInclude Include="src\app\agent-chat\CIrcChatTransport.h" />
+    <ClInclude Include="src\app\agent-chat\INetworkClient.h" />
     <ClInclude Include="src\app\agent-chat\IrcMessageParser.h" />
+    <ClInclude Include="src\app\agent-chat\ITransport.h" />
     <ClInclude Include="src\app\agent-chat\WorkerThread.h" />
     <ClInclude Include="src\app\AudioRingBuffer.h" />
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />
