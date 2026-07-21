@@ -24,17 +24,24 @@ inline constexpr int kSocketSendTimeoutMs = 5000;
 // 注意：使用 uint32_t 而非 DWORD，避免依赖 <winsock2.h> 的 typedef 顺序。
 inline constexpr uint32_t kTcpKeepaliveIdleMs = 30 * 1000;
 
+// ─── IRC 重连退避 ───
+// Defaults for TransportConfig / NetworkTimeouts fallback.
+// Prefer blazeclaw.conf keys:
+//   agentchat.transport.initialReconnectBackoffMs
+//   agentchat.transport.maxReconnectBackoffMs
+// 每次失败 backoff *= 2，上限 30s；成功后重置为 1s。
+inline constexpr std::chrono::milliseconds kInitialReconnectBackoff{ 1000 };
+inline constexpr std::chrono::milliseconds kMaxReconnectBackoff{ 30000 };
+
 // ─── 应用层心跳间隔 ───
+// Prefer blazeclaw.conf:
+//   agentchat.transport.heartbeatIntervalMs
+//   agentchat.transport.heartbeatStepMs
 // 服务端经常因长连接 idle (默认 60~120s) 主动 RST，每 20s 发送一次 Ping (type=21)。
 inline constexpr uint32_t kHeartbeatIntervalMs = 20000;
 
 // ─── 心跳线程分段 sleep (ControlLoop 用) ───
 inline constexpr int kHeartbeatStepMs = 30000;
-
-// ─── IRC 重连退避 ───
-// 每次失败 backoff *= 2，上限 30s；成功后重置为 1s。
-inline constexpr std::chrono::milliseconds kInitialReconnectBackoff{ 1000 };
-inline constexpr std::chrono::milliseconds kMaxReconnectBackoff{ 30000 };
 
 // ─── ChatRoomBridge 请求超时 ───
 // 异步请求超过此时间未收到响应，触发重试/超时回调。

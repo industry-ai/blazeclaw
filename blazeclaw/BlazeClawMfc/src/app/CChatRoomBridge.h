@@ -13,7 +13,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "CIrcChatTransport.h"
+#include "agent-chat/CIrcChatTransport.h"
 #include "NetworkTimeouts.h"
 
 namespace blazeclaw::irc {

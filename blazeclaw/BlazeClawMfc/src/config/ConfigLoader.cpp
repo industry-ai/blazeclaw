@@ -637,6 +637,51 @@ namespace blazeclaw::config {
 					ParseBool(trimmedLine.substr(36), false);
 				continue;
 			}
+			if (trimmedLine.rfind(L"agentchat.transport.initialReconnectBackoffMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.transportInitialReconnectBackoffMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(46))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.transport.maxReconnectBackoffMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.transportMaxReconnectBackoffMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(42))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.transport.heartbeatIntervalMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.transportHeartbeatIntervalMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(40))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.transport.heartbeatStepMs=", 0) == 0) {
+				try {
+					outConfig.agentChatRuntime.transportHeartbeatStepMs =
+						static_cast<std::uint32_t>(std::stoul(Trim(trimmedLine.substr(36))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+			if (trimmedLine.rfind(L"agentchat.transport.callbackDispatchMode=", 0) == 0) {
+				const std::wstring raw = ToLowerTrim(trimmedLine.substr(41));
+				if (raw == L"caller" || raw == L"caller_thread" || raw == L"sync" ||
+					raw == L"external" || raw == L"ui" || raw == L"executor" ||
+					raw == L"dispatcher" || raw == L"worker") {
+					outConfig.agentChatRuntime.transportCallbackDispatchMode = raw;
+				}
+				continue;
+			}
 			//-------------------------------------------------------------------
 
 			if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {

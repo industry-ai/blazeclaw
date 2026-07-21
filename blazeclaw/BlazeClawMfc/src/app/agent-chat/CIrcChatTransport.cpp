@@ -1,5 +1,9 @@
 #include "pch.h"
 #include "CIrcChatTransport.h"
+#include "IrcMessageParser.h"
+#include "NetworkClientAdapter.h"
+#include "PushDispatcher.h"
+#include "WorkerThread.h"
 
 #include <algorithm>
 #include <chrono>
@@ -8,8 +12,9 @@
 #include <set>
 #include <sstream>
 
-#include "CNetwork_c.h"
-#include "Logger.h"
+#include "../BlazeClawMfcApp.h"
+#include "../Logger.h"
+#include "../../config/ConfigModels.h"
 
 #include <nlohmann/json.hpp>
 
@@ -17,7 +22,7 @@ namespace blazeclaw::irc {
 
 namespace {
 
-// 单调时钟，用于内部诊断（消息间隔、重试退避等�?
+// 单调时钟，用于内部诊断（消息间隔、重试退避等）
 uint64_t GetCurrentTimestampMs() {
     auto now = std::chrono::steady_clock::now();
     return static_cast<uint64_t>(
@@ -25,114 +30,69 @@ uint64_t GetCurrentTimestampMs() {
             now.time_since_epoch()).count());
 }
 
-// 墙钟 Unix 时间戳（秒）—�?协议层发送的 ts 必须�?system_clock�?
-// 1783562987 这种格式�?Unix epoch (1970-01-01) 以来的秒数，
-// 不能�?steady_clock（设备启动时间起算）�?
+// 墙钟 Unix 时间戳（秒）— 协议层发送的 ts 必须用 system_clock：
+// 1783562987 这种格式是 Unix epoch (1970-01-01) 以来的秒数，
+// 不能用 steady_clock（设备启动时间起算）。
 int64_t GetCurrentUnixSeconds() {
     return static_cast<int64_t>(
         std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
 }
 
-// Parse IRC PRIVMSG format: :nick!user@host PRIVMSG channel :message
-bool ParsePrivmsg(const std::string& line, std::string& nick, std::string& user,
-                  std::string& host, std::string& channel, std::string& message) {
-    if (line.empty() || line[0] != ':') {
-        return false;
+TransportConfig TransportConfigFromRuntime(
+    const blazeclaw::config::AgentChatRuntimeConfig& runtime) {
+    TransportConfig cfg;
+    if (runtime.transportInitialReconnectBackoffMs > 0) {
+        cfg.initialReconnectBackoff =
+            std::chrono::milliseconds{runtime.transportInitialReconnectBackoffMs};
     }
-    
-    size_t pos = 1;
-    size_t space = line.find(' ', pos);
-    if (space == std::string::npos) return false;
-    
-    std::string prefix = line.substr(pos, space - pos);
-    pos = space + 1;
-    
-    // Parse nick!user@host
-    size_t nick_end = prefix.find('!');
-    if (nick_end != std::string::npos) {
-        nick = prefix.substr(0, nick_end);
-        size_t user_end = prefix.find('@', nick_end + 1);
-        if (user_end != std::string::npos) {
-            user = prefix.substr(nick_end + 1, user_end - nick_end - 1);
-            host = prefix.substr(user_end + 1);
-        }
-    } else {
-        nick = prefix;
+    if (runtime.transportMaxReconnectBackoffMs > 0) {
+        cfg.maxReconnectBackoff =
+            std::chrono::milliseconds{runtime.transportMaxReconnectBackoffMs};
     }
-    
-    // Parse command
-    space = line.find(' ', pos);
-    if (space == std::string::npos) return false;
-    std::string cmd = line.substr(pos, space - pos);
-    pos = space + 1;
-    
-    // Parse channel
-    space = line.find(' ', pos);
-    if (space != std::string::npos) {
-        channel = line.substr(pos, space - pos);
-        pos = space + 1;
-    } else {
-        channel = line.substr(pos);
-        if (!channel.empty() && channel[0] == ':') {
-            channel = channel.substr(1);
-        }
-        message = "";
-        return true;
+    if (cfg.maxReconnectBackoff < cfg.initialReconnectBackoff) {
+        cfg.maxReconnectBackoff = cfg.initialReconnectBackoff;
     }
-    
-    // Rest is message (may start with :)
-    if (pos < line.size()) {
-        if (line[pos] == ':') {
-            message = line.substr(pos + 1);
-        } else {
-            message = line.substr(pos);
-        }
+    if (runtime.transportHeartbeatIntervalMs > 0) {
+        cfg.heartbeatInterval =
+            std::chrono::milliseconds{runtime.transportHeartbeatIntervalMs};
     }
-    
-    return true;
-}
-
-// Parse JOIN/PART messages
-bool ParseJoinPart(const std::string& line, std::string& nick,
-                  std::string& user, std::string& host, std::string& channel) {
-    if (line.empty() || line[0] != ':') return false;
-    
-    size_t pos = 1;
-    size_t space = line.find(' ', pos);
-    if (space == std::string::npos) return false;
-    
-    std::string prefix = line.substr(pos, space - pos);
-    pos = space + 1;
-    
-    size_t nick_end = prefix.find('!');
-    if (nick_end != std::string::npos) {
-        nick = prefix.substr(0, nick_end);
-        size_t user_end = prefix.find('@', nick_end + 1);
-        if (user_end != std::string::npos) {
-            user = prefix.substr(nick_end + 1, user_end - nick_end - 1);
-            host = prefix.substr(user_end + 1);
-        }
-    } else {
-        nick = prefix;
+    if (runtime.transportHeartbeatStepMs > 0) {
+        cfg.heartbeatStep =
+            std::chrono::milliseconds{runtime.transportHeartbeatStepMs};
     }
-    
-    space = line.find(' ', pos);
-    if (space != std::string::npos) {
-        std::string rest = line.substr(space + 1);
-        if (!rest.empty() && rest[0] == ':') {
-            channel = rest.substr(1);
-        } else {
-            channel = rest;
-        }
-    }
-    
-    return true;
+    cfg.callbackDispatchMode =
+        TransportConfig::ParseDispatchMode(runtime.transportCallbackDispatchMode);
+    return cfg;
 }
 
 } // anonymous namespace
 
 // CIrcChatTransport implementation
+
+CIrcChatTransport::CIrcChatTransport()
+    : CIrcChatTransport(std::make_shared<blazeclaw::net::CNetworkClientAdapter>()) {
+}
+
+CIrcChatTransport::CIrcChatTransport(
+    std::shared_ptr<blazeclaw::net::INetworkClient> network_client)
+    : CIrcChatTransport(std::move(network_client), TransportConfig{}) {
+}
+
+CIrcChatTransport::CIrcChatTransport(
+    std::shared_ptr<blazeclaw::net::INetworkClient> network_client,
+    TransportConfig config)
+    : reconnect_backoff_(config.initialReconnectBackoff),
+      network_client_(std::move(network_client)),
+      push_dispatcher_(std::make_unique<PushDispatcher>()),
+      transport_config_(std::move(config)),
+      // Default-constructed TransportConfig is not an explicit override; app conf
+      // may still refresh on Initialize. Call SetTransportConfig to force override.
+      transport_config_overridden_(false) {
+    if (!network_client_) {
+        network_client_ = std::make_shared<blazeclaw::net::CNetworkClientAdapter>();
+    }
+}
 
 CIrcChatTransport::~CIrcChatTransport() noexcept {
     try {
@@ -142,26 +102,38 @@ CIrcChatTransport::~CIrcChatTransport() noexcept {
     }
 }
 
-bool CIrcChatTransport::Initialize() {
-    if (initialized_.load()) {
-        TRACE(_T("[CIrcChatTransport] Initialize: already initialized, skipping\n"));
+bool CIrcChatTransport::EnsureCallbacksRegisteredLocked() {
+    if (callbacks_registered_) {
         return true;
     }
 
-    auto& network = CNetwork_c::Instance();
+    if (!network_client_) {
+        LOG_ERROR("[CIrcChatTransport] EnsureCallbacksRegisteredLocked: network client is null");
+        return false;
+    }
 
     TRACE(_T("[CIrcChatTransport] Initialize: setting up push callbacks...\n"));
     LOG_INFO("[CIrcChatTransport] Initialize: setting up TCP and TLS push callbacks");
 
-    // 订阅 CNetwork_c 的连接状态变化，断连时触发上层重连
-    network.SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
-        // 加锁读取 connection_state_callback_，转给上层用
-        std::function<void(bool, bool)> cb_copy;
-        {
-            std::lock_guard<std::mutex> lock(callbacks_mutex_);
-            cb_copy = connection_state_callback_;
+    network_client_->SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
+        // Reconnect scheduling must stay on the network callback thread so it
+        // never waits on UI/dispatcher delivery.
+        if (is_connected == false) {
+            LOG_WARN("[CIrcChatTransport] Detected disconnect (is_tcp={}), scheduling auto-reconnect", is_tcp);
+            ScheduleAutoReconnect(is_tcp);
         }
-        if (cb_copy) {
+
+        DispatchCallback([this, is_tcp, is_connected]() {
+            std::function<void(bool, bool)> cb_copy;
+            {
+                std::lock_guard<std::mutex> lock(callbacks_mutex_);
+                cb_copy = connection_state_callback_;
+            }
+            if (!cb_copy) {
+                LOG_WARN("[CIrcChatTransport] state changed (tcp={} connected={}) but no upper callback registered",
+                         is_tcp, is_connected);
+                return;
+            }
             try {
                 cb_copy(is_tcp, is_connected);
             } catch (const std::exception& e) {
@@ -169,23 +141,11 @@ bool CIrcChatTransport::Initialize() {
             } catch (...) {
                 LOG_ERROR("[CIrcChatTransport] state callback unknown exception");
             }
-        } else {
-            LOG_WARN("[CIrcChatTransport] state changed (tcp={} connected={}) but no upper callback registered",
-                     is_tcp, is_connected);
-        }
-        // TCP 物理断连后，自动重连
-        //   - CNetwork_c 已经把 tcp_connected_ / tls_connected_ 设为 false
-        //   - 这里起一个独立线程尝试 Connect* + StartReceivers 重新建链
-        //   - 不能阻塞当前回调 PushReceiver disconnect callback 路径，否则可能死锁
-        // 不区分 tcp/tls 都能重连，调用方传哪个就重连哪个
-        if (is_connected == false) {
-            LOG_WARN("[CIrcChatTransport] Detected disconnect (is_tcp={}), scheduling auto-reconnect", is_tcp);
-            ScheduleAutoReconnect(is_tcp);
-        }
+        });
     });
 
     // Set up TCP push callback to parse and forward to registered callback
-    network.SetTcpPushCallback([this](const std::string& payload) {
+    network_client_->SetTcpPushCallback([this](const std::string& payload) {
         TRACE(_T("[CIrcChatTransport] === RAW TCP PUSH === size=%zu\n"), payload.size());
         if (payload.size() < 500) {
             std::string preview = payload.size() > 200 ? payload.substr(0, 200) + "..." : payload;
@@ -236,12 +196,18 @@ bool CIrcChatTransport::Initialize() {
               static_cast<int>(event.type), CA2T(type_str.c_str()),
               CA2T(event.channel.c_str()), CA2T(event.sender_nick.c_str()));
 
-        IrcPushCallback cb;
-        {
-            std::lock_guard<std::mutex> lock(callbacks_mutex_);
-            cb = push_callback_;
-        }
-        if (cb) {
+        DispatchCallback([this, event]() {
+            IrcPushCallback cb;
+            {
+                std::lock_guard<std::mutex> lock(callbacks_mutex_);
+                cb = push_callback_;
+            }
+
+            if (!cb) {
+                TRACE(_T("[CIrcChatTransport] TCP push: no user callback registered\n"));
+                return;
+            }
+
             TRACE(_T("[CIrcChatTransport] Invoking user callback...\n"));
             try {
                 cb(event);
@@ -249,30 +215,61 @@ bool CIrcChatTransport::Initialize() {
             } catch (const std::exception& e) {
                 TRACE(_T("[CIrcChatTransport] TCP push callback exception: %s\n"), CA2T(e.what()));
             }
-        } else {
-            TRACE(_T("[CIrcChatTransport] TCP push: no user callback registered\n"));
-        }
+        });
     });
 
     // Set up TLS push callback to parse and forward to registered callback
-    network.SetTlsPushCallback([this](const std::string& payload) {
+    network_client_->SetTlsPushCallback([this](const std::string& payload) {
         if (!payload.empty()) {
             auto event = ParseIrcMessage(payload);
             ++push_events_;
-            IrcPushCallback cb;
-            {
-                std::lock_guard<std::mutex> lock(callbacks_mutex_);
-                cb = push_callback_;
-            }
-            if (cb) {
+
+            DispatchCallback([this, event]() {
+                IrcPushCallback cb;
+                {
+                    std::lock_guard<std::mutex> lock(callbacks_mutex_);
+                    cb = push_callback_;
+                }
+
+                if (!cb) {
+                    return;
+                }
+
                 try {
                     cb(event);
                 } catch (const std::exception& e) {
                     LOG_ERROR("[CIrcChatTransport] TLS push callback exception: {}", e.what());
                 }
-            }
+            });
         }
     });
+
+    callbacks_registered_ = true;
+    return true;
+}
+
+bool CIrcChatTransport::Initialize() {
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+    if (initialized_.load()) {
+        TRACE(_T("[CIrcChatTransport] Initialize: already initialized, skipping\n"));
+        return true;
+    }
+
+    RefreshTransportConfigFromAppIfNeeded();
+    ApplyTransportConfigLocked();
+
+    if (!EnsureCallbacksRegisteredLocked()) {
+        LOG_ERROR("[CIrcChatTransport] Initialize failed: callback registration failed");
+        return false;
+    }
+
+    if (!push_dispatcher_) {
+        push_dispatcher_ = std::make_unique<PushDispatcher>();
+    }
+    if (!push_dispatcher_->Start()) {
+        LOG_ERROR("[CIrcChatTransport] Initialize failed: push dispatcher start failed");
+        return false;
+    }
 
     initialized_.store(true);
     TRACE(_T("[CIrcChatTransport] Initialize: DONE, initialized_=true\n"));
@@ -280,8 +277,26 @@ bool CIrcChatTransport::Initialize() {
 }
 
 void CIrcChatTransport::Shutdown() {
-    StopReceivers();
-    initialized_.store(false);
+    bool should_stop_receivers = false;
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        if (!initialized_.load() &&
+            !receivers_started_ &&
+            !reconnect_running_.load() &&
+            !heartbeat_worker_.Joinable() &&
+            !reconnect_worker_.Joinable()) {
+            LOG_INFO("[CIrcChatTransport] Shutdown: already stopped, skipping");
+            return;
+        }
+
+        should_stop_receivers = receivers_started_;
+        receivers_started_ = false;
+        initialized_.store(false);
+    }
+
+    if (should_stop_receivers && network_client_) {
+        network_client_->StopPushReceivers();
+    }
 
     // Ensure all owned background threads observe stop state before joins.
     heartbeat_running_.store(false);
@@ -295,14 +310,28 @@ void CIrcChatTransport::Shutdown() {
         // ReconnectLoop 正在跑，告诉它退�?
         LOG_INFO("[CIrcChatTransport] Shutdown: signaling ReconnectLoop to exit");
     }
-    if (reconnect_thread_.joinable()) {
-        reconnect_thread_.join();
+    if (reconnect_worker_.Joinable()) {
+        reconnect_worker_.Join();
         LOG_INFO("[CIrcChatTransport] Shutdown: reconnect thread joined");
     }
 
-    if (heartbeat_thread_.joinable()) {
-        heartbeat_thread_.join();
+    if (heartbeat_worker_.Joinable()) {
+        heartbeat_worker_.Join();
         LOG_INFO("[CIrcChatTransport] Shutdown: heartbeat thread joined");
+    }
+
+    if (push_dispatcher_) {
+        push_dispatcher_->Stop();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        if (network_client_) {
+            network_client_->SetTcpPushCallback({});
+            network_client_->SetTlsPushCallback({});
+            network_client_->SetConnectionStateCallback({});
+        }
+        callbacks_registered_ = false;
     }
 
     LOG_INFO("[CIrcChatTransport] Shutdown complete");
@@ -320,8 +349,13 @@ void CIrcChatTransport::StartReceivers() {
         return;
     }
 
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+    if (receivers_started_) {
+        TRACE("[CIrcChatTransport] StartReceivers: already started, skipping");
+        return;
+    }
+
     TRACE("[CIrcChatTransport] StartReceivers: calling network.StartPushReceivers()");
-    auto& network = CNetwork_c::Instance();
     
     // 关键诊断：检查 push callback 是否已设置
     {
@@ -330,12 +364,30 @@ void CIrcChatTransport::StartReceivers() {
                  push_callback_ ? "" : "NOT ");
     }
     
-    network.StartPushReceivers();
+    if (!network_client_) {
+        LOG_ERROR("[CIrcChatTransport] StartReceivers: network client is null");
+        return;
+    }
+    network_client_->StartPushReceivers();
+    receivers_started_ = true;
     LOG_INFO("[CIrcChatTransport] Push receivers started");
 }
 
 void CIrcChatTransport::StopReceivers() {
-    CNetwork_c::Instance().StopPushReceivers();
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+    if (!receivers_started_) {
+        LOG_INFO("[CIrcChatTransport] StopReceivers: already stopped, skipping");
+        return;
+    }
+
+    if (!network_client_) {
+        LOG_WARN("[CIrcChatTransport] StopReceivers: network client is null");
+        receivers_started_ = false;
+        return;
+    }
+
+    network_client_->StopPushReceivers();
+    receivers_started_ = false;
     LOG_INFO("[CIrcChatTransport] Push receivers stopped");
 }
 
@@ -349,44 +401,50 @@ void CIrcChatTransport::ScheduleAutoReconnect(bool is_tcp) {
     // 上一�?reconnect_thread_ 如果�?joinable（ReconnectLoop 自然 return 但没�?join/detach），
     // 直接 reconnect_thread_ = std::thread(...) 会触�?abort�?
     // 这里在每次调度前 join 一下，确保 reconnect_thread_ 不是 joinable 状态�?
-    if (reconnect_thread_.joinable()) {
-        reconnect_thread_.join();
-    }
-    try {
-        reconnect_thread_ = std::thread([this, is_tcp]() { ReconnectLoop(is_tcp); });
-    } catch (const std::exception& e) {
-        LOG_ERROR("[CIrcChatTransport] ScheduleAutoReconnect failed to spawn thread: {}", e.what());
+    reconnect_worker_.Join();
+    if (!reconnect_worker_.Start([this, is_tcp]() { ReconnectLoop(is_tcp); })) {
+        LOG_ERROR("[CIrcChatTransport] ScheduleAutoReconnect failed to spawn thread");
         reconnect_running_.store(false);
     }
 }
 
 void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
     LOG_INFO("[CIrcChatTransport] ReconnectLoop started (is_tcp={})", is_tcp);
-    auto& network = CNetwork_c::Instance();
+    if (!network_client_) {
+        LOG_ERROR("[CIrcChatTransport] ReconnectLoop: network client is null");
+        reconnect_running_.store(false);
+        return;
+    }
+
+    TransportConfig cfg;
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        cfg = transport_config_;
+    }
 
     // 重置 backoff
-    reconnect_backoff_ = blazeclaw::net::kInitialReconnectBackoff;
+    reconnect_backoff_ = cfg.initialReconnectBackoff;
 
     int attempt = 0;
     while (reconnect_running_.load()) {
         attempt++;
-        // 检查当前是否已经重连上了（其他路径可能已经成功�?
-        if (is_tcp && network.IsTcpConnected()) {
+        // 检查当前是否已经重连上了（其他路径可能已经成功）
+        if (is_tcp && network_client_->IsTcpConnected()) {
             LOG_INFO("[CIrcChatTransport] ReconnectLoop: TCP already connected, exit");
             break;
         }
-        if (!is_tcp && network.IsTlsConnected()) {
+        if (!is_tcp && network_client_->IsTlsConnected()) {
             LOG_INFO("[CIrcChatTransport] ReconnectLoop: TLS already connected, exit");
             break;
         }
 
-        // 检�?configured host/port 通过 ServerConfig
+        // 检查 configured host/port 通过 ServerConfig
         bool ok = false;
         try {
             if (is_tcp) {
-                ok = network.ConnectTcp();
+                ok = network_client_->ConnectTcp();
             } else {
-                ok = network.ConnectTls();
+                ok = network_client_->ConnectTls();
             }
         } catch (...) {
             ok = false;
@@ -394,18 +452,18 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
 
         if (ok) {
             LOG_INFO("[CIrcChatTransport] ReconnectLoop: connect succeeded on attempt {}", attempt);
-            // 必须重新挂上 push 回调 + 重启 PushReceiver（disconnect callback 不会再起�?
+            // 必须重新挂上 push 回调 + 重启 PushReceiver（disconnect callback 不会再起）
             try {
                 StartReceivers();
             } catch (...) {
                 LOG_ERROR("[CIrcChatTransport] ReconnectLoop: StartReceivers threw");
             }
-            reconnect_backoff_ = blazeclaw::net::kInitialReconnectBackoff; // 重置
+            reconnect_backoff_ = cfg.initialReconnectBackoff; // 重置
             break;
         }
 
-        // 退出请求（reconnect_running_=false）的快速响应：sleep_for �?200ms 间隔分段�?
-        // 这样 Shutdown 触发时最多等 200ms 而不�?backoff（最�?30s）�?
+        // 退出请求（reconnect_running_=false）的快速响应：sleep_for 按 200ms 间隔分段，
+        // 这样 Shutdown 触发时最多等 200ms 而不是 backoff（最长可到 max）。
         auto remaining_ms = reconnect_backoff_.count();
         while (remaining_ms > 0 && reconnect_running_.load()) {
             const int step_ms = static_cast<int>(std::min<long long>(remaining_ms, 200));
@@ -418,7 +476,9 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
         }
         // 退避：双倍，直到上限
         auto next = reconnect_backoff_.count() * 2;
-        if (next > blazeclaw::net::kMaxReconnectBackoff.count()) next = blazeclaw::net::kMaxReconnectBackoff.count();
+        if (next > cfg.maxReconnectBackoff.count()) {
+            next = cfg.maxReconnectBackoff.count();
+        }
         reconnect_backoff_ = std::chrono::milliseconds(next);
     }
 
@@ -427,12 +487,11 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
 }
 
 bool CIrcChatTransport::SendIrcMessageTcp(const std::string& payload, std::string* response) {
-    auto& network = CNetwork_c::Instance();
-    if (!network.IsTcpConnected()) {
+    if (!network_client_ || !network_client_->IsTcpConnected()) {
         return false;
     }
 
-    std::string resp = network.SendRequestTcp(
+    std::string resp = network_client_->SendRequestTcp(
         static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
     
     ++messages_sent_tcp_;
@@ -445,21 +504,23 @@ bool CIrcChatTransport::SendIrcMessageTcp(const std::string& payload, std::strin
 }
 
 bool CIrcChatTransport::SendIrcMessageTls(const std::string& payload, std::string* response) {
-    auto& network = CNetwork_c::Instance();
+    if (!network_client_) {
+        return false;
+    }
 
     // Prefer TLS when connected, otherwise fall back to the existing TCP
     // connection (the chatroom is always brought up with at least the TCP
     // path active, even if TLS login didn't take). This keeps the chatroom
     // working without forcing the caller to know which transport is up.
-    if (!network.IsTlsConnected() && network.IsTcpConnected()) {
+    if (!network_client_->IsTlsConnected() && network_client_->IsTcpConnected()) {
         return SendIrcMessageTcp(payload, response);
     }
 
-    if (!network.IsTlsConnected()) {
+    if (!network_client_->IsTlsConnected()) {
         return false;
     }
 
-    std::string resp = network.SendRequestTls(
+    std::string resp = network_client_->SendRequestTls(
         static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
 
     ++messages_sent_tls_;
@@ -479,12 +540,14 @@ bool CIrcChatTransport::SendPrivmsg(const std::string& channel, const std::strin
 bool CIrcChatTransport::SendPrivmsgNoWait(const std::string& channel, const std::string& message) {
     std::string payload = BuildPrivmsgPayload(channel, message);
     // TLS 优先，TCP 兜底。与 fire-and-forget 的发送语义一致：不读响应�?
-    auto& network = CNetwork_c::Instance();
-   /* if (network.IsTlsConnected()) {
-        return network.SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
+    if (!network_client_) {
+        return false;
+    }
+   /* if (network_client_->IsTlsConnected()) {
+        return network_client_->SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
     }*/
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
+    if (network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), payload);
     }
     return false;
 }
@@ -525,9 +588,8 @@ bool CIrcChatTransport::SendPrivmsgAsAgentNoWait(const std::string& channel, con
     oss << "}";
     const std::string payload = oss.str();
 
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWaitWithSession(
+    if (network_client_ && network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWaitWithSession(
             static_cast<uint16_t>(MsgType::IrcMessageReq), payload, 0);
     }
     return false;
@@ -575,9 +637,8 @@ bool CIrcChatTransport::SendTopic(const std::string& channel, const std::string&
 bool CIrcChatTransport::SendJoinNoWait(const std::string& channel) {
     std::ostringstream oss;
     oss << "{\"cmd\":\"JOIN\",\"channel\":\"" << channel << "\"}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_ && network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
@@ -589,9 +650,8 @@ bool CIrcChatTransport::SendPartNoWait(const std::string& channel, const std::st
         oss << ",\"reason\":\"" << reason << "\"";
     }
     oss << "}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_ && network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
@@ -604,12 +664,14 @@ bool CIrcChatTransport::SendKickNoWait(const std::string& channel, const std::st
         oss << ",\"reason\":\"" << reason << "\"";
     }
     oss << "}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTlsConnected()) {
-        return network.SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (!network_client_) {
+        return false;
     }
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_->IsTlsConnected()) {
+        return network_client_->SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    }
+    if (network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
@@ -617,12 +679,14 @@ bool CIrcChatTransport::SendKickNoWait(const std::string& channel, const std::st
 bool CIrcChatTransport::SendModeNoWait(const std::string& channel, const std::string& mode) {
     std::ostringstream oss;
     oss << "{\"cmd\":\"MODE\",\"channel\":\"" << channel << "\",\"mode\":\"" << mode << "\"}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTlsConnected()) {
-        return network.SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (!network_client_) {
+        return false;
     }
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_->IsTlsConnected()) {
+        return network_client_->SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    }
+    if (network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
@@ -630,31 +694,34 @@ bool CIrcChatTransport::SendModeNoWait(const std::string& channel, const std::st
 bool CIrcChatTransport::SendTopicNoWait(const std::string& channel, const std::string& topic) {
     std::ostringstream oss;
     oss << "{\"cmd\":\"TOPIC\",\"channel\":\"" << channel << "\",\"topic\":\"" << topic << "\"}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTlsConnected()) {
-        return network.SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (!network_client_) {
+        return false;
     }
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_->IsTlsConnected()) {
+        return network_client_->SendTlsNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    }
+    if (network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
 
 bool CIrcChatTransport::SendCommandNoWait(const std::string& body) {
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
+    if (network_client_ && network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
     }
     return false;
 }
 
 bool CIrcChatTransport::SendCommandTlsNoWait(const std::string& body) {
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTlsConnected()) {
-        return network.SendTlsNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
+    if (!network_client_) {
+        return false;
     }
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
+    if (network_client_->IsTlsConnected()) {
+        return network_client_->SendTlsNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
+    }
+    if (network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::NodeBindReq), body);
     }
     return false;
 }
@@ -682,34 +749,33 @@ bool CIrcChatTransport::SendIrcCommandTcpNoWait(const std::string& channel, cons
         oss << ",\"message\":\"" << message << "\"";
     }
     oss << "}";
-    auto& network = CNetwork_c::Instance();
-    if (network.IsTcpConnected()) {
-        return network.SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
+    if (network_client_ && network_client_->IsTcpConnected()) {
+        return network_client_->SendTcpNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), oss.str());
     }
     return false;
 }
 
 std::string CIrcChatTransport::SendCommandTcp(const std::string& body) {
-
-    auto& network = CNetwork_c::Instance();
-    if (!network.IsTcpConnected()) {
+    if (!network_client_ || !network_client_->IsTcpConnected()) {
         return "";
     }
-    return network.SendRequestTcp(
+    return network_client_->SendRequestTcp(
         static_cast<uint16_t>(MsgType::NodeBindReq), body);
 }
 
 std::string CIrcChatTransport::SendCommandTls(const std::string& body) {
-    auto& network = CNetwork_c::Instance();
-
-    // TLS 优先，TCP 兜底（保持原有策略）�?
-    if (!network.IsTlsConnected() && network.IsTcpConnected()) {
-        return SendCommandTcp(body);
-    }
-    if (!network.IsTlsConnected()) {
+    if (!network_client_) {
         return "";
     }
-    return network.SendRequestTls(
+
+    // TLS 优先，TCP 兜底（保持原有策略）�?
+    if (!network_client_->IsTlsConnected() && network_client_->IsTcpConnected()) {
+        return SendCommandTcp(body);
+    }
+    if (!network_client_->IsTlsConnected()) {
+        return "";
+    }
+    return network_client_->SendRequestTls(
         static_cast<uint16_t>(MsgType::NodeBindReq), body);
 }
 
@@ -726,50 +792,179 @@ void CIrcChatTransport::SetConnectionStateCallback(std::function<void(bool, bool
     connection_state_callback_ = std::move(callback);
 }
 
-CIrcChatTransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
-    Diagnostics diag;
+void CIrcChatTransport::SetTransportConfig(const TransportConfig& config) {
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        transport_config_ = config;
+        if (transport_config_.maxReconnectBackoff < transport_config_.initialReconnectBackoff) {
+            transport_config_.maxReconnectBackoff = transport_config_.initialReconnectBackoff;
+        }
+        transport_config_overridden_ = true;
+        reconnect_backoff_ = transport_config_.initialReconnectBackoff;
+        LOG_INFO(
+            "[CIrcChatTransport] SetTransportConfig: backoff={}..{}ms heartbeat={}ms/{}ms mode={}",
+            static_cast<long long>(transport_config_.initialReconnectBackoff.count()),
+            static_cast<long long>(transport_config_.maxReconnectBackoff.count()),
+            static_cast<long long>(transport_config_.heartbeatInterval.count()),
+            static_cast<long long>(transport_config_.heartbeatStep.count()),
+            TransportConfig::DispatchModeToString(transport_config_.callbackDispatchMode));
+    }
+    ApplyTransportConfigLocked();
+}
+
+TransportConfig CIrcChatTransport::GetTransportConfig() const {
+    std::lock_guard<std::mutex> lock(config_mutex_);
+    return transport_config_;
+}
+
+void CIrcChatTransport::SetCallbackExecutor(CallbackExecutor executor) {
+    std::lock_guard<std::mutex> lock(config_mutex_);
+    callback_executor_ = std::move(executor);
+    LOG_INFO("[CIrcChatTransport] SetCallbackExecutor: executor {}",
+             callback_executor_ ? "set" : "cleared");
+}
+
+void CIrcChatTransport::RefreshTransportConfigFromAppIfNeeded() {
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        if (transport_config_overridden_) {
+            return;
+        }
+    }
+
+    try {
+        auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+        if (app == nullptr) {
+            return;
+        }
+        TransportConfig loaded = TransportConfigFromRuntime(app->Config().agentChatRuntime);
+        {
+            std::lock_guard<std::mutex> lock(config_mutex_);
+            if (transport_config_overridden_) {
+                return;
+            }
+            transport_config_ = std::move(loaded);
+            reconnect_backoff_ = transport_config_.initialReconnectBackoff;
+            LOG_INFO(
+                "[CIrcChatTransport] Loaded TransportConfig from blazeclaw.conf: "
+                "backoff={}..{}ms heartbeat={}ms/{}ms mode={}",
+                static_cast<long long>(transport_config_.initialReconnectBackoff.count()),
+                static_cast<long long>(transport_config_.maxReconnectBackoff.count()),
+                static_cast<long long>(transport_config_.heartbeatInterval.count()),
+                static_cast<long long>(transport_config_.heartbeatStep.count()),
+                TransportConfig::DispatchModeToString(transport_config_.callbackDispatchMode));
+        }
+    } catch (...) {
+        LOG_WARN("[CIrcChatTransport] Failed to load TransportConfig from app; using defaults");
+    }
+}
+
+void CIrcChatTransport::ApplyTransportConfigLocked() {
+    TransportConfig cfg;
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        cfg = transport_config_;
+    }
+
+    if (network_client_) {
+        network_client_->SetHeartbeatConfig(cfg.heartbeatInterval, cfg.heartbeatStep);
+    }
+}
+
+void CIrcChatTransport::DispatchCallback(std::function<void()> task) {
+    if (!task) {
+        return;
+    }
+
+    CallbackDispatchMode mode = CallbackDispatchMode::DispatcherWorker;
+    CallbackExecutor executor;
+    {
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        mode = transport_config_.callbackDispatchMode;
+        executor = callback_executor_;
+    }
+
+    switch (mode) {
+    case CallbackDispatchMode::CallerThread:
+        try {
+            task();
+        } catch (const std::exception& e) {
+            LOG_ERROR("[CIrcChatTransport] CallerThread callback exception: {}", e.what());
+        } catch (...) {
+            LOG_ERROR("[CIrcChatTransport] CallerThread callback unknown exception");
+        }
+        return;
+
+    case CallbackDispatchMode::ExternalExecutor:
+        if (executor) {
+            try {
+                executor(std::move(task));
+            } catch (const std::exception& e) {
+                LOG_ERROR("[CIrcChatTransport] ExternalExecutor post exception: {}", e.what());
+            } catch (...) {
+                LOG_ERROR("[CIrcChatTransport] ExternalExecutor post unknown exception");
+            }
+            return;
+        }
+        LOG_WARN("[CIrcChatTransport] ExternalExecutor mode without executor; falling back to dispatcher");
+        [[fallthrough]];
+
+    case CallbackDispatchMode::DispatcherWorker:
+    default:
+        if (!push_dispatcher_) {
+            LOG_ERROR("[CIrcChatTransport] DispatchCallback: dispatcher is null");
+            return;
+        }
+        push_dispatcher_->Post(std::move(task));
+        return;
+    }
+}
+
+ITransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
+    ITransport::Diagnostics diag;
     diag.messages_sent_tcp = messages_sent_tcp_.load();
     diag.messages_sent_tls = messages_sent_tls_.load();
     diag.push_events = push_events_.load();
-    diag.tcp_connected = CNetwork_c::Instance().IsTcpConnected();
-    diag.tls_connected = CNetwork_c::Instance().IsTlsConnected();
+    diag.tcp_connected = network_client_ && network_client_->IsTcpConnected();
+    diag.tls_connected = network_client_ && network_client_->IsTlsConnected();
     return diag;
 }
 
 std::string CIrcChatTransport::BuildPrivmsgPayload(const std::string& channel,
                                                    const std::string& message) {
-    auto escapeJson = [](const std::string& s) {
-        std::string out;
-        out.reserve(s.size() + 8);
-        for (char c : s) {
-            switch (c) {
-                case '"':  out += "\\\""; break;
-                case '\\': out += "\\\\"; break;
-                case '\n': out += "\\n";  break;
-                case '\r': out += "\\r";  break;
-                case '\t': out += "\\t";  break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        char buf[8];
-                        std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                        out += buf;
-                    } else {
-                        out.push_back(c);
-                    }
-            }
-        }
-        return out;
-    };
-    std::ostringstream oss;
-    oss << "{";
-    oss << "\"cmd\":\"PRIVMSG\",";
-    oss << "\"channel\":\"" << escapeJson(channel) << "\",";
-    oss << "\"message\":\"" << escapeJson(message) << "\",";
-    // ts Unix epoch 秒（墙钟），不是设备启动后的秒数
-    // 对齐 chat-bridge.mjs：Math.floor(Date.now() / 1000)
-    oss << "\"ts\":" << GetCurrentUnixSeconds();
-    oss << "}";
-    return oss.str();
+    //auto escapeJson = [](const std::string& s) {
+    //    std::string out;
+    //    out.reserve(s.size() + 8);
+    //    for (char c : s) {
+    //        switch (c) {
+    //            case '"':  out += "\\\""; break;
+    //            case '\\': out += "\\\\"; break;
+    //            case '\n': out += "\\n";  break;
+    //            case '\r': out += "\\r";  break;
+    //            case '\t': out += "\\t";  break;
+    //            default:
+    //                if (static_cast<unsigned char>(c) < 0x20) {
+    //                    char buf[8];
+    //                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+    //                    out += buf;
+    //                } else {
+    //                    out.push_back(c);
+    //                }
+    //        }
+    //    }
+    //    return out;
+    //};
+    //std::ostringstream oss;
+    //oss << "{";
+    //oss << "\"cmd\":\"PRIVMSG\",";
+    //oss << "\"channel\":\"" << escapeJson(channel) << "\",";
+    //oss << "\"message\":\"" << escapeJson(message) << "\",";
+    //// ts Unix epoch 秒（墙钟），不是设备启动后的秒数
+    //// 对齐 chat-bridge.mjs：Math.floor(Date.now() / 1000)
+    //oss << "\"ts\":" << GetCurrentUnixSeconds();
+    //oss << "}";
+    //return oss.str();
+    return IrcMessageParser::BuildPrivmsgPayload(channel, message);
 }
 
 IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
@@ -1017,7 +1212,8 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // ── 2) Raw IRC line 格式（RFC 1459）──
     // Try to parse as PRIVMSG
     std::string nick, user, host, channel, message;
-    if (ParsePrivmsg(payload, nick, user, host, channel, message)) {
+    if (IrcMessageParser::ParsePrivmsgLine(
+            payload, nick, user, host, channel, message)) {
         event.type = IrcPushEventType::Privmsg;
         event.sender_nick = nick;
         event.sender_user = user;
@@ -1030,16 +1226,24 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // Try as JOIN
     if (payload.find("JOIN") != std::string::npos) {
         event.type = IrcPushEventType::Join;
-        ParseJoinPart(payload, event.sender_nick, event.sender_user,
-                      event.sender_host, event.channel);
+        IrcMessageParser::ParseJoinPartLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel);
         return event;
     }
 
     // Try as PART
     if (payload.find("PART") != std::string::npos) {
         event.type = IrcPushEventType::Part;
-        ParseJoinPart(payload, event.sender_nick, event.sender_user,
-                      event.sender_host, event.channel);
+        IrcMessageParser::ParseJoinPartLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel);
         return event;
     }
 
@@ -1125,8 +1329,13 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // Try as NOTICE
     if (payload.find("NOTICE") != std::string::npos) {
         event.type = IrcPushEventType::Notice;
-        ParsePrivmsg(payload, event.sender_nick, event.sender_user,
-                     event.sender_host, event.channel, event.message);
+        IrcMessageParser::ParsePrivmsgLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel,
+            event.message);
         return event;
     }
 

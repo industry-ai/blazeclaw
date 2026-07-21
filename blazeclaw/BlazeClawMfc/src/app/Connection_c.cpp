@@ -547,7 +547,8 @@ void CConnection_c::HeartbeatLoop() {
     // 用 sleep_for 分段，每秒检查一次 running 标志，可及时退出。
     int slept_ms = 0;
     while (heartbeat_running_.load() && is_connected_.load()) {
-        const int step_ms = blazeclaw::net::kHeartbeatStepMs;
+        const int step_ms = static_cast<int>(
+            (std::max)(heartbeat_step_ms_.count(), std::chrono::milliseconds::rep{1}));
         std::this_thread::sleep_for(std::chrono::milliseconds(step_ms));
         slept_ms += step_ms;
         if (slept_ms < static_cast<int>(heartbeat_interval_ms_.count())) {

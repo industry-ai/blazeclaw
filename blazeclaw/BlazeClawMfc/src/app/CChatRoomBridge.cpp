@@ -16,7 +16,7 @@
 #include "CMgrChannels.h"
 #include "ChatMessage.h"
 #include "AppProtoHeader.h"
-#include "CIrcChatTransport.h"
+#include "agent-chat/CIrcChatTransport.h"
 #include "CNetwork_c.h"
 #include "NetworkTimeouts.h"
 
