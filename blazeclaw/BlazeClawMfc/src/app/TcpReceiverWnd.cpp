@@ -30,6 +30,7 @@ BEGIN_MESSAGE_MAP(CTcpReceiverWnd, CDockablePane)
 	ON_WM_DESTROY()
 	ON_WM_ERASEBKGND()
 	ON_WM_COPYDATA()
+	ON_WM_CONTEXTMENU()
 	ON_MESSAGE(WM_TCP_RECEIVER_DATA, &CTcpReceiverWnd::OnTcpDataReceived)
 	ON_MESSAGE(WM_TCP_RECEIVER_STATUS, &CTcpReceiverWnd::OnTcpStatusChanged)
 	ON_MESSAGE(WM_TCP_RECEIVER_APPEND_LINE, &CTcpReceiverWnd::OnAppendLogLine)
@@ -37,6 +38,9 @@ BEGIN_MESSAGE_MAP(CTcpReceiverWnd, CDockablePane)
 	ON_UPDATE_COMMAND_UI(ID_TCPRECEIVER_CLEAR, &CTcpReceiverWnd::OnUpdateClear)
 	ON_EN_CHANGE(IDC_TCPRECEIVER_SEARCH, &CTcpReceiverWnd::OnSearchTextChanged)
 	ON_COMMAND(ID_EDIT_COPY, &CTcpReceiverWnd::OnEditCopy)
+	ON_UPDATE_COMMAND_UI(ID_EDIT_COPY, &CTcpReceiverWnd::OnUpdateEditCopy)
+	ON_COMMAND(ID_EDIT_SELECT_ALL, &CTcpReceiverWnd::OnEditSelectAll)
+	ON_UPDATE_COMMAND_UI(ID_EDIT_SELECT_ALL, &CTcpReceiverWnd::OnUpdateEditSelectAll)
 END_MESSAGE_MAP()
 
 int CTcpReceiverWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
@@ -497,6 +501,94 @@ void CTcpReceiverWnd::OnEditCopy()
 	{
 		m_logEdit.Copy();
 	}
+}
+
+void CTcpReceiverWnd::OnUpdateEditCopy(CCmdUI* pCmdUI)
+{
+	if (!m_logEdit.m_hWnd)
+	{
+		pCmdUI->Enable(FALSE);
+		return;
+	}
+
+	long nStart = 0, nEnd = 0;
+	m_logEdit.GetSel(nStart, nEnd);
+	pCmdUI->Enable(nStart != nEnd);
+}
+
+void CTcpReceiverWnd::OnEditSelectAll()
+{
+	if (m_logEdit.m_hWnd)
+	{
+		m_logEdit.SetSel(0, -1);
+	}
+}
+
+void CTcpReceiverWnd::OnUpdateEditSelectAll(CCmdUI* pCmdUI)
+{
+	if (!m_logEdit.m_hWnd)
+	{
+		pCmdUI->Enable(FALSE);
+		return;
+	}
+
+	pCmdUI->Enable(m_logEdit.GetTextLength() > 0);
+}
+
+void CTcpReceiverWnd::OnContextMenu(CWnd* /*pWnd*/, CPoint point)
+{
+	if (!m_logEdit.m_hWnd)
+		return;
+
+	// 确保 RichEdit 获得焦点，以便 Copy 命令能找到正确的目标窗口
+	m_logEdit.SetFocus();
+
+	CMenu menu;
+	menu.CreatePopupMenu();
+
+	long nStart = 0, nEnd = 0;
+	m_logEdit.GetSel(nStart, nEnd);
+	const bool bHasSelection = (nStart != nEnd);
+
+	CString strCopy(_T("复制(&C)\tCtrl+C"));
+	CString strSelectAll(_T("全选(&A)\tCtrl+A"));
+
+	menu.AppendMenu(bHasSelection ? MF_STRING : MF_STRING | MF_GRAYED,
+		ID_EDIT_COPY, strCopy);
+	menu.AppendMenu(m_logEdit.GetTextLength() > 0 ? MF_STRING : MF_STRING | MF_GRAYED,
+		ID_EDIT_SELECT_ALL, strSelectAll);
+
+	menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, point.x, point.y, this);
+}
+
+BOOL CTcpReceiverWnd::PreTranslateMessage(MSG* pMsg)
+{
+	// 当焦点在 RichEdit 控件上时，确保 Ctrl+C / Ctrl+A / Ctrl+Ins 等快捷键路由到它，
+	// 而不是被主框架的加速键表拦截。CDockablePane 默认不会将键盘消息转发给子控件。
+	if (pMsg->hwnd == m_logEdit.m_hWnd || ::IsChild(m_logEdit.m_hWnd, pMsg->hwnd))
+	{
+		if (pMsg->message == WM_KEYDOWN)
+		{
+			const bool bCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+			if (bCtrl)
+			{
+				switch (pMsg->wParam)
+				{
+				case 'C':
+				case 'c':
+				case VK_INSERT:
+					OnEditCopy();
+					return TRUE;
+				case 'A':
+				case 'a':
+					OnEditSelectAll();
+					return TRUE;
+				}
+			}
+		}
+	}
+
+	return CDockablePane::PreTranslateMessage(pMsg);
 }
 
 void CTcpReceiverWnd::ClearData()

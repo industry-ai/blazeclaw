@@ -57,6 +57,8 @@ public:
 	// 追加到富文本日志控件。内部通过 SendMessage 把 CString* 跨线程搬运。
 	void EnqueueIncomingLogLine(const CString& line);
 
+	virtual BOOL PreTranslateMessage(MSG* pMsg) override;
+
 protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
@@ -70,6 +72,10 @@ protected:
 	afx_msg void OnUpdateClear(CCmdUI* pCmdUI);
 	afx_msg void OnSearchTextChanged();
 	afx_msg void OnEditCopy();
+	afx_msg void OnUpdateEditCopy(CCmdUI* pCmdUI);
+	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
+	afx_msg void OnEditSelectAll();
+	afx_msg void OnUpdateEditSelectAll(CCmdUI* pCmdUI);
 
 	DECLARE_MESSAGE_MAP()
 

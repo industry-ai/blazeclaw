@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "CChatRoomBridge.h"
 
 #include <algorithm>
@@ -801,6 +801,15 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         return;
     }
 
+    // send_message 走 221 (IrcMessageReq) 通道 —— 与 PRIVMSG 命令的协议类型保持一致。
+    // 挂 seq 等 222 ack 确认消息已被服务端接收，30s 超时降级为 fire-and-forget。
+    // Why：直接 fire-and-forget 无法区分"发送成功"和"发送失败但上层不知道"，
+    // 服务端确认机制提供可靠的端到端交付保证（对齐 §17.1）。
+    if (req.kind == "send_message") {
+        HandleSendMessageViaIrc(req);
+        return;
+    }
+
     // Commands that need server response → async with callback
     if (req.kind == "list_conversations" ||
         req.kind == "create_conversation" ||
@@ -1347,8 +1356,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
     }
 
     // Commands that are fully local (no server round-trip) → sync
-    if (req.kind == "send_message" ||
-        req.kind == "send_prompt" || req.kind == "set_mode" ||
+    if (req.kind == "send_prompt" || req.kind == "set_mode" ||
         req.kind == "promote_operator" || req.kind == "demote_operator" ||
         req.kind == "whois" || req.kind == "names") {
         BridgeResponse resp;
@@ -1636,9 +1644,10 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
         return;
     }
 
-    // 用 shared_ptr 原子标记追踪 callback 是否已被调用（用于超时判断）
+    // 用 shared_ptr 原子标记追踪 callback 是否已被调用（用于超时判断）。
+    // 关键：called 必须被 done_cb 和超时线程以 shared_ptr 捕获（非 weak_ptr），
+    // 否则 called 在函数返回时析构，后续 weak_ptr.lock() 永远返回 null。
     auto called = std::make_shared<std::atomic<bool>>(false);
-    std::weak_ptr<std::atomic<bool>> weak_called = called;
 
     auto register_channel_locally = [this, channel]() {
         auto& mgr = CMgrChannels::Instance();
@@ -1663,14 +1672,13 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
     };
 
     // seq callback：服务端 222 JOIN ack 到达时触发
-    auto done_cb = [this, request_id, channel, weak_called,
+    auto done_cb = [this, request_id, channel, called,
                     register_channel_locally, emit_success]
                     (uint32_t seq, const std::string& resp_payload) {
         TRACE(_T("[CChatRoomBridge] HandleJoinChannelViaIrc ack: seq=%u resp_len=%zu\n"),
               seq, resp_payload.size());
 
-        auto sp = weak_called.lock();
-        if (!sp || sp->exchange(true)) return;  // 已处理过
+        if (called->exchange(true)) return;  // 已处理过
 
         register_channel_locally();
         std::string sid = deps_.get_current_session_id ? deps_.get_current_session_id() : GetCurrentSessionId();
@@ -1701,14 +1709,150 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
     }
 
     // 30s 超时降级：本地注册 + 返回 {joined:true, fallback:true}
-    std::thread([weak_called, request_id, channel,
+    std::thread([called, request_id, channel,
                  register_channel_locally, emit_success]() {
         std::this_thread::sleep_for(std::chrono::seconds(30));
-        auto sp = weak_called.lock();
-        if (sp && !sp->load()) {
+        if (!called->load()) {
             TRACE(_T("[CChatRoomBridge] HandleJoinChannelViaIrc timeout fallback: channel=%hs\n"),
                   channel.c_str());
             register_channel_locally();
+            emit_success(request_id, true);
+        }
+    }).detach();
+}
+
+// send_message 走 221 (IrcMessageReq) → 222 (IrcMessageResp) 通道，挂 seq 等 ACK。
+// 服务端 ACK 的 JSON payload 与接收到的 push 消息 JSON 格式一致，仅 seq 不同。
+// 收到 222 ack（status=ok/accepted）后 resolve；30s 未响应则降级返回 fallback:true。
+void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
+    std::string request_id = req.request_id;
+
+    // Parse channel and message from payload
+    std::string channel;
+    std::string message;
+    try {
+        auto pl = nlohmann::json::parse(req.payload_json);
+        channel = pl.value("channel", "");
+        message = pl.value("message", "");
+    } catch (...) {
+        channel = "";
+        message = "";
+    }
+
+    if (channel.empty() || message.empty()) {
+        EmitResponse(request_id, false, "missing_channel_or_message",
+                     "{\"sent\":false,\"error\":\"channel and message are required\"}");
+        return;
+    }
+
+    if (!channel.empty() && channel[0] != '#') {
+        channel = "#" + channel;
+    }
+
+    // Build 221 IRC PRIVMSG payload
+    nlohmann::json irc_payload_json;
+    irc_payload_json["cmd"] = "PRIVMSG";
+    irc_payload_json["channel"] = channel;
+    irc_payload_json["message"] = message;
+    irc_payload_json["ts"] = static_cast<int64_t>(GetTimestampSeconds());
+    std::string irc_payload = irc_payload_json.dump();
+
+    if (!CNetwork_c::Instance().IsTcpConnected()) {
+        TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: TCP not connected\n"));
+        EmitResponse(request_id, false, "tcp_not_connected",
+                     "{\"sent\":false,\"error\":\"tcp_not_connected\"}");
+        return;
+    }
+
+    // ── OpenClaw AI Agent 检测：在发送前检查是否需要触发 AI 请求 ──
+    // 对齐 AIAssistant/JsBridge 的 chatSendPrivmsg 中 agent mention 检测逻辑
+    bool isAgentMention = false;
+    if (message.find('@') != std::string::npos) {
+        static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
+        isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
+        if (!isAgentMention) {
+            isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
+        }
+        if (!isAgentMention) {
+            isAgentMention = (message.find("@炎图AI助手") != std::string::npos);
+        }
+    }
+    if (!isAgentMention && channel.find("#workspace_") != std::string::npos) {
+        isAgentMention = true;
+    }
+    TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: isAgentMention=%d\n"), isAgentMention ? 1 : 0);
+
+    // 用 shared_ptr 原子标记追踪 callback 是否已被调用（用于超时判断）。
+    // 关键：called 必须被 done_cb 和超时线程以 shared_ptr 捕获（非 weak_ptr），
+    // 否则 called 在函数返回时析构，后续 weak_ptr.lock() 永远返回 null，
+    // ACK 回调静默丢弃、前端永远收不到响应。
+    auto called = std::make_shared<std::atomic<bool>>(false);
+
+    auto emit_success = [this, channel](const std::string& rid, bool fallback) {
+        nlohmann::json out;
+        out["sent"] = true;
+        out["channel"] = channel;
+        if (fallback) out["fallback"] = true;
+        EmitResponse(rid, true, "", out.dump());
+    };
+
+    // seq callback：服务端 222 PRIVMSG ack 到达时触发
+    // ack JSON 格式与接收到的 push 消息一致：{"event":"PRIVMSG","channel":"#xxx","message":"...","status":"ok",...}
+    auto done_cb = [this, request_id, channel, called, emit_success]
+                   (uint32_t seq, const std::string& resp_payload) {
+        TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc ack: seq=%u resp_len=%zu\n"),
+              seq, resp_payload.size());
+
+        if (called->exchange(true)) return;  // 已处理过
+
+        try {
+            auto ack = nlohmann::json::parse(resp_payload);
+            std::string status = ack.value("status", std::string());
+            // 服务端 PRIVMSG ack 的 status 可能为 "ok" 或 "accepted"（对齐 §17.1 注意项）
+            bool is_ok = (status == "ok" || status == "accepted");
+
+            nlohmann::json out;
+            out["sent"] = is_ok;
+            out["channel"] = channel;
+            if (!is_ok) {
+                std::string err = ack.value("error", ack.value("message", "server_rejected"));
+                out["error"] = err;
+                EmitResponse(request_id, false, err, out.dump());
+            } else {
+                // 把服务端 ack JSON 透传给前端（含 ts / session_id 等元数据）
+                out["ack"] = ack;
+                EmitResponse(request_id, true, "", out.dump());
+            }
+        } catch (...) {
+            // ack 解析失败，视为成功（至少服务端回了 222 帧）
+            emit_success(request_id, false);
+        }
+    };
+
+    uint32_t seq = CNetwork_c::Instance().SendTcpNoWaitWithCallback(
+        static_cast<uint16_t>(MsgType::IrcMessageReq), irc_payload, done_cb);
+
+    TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: channel=%hs seq=%u\n"),
+          channel.c_str(), seq);
+
+    if (seq == 0) {
+        EmitResponse(request_id, false, "tcp_send_failed",
+                     "{\"sent\":false,\"error\":\"tcp_send_failed\"}");
+        return;
+    }
+
+    // 触发 OpenClaw AI Agent 请求（后台线程，不阻塞 ACK 等待）
+    if (isAgentMention) {
+        TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: agent mention detected, triggering OpenClaw request\n"));
+        SendOpenClawAgentRequest(channel, message);
+    }
+
+    // 30s 超时降级：返回 {sent:true, fallback:true}
+    std::thread([called, request_id, channel, emit_success]() {
+        std::this_thread::sleep_for(std::chrono::seconds(30));
+        if (!called->load()) {
+            TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc timeout fallback: channel=%hs\n"),
+                  channel.c_str());
             emit_success(request_id, true);
         }
     }).detach();

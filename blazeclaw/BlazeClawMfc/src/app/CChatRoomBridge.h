@@ -149,6 +149,7 @@ private:
     bool HandleSendMessage(const BridgeRequest& req, BridgeResponse& resp);
     bool HandleSendPrompt(const BridgeRequest& req, BridgeResponse& resp);
     void HandleJoinChannelViaIrc(const BridgeRequest& req);
+    void HandleSendMessageViaIrc(const BridgeRequest& req);
     bool HandlePartChannel(const BridgeRequest& req, BridgeResponse& resp);
     bool HandleKickMember(const BridgeRequest& req, BridgeResponse& resp);
     bool HandleBanMember(const BridgeRequest& req, BridgeResponse& resp);
