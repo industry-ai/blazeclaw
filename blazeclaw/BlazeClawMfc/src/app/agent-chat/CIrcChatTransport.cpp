@@ -424,6 +424,7 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
 
     // 重置 backoff
     reconnect_backoff_ = cfg.initialReconnectBackoff;
+    last_backoff_ms_.store(static_cast<uint64_t>(reconnect_backoff_.count()));
 
     int attempt = 0;
     while (reconnect_running_.load()) {
@@ -441,6 +442,12 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
         // 检查 configured host/port 通过 ServerConfig
         bool ok = false;
         try {
+            ++reconnect_attempts_;
+            LOG_INFO(
+                "[CIrcChatTransport] ReconnectLoop: attempt={} is_tcp={} backoff_ms={}",
+                attempt,
+                is_tcp,
+                static_cast<long long>(reconnect_backoff_.count()));
             if (is_tcp) {
                 ok = network_client_->ConnectTcp();
             } else {
@@ -451,6 +458,7 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
         }
 
         if (ok) {
+            ++reconnect_successes_;
             LOG_INFO("[CIrcChatTransport] ReconnectLoop: connect succeeded on attempt {}", attempt);
             // 必须重新挂上 push 回调 + 重启 PushReceiver（disconnect callback 不会再起）
             try {
@@ -459,8 +467,16 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
                 LOG_ERROR("[CIrcChatTransport] ReconnectLoop: StartReceivers threw");
             }
             reconnect_backoff_ = cfg.initialReconnectBackoff; // 重置
+            last_backoff_ms_.store(static_cast<uint64_t>(reconnect_backoff_.count()));
             break;
         }
+
+        ++reconnect_failures_;
+        LOG_WARN(
+            "[CIrcChatTransport] ReconnectLoop: attempt={} failed is_tcp={} next_wait_ms={}",
+            attempt,
+            is_tcp,
+            static_cast<long long>(reconnect_backoff_.count()));
 
         // 退出请求（reconnect_running_=false）的快速响应：sleep_for 按 200ms 间隔分段，
         // 这样 Shutdown 触发时最多等 200ms 而不是 backoff（最长可到 max）。
@@ -480,6 +496,7 @@ void CIrcChatTransport::ReconnectLoop(bool is_tcp) {
             next = cfg.maxReconnectBackoff.count();
         }
         reconnect_backoff_ = std::chrono::milliseconds(next);
+        last_backoff_ms_.store(static_cast<uint64_t>(reconnect_backoff_.count()));
     }
 
     LOG_INFO("[CIrcChatTransport] ReconnectLoop exiting (is_tcp={})", is_tcp);
@@ -801,6 +818,7 @@ void CIrcChatTransport::SetTransportConfig(const TransportConfig& config) {
         }
         transport_config_overridden_ = true;
         reconnect_backoff_ = transport_config_.initialReconnectBackoff;
+        last_backoff_ms_.store(static_cast<uint64_t>(reconnect_backoff_.count()));
         LOG_INFO(
             "[CIrcChatTransport] SetTransportConfig: backoff={}..{}ms heartbeat={}ms/{}ms mode={}",
             static_cast<long long>(transport_config_.initialReconnectBackoff.count()),
@@ -845,6 +863,7 @@ void CIrcChatTransport::RefreshTransportConfigFromAppIfNeeded() {
             }
             transport_config_ = std::move(loaded);
             reconnect_backoff_ = transport_config_.initialReconnectBackoff;
+            last_backoff_ms_.store(static_cast<uint64_t>(reconnect_backoff_.count()));
             LOG_INFO(
                 "[CIrcChatTransport] Loaded TransportConfig from blazeclaw.conf: "
                 "backoff={}..{}ms heartbeat={}ms/{}ms mode={}",
@@ -925,6 +944,10 @@ ITransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
     diag.messages_sent_tcp = messages_sent_tcp_.load();
     diag.messages_sent_tls = messages_sent_tls_.load();
     diag.push_events = push_events_.load();
+    diag.reconnect_attempts = reconnect_attempts_.load();
+    diag.reconnect_successes = reconnect_successes_.load();
+    diag.reconnect_failures = reconnect_failures_.load();
+    diag.last_backoff_ms = last_backoff_ms_.load();
     diag.tcp_connected = network_client_ && network_client_->IsTcpConnected();
     diag.tls_connected = network_client_ && network_client_->IsTlsConnected();
     return diag;

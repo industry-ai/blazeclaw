@@ -184,6 +184,10 @@ private:
     std::atomic<uint64_t> messages_sent_tcp_{ 0 };
     std::atomic<uint64_t> messages_sent_tls_{ 0 };
     std::atomic<uint64_t> push_events_{ 0 };
+    std::atomic<uint64_t> reconnect_attempts_{ 0 };
+    std::atomic<uint64_t> reconnect_successes_{ 0 };
+    std::atomic<uint64_t> reconnect_failures_{ 0 };
+    std::atomic<uint64_t> last_backoff_ms_{ 0 };
 };
 
 }

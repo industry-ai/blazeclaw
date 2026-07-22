@@ -117,6 +117,9 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AudioRingBufferPhaseETests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\VoiceRecorderRingArtifactIntegrationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\IrcMessageParserTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\CIrcChatTransportReconnectTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatTransportTestStubs.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
@@ -303,6 +306,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\DiagnosticsRegressionComparator.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\CMgrMessage.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\app\\agent-chat\\CIrcChatTransport.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\agent-chat\IrcMessageParser.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\WebViewStartupConfigBridge.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\app\\AudioRingBuffer.cpp" />
   </ItemGroup>
@@ -312,3 +317,7 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+
+
+
+

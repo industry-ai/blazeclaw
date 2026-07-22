@@ -16,7 +16,7 @@
 #include <nlohmann/json.hpp>
 
 #include "CNetwork_c.h"
-#include "agent-chat/CIrcChatTransport.h"
+#include "agent-chat/ITransport.h"
 #include "IoData_cFactory.h"
 #include "LogSinks.h"
 #include "Logger.h"
@@ -30,6 +30,7 @@ static std::string base64url_decode(const std::string& input) {
         if (encoded[i] == '-') encoded[i] = '+';
         else if (encoded[i] == '_') encoded[i] = '/';
     }
+
     // 补全padding
     size_t padding = 4 - (encoded.size() % 4);
     if (padding < 4) {
@@ -58,6 +59,16 @@ static std::string base64url_decode(const std::string& input) {
     }
     
     return decoded;
+}
+
+static void StartInjectedChatTransportReceivers(CClient& client) {
+    auto* transport = client.GetChatTransport();
+    if (transport == nullptr) {
+        LOG_WARN("[CClient] Chat transport not injected; skipping StartReceivers");
+        return;
+    }
+
+    transport->StartReceivers();
 }
 
 // JWT解析函数，提取sub和phone
@@ -221,6 +232,16 @@ void CClient::Init(CNetwork_c& network) {
 	network_->server_config_.tls_host = TLS_server_ip_;
 	network_->server_config_.tls_port = TLS_server_port_;   
 
+}
+
+void CClient::SetChatTransport(std::shared_ptr<blazeclaw::irc::ITransport> transport) {
+    std::lock_guard<std::mutex> lock(chat_transport_mutex_);
+    chat_transport_ = std::move(transport);
+}
+
+blazeclaw::irc::ITransport* CClient::GetChatTransport() const noexcept {
+    std::lock_guard<std::mutex> lock(chat_transport_mutex_);
+    return chat_transport_.get();
 }
 
 int CClient::start() {
@@ -537,7 +558,7 @@ std::string CClient::LoginWithSms(const std::string& phoneNumber, const std::str
     network_->ConnectTcp(server_ip_, server_port_);
 
     // Start background receivers for push messages
-    blazeclaw::irc::CIrcChatTransport::Instance().StartReceivers();
+    StartInjectedChatTransportReceivers(*this);
 
     return session_token_;
 }
@@ -808,7 +829,7 @@ std::string CClient::AutoLogin() {
             network_->ConnectTcp(server_ip_, server_port_);
 
             // Start background receivers for push messages
-            blazeclaw::irc::CIrcChatTransport::Instance().StartReceivers();
+            StartInjectedChatTransportReceivers(*this);
 
             return "SESSION_OK";
         } else if (status == "SESSION_INVALID" || status == "SESSION_CONFLICT" || status == "JWT_REFRESH_FAILED") {

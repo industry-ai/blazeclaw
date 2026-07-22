@@ -24,7 +24,7 @@
 
 namespace {
 
-// HTTP POST JSON 璇锋眰锛屽畬鍏ㄥ榻?AIAssistant/JsBridge 鐨?HttpPostJson 瀹炵幇
+// HTTP POST JSON 请求，完全对齐 AIAssistant/JsBridge 的 HttpPostJson 实现
 static std::string HttpPostJson(const std::wstring& host, INTERNET_PORT port, const std::wstring& path,
 	const std::string& body, DWORD timeoutMs, DWORD& statusCode)
 {
@@ -126,9 +126,9 @@ int64_t GetTimestampSeconds() {
             std::chrono::system_clock::now().time_since_epoch()).count());
 }
 
-// 搴旂敤鍗忚鍝嶅簲鐢?CConnection_c 鎸?AppProtoHeader::seq 鍖归厤锛屽苟鍦ㄦ帴鏀剁嚎绋嬭皟鐢?callback銆?
-// WebView 鐨?requestId 鐢辫皟鐢ㄦ柟闂寘淇濈暀锛屼笉杩涘叆搴旂敤鍗忚 payload銆?
-// timeout_cb锛氬鏋滄彁渚涳紝瓒呮椂鍚庝細琚皟鐢紙浼犲叆 body 鐢ㄤ簬閲嶅彂锛夛紱濡傛灉 timeout_cb 杩斿洖 true锛屽垯涓嶈皟鐢ㄥ師濮?callback銆?
+// 应用协议响应由 CConnection_c 按 AppProtoHeader::seq 匹配，并在接收线程调用 callback。
+// WebView 的 requestId 由调用方闭包保留，不进入应用协议 payload。
+// timeout_cb：如果提供，超时后会被调用（传入 body 用于重发）；如果 timeout_cb 返回 true，则不调用原始 callback。
 bool SendAppProtoCommandAsyncWithCb(
     const std::string& command,
     const nlohmann::json& body,
@@ -153,9 +153,9 @@ bool SendAppProtoCommandAsyncWithCb(
     struct CbState {
         std::decay_t<decltype(callback)> cb;
         std::atomic<bool> called{ false };
-        // 鍏变韩鐨勫墿浣欓噸璇曟鏁帮細姣忔瓒呮椂+1娆￠噸璇曚細閫掑噺锛屽埌 0 鍒欏交搴曞け璐ャ€?
-        // 鐢?shared_ptr 璁?SendAppProtoCommandAsyncWithCb 閫掑綊璋冪敤锛坱imeout_cb 鍐呴噸璇曪級鏃?
-        // 澶氫釜 CbState 鍏变韩鍚屼竴涓?budget銆?
+        // 共享的剩余重试次数：每次超时+1次重试会递减，到 0 则彻底失败。
+        // 用 shared_ptr 让 SendAppProtoCommandAsyncWithCb 递归调用（timeout_cb 内重试）时
+        // 多个 CbState 共享同一个 budget。
         std::shared_ptr<std::atomic<int>> retry_remaining;
     };
     auto cb_state = std::make_shared<CbState>();
@@ -183,8 +183,8 @@ bool SendAppProtoCommandAsyncWithCb(
           command.c_str(), seq);
 
     if (seq > 0) {
-        // 瓒呮椂鏃堕暱璧扮粺涓€甯搁噺 kBridgeRequestTimeoutMs锛堥粯璁?30s锛夛紝涓庡墠绔?chatroomBridgeRequest 榛樿涓€鑷淬€?
-        // 濡傛灉鎻愪緵浜?timeout_cb锛岃秴鏃跺悗璋冪敤瀹冭繘琛岄噸璇曪紙娆℃暟鍙?kBridgeMaxRetryCount 闄愬埗锛夈€?
+        // 超时时长走统一常量 kBridgeRequestTimeoutMs（默认 30s），与前端 chatroomBridgeRequest 默认一致。
+        // 如果提供了 timeout_cb，超时后调用它进行重试（次数受 kBridgeMaxRetryCount 限制）。
         std::thread([cb_state, seq, command, body, timeout_cb]() {
             const auto timeout_ms = blazeclaw::net::kBridgeRequestTimeoutMs;
 
@@ -198,18 +198,18 @@ bool SendAppProtoCommandAsyncWithCb(
                 cb_state->retry_remaining->store(retries_left - 1);
                 TRACE(_T("[CChatRoomBridge] timeout fired after %ums: cmd=%hs seq=%u retries_left=%d\n"),
                       timeout_ms, command.c_str(), seq, retries_left - 1);
-                // timeout_cb 杩斿洖 true 琛ㄧず鎴戜滑鏉ュ鐞嗗搷搴旓紙閲嶈瘯鏈韩锛夛紝姝ゆ椂涓嶈皟鐢ㄥ師濮?callback
+                // timeout_cb 返回 true 表示我们来处理响应（重试本身），此时不调用原始 callback
                 if (timeout_cb(command, body)) {
                     cb_state->called.store(true);
                     return;
                 }
-                // timeout_cb 杩斿洖 false锛堟瀬绔儏鍐典笅锛夛細缁х画璧板け璐ヨ矾寰?
+                // timeout_cb 返回 false（极端情况下）：继续走失败路径
             } else {
                 TRACE(_T("[CChatRoomBridge] timeout fired after %ums: cmd=%hs seq=%u retries_exhausted\n"),
                       timeout_ms, command.c_str(), seq);
             }
 
-            // 褰诲簳澶辫触锛氬洖璋冨師濮?caller銆?
+            // 彻底失败：回调原始 caller。
             try {
                 if (cb_state->cb && !cb_state->called.exchange(true)) {
                     cb_state->cb(false, "request_timeout");
@@ -281,15 +281,15 @@ void CChatRoomBridge::EmitResponse(const std::string& request_id, bool ok,
 }
 
 /**
- * 浠庢湰鍦?CMgrChannels 鏋勯€犳埧闂翠俊鎭?JSON锛圙ET_ROOM_INFO 鏈嶅姟绔皟鐢ㄥけ璐ユ椂鐨?fallback锛?
- * 杩斿洖绌哄瓧绗︿覆琛ㄧず鏈湴涔熸壘涓嶅埌璇ラ閬撱€?
+ * 从本地 CMgrChannels 构造房间信息 JSON（GET_ROOM_INFO 服务端调用失败时的 fallback）
+ * 返回空字符串表示本地也找不到该频道。
  */
 static std::string BuildRoomInfoFallbackFromLocal(const std::string& channel) {
     auto& mgr = CMgrChannels::Instance();
     auto chan = mgr.GetChannel(channel);
     if (!chan) {
-        // 鏈湴涔熸病杩欎釜 channel 鈥斺€?浠嶇劧杩斿洖鏈€灏忓寲 JSON锛堝惈 name/room_id + 绌?members锛夛紝
-        // 淇濊瘉鍓嶇鑷冲皯鑳芥覆鏌撳嚭鎴块棿鍚嶏紝涓嶄細绌虹櫧銆?
+        // 本地也没这个 channel —— 仍然返回最小化 JSON（含 name/room_id + 空 members），
+        // 保证前端至少能渲染出房间名，不会空白。
         std::ostringstream oss;
         std::string name = channel;
         if (!name.empty() && name[0] == '#') name = name.substr(1);
@@ -408,7 +408,7 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
               static_cast<int>(event.type),
               CA2T(event.channel.substr(0, 50).c_str()),
               CA2T(event.sender_nick.substr(0, 30).c_str()));
-        // 璇婃柇杈撳嚭锛堥伩鍏?TRACE 鐩存帴杈撳嚭 UTF-8 瀛楃涓插鑷翠贡鐮侊級
+        // 诊断输出（避免 TRACE 直接输出 UTF-8 字符串导致乱码）
         {
             std::string type_str = IrcPushEventTypeToString(event.type);
             std::string chan_short = event.channel.size() > 30
@@ -424,31 +424,31 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
         }
 
         if (event.type == IrcPushEventType::Unknown) {
-            // Unknown 绫诲瀷閫氬父鏄湇鍔＄杩斿洖鐨勯潪 IRC 鏍煎紡鏁版嵁锛堝 app proto JSON锛夛紝
-            // 鎵撳嵃鍘熷鏁版嵁浠ヤ究璇婃柇
+            // Unknown 类型通常是服务端返回的非 IRC 格式数据（如 app proto JSON），
+            // 打印原始数据以便诊断
             if (!event.raw_line.empty()) {
                 std::string raw_short = event.raw_line.size() > 200
                     ? event.raw_line.substr(0, 200) + "..." : event.raw_line;
                 TRACE(_T("[CChatRoomBridge] Push event: Unknown raw_line=%s\n"),
                       CA2T(raw_short.c_str()));
             }
-            // 涓嶈烦杩囷紝璁╀笂灞傚喅瀹氬浣曞鐞?
+            // 不跳过，让上层决定如何处理
         }
 
-        // 鈹€鈹€ 鎶?JOIN / NAMES / TOPIC 绛?push 鍚屾杩涙湰鍦?CMgrChannels 鈹€鈹€
-        // 鍚﹀垯 list_room_members / names / get_room_info 璧?fallback 鏃舵湰鍦版病鏈夋垚鍛樺垪琛ㄣ€?
+        // ── 把 JOIN / NAMES / TOPIC 等 push 同步进本地 CMgrChannels ──
+        // 否则 list_room_members / names / get_room_info 走 fallback 时本地没有成员列表。
         if (!event.channel.empty() && event.channel[0] == '#') {
             auto& mgr = CMgrChannels::Instance();
             auto chan = mgr.GetChannel(event.channel);
             if (!chan) {
-                // 鏀跺埌鏌愪釜棰戦亾鐨勭涓€涓?push锛圝OIN/NAMES/PRIVMSG锛夛紝鍏堝湪鏈湴寤哄ソ棰戦亾
+                // 收到某个频道的第一个 push（JOIN/NAMES/PRIVMSG），先在本地建好频道
                 auto nickname = deps_.get_current_nickname ? deps_.get_current_nickname() : GetCurrentNickname();
                 auto peer = CPeer::Create(nickname);
                 mgr.RegisterMember(peer);
                 chan = mgr.CreateChannel(event.channel, peer);
             }
             if (event.type == IrcPushEventType::Join) {
-                // 鏈嶅姟绔帹 JOIN锛氭敞鍐屽彂閫佽€呭埌鏈湴棰戦亾
+                // 服务端推 JOIN：注册发送者到本地频道
                 std::string nick = event.sender_nick;
                 if (nick.empty()) nick = event.sender_user;
                 if (!nick.empty()) {
@@ -468,12 +468,12 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                     chan->RemoveMember(nick);
                 }
             } else if (event.type == IrcPushEventType::Kicked) {
-                // 浠庢湰鍦伴閬撶Щ闄よ韪㈢殑鎴愬憳锛堟湇鍔＄鎺ㄩ€侊紝琚涪鏂规敹鍒帮級
+                // 从本地频道移除被踢的成员（服务端推送，被踢方收到）
                 std::string kicked_nick;
                 if (!event.kicked_user_id.empty()) {
                     kicked_nick = event.kicked_user_id;
                 } else if (event.kicked_node_id != 0) {
-                    // 璁惧琚涪锛氭湰鍦?CPeer 鐩墠娌℃湁 node_id 瀛楁锛屼粎璁板綍鏃ュ織
+                    // 设备被踢：本地 CPeer 目前没有 node_id 字段，仅记录日志
                     TRACE(_T("[CChatRoomBridge] Kicked event: node_id=%d from %s (device, no local record)\n"),
                           event.kicked_node_id, CA2T(event.channel.c_str()));
                 }
@@ -485,8 +485,8 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                     chan->SetTopic(event.message);
                 }
             } else if (event.type == IrcPushEventType::Names) {
-                // RPL_NAMREPLY (353)锛氭壒閲忓姞 names 鍒版湰鍦?channel銆?
-                // message 鏄┖鏍煎垎闅旂殑 nick 鍒楄〃锛堝彲鑳藉惈 @ / + / % 鍓嶇紑琛ㄧず mode锛夈€?
+                // RPL_NAMREPLY (353)：批量加 names 到本地 channel。
+                // message 是空格分隔的 nick 列表（可能含 @ / + / % 前缀表示 mode）。
                 std::string names_blob = event.message;
                 size_t i = 0;
                 while (i < names_blob.size()) {
@@ -522,11 +522,11 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
         payload["raw"] = event.raw_line;
         payload["timestamp_ms"] = event.timestamp_ms;
 
-        // 鍏滃簳锛氬鏋?sender_nick 鍦?ParseIrcMessage 寮傚父璺緞涓嬭涓㈡帀
-        // 锛堜緥濡?JSON 鏈熬鏈夐潪 UTF-8 浜岃繘鍒跺瀮鍦惧鑷?nlohmann 闈欓粯杩斿洖 discarded锛夛紝
-        // 杩欓噷浠?event.raw_line 浜屾瑙ｆ瀽 JSON锛屼粠涓彁鍙?from / sender 瀛楁锛?
-        // 淇濊瘉鍓嶇鎷垮埌鐨?payload.sender 姘歌繙鏈夌湡瀹炲彂閫佽€?ID銆?
-        // 杩欐槸淇 "缇よ亰鍙樉绀?+1 浣嗘秷鎭鏂?鍙戦€佽€呮樀绉颁负绌? 鐨勫叧閿慨澶嶃€?
+        // 兜底：如果 sender_nick 在 ParseIrcMessage 异常路径下被丢掉
+        // （例如 JSON 末尾有非 UTF-8 二进制垃圾导致 nlohmann 静默返回 discarded），
+        // 这里从 event.raw_line 二次解析 JSON，从中提取 from / sender 字段，
+        // 保证前端拿到的 payload.sender 永远有真实发送者 ID。
+        // 这是修复 "群聊只显示 +1 但消息正文/发送者昵称为空" 的关键修复。
         if (payload["sender"].get<std::string>().empty() && !event.raw_line.empty()) {
             try {
                 size_t json_end = event.raw_line.find_last_of('}');
@@ -546,13 +546,13 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                     }
                 }
             } catch (...) {
-                // raw_line 涓嶆槸鍚堟硶 JSON锛屾斁寮冨厹搴?
+                // raw_line 不是合法 JSON，放弃兜底
             }
         }
 
-        // 鈹€鈹€ Agent 鍥炲瑕嗗啓锛氭湇鍔＄鍥炴樉鏃?from 涓哄綋鍓嶇敤鎴锋墜鏈哄彿锛?
-        // 鍓嶇 isSelfById 浼氬懡涓鑷?AI 娑堟伅鏄剧ず鍦ㄥ彸渚с€傝繖閲屾娴?
-        // pending_agent_replies_ 涓殑 "channel:message" 閿紝鍛戒腑鍒欒鍐?sender銆?
+        // ── Agent 回复覆写：服务端回显时 from 为当前用户手机号，
+        // 前端 isSelfById 会命中导致 AI 消息显示在右侧。这里检测
+        // pending_agent_replies_ 中的 "channel:message" 键，命中则覆写 sender。
         if (event.type == IrcPushEventType::Privmsg) {
             std::string key = event.channel + ":" + event.message;
             {
@@ -572,197 +572,25 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
     });
 
     transport.SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
-        // CIrcChatTransport 宸茬粡鍦ㄥ唴閮?ScheduleAutoReconnect 璧蜂簡閲嶈繛绾跨▼锛?
-        // 杩欓噷鎶婄姸鎬佸彉鍖栧師鏍疯浆缁?web锛屽悓鏃剁鐞嗚姹傞槦鍒椼€?
+        // CIrcChatTransport 已经在内部 ScheduleAutoReconnect 起了重连线程；
+        // 这里把状态变化原样转给 web，同时管理请求队列。
         TRACE(_T("[CChatRoomBridge] ConnectionState: is_tcp=%d is_connected=%d\n"),
               is_tcp, is_connected);
 
-        // TCP 杩炴帴鐘舵€佸彉鍖?
+        // TCP 连接状态变化
         if (is_tcp) {
             is_connected_.store(is_connected);
             if (is_connected) {
-                // 杩炴帴鎭㈠锛岄噸璇曟帓闃熺殑璇锋眰
+                // 连接恢复，重试排队的请求
                 TRACE(_T("[CChatRoomBridge] Connection restored, retrying pending requests\n"));
                 RetryPendingRequests();
             } else {
-                // 杩炴帴鏂紑锛孴RACE 璁板綍锛堣姹備細鍦?HandleWebMessage 鏃惰繘鍏ラ槦鍒楋級
+                // 连接断开，TRACE 记录（请求会在 HandleWebMessage 时进入队列）
                 TRACE(_T("[CChatRoomBridge] Connection lost, requests will be queued\n"));
             }
         }
     });
 
-}
-
-void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
-                                              ChatRoomBridgeConfig config) {
-    deps_ = std::move(deps);
-    config_ = config;
-    
-    // Initialize IRC transport
-    auto& transport = ResolveTransport();
-    transport.Initialize();
-
-    // Set up push callback to forward events to web
-    transport.SetPushCallback([this](const IrcPushEvent& event) {
-        TRACE(_T("[CChatRoomBridge] Push event: type=%d channel=%s sender=%s msg=%s\n"),
-              static_cast<int>(event.type), CA2T(event.channel.c_str()), 
-              CA2T(event.sender_nick.c_str()), CA2T(event.message.substr(0, 100).c_str()));
-
-        if (event.type == IrcPushEventType::Unknown) {
-            TRACE(_T("[CChatRoomBridge] Push event: skipped (Unknown type)\n"));
-            return;
-        }
-
-        // 鈹€鈹€ 鍚屾 push 浜嬩欢鍒版湰鍦?CMgrChannels锛堢敤浜?list_room_members / get_room_info fallback锛?鈹€鈹€
-        if (!event.channel.empty() && event.channel[0] == '#') {
-            auto& mgr = CMgrChannels::Instance();
-            auto chan = mgr.GetChannel(event.channel);
-            if (!chan) {
-                auto nickname = deps_.get_current_nickname ? deps_.get_current_nickname() : GetCurrentNickname();
-                auto peer = CPeer::Create(nickname);
-                mgr.RegisterMember(peer);
-                chan = mgr.CreateChannel(event.channel, peer);
-            }
-            if (event.type == IrcPushEventType::Join) {
-                std::string nick = event.sender_nick;
-                if (nick.empty()) nick = event.sender_user;
-                if (!nick.empty()) {
-                    auto member = mgr.GetMember(nick);
-                    if (!member) {
-                        member = CPeer::Create(nick);
-                        mgr.RegisterMember(member);
-                    }
-                    chan->AddMember(member);
-                }
-            } else if (event.type == IrcPushEventType::Part ||
-                       event.type == IrcPushEventType::Quit ||
-                       event.type == IrcPushEventType::Kick) {
-                std::string nick = event.sender_nick;
-                if (nick.empty()) nick = event.sender_user;
-                if (!nick.empty()) {
-                    chan->RemoveMember(nick);
-                }
-            } else if (event.type == IrcPushEventType::Kicked) {
-                std::string kicked_nick;
-                if (!event.kicked_user_id.empty()) {
-                    kicked_nick = event.kicked_user_id;
-                } else if (event.kicked_node_id != 0) {
-                    // 璁惧琚涪锛氭湰鍦?CPeer 鐩墠娌℃湁 node_id 瀛楁锛屼粎璁板綍鏃ュ織
-                    TRACE(_T("[CChatRoomBridge] Kicked event: node_id=%d from %s (device, no local record)\n"),
-                          event.kicked_node_id, CA2T(event.channel.c_str()));
-                }
-                if (!kicked_nick.empty()) {
-                    chan->RemoveMember(kicked_nick);
-                }
-            } else if (event.type == IrcPushEventType::Topic) {
-                if (!event.message.empty()) {
-                    chan->SetTopic(event.message);
-                }
-            } else if (event.type == IrcPushEventType::Names) {
-                // RPL_NAMREPLY (353)锛氭壒閲忓姞 names 鍒版湰鍦?channel銆?
-                // message 鏄┖鏍煎垎闅旂殑 nick 鍒楄〃锛堝彲鑳藉惈 @ / + / % 鍓嶇紑琛ㄧず mode锛夈€?
-                std::string names_blob = event.message;
-                size_t i = 0;
-                while (i < names_blob.size()) {
-                    while (i < names_blob.size() && (names_blob[i] == ' ' || names_blob[i] == ',')) ++i;
-                    std::string nick;
-                    while (i < names_blob.size() && names_blob[i] != ' ' && names_blob[i] != ',') {
-                        if (names_blob[i] == '@' || names_blob[i] == '+' ||
-                            names_blob[i] == '%' || names_blob[i] == '~' ||
-                            names_blob[i] == '&') {
-                            ++i;
-                            continue;
-                        }
-                        nick.push_back(names_blob[i]);
-                        ++i;
-                    }
-                    if (!nick.empty()) {
-                        auto member = mgr.GetMember(nick);
-                        if (!member) {
-                            member = CPeer::Create(nick);
-                            mgr.RegisterMember(member);
-                        }
-                        chan->AddMember(member);
-                    }
-                }
-            }
-        }
-
-        nlohmann::json payload;
-        payload["type"] = static_cast<int>(event.type);
-        payload["sender"] = event.sender_nick;
-        payload["channel"] = event.channel;
-        payload["message"] = event.message;
-        payload["raw"] = event.raw_line;
-        payload["timestamp_ms"] = event.timestamp_ms;
-
-        // 鍏滃簳锛氬鏋?sender_nick 鍦?ParseIrcMessage 寮傚父璺緞涓嬭涓㈡帀
-        // 锛堜緥濡?JSON 鏈熬鏈夐潪 UTF-8 浜岃繘鍒跺瀮鍦惧鑷?nlohmann 闈欓粯杩斿洖 discarded锛夛紝
-        // 杩欓噷浠?event.raw_line 浜屾瑙ｆ瀽 JSON锛屼粠涓彁鍙?from / sender 瀛楁锛?
-        // 淇濊瘉鍓嶇鎷垮埌鐨?payload.sender 姘歌繙鏈夌湡瀹炲彂閫佽€?ID銆?
-        // 杩欐槸淇 "缇よ亰鍙樉绀?+1 浣嗘秷鎭鏂?鍙戦€佽€呮樀绉颁负绌? 鐨勫叧閿慨澶嶃€?
-        if (payload["sender"].get<std::string>().empty() && !event.raw_line.empty()) {
-            try {
-                size_t json_end = event.raw_line.find_last_of('}');
-                std::string clean_raw = (json_end != std::string::npos)
-                    ? event.raw_line.substr(0, json_end + 1)
-                    : event.raw_line;
-                auto reparsed = nlohmann::json::parse(clean_raw, nullptr, false);
-                if (!reparsed.is_discarded() && reparsed.is_object()) {
-                    std::string recovered = reparsed.value("from",
-                        reparsed.value("from_user",
-                        reparsed.value("from_phone",
-                        reparsed.value("sender", std::string()))));
-                    if (!recovered.empty()) {
-                        payload["sender"] = recovered;
-                        TRACE(_T("[CChatRoomBridge] sender_nick fallback recovered: %s\n"),
-                              CA2T(recovered.c_str()));
-                    }
-                }
-            } catch (...) {
-                // raw_line 涓嶆槸鍚堟硶 JSON锛屾斁寮冨厹搴?
-            }
-        }
-
-        // 鈹€鈹€ Agent 鍥炲瑕嗗啓锛氭湇鍔＄鍥炴樉鏃?from 涓哄綋鍓嶇敤鎴锋墜鏈哄彿锛?
-        // 鍓嶇 isSelfById 浼氬懡涓鑷?AI 娑堟伅鏄剧ず鍦ㄥ彸渚с€傝繖閲屾娴?
-        // pending_agent_replies_ 涓殑 "channel:message" 閿紝鍛戒腑鍒欒鍐?sender銆?
-        if (event.type == IrcPushEventType::Privmsg) {
-            std::string key = event.channel + ":" + event.message;
-            {
-                std::lock_guard<std::mutex> lock(pending_agent_replies_mutex_);
-                auto it = pending_agent_replies_.find(key);
-                if (it != pending_agent_replies_.end()) {
-                    payload["sender"] = "鐐庡浘AI鍔╂墜";
-                    pending_agent_replies_.erase(it);
-                    TRACE(_T("[CChatRoomBridge] Agent reply matched, sender overridden to 鐐庡浘AI鍔╂墜\n"));
-                }
-            }
-        }
-
-        std::string payload_str = payload.dump();
-        TRACE(_T("[CChatRoomBridge] OnNetworkPush: emitting to web\n"));
-        OnNetworkPush(IrcPushEventTypeToString(event.type), payload_str);
-    });
-
-    transport.SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
-        // 鍚?Initialize 鈥斺€?transport 鍐呴儴宸茶嚜鍔ㄩ噸杩烇紝杩欓噷绠＄悊璇锋眰闃熷垪鍜岄噸璇曘€?
-        TRACE(_T("[CChatRoomBridge] InitWithTransport ConnectionState: is_tcp=%d is_connected=%d\n"),
-              is_tcp, is_connected);
-
-        // TCP 杩炴帴鐘舵€佸彉鍖?
-        if (is_tcp) {
-            is_connected_.store(is_connected);
-            if (is_connected) {
-                // 杩炴帴鎭㈠锛岄噸璇曟帓闃熺殑璇锋眰
-                TRACE(_T("[CChatRoomBridge] Connection restored, retrying pending requests\n"));
-                RetryPendingRequests();
-            } else {
-                // 杩炴帴鏂紑
-                TRACE(_T("[CChatRoomBridge] Connection lost, requests will be queued\n"));
-            }
-        }
-    });
 }
 
 void CChatRoomBridge::Shutdown() {
@@ -909,7 +737,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             converted["id"] = cmd_payload.value("id", "");
             converted["ownerUserId"] = cmd_payload.value("owner_user_id", "");
             converted["creatorUserId"] = cmd_payload.value("creator_user_id", cmd_payload.value("owner_user_id", ""));
-            converted["title"] = cmd_payload.value("title", "鏂颁换鍔?);
+            converted["title"] = cmd_payload.value("title", "新任务");
             converted["summary"] = cmd_payload.value("summary", "");
             converted["sourceConversationId"] = cmd_payload.value("source_conversation_id", "");
             converted["createdFromMessageId"] = cmd_payload.value("created_from_message_id", "");
@@ -1567,10 +1395,6 @@ bool CChatRoomBridge::HandleSendMessage(const BridgeRequest& req,
             // UTF-8 缂栫爜鐨?"鐐庡浘AI鍔╂墜": E7 82 8E E5 9B BE 41 49 E5 8A A9 E6 89 8B
             static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
             isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
-            if (!isAgentMention) {
-                // GBK 璇В閲婂舰鎬侊紙UTF-8 瀛楄妭琚綋 GBK 瑙ｇ爜锛?
-                isAgentMention = (message.find("@閻愬骸娴楢I閸斺晜澧?) != std::string::npos);
-            }
             // 鍏滃簳锛氱洿鎺ユ悳绱㈡簮鐮佷腑鐨?UTF-8 literal锛堝彇鍐充簬婧愭枃浠剁紪鐮侊級
             if (!isAgentMention) {
                 isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
@@ -1797,9 +1621,6 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
     if (message.find('@') != std::string::npos) {
         static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
         isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
-        if (!isAgentMention) {
-            isAgentMention = (message.find("@閻愬骸娴楢I閸斺晜澧?) != std::string::npos);
-        }
         if (!isAgentMention) {
             isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
         }
@@ -2701,8 +2522,6 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
             std::string aiPrompt = message;
             size_t pos = std::string::npos;
             if ((pos = aiPrompt.find("@鐐庡浘AI鍔╂墜")) != std::string::npos) {
-                aiPrompt.erase(pos, 8);
-            } else if ((pos = aiPrompt.find("@閻愬骸娴楢I閸斺晜澧?)) != std::string::npos) {
                 aiPrompt.erase(pos, 8);
             }
             // Trim whitespace

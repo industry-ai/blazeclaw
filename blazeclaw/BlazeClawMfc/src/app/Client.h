@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,10 @@
 #include "TaskQueue.h"
 
 class CNetwork_c;
+
+namespace blazeclaw::irc {
+class ITransport;
+}
 
 class CClient {
 public:
@@ -42,6 +47,11 @@ public:
 
     // Must be called once before any network operations.
     void Init(CNetwork_c& network);
+
+    // Optional transport injection for chat receiver lifecycle wiring.
+    // Composition root should set this to avoid singleton usage in leaf code.
+    void SetChatTransport(std::shared_ptr<blazeclaw::irc::ITransport> transport);
+    blazeclaw::irc::ITransport* GetChatTransport() const noexcept;
 
     // 邮箱密码登录
     std::string LoginWithPassword(const std::string& password);
@@ -84,6 +94,8 @@ private:
     //friend int main(); // allow main.cpp handlers to access private connection settings
 
     CNetwork_c* network_{ nullptr }; // provided by main.cpp
+    mutable std::mutex chat_transport_mutex_;
+    std::shared_ptr<blazeclaw::irc::ITransport> chat_transport_;
 
     std::string server_ip_;     // TCP middleware server IP
     int server_port_{ 0 };      // TCP middleware server port

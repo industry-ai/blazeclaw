@@ -428,7 +428,12 @@ void CBlazeClawAgentChatView::StopNativeRuntime()
 
 void CBlazeClawAgentChatView::InitChatRoomBridge()
 {
+	auto transport = std::shared_ptr<blazeclaw::irc::ITransport>(
+		&blazeclaw::irc::CIrcChatTransport::Instance(),
+		[](blazeclaw::irc::ITransport*) {});
+
 	blazeclaw::irc::ChatRoomBridgeDependencies deps;
+	deps.transport = transport;
 	deps.get_current_session_id = []() {
 		return std::to_string(CClient::Instance().GetSessionId());
 	};
@@ -444,6 +449,8 @@ void CBlazeClawAgentChatView::InitChatRoomBridge()
 		response = network.SendRequest(msg_type, payload);
 		return !response.empty();
 	};
+
+	CClient::Instance().SetChatTransport(transport);
 	blazeclaw::irc::CChatRoomBridge::Instance().Initialize(std::move(deps));
 }
 

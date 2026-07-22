@@ -653,7 +653,6 @@
       <Filter>tests</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ChatMessage.cpp" />
-    <ClCompile Include="src\app\CChatRoomBridge.cpp" />
     <ClCompile Include="src\app\CChannel.cpp" />
     <ClCompile Include="src\app\CMgrChannels.cpp" />
     <ClCompile Include="src\app\COperator.cpp" />
@@ -666,6 +665,9 @@
       <Filter>agent-chat</Filter>
     </ClCompile>
     <ClCompile Include="src\app\agent-chat\NetworkClientAdapter.cpp">
+      <Filter>agent-chat</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CChatRoomBridge.cpp">
       <Filter>agent-chat</Filter>
     </ClCompile>
   </ItemGroup>
@@ -1225,7 +1227,6 @@
     <ClInclude Include="src\gateway\GatewayChatEventPayload.h" />
     <ClInclude Include="src\core\ThreadPoolRuntimeService.h" />
     <ClInclude Include="src\app\ChatMessage.h" />
-    <ClInclude Include="src\app\CChatRoomBridge.h" />
     <ClInclude Include="src\app\CChannel.h" />
     <ClInclude Include="src\app\CMgrChannels.h" />
     <ClInclude Include="src\app\COperator.h" />
@@ -1253,6 +1254,9 @@
       <Filter>agent-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\agent-chat\TransportConfig.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CChatRoomBridge.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
   </ItemGroup>
