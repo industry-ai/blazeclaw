@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include "agent-chat/CIrcChatTransport.h"
+#include "agent-chat/ITransport.h"
 #include "NetworkTimeouts.h"
 
 namespace blazeclaw::irc {
@@ -61,6 +62,10 @@ struct ChatRoomBridgeDependencies {
     std::function<std::string()> get_current_nickname;
     // Send message to network layer
     std::function<bool(uint8_t msg_type, const std::string& payload, std::string& response)> send_request;
+    // Optional injected transport. Prefer explicit injection for tests.
+    // When null, ResolveTransport() falls back to CIrcChatTransport::Instance()
+    // (composition-root convenience only).
+    std::shared_ptr<ITransport> transport;
 };
 
 // Non-blocking: the network layer matches the response by AppProtoHeader::seq and
@@ -95,12 +100,14 @@ public:
     // Initialize the bridge (legacy version for backward compatibility)
     void Initialize(ChatRoomBridgeDependencies deps, ChatRoomBridgeConfig config = {});
 
-    // Initialize the bridge with IRC transport (uses existing CNetwork_c connection)
+    // Initialize the bridge with an explicit ITransport (preferred for testability).
+    // When deps.transport is null, falls back to CIrcChatTransport::Instance().
     void InitializeWithTransport(ChatRoomBridgeDependencies deps,
                                  ChatRoomBridgeConfig config = {});
 
-    // Get IRC transport for advanced usage
-    CIrcChatTransport& GetIrcTransport() { return CIrcChatTransport::Instance(); }
+    // Resolved transport used by handlers (injected or singleton fallback).
+    ITransport& GetIrcTransport();
+    ITransport& ResolveTransport();
 
     // Shutdown
     void Shutdown();

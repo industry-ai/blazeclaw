@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "CChatRoomBridge.h"
 
 #include <algorithm>
@@ -24,7 +24,7 @@
 
 namespace {
 
-// HTTP POST JSON 请求，完全对齐 AIAssistant/JsBridge 的 HttpPostJson 实现
+// HTTP POST JSON 璇锋眰锛屽畬鍏ㄥ榻?AIAssistant/JsBridge 鐨?HttpPostJson 瀹炵幇
 static std::string HttpPostJson(const std::wstring& host, INTERNET_PORT port, const std::wstring& path,
 	const std::string& body, DWORD timeoutMs, DWORD& statusCode)
 {
@@ -126,9 +126,9 @@ int64_t GetTimestampSeconds() {
             std::chrono::system_clock::now().time_since_epoch()).count());
 }
 
-// 应用协议响应由 CConnection_c 按 AppProtoHeader::seq 匹配，并在接收线程调用 callback。
-// WebView 的 requestId 由调用方闭包保留，不进入应用协议 payload。
-// timeout_cb：如果提供，超时后会被调用（传入 body 用于重发）；如果 timeout_cb 返回 true，则不调用原始 callback。
+// 搴旂敤鍗忚鍝嶅簲鐢?CConnection_c 鎸?AppProtoHeader::seq 鍖归厤锛屽苟鍦ㄦ帴鏀剁嚎绋嬭皟鐢?callback銆?
+// WebView 鐨?requestId 鐢辫皟鐢ㄦ柟闂寘淇濈暀锛屼笉杩涘叆搴旂敤鍗忚 payload銆?
+// timeout_cb锛氬鏋滄彁渚涳紝瓒呮椂鍚庝細琚皟鐢紙浼犲叆 body 鐢ㄤ簬閲嶅彂锛夛紱濡傛灉 timeout_cb 杩斿洖 true锛屽垯涓嶈皟鐢ㄥ師濮?callback銆?
 bool SendAppProtoCommandAsyncWithCb(
     const std::string& command,
     const nlohmann::json& body,
@@ -153,9 +153,9 @@ bool SendAppProtoCommandAsyncWithCb(
     struct CbState {
         std::decay_t<decltype(callback)> cb;
         std::atomic<bool> called{ false };
-        // 共享的剩余重试次数：每次超时+1次重试会递减，到 0 则彻底失败。
-        // 用 shared_ptr 让 SendAppProtoCommandAsyncWithCb 递归调用（timeout_cb 内重试）时
-        // 多个 CbState 共享同一个 budget。
+        // 鍏变韩鐨勫墿浣欓噸璇曟鏁帮細姣忔瓒呮椂+1娆￠噸璇曚細閫掑噺锛屽埌 0 鍒欏交搴曞け璐ャ€?
+        // 鐢?shared_ptr 璁?SendAppProtoCommandAsyncWithCb 閫掑綊璋冪敤锛坱imeout_cb 鍐呴噸璇曪級鏃?
+        // 澶氫釜 CbState 鍏变韩鍚屼竴涓?budget銆?
         std::shared_ptr<std::atomic<int>> retry_remaining;
     };
     auto cb_state = std::make_shared<CbState>();
@@ -183,8 +183,8 @@ bool SendAppProtoCommandAsyncWithCb(
           command.c_str(), seq);
 
     if (seq > 0) {
-        // 超时时长走统一常量 kBridgeRequestTimeoutMs（默认 30s），与前端 chatroomBridgeRequest 默认一致。
-        // 如果提供了 timeout_cb，超时后调用它进行重试（次数受 kBridgeMaxRetryCount 限制）。
+        // 瓒呮椂鏃堕暱璧扮粺涓€甯搁噺 kBridgeRequestTimeoutMs锛堥粯璁?30s锛夛紝涓庡墠绔?chatroomBridgeRequest 榛樿涓€鑷淬€?
+        // 濡傛灉鎻愪緵浜?timeout_cb锛岃秴鏃跺悗璋冪敤瀹冭繘琛岄噸璇曪紙娆℃暟鍙?kBridgeMaxRetryCount 闄愬埗锛夈€?
         std::thread([cb_state, seq, command, body, timeout_cb]() {
             const auto timeout_ms = blazeclaw::net::kBridgeRequestTimeoutMs;
 
@@ -198,18 +198,18 @@ bool SendAppProtoCommandAsyncWithCb(
                 cb_state->retry_remaining->store(retries_left - 1);
                 TRACE(_T("[CChatRoomBridge] timeout fired after %ums: cmd=%hs seq=%u retries_left=%d\n"),
                       timeout_ms, command.c_str(), seq, retries_left - 1);
-                // timeout_cb 返回 true 表示我们来处理响应（重试本身），此时不调用原始 callback
+                // timeout_cb 杩斿洖 true 琛ㄧず鎴戜滑鏉ュ鐞嗗搷搴旓紙閲嶈瘯鏈韩锛夛紝姝ゆ椂涓嶈皟鐢ㄥ師濮?callback
                 if (timeout_cb(command, body)) {
                     cb_state->called.store(true);
                     return;
                 }
-                // timeout_cb 返回 false（极端情况下）：继续走失败路径
+                // timeout_cb 杩斿洖 false锛堟瀬绔儏鍐典笅锛夛細缁х画璧板け璐ヨ矾寰?
             } else {
                 TRACE(_T("[CChatRoomBridge] timeout fired after %ums: cmd=%hs seq=%u retries_exhausted\n"),
                       timeout_ms, command.c_str(), seq);
             }
 
-            // 彻底失败：回调原始 caller。
+            // 褰诲簳澶辫触锛氬洖璋冨師濮?caller銆?
             try {
                 if (cb_state->cb && !cb_state->called.exchange(true)) {
                     cb_state->cb(false, "request_timeout");
@@ -281,15 +281,15 @@ void CChatRoomBridge::EmitResponse(const std::string& request_id, bool ok,
 }
 
 /**
- * 从本地 CMgrChannels 构造房间信息 JSON（GET_ROOM_INFO 服务端调用失败时的 fallback）
- * 返回空字符串表示本地也找不到该频道。
+ * 浠庢湰鍦?CMgrChannels 鏋勯€犳埧闂翠俊鎭?JSON锛圙ET_ROOM_INFO 鏈嶅姟绔皟鐢ㄥけ璐ユ椂鐨?fallback锛?
+ * 杩斿洖绌哄瓧绗︿覆琛ㄧず鏈湴涔熸壘涓嶅埌璇ラ閬撱€?
  */
 static std::string BuildRoomInfoFallbackFromLocal(const std::string& channel) {
     auto& mgr = CMgrChannels::Instance();
     auto chan = mgr.GetChannel(channel);
     if (!chan) {
-        // 本地也没这个 channel —— 仍然返回最小化 JSON（含 name/room_id + 空 members），
-        // 保证前端至少能渲染出房间名，不会空白。
+        // 鏈湴涔熸病杩欎釜 channel 鈥斺€?浠嶇劧杩斿洖鏈€灏忓寲 JSON锛堝惈 name/room_id + 绌?members锛夛紝
+        // 淇濊瘉鍓嶇鑷冲皯鑳芥覆鏌撳嚭鎴块棿鍚嶏紝涓嶄細绌虹櫧銆?
         std::ostringstream oss;
         std::string name = channel;
         if (!name.empty() && name[0] == '#') name = name.substr(1);
@@ -366,14 +366,41 @@ std::string JsonEscape(const std::string& value) {
 
 void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
                                   ChatRoomBridgeConfig config) {
+    // Prefer explicit transport injection; keep singleton only as composition fallback.
+    if (!deps.transport) {
+        deps.transport = std::shared_ptr<ITransport>(
+            &CIrcChatTransport::Instance(),
+            [](ITransport*) {});
+    }
+    InitializeWithTransport(std::move(deps), config);
+}
+
+ITransport& CChatRoomBridge::ResolveTransport() {
+    if (deps_.transport) {
+        return *deps_.transport;
+    }
+    return CIrcChatTransport::Instance();
+}
+
+ITransport& CChatRoomBridge::GetIrcTransport() {
+    return ResolveTransport();
+}
+
+void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
+                                              ChatRoomBridgeConfig config) {
     deps_ = std::move(deps);
     config_ = config;
+    if (!deps_.transport) {
+        deps_.transport = std::shared_ptr<ITransport>(
+            &CIrcChatTransport::Instance(),
+            [](ITransport*) {});
+    }
     initialized_ = true;
 
     // Wire IRC transport: forward all server push events to the web UI via
     // deps_.emit_to_web. CNetwork_c is shared with the rest of the app and
     // has its own TCP/TLS push receivers; this hook just bridges the IRC layer.
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.Initialize();
     TRACE(_T("[CChatRoomBridge] Initialize: transport initialized, now setting push callback\n"));
     transport.SetPushCallback([this](const IrcPushEvent& event) {
@@ -381,7 +408,7 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
               static_cast<int>(event.type),
               CA2T(event.channel.substr(0, 50).c_str()),
               CA2T(event.sender_nick.substr(0, 30).c_str()));
-        // 诊断输出（避免 TRACE 直接输出 UTF-8 字符串导致乱码）
+        // 璇婃柇杈撳嚭锛堥伩鍏?TRACE 鐩存帴杈撳嚭 UTF-8 瀛楃涓插鑷翠贡鐮侊級
         {
             std::string type_str = IrcPushEventTypeToString(event.type);
             std::string chan_short = event.channel.size() > 30
@@ -397,31 +424,31 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
         }
 
         if (event.type == IrcPushEventType::Unknown) {
-            // Unknown 类型通常是服务端返回的非 IRC 格式数据（如 app proto JSON），
-            // 打印原始数据以便诊断
+            // Unknown 绫诲瀷閫氬父鏄湇鍔＄杩斿洖鐨勯潪 IRC 鏍煎紡鏁版嵁锛堝 app proto JSON锛夛紝
+            // 鎵撳嵃鍘熷鏁版嵁浠ヤ究璇婃柇
             if (!event.raw_line.empty()) {
                 std::string raw_short = event.raw_line.size() > 200
                     ? event.raw_line.substr(0, 200) + "..." : event.raw_line;
                 TRACE(_T("[CChatRoomBridge] Push event: Unknown raw_line=%s\n"),
                       CA2T(raw_short.c_str()));
             }
-            // 不跳过，让上层决定如何处理
+            // 涓嶈烦杩囷紝璁╀笂灞傚喅瀹氬浣曞鐞?
         }
 
-        // ── 把 JOIN / NAMES / TOPIC 等 push 同步进本地 CMgrChannels ──
-        // 否则 list_room_members / names / get_room_info 走 fallback 时本地没有成员列表。
+        // 鈹€鈹€ 鎶?JOIN / NAMES / TOPIC 绛?push 鍚屾杩涙湰鍦?CMgrChannels 鈹€鈹€
+        // 鍚﹀垯 list_room_members / names / get_room_info 璧?fallback 鏃舵湰鍦版病鏈夋垚鍛樺垪琛ㄣ€?
         if (!event.channel.empty() && event.channel[0] == '#') {
             auto& mgr = CMgrChannels::Instance();
             auto chan = mgr.GetChannel(event.channel);
             if (!chan) {
-                // 收到某个频道的第一个 push（JOIN/NAMES/PRIVMSG），先在本地建好频道
+                // 鏀跺埌鏌愪釜棰戦亾鐨勭涓€涓?push锛圝OIN/NAMES/PRIVMSG锛夛紝鍏堝湪鏈湴寤哄ソ棰戦亾
                 auto nickname = deps_.get_current_nickname ? deps_.get_current_nickname() : GetCurrentNickname();
                 auto peer = CPeer::Create(nickname);
                 mgr.RegisterMember(peer);
                 chan = mgr.CreateChannel(event.channel, peer);
             }
             if (event.type == IrcPushEventType::Join) {
-                // 服务端推 JOIN：注册发送者到本地频道
+                // 鏈嶅姟绔帹 JOIN锛氭敞鍐屽彂閫佽€呭埌鏈湴棰戦亾
                 std::string nick = event.sender_nick;
                 if (nick.empty()) nick = event.sender_user;
                 if (!nick.empty()) {
@@ -441,12 +468,12 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
                     chan->RemoveMember(nick);
                 }
             } else if (event.type == IrcPushEventType::Kicked) {
-                // 从本地频道移除被踢的成员（服务端推送，被踢方收到）
+                // 浠庢湰鍦伴閬撶Щ闄よ韪㈢殑鎴愬憳锛堟湇鍔＄鎺ㄩ€侊紝琚涪鏂规敹鍒帮級
                 std::string kicked_nick;
                 if (!event.kicked_user_id.empty()) {
                     kicked_nick = event.kicked_user_id;
                 } else if (event.kicked_node_id != 0) {
-                    // 设备被踢：本地 CPeer 目前没有 node_id 字段，仅记录日志
+                    // 璁惧琚涪锛氭湰鍦?CPeer 鐩墠娌℃湁 node_id 瀛楁锛屼粎璁板綍鏃ュ織
                     TRACE(_T("[CChatRoomBridge] Kicked event: node_id=%d from %s (device, no local record)\n"),
                           event.kicked_node_id, CA2T(event.channel.c_str()));
                 }
@@ -458,8 +485,8 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
                     chan->SetTopic(event.message);
                 }
             } else if (event.type == IrcPushEventType::Names) {
-                // RPL_NAMREPLY (353)：批量加 names 到本地 channel。
-                // message 是空格分隔的 nick 列表（可能含 @ / + / % 前缀表示 mode）。
+                // RPL_NAMREPLY (353)锛氭壒閲忓姞 names 鍒版湰鍦?channel銆?
+                // message 鏄┖鏍煎垎闅旂殑 nick 鍒楄〃锛堝彲鑳藉惈 @ / + / % 鍓嶇紑琛ㄧず mode锛夈€?
                 std::string names_blob = event.message;
                 size_t i = 0;
                 while (i < names_blob.size()) {
@@ -495,11 +522,11 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
         payload["raw"] = event.raw_line;
         payload["timestamp_ms"] = event.timestamp_ms;
 
-        // 兜底：如果 sender_nick 在 ParseIrcMessage 异常路径下被丢掉
-        // （例如 JSON 末尾有非 UTF-8 二进制垃圾导致 nlohmann 静默返回 discarded），
-        // 这里从 event.raw_line 二次解析 JSON，从中提取 from / sender 字段，
-        // 保证前端拿到的 payload.sender 永远有真实发送者 ID。
-        // 这是修复 "群聊只显示 +1 但消息正文/发送者昵称为空" 的关键修复。
+        // 鍏滃簳锛氬鏋?sender_nick 鍦?ParseIrcMessage 寮傚父璺緞涓嬭涓㈡帀
+        // 锛堜緥濡?JSON 鏈熬鏈夐潪 UTF-8 浜岃繘鍒跺瀮鍦惧鑷?nlohmann 闈欓粯杩斿洖 discarded锛夛紝
+        // 杩欓噷浠?event.raw_line 浜屾瑙ｆ瀽 JSON锛屼粠涓彁鍙?from / sender 瀛楁锛?
+        // 淇濊瘉鍓嶇鎷垮埌鐨?payload.sender 姘歌繙鏈夌湡瀹炲彂閫佽€?ID銆?
+        // 杩欐槸淇 "缇よ亰鍙樉绀?+1 浣嗘秷鎭鏂?鍙戦€佽€呮樀绉颁负绌? 鐨勫叧閿慨澶嶃€?
         if (payload["sender"].get<std::string>().empty() && !event.raw_line.empty()) {
             try {
                 size_t json_end = event.raw_line.find_last_of('}');
@@ -519,22 +546,22 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
                     }
                 }
             } catch (...) {
-                // raw_line 不是合法 JSON，放弃兜底
+                // raw_line 涓嶆槸鍚堟硶 JSON锛屾斁寮冨厹搴?
             }
         }
 
-        // ── Agent 回复覆写：服务端回显时 from 为当前用户手机号，
-        // 前端 isSelfById 会命中导致 AI 消息显示在右侧。这里检测
-        // pending_agent_replies_ 中的 "channel:message" 键，命中则覆写 sender。
+        // 鈹€鈹€ Agent 鍥炲瑕嗗啓锛氭湇鍔＄鍥炴樉鏃?from 涓哄綋鍓嶇敤鎴锋墜鏈哄彿锛?
+        // 鍓嶇 isSelfById 浼氬懡涓鑷?AI 娑堟伅鏄剧ず鍦ㄥ彸渚с€傝繖閲屾娴?
+        // pending_agent_replies_ 涓殑 "channel:message" 閿紝鍛戒腑鍒欒鍐?sender銆?
         if (event.type == IrcPushEventType::Privmsg) {
             std::string key = event.channel + ":" + event.message;
             {
                 std::lock_guard<std::mutex> lock(pending_agent_replies_mutex_);
                 auto it = pending_agent_replies_.find(key);
                 if (it != pending_agent_replies_.end()) {
-                    payload["sender"] = "炎图AI助手";
+                    payload["sender"] = "鐐庡浘AI鍔╂墜";
                     pending_agent_replies_.erase(it);
-                    TRACE(_T("[CChatRoomBridge] Agent reply matched, sender overridden to 炎图AI助手\n"));
+                    TRACE(_T("[CChatRoomBridge] Agent reply matched, sender overridden to 鐐庡浘AI鍔╂墜\n"));
                 }
             }
         }
@@ -545,20 +572,20 @@ void CChatRoomBridge::Initialize(ChatRoomBridgeDependencies deps,
     });
 
     transport.SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
-        // CIrcChatTransport 已经在内部 ScheduleAutoReconnect 起了重连线程；
-        // 这里把状态变化原样转给 web，同时管理请求队列。
+        // CIrcChatTransport 宸茬粡鍦ㄥ唴閮?ScheduleAutoReconnect 璧蜂簡閲嶈繛绾跨▼锛?
+        // 杩欓噷鎶婄姸鎬佸彉鍖栧師鏍疯浆缁?web锛屽悓鏃剁鐞嗚姹傞槦鍒椼€?
         TRACE(_T("[CChatRoomBridge] ConnectionState: is_tcp=%d is_connected=%d\n"),
               is_tcp, is_connected);
 
-        // TCP 连接状态变化
+        // TCP 杩炴帴鐘舵€佸彉鍖?
         if (is_tcp) {
             is_connected_.store(is_connected);
             if (is_connected) {
-                // 连接恢复，重试排队的请求
+                // 杩炴帴鎭㈠锛岄噸璇曟帓闃熺殑璇锋眰
                 TRACE(_T("[CChatRoomBridge] Connection restored, retrying pending requests\n"));
                 RetryPendingRequests();
             } else {
-                // 连接断开，TRACE 记录（请求会在 HandleWebMessage 时进入队列）
+                // 杩炴帴鏂紑锛孴RACE 璁板綍锛堣姹備細鍦?HandleWebMessage 鏃惰繘鍏ラ槦鍒楋級
                 TRACE(_T("[CChatRoomBridge] Connection lost, requests will be queued\n"));
             }
         }
@@ -572,7 +599,7 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
     config_ = config;
     
     // Initialize IRC transport
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.Initialize();
 
     // Set up push callback to forward events to web
@@ -586,7 +613,7 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
             return;
         }
 
-        // ── 同步 push 事件到本地 CMgrChannels（用于 list_room_members / get_room_info fallback） ──
+        // 鈹€鈹€ 鍚屾 push 浜嬩欢鍒版湰鍦?CMgrChannels锛堢敤浜?list_room_members / get_room_info fallback锛?鈹€鈹€
         if (!event.channel.empty() && event.channel[0] == '#') {
             auto& mgr = CMgrChannels::Instance();
             auto chan = mgr.GetChannel(event.channel);
@@ -620,7 +647,7 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                 if (!event.kicked_user_id.empty()) {
                     kicked_nick = event.kicked_user_id;
                 } else if (event.kicked_node_id != 0) {
-                    // 设备被踢：本地 CPeer 目前没有 node_id 字段，仅记录日志
+                    // 璁惧琚涪锛氭湰鍦?CPeer 鐩墠娌℃湁 node_id 瀛楁锛屼粎璁板綍鏃ュ織
                     TRACE(_T("[CChatRoomBridge] Kicked event: node_id=%d from %s (device, no local record)\n"),
                           event.kicked_node_id, CA2T(event.channel.c_str()));
                 }
@@ -632,8 +659,8 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                     chan->SetTopic(event.message);
                 }
             } else if (event.type == IrcPushEventType::Names) {
-                // RPL_NAMREPLY (353)：批量加 names 到本地 channel。
-                // message 是空格分隔的 nick 列表（可能含 @ / + / % 前缀表示 mode）。
+                // RPL_NAMREPLY (353)锛氭壒閲忓姞 names 鍒版湰鍦?channel銆?
+                // message 鏄┖鏍煎垎闅旂殑 nick 鍒楄〃锛堝彲鑳藉惈 @ / + / % 鍓嶇紑琛ㄧず mode锛夈€?
                 std::string names_blob = event.message;
                 size_t i = 0;
                 while (i < names_blob.size()) {
@@ -669,11 +696,11 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
         payload["raw"] = event.raw_line;
         payload["timestamp_ms"] = event.timestamp_ms;
 
-        // 兜底：如果 sender_nick 在 ParseIrcMessage 异常路径下被丢掉
-        // （例如 JSON 末尾有非 UTF-8 二进制垃圾导致 nlohmann 静默返回 discarded），
-        // 这里从 event.raw_line 二次解析 JSON，从中提取 from / sender 字段，
-        // 保证前端拿到的 payload.sender 永远有真实发送者 ID。
-        // 这是修复 "群聊只显示 +1 但消息正文/发送者昵称为空" 的关键修复。
+        // 鍏滃簳锛氬鏋?sender_nick 鍦?ParseIrcMessage 寮傚父璺緞涓嬭涓㈡帀
+        // 锛堜緥濡?JSON 鏈熬鏈夐潪 UTF-8 浜岃繘鍒跺瀮鍦惧鑷?nlohmann 闈欓粯杩斿洖 discarded锛夛紝
+        // 杩欓噷浠?event.raw_line 浜屾瑙ｆ瀽 JSON锛屼粠涓彁鍙?from / sender 瀛楁锛?
+        // 淇濊瘉鍓嶇鎷垮埌鐨?payload.sender 姘歌繙鏈夌湡瀹炲彂閫佽€?ID銆?
+        // 杩欐槸淇 "缇よ亰鍙樉绀?+1 浣嗘秷鎭鏂?鍙戦€佽€呮樀绉颁负绌? 鐨勫叧閿慨澶嶃€?
         if (payload["sender"].get<std::string>().empty() && !event.raw_line.empty()) {
             try {
                 size_t json_end = event.raw_line.find_last_of('}');
@@ -693,22 +720,22 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
                     }
                 }
             } catch (...) {
-                // raw_line 不是合法 JSON，放弃兜底
+                // raw_line 涓嶆槸鍚堟硶 JSON锛屾斁寮冨厹搴?
             }
         }
 
-        // ── Agent 回复覆写：服务端回显时 from 为当前用户手机号，
-        // 前端 isSelfById 会命中导致 AI 消息显示在右侧。这里检测
-        // pending_agent_replies_ 中的 "channel:message" 键，命中则覆写 sender。
+        // 鈹€鈹€ Agent 鍥炲瑕嗗啓锛氭湇鍔＄鍥炴樉鏃?from 涓哄綋鍓嶇敤鎴锋墜鏈哄彿锛?
+        // 鍓嶇 isSelfById 浼氬懡涓鑷?AI 娑堟伅鏄剧ず鍦ㄥ彸渚с€傝繖閲屾娴?
+        // pending_agent_replies_ 涓殑 "channel:message" 閿紝鍛戒腑鍒欒鍐?sender銆?
         if (event.type == IrcPushEventType::Privmsg) {
             std::string key = event.channel + ":" + event.message;
             {
                 std::lock_guard<std::mutex> lock(pending_agent_replies_mutex_);
                 auto it = pending_agent_replies_.find(key);
                 if (it != pending_agent_replies_.end()) {
-                    payload["sender"] = "炎图AI助手";
+                    payload["sender"] = "鐐庡浘AI鍔╂墜";
                     pending_agent_replies_.erase(it);
-                    TRACE(_T("[CChatRoomBridge] Agent reply matched, sender overridden to 炎图AI助手\n"));
+                    TRACE(_T("[CChatRoomBridge] Agent reply matched, sender overridden to 鐐庡浘AI鍔╂墜\n"));
                 }
             }
         }
@@ -719,19 +746,19 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
     });
 
     transport.SetConnectionStateCallback([this](bool is_tcp, bool is_connected) {
-        // 同 Initialize —— transport 内部已自动重连，这里管理请求队列和重试。
+        // 鍚?Initialize 鈥斺€?transport 鍐呴儴宸茶嚜鍔ㄩ噸杩烇紝杩欓噷绠＄悊璇锋眰闃熷垪鍜岄噸璇曘€?
         TRACE(_T("[CChatRoomBridge] InitWithTransport ConnectionState: is_tcp=%d is_connected=%d\n"),
               is_tcp, is_connected);
 
-        // TCP 连接状态变化
+        // TCP 杩炴帴鐘舵€佸彉鍖?
         if (is_tcp) {
             is_connected_.store(is_connected);
             if (is_connected) {
-                // 连接恢复，重试排队的请求
+                // 杩炴帴鎭㈠锛岄噸璇曟帓闃熺殑璇锋眰
                 TRACE(_T("[CChatRoomBridge] Connection restored, retrying pending requests\n"));
                 RetryPendingRequests();
             } else {
-                // 连接断开
+                // 杩炴帴鏂紑
                 TRACE(_T("[CChatRoomBridge] Connection lost, requests will be queued\n"));
             }
         }
@@ -739,7 +766,7 @@ void CChatRoomBridge::InitializeWithTransport(ChatRoomBridgeDependencies deps,
 }
 
 void CChatRoomBridge::Shutdown() {
-    CIrcChatTransport::Instance().Shutdown();
+    ResolveTransport().Shutdown();
     initialized_ = false;
 }
 
@@ -760,8 +787,8 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
 
     ++requests_received_;
 
-    // TCP 连接断开时，将需要网络往返的命令加入队列
-    // 连接恢复后会自动重试（见 RetryPendingRequests）
+    // TCP 杩炴帴鏂紑鏃讹紝灏嗛渶瑕佺綉缁滃線杩旂殑鍛戒护鍔犲叆闃熷垪
+    // 杩炴帴鎭㈠鍚庝細鑷姩閲嶈瘯锛堣 RetryPendingRequests锛?
     auto needs_network_roundtrip = [](const std::string& kind) -> bool {
         return kind == "list_conversations" ||
                kind == "create_conversation" ||
@@ -781,7 +808,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
     };
 
     if (!is_connected_.load() && needs_network_roundtrip(req.kind)) {
-        // 连接断开，将请求加入队列
+        // 杩炴帴鏂紑锛屽皢璇锋眰鍔犲叆闃熷垪
         {
             std::lock_guard<std::mutex> lock(pending_requests_queue_mutex_);
             pending_requests_queue_.push_back(req);
@@ -790,27 +817,27 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
               CA2T(req.kind.c_str()), CA2T(req.request_id.c_str()),
               static_cast<int>(pending_requests_queue_.size()));
 
-        // 不发送响应 —— 重试成功后才会通过 callback 发送响应
+        // 涓嶅彂閫佸搷搴?鈥斺€?閲嶈瘯鎴愬姛鍚庢墠浼氶€氳繃 callback 鍙戦€佸搷搴?
         return;
     }
 
-    // join_channel 走 221 (IrcMessageReq) 通道 —— 与 PRIVMSG/PART/MODE/TOPIC 等 IRC
-    // 命令的协议类型保持一致。挂 seq 等响应，超时后回退本地 CMgrChannels 注册。
+    // join_channel 璧?221 (IrcMessageReq) 閫氶亾 鈥斺€?涓?PRIVMSG/PART/MODE/TOPIC 绛?IRC
+    // 鍛戒护鐨勫崗璁被鍨嬩繚鎸佷竴鑷淬€傛寕 seq 绛夊搷搴旓紝瓒呮椂鍚庡洖閫€鏈湴 CMgrChannels 娉ㄥ唽銆?
     if (req.kind == "join_channel") {
         HandleJoinChannelViaIrc(req);
         return;
     }
 
-    // send_message 走 221 (IrcMessageReq) 通道 —— 与 PRIVMSG 命令的协议类型保持一致。
-    // 挂 seq 等 222 ack 确认消息已被服务端接收，30s 超时降级为 fire-and-forget。
-    // Why：直接 fire-and-forget 无法区分"发送成功"和"发送失败但上层不知道"，
-    // 服务端确认机制提供可靠的端到端交付保证（对齐 §17.1）。
+    // send_message 璧?221 (IrcMessageReq) 閫氶亾 鈥斺€?涓?PRIVMSG 鍛戒护鐨勫崗璁被鍨嬩繚鎸佷竴鑷淬€?
+    // 鎸?seq 绛?222 ack 纭娑堟伅宸茶鏈嶅姟绔帴鏀讹紝30s 瓒呮椂闄嶇骇涓?fire-and-forget銆?
+    // Why锛氱洿鎺?fire-and-forget 鏃犳硶鍖哄垎"鍙戦€佹垚鍔?鍜?鍙戦€佸け璐ヤ絾涓婂眰涓嶇煡閬?锛?
+    // 鏈嶅姟绔‘璁ゆ満鍒舵彁渚涘彲闈犵殑绔埌绔氦浠樹繚璇侊紙瀵归綈 搂17.1锛夈€?
     if (req.kind == "send_message") {
         HandleSendMessageViaIrc(req);
         return;
     }
 
-    // Commands that need server response → async with callback
+    // Commands that need server response 鈫?async with callback
     if (req.kind == "list_conversations" ||
         req.kind == "create_conversation" ||
         req.kind == "part_channel" || req.kind == "kick_member" ||
@@ -831,8 +858,8 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             }
         } catch (...) {}
 
-        // GET_ROOM_INFO / LIST_ROOM_MEMBERS 服务端契约使用 room_id 字段（对齐 chat-bridge.mjs），
-        // 同时兼容早期前端传来的 channel 字段。channel_for_fallback 用于 30s 超时 fallback。
+        // GET_ROOM_INFO / LIST_ROOM_MEMBERS 鏈嶅姟绔绾︿娇鐢?room_id 瀛楁锛堝榻?chat-bridge.mjs锛夛紝
+        // 鍚屾椂鍏煎鏃╂湡鍓嶇浼犳潵鐨?channel 瀛楁銆俢hannel_for_fallback 鐢ㄤ簬 30s 瓒呮椂 fallback銆?
         std::string room_id;
         std::string channel_for_fallback;
         if (payload.is_object()) {
@@ -864,25 +891,25 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         else if (req.kind == "invite_member") command = "INVITE_MEMBER";
         else if (req.kind == "remove_member") command = "REMOVE_MEMBER";
         else if (req.kind == "list_conversations") command = "LIST_MY_CHAT_ROOMS";
-        // 个人任务命令（对齐 chat-bridge.mjs 中的 PERSONAL_TASK_* 命令）
+        // 涓汉浠诲姟鍛戒护锛堝榻?chat-bridge.mjs 涓殑 PERSONAL_TASK_* 鍛戒护锛?
         else if (req.kind == "list_personal_tasks") command = "PERSONAL_TASK_LIST";
         else if (req.kind == "create_personal_task") command = "PERSONAL_TASK_CREATE";
         else if (req.kind == "set_task_status") command = "PERSONAL_TASK_SET_STATUS";
         else if (req.kind == "reschedule_task") command = "PERSONAL_TASK_RESCHEDULE";
 
-        // 房间信息/成员查询的 payload 必须带 room_id，
+        // 鎴块棿淇℃伅/鎴愬憳鏌ヨ鐨?payload 蹇呴』甯?room_id锛?
         nlohmann::json cmd_payload = payload.is_object() ? payload : nlohmann::json::object();
         if (req.kind == "get_room_info" || req.kind == "list_room_members") {
             cmd_payload = nlohmann::json::object();
             cmd_payload["room_id"] = room_id;
         }
-        // 个人任务命令：前端发送 snake_case，服务端期望 camelCase，需要转换
+        // 涓汉浠诲姟鍛戒护锛氬墠绔彂閫?snake_case锛屾湇鍔＄鏈熸湜 camelCase锛岄渶瑕佽浆鎹?
         else if (req.kind == "create_personal_task") {
             nlohmann::json converted;
             converted["id"] = cmd_payload.value("id", "");
             converted["ownerUserId"] = cmd_payload.value("owner_user_id", "");
             converted["creatorUserId"] = cmd_payload.value("creator_user_id", cmd_payload.value("owner_user_id", ""));
-            converted["title"] = cmd_payload.value("title", "新任务");
+            converted["title"] = cmd_payload.value("title", "鏂颁换鍔?);
             converted["summary"] = cmd_payload.value("summary", "");
             converted["sourceConversationId"] = cmd_payload.value("source_conversation_id", "");
             converted["createdFromMessageId"] = cmd_payload.value("created_from_message_id", "");
@@ -907,7 +934,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             converted["dueTime"] = cmd_payload.value("due_time", "");
             cmd_payload = std::move(converted);
         }
-        // create_post：deadlineAt 需要转成字符串
+        // create_post锛歞eadlineAt 闇€瑕佽浆鎴愬瓧绗︿覆
         else if (req.kind == "create_post") {
             nlohmann::json converted;
             converted["id"] = cmd_payload.value("id", "");
@@ -918,7 +945,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             converted["actionType"] = cmd_payload.value("actionType", "read");
             converted["resourceType"] = cmd_payload.value("resourceType", "none");
             converted["resourceUrl"] = cmd_payload.value("resourceUrl", "");
-            // deadlineAt 必须是字符串（服务端 JSON schema 要求 string）
+            // deadlineAt 蹇呴』鏄瓧绗︿覆锛堟湇鍔＄ JSON schema 瑕佹眰 string锛?
             if (cmd_payload.contains("deadlineAt")) {
                 if (cmd_payload["deadlineAt"].is_number()) {
                     converted["deadlineAt"] = std::to_string(cmd_payload["deadlineAt"].get<int64_t>());
@@ -933,7 +960,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             cmd_payload = std::move(converted);
             TRACE(_T("[CChatRoomBridge] create_post payload: %hs\n"), cmd_payload.dump().c_str());
         }
-        // invite_member：前端发送 target 字段，服务端根据 member_kind 期望 phone / user_id / node_id
+        // invite_member锛氬墠绔彂閫?target 瀛楁锛屾湇鍔＄鏍规嵁 member_kind 鏈熸湜 phone / user_id / node_id
         else if (req.kind == "invite_member") {
             nlohmann::json converted;
             converted["room_id"] = cmd_payload.value("room_id", cmd_payload.value("channel", ""));
@@ -950,7 +977,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             }
             cmd_payload = std::move(converted);
         }
-        // remove_member：前端发送 target 字段，服务端根据 member_kind 期望 user_id / node_id
+        // remove_member锛氬墠绔彂閫?target 瀛楁锛屾湇鍔＄鏍规嵁 member_kind 鏈熸湜 user_id / node_id
         else if (req.kind == "remove_member") {
             nlohmann::json converted;
             converted["room_id"] = cmd_payload.value("room_id", cmd_payload.value("channel", ""));
@@ -988,14 +1015,14 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                 ? requested_name
                 : "#" + requested_name);
 
-        // 是否需要超时重试的命令（get_room_info / list_room_members）
+        // 鏄惁闇€瑕佽秴鏃堕噸璇曠殑鍛戒护锛坓et_room_info / list_room_members锛?
         bool needs_retry = (req.kind == "get_room_info" || req.kind == "list_room_members");
 
-        // 超时重试回调：重新发送请求，重试响应会调用原始 callback
+        // 瓒呮椂閲嶈瘯鍥炶皟锛氶噸鏂板彂閫佽姹傦紝閲嶈瘯鍝嶅簲浼氳皟鐢ㄥ師濮?callback
         std::function<bool(const std::string&, const nlohmann::json&)> timeout_cb;
         std::shared_ptr<std::function<void(bool, const std::string&)>> retry_callback_holder;
         if (needs_retry) {
-            // 保存原始 callback 的状态指针用于重试
+            // 淇濆瓨鍘熷 callback 鐨勭姸鎬佹寚閽堢敤浜庨噸璇?
             retry_callback_holder = std::make_shared<std::function<void(bool, const std::string&)>>(
                 [this, request_id, kind = req.kind, channel_for_fallback, fallback_name](bool ok, const std::string& payload_or_error) {
                     nlohmann::json response;
@@ -1114,11 +1141,11 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
             timeout_cb = [retry_callback_holder](const std::string& cmd, const nlohmann::json& body) -> bool {
                 TRACE(_T("[CChatRoomBridge] timeout_cb: retrying cmd=%hs\n"), cmd.c_str());
                 SendAppProtoCommandAsyncWithCb(cmd, body, *retry_callback_holder, nullptr);
-                return true; // 返回 true 表示我们来处理响应，原始 callback 会被跳过
+                return true; // 杩斿洖 true 琛ㄧず鎴戜滑鏉ュ鐞嗗搷搴旓紝鍘熷 callback 浼氳璺宠繃
             };
         }
 
-        // 传递 callback（第三个参数）和 timeout_cb（第四个参数）
+        // 浼犻€?callback锛堢涓変釜鍙傛暟锛夊拰 timeout_cb锛堢鍥涗釜鍙傛暟锛?
         SendAppProtoCommandAsyncWithCb(command, cmd_payload,
             [this, request_id, kind = req.kind, channel_for_fallback, fallback_name](bool ok, const std::string& payload_or_error) {
                 nlohmann::json response;
@@ -1128,7 +1155,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
 
                 if (!ok) {
                     if (kind == "create_conversation") {
-                        // CREATE_CONVERSATION 服务端无响应：本地降级创建 channel
+                        // CREATE_CONVERSATION 鏈嶅姟绔棤鍝嶅簲锛氭湰鍦伴檷绾у垱寤?channel
                         nlohmann::json local;
                         local["channel"] = fallback_name;
                         local["fallback"] = true;
@@ -1160,8 +1187,8 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                     response["ok"] = true;
                 }
 
-                // create_conversation：在本地 CMgrChannels 注册 channel（不管服务端 ok 还是 fallback），
-                // 确保后续 get_room_info/list_room_members 能找到 channel。
+                // create_conversation锛氬湪鏈湴 CMgrChannels 娉ㄥ唽 channel锛堜笉绠℃湇鍔＄ ok 杩樻槸 fallback锛夛紝
+                // 纭繚鍚庣画 get_room_info/list_room_members 鑳芥壘鍒?channel銆?
                 if (ok && kind == "create_conversation") {
                     std::string channel_name = fallback_name;
                     if (!final_payload.empty()) {
@@ -1207,7 +1234,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                     try {
                         auto parsed = nlohmann::json::parse(final_payload);
 
-                        // 230 房间管理响应可能带业务信封；WebView API 需要直接拿到房间对象。
+                        // 230 鎴块棿绠＄悊鍝嶅簲鍙兘甯︿笟鍔′俊灏侊紱WebView API 闇€瑕佺洿鎺ユ嬁鍒版埧闂村璞°€?
                         if (kind == "get_room_info") {
                             if (parsed.contains("room_info") && parsed["room_info"].is_object()) {
                                 nlohmann::json room_info = parsed["room_info"];
@@ -1224,13 +1251,13 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                             parsed.erase("room_members");
                         }
 
-                        // 前端 chatApi.js 期望 conversations 字段，但服务器返回的是 rooms
+                        // 鍓嶇 chatApi.js 鏈熸湜 conversations 瀛楁锛屼絾鏈嶅姟鍣ㄨ繑鍥炵殑鏄?rooms
                         if (kind == "list_conversations" && parsed.contains("rooms")) {
                             parsed["conversations"] = std::move(parsed["rooms"]);
                             parsed.erase("rooms");
                         }
-                        // list_conversations：把每个房间缓存到本地 CMgrChannels，
-                        // 让后续 get_room_info fallback 至少能找到 channel 拿到基本信息。
+                        // list_conversations锛氭妸姣忎釜鎴块棿缂撳瓨鍒版湰鍦?CMgrChannels锛?
+                        // 璁╁悗缁?get_room_info fallback 鑷冲皯鑳芥壘鍒?channel 鎷垮埌鍩烘湰淇℃伅銆?
                         if (kind == "list_conversations" && parsed.contains("conversations")) {
                             auto& mgr = CMgrChannels::Instance();
                             std::string nickname = deps_.get_current_nickname ? deps_.get_current_nickname() : GetCurrentNickname();
@@ -1261,19 +1288,19 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                                 }
                             }
                         }
-                        // 调试：打印 GET_ROOM_INFO 解包后的响应
+                        // 璋冭瘯锛氭墦鍗?GET_ROOM_INFO 瑙ｅ寘鍚庣殑鍝嶅簲
                         if (kind == "get_room_info") {
                             TRACE(_T("[CChatRoomBridge] get_room_info response: %hs\n"), parsed.dump().c_str());
                         }
-                        // list_room_members 标准化：确保 members 字段存在
+                        // list_room_members 鏍囧噯鍖栵細纭繚 members 瀛楁瀛樺湪
                         if (kind == "list_room_members" && !parsed.contains("members")) {
                             parsed["members"] = nlohmann::json::array();
                         }
-                        // ── 关键修复：服务端响应数据不完整时，merge 本地 CMgrChannels fallback ──
-                        // 服务端 LIST_MY_CHAT_ROOMS 返回的 rooms 不含 members；
-                        // GET_ROOM_INFO 在某些环境下返回空对象；
-                        // LIST_ROOM_MEMBERS 可能根本没注册到服务端。
-                        // 一律 merge 本地 channel 的 members，确保前端能渲染群成员列表。
+                        // 鈹€鈹€ 鍏抽敭淇锛氭湇鍔＄鍝嶅簲鏁版嵁涓嶅畬鏁存椂锛宮erge 鏈湴 CMgrChannels fallback 鈹€鈹€
+                        // 鏈嶅姟绔?LIST_MY_CHAT_ROOMS 杩斿洖鐨?rooms 涓嶅惈 members锛?
+                        // GET_ROOM_INFO 鍦ㄦ煇浜涚幆澧冧笅杩斿洖绌哄璞★紱
+                        // LIST_ROOM_MEMBERS 鍙兘鏍规湰娌℃敞鍐屽埌鏈嶅姟绔€?
+                        // 涓€寰?merge 鏈湴 channel 鐨?members锛岀‘淇濆墠绔兘娓叉煋缇ゆ垚鍛樺垪琛ㄣ€?
                         if ((kind == "get_room_info" || kind == "list_room_members") &&
                             !channel_for_fallback.empty()) {
                             bool need_merge = false;
@@ -1295,7 +1322,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                                             TRACE(_T("[CChatRoomBridge] %hs merged local members count=%zu\n"),
                                                   CA2T(kind.c_str()), local_parsed["members"].size());
                                         }
-                                        // 也补上其他本地有但服务端没有的字段
+                                        // 涔熻ˉ涓婂叾浠栨湰鍦版湁浣嗘湇鍔＄娌℃湁鐨勫瓧娈?
                                         if (!parsed.contains("name") && local_parsed.contains("name")) {
                                             parsed["name"] = local_parsed["name"];
                                         }
@@ -1315,7 +1342,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
                                 }
                             }
                         }
-                        // join_channel：在本地 CMgrChannels 注册 channel，确保后续查询能找到
+                        // join_channel锛氬湪鏈湴 CMgrChannels 娉ㄥ唽 channel锛岀‘淇濆悗缁煡璇㈣兘鎵惧埌
                         if (ok && !channel_for_fallback.empty()) {
                             auto& mgr = CMgrChannels::Instance();
                             std::string nickname = deps_.get_current_nickname ? deps_.get_current_nickname() : GetCurrentNickname();
@@ -1355,7 +1382,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         return;
     }
 
-    // Commands that are fully local (no server round-trip) → sync
+    // Commands that are fully local (no server round-trip) 鈫?sync
     if (req.kind == "send_prompt" || req.kind == "set_mode" ||
         req.kind == "promote_operator" || req.kind == "demote_operator" ||
         req.kind == "whois" || req.kind == "names") {
@@ -1392,7 +1419,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         return;
     }
 
-    // Unknown kind → immediate error
+    // Unknown kind 鈫?immediate error
     nlohmann::json response;
     response["channel"] = "chatroom.bridge.response";
     response["requestId"] = req.request_id;
@@ -1506,7 +1533,7 @@ bool CChatRoomBridge::HandleSendMessage(const BridgeRequest& req,
     // The server echoes it back via push (privmsg event), which arrives asynchronously
     // through the push receiver thread.  This avoids the race where a concurrent push
     // message on the socket is misread as the response to this request.
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     bool ok = transport.SendPrivmsgNoWait(channel, message);
 
     resp.ok = ok;
@@ -1517,10 +1544,10 @@ bool CChatRoomBridge::HandleSendMessage(const BridgeRequest& req,
         resp.payload_json = "{\"sent\":true}";
         }
 
-    // ── OpenClaw AI Agent 调用（对齐 AIAssistant/JsBridge 的 chatSendPrivmsg 中 agent mention 检测逻辑）──
-    // 条件：消息中包含 @炎图AI助手 或频道为 workspace
+    // 鈹€鈹€ OpenClaw AI Agent 璋冪敤锛堝榻?AIAssistant/JsBridge 鐨?chatSendPrivmsg 涓?agent mention 妫€娴嬮€昏緫锛夆攢鈹€
+    // 鏉′欢锛氭秷鎭腑鍖呭惈 @鐐庡浘AI鍔╂墜 鎴栭閬撲负 workspace
     if (ok) {
-        // 诊断：打印 message 的前 120 字节（十六进制 + 可读字符）
+        // 璇婃柇锛氭墦鍗?message 鐨勫墠 120 瀛楄妭锛堝崄鍏繘鍒?+ 鍙瀛楃锛?
         {
             std::ostringstream diag;
             diag << "HandleSendMessage message(len=" << message.size() << "): ";
@@ -1533,38 +1560,38 @@ bool CChatRoomBridge::HandleSendMessage(const BridgeRequest& req,
         }
 
         bool isAgentMention = false;
-        // TEMP: 禁用 Agent 请求，避免 OpenClaw 服务不可用时卡死
-        // TODO: 重新启用前确保 OpenClaw 服务 (192.168.20.12:3000) 已运行
+        // TEMP: 绂佺敤 Agent 璇锋眰锛岄伩鍏?OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
+        // TODO: 閲嶆柊鍚敤鍓嶇‘淇?OpenClaw 鏈嶅姟 (192.168.20.12:3000) 宸茶繍琛?
         
         if (message.find('@') != std::string::npos) {
-            // UTF-8 编码的 "炎图AI助手": E7 82 8E E5 9B BE 41 49 E5 8A A9 E6 89 8B
+            // UTF-8 缂栫爜鐨?"鐐庡浘AI鍔╂墜": E7 82 8E E5 9B BE 41 49 E5 8A A9 E6 89 8B
             static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
             isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
             if (!isAgentMention) {
-                // GBK 误解释形态（UTF-8 字节被当 GBK 解码）
-                isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
+                // GBK 璇В閲婂舰鎬侊紙UTF-8 瀛楄妭琚綋 GBK 瑙ｇ爜锛?
+                isAgentMention = (message.find("@閻愬骸娴楢I閸斺晜澧?) != std::string::npos);
             }
-            // 兜底：直接搜索源码中的 UTF-8 literal（取决于源文件编码）
+            // 鍏滃簳锛氱洿鎺ユ悳绱㈡簮鐮佷腑鐨?UTF-8 literal锛堝彇鍐充簬婧愭枃浠剁紪鐮侊級
             if (!isAgentMention) {
-                isAgentMention = (message.find("@炎图AI助手") != std::string::npos);
+                isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
             }
         }
         if (!isAgentMention && channel.find("#workspace_") != std::string::npos) {
             isAgentMention = true;
         }
         
-        // 暂时禁用 Agent 检测，避免 OpenClaw 服务不可用时卡死
+        // 鏆傛椂绂佺敤 Agent 妫€娴嬶紝閬垮厤 OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
         //isAgentMention = false;
         TRACE(_T("[CChatRoomBridge] HandleSendMessage: isAgentMention=%d\n"), isAgentMention ? 1 : 0);
-        // TEMP: 禁用 Agent 请求触发，避免 OpenClaw 服务不可用时卡死
+        // TEMP: 绂佺敤 Agent 璇锋眰瑙﹀彂锛岄伩鍏?OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
          if (isAgentMention) {
              TRACE(_T("[CChatRoomBridge] HandleSendMessage: agent mention detected, triggering OpenClaw request\n"));
              SendOpenClawAgentRequest(channel, message);
          }
     }
 
-    // 异步处理，done_cb 或 timeout thread 会发 EmitResponse。此处不填充 resp
-    // （已由 HandleWebMessageAsync 忽略），也不在此 EmitResponse——避免与 async callback 竞争。
+    // 寮傛澶勭悊锛宒one_cb 鎴?timeout thread 浼氬彂 EmitResponse銆傛澶勪笉濉厖 resp
+    // 锛堝凡鐢?HandleWebMessageAsync 蹇界暐锛夛紝涔熶笉鍦ㄦ EmitResponse鈥斺€旈伩鍏嶄笌 async callback 绔炰簤銆?
     return true;
 }
 
@@ -1599,7 +1626,7 @@ bool CChatRoomBridge::HandleSendPrompt(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TCP (for AI commands).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     bool ok = transport.SendIrcCommandTcpNoWait(channel, "PRIVMSG", message);
     
     resp.ok = ok;
@@ -1613,9 +1640,9 @@ bool CChatRoomBridge::HandleSendPrompt(const BridgeRequest& req,
     return true;
 }
 
-// join_channel 通过 221 (IrcMessageReq) 发送（协议类型与 PRIVMSG/PART/MODE/TOPIC 等
-// IRC 命令一致）。服务端会在 221 通道回 222 IrcMessageResp，payload 为 JOIN ack JSON。
-// 挂 seq 等响应：收到 222 ack 后 resolve；30s 未响应则降级（本地注册 + 返回 fallback:true）。
+// join_channel 閫氳繃 221 (IrcMessageReq) 鍙戦€侊紙鍗忚绫诲瀷涓?PRIVMSG/PART/MODE/TOPIC 绛?
+// IRC 鍛戒护涓€鑷达級銆傛湇鍔＄浼氬湪 221 閫氶亾鍥?222 IrcMessageResp锛宲ayload 涓?JOIN ack JSON銆?
+// 鎸?seq 绛夊搷搴旓細鏀跺埌 222 ack 鍚?resolve锛?0s 鏈搷搴斿垯闄嶇骇锛堟湰鍦版敞鍐?+ 杩斿洖 fallback:true锛夈€?
 void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
     std::string request_id = req.request_id;
 
@@ -1644,9 +1671,9 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
         return;
     }
 
-    // 用 shared_ptr 原子标记追踪 callback 是否已被调用（用于超时判断）。
-    // 关键：called 必须被 done_cb 和超时线程以 shared_ptr 捕获（非 weak_ptr），
-    // 否则 called 在函数返回时析构，后续 weak_ptr.lock() 永远返回 null。
+    // 鐢?shared_ptr 鍘熷瓙鏍囪杩借釜 callback 鏄惁宸茶璋冪敤锛堢敤浜庤秴鏃跺垽鏂級銆?
+    // 鍏抽敭锛歝alled 蹇呴』琚?done_cb 鍜岃秴鏃剁嚎绋嬩互 shared_ptr 鎹曡幏锛堥潪 weak_ptr锛夛紝
+    // 鍚﹀垯 called 鍦ㄥ嚱鏁拌繑鍥炴椂鏋愭瀯锛屽悗缁?weak_ptr.lock() 姘歌繙杩斿洖 null銆?
     auto called = std::make_shared<std::atomic<bool>>(false);
 
     auto register_channel_locally = [this, channel]() {
@@ -1671,20 +1698,20 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
         EmitResponse(rid, true, "", out.dump());
     };
 
-    // seq callback：服务端 222 JOIN ack 到达时触发
+    // seq callback锛氭湇鍔＄ 222 JOIN ack 鍒拌揪鏃惰Е鍙?
     auto done_cb = [this, request_id, channel, called,
                     register_channel_locally, emit_success]
                     (uint32_t seq, const std::string& resp_payload) {
         TRACE(_T("[CChatRoomBridge] HandleJoinChannelViaIrc ack: seq=%u resp_len=%zu\n"),
               seq, resp_payload.size());
 
-        if (called->exchange(true)) return;  // 已处理过
+        if (called->exchange(true)) return;  // 宸插鐞嗚繃
 
         register_channel_locally();
         std::string sid = deps_.get_current_session_id ? deps_.get_current_session_id() : GetCurrentSessionId();
         TrackJoinedChannel(sid, channel);
 
-        // 把服务端 ack JSON 透传给前端（room_members/status/session_id 等元数据）
+        // 鎶婃湇鍔＄ ack JSON 閫忎紶缁欏墠绔紙room_members/status/session_id 绛夊厓鏁版嵁锛?
         try {
             auto ack = nlohmann::json::parse(resp_payload);
             nlohmann::json out = ack;
@@ -1708,7 +1735,7 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
         return;
     }
 
-    // 30s 超时降级：本地注册 + 返回 {joined:true, fallback:true}
+    // 30s 瓒呮椂闄嶇骇锛氭湰鍦版敞鍐?+ 杩斿洖 {joined:true, fallback:true}
     std::thread([called, request_id, channel,
                  register_channel_locally, emit_success]() {
         std::this_thread::sleep_for(std::chrono::seconds(30));
@@ -1721,9 +1748,9 @@ void CChatRoomBridge::HandleJoinChannelViaIrc(const BridgeRequest& req) {
     }).detach();
 }
 
-// send_message 走 221 (IrcMessageReq) → 222 (IrcMessageResp) 通道，挂 seq 等 ACK。
-// 服务端 ACK 的 JSON payload 与接收到的 push 消息 JSON 格式一致，仅 seq 不同。
-// 收到 222 ack（status=ok/accepted）后 resolve；30s 未响应则降级返回 fallback:true。
+// send_message 璧?221 (IrcMessageReq) 鈫?222 (IrcMessageResp) 閫氶亾锛屾寕 seq 绛?ACK銆?
+// 鏈嶅姟绔?ACK 鐨?JSON payload 涓庢帴鏀跺埌鐨?push 娑堟伅 JSON 鏍煎紡涓€鑷达紝浠?seq 涓嶅悓銆?
+// 鏀跺埌 222 ack锛坰tatus=ok/accepted锛夊悗 resolve锛?0s 鏈搷搴斿垯闄嶇骇杩斿洖 fallback:true銆?
 void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
     std::string request_id = req.request_id;
 
@@ -1764,17 +1791,17 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
         return;
     }
 
-    // ── OpenClaw AI Agent 检测：在发送前检查是否需要触发 AI 请求 ──
-    // 对齐 AIAssistant/JsBridge 的 chatSendPrivmsg 中 agent mention 检测逻辑
+    // 鈹€鈹€ OpenClaw AI Agent 妫€娴嬶細鍦ㄥ彂閫佸墠妫€鏌ユ槸鍚﹂渶瑕佽Е鍙?AI 璇锋眰 鈹€鈹€
+    // 瀵归綈 AIAssistant/JsBridge 鐨?chatSendPrivmsg 涓?agent mention 妫€娴嬮€昏緫
     bool isAgentMention = false;
     if (message.find('@') != std::string::npos) {
         static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
         isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
         if (!isAgentMention) {
-            isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
+            isAgentMention = (message.find("@閻愬骸娴楢I閸斺晜澧?) != std::string::npos);
         }
         if (!isAgentMention) {
-            isAgentMention = (message.find("@炎图AI助手") != std::string::npos);
+            isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
         }
     }
     if (!isAgentMention && channel.find("#workspace_") != std::string::npos) {
@@ -1782,10 +1809,10 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
     }
     TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: isAgentMention=%d\n"), isAgentMention ? 1 : 0);
 
-    // 用 shared_ptr 原子标记追踪 callback 是否已被调用（用于超时判断）。
-    // 关键：called 必须被 done_cb 和超时线程以 shared_ptr 捕获（非 weak_ptr），
-    // 否则 called 在函数返回时析构，后续 weak_ptr.lock() 永远返回 null，
-    // ACK 回调静默丢弃、前端永远收不到响应。
+    // 鐢?shared_ptr 鍘熷瓙鏍囪杩借釜 callback 鏄惁宸茶璋冪敤锛堢敤浜庤秴鏃跺垽鏂級銆?
+    // 鍏抽敭锛歝alled 蹇呴』琚?done_cb 鍜岃秴鏃剁嚎绋嬩互 shared_ptr 鎹曡幏锛堥潪 weak_ptr锛夛紝
+    // 鍚﹀垯 called 鍦ㄥ嚱鏁拌繑鍥炴椂鏋愭瀯锛屽悗缁?weak_ptr.lock() 姘歌繙杩斿洖 null锛?
+    // ACK 鍥炶皟闈欓粯涓㈠純銆佸墠绔案杩滄敹涓嶅埌鍝嶅簲銆?
     auto called = std::make_shared<std::atomic<bool>>(false);
 
     auto emit_success = [this, channel](const std::string& rid, bool fallback) {
@@ -1796,19 +1823,19 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
         EmitResponse(rid, true, "", out.dump());
     };
 
-    // seq callback：服务端 222 PRIVMSG ack 到达时触发
-    // ack JSON 格式与接收到的 push 消息一致：{"event":"PRIVMSG","channel":"#xxx","message":"...","status":"ok",...}
+    // seq callback锛氭湇鍔＄ 222 PRIVMSG ack 鍒拌揪鏃惰Е鍙?
+    // ack JSON 鏍煎紡涓庢帴鏀跺埌鐨?push 娑堟伅涓€鑷达細{"event":"PRIVMSG","channel":"#xxx","message":"...","status":"ok",...}
     auto done_cb = [this, request_id, channel, called, emit_success]
                    (uint32_t seq, const std::string& resp_payload) {
         TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc ack: seq=%u resp_len=%zu\n"),
               seq, resp_payload.size());
 
-        if (called->exchange(true)) return;  // 已处理过
+        if (called->exchange(true)) return;  // 宸插鐞嗚繃
 
         try {
             auto ack = nlohmann::json::parse(resp_payload);
             std::string status = ack.value("status", std::string());
-            // 服务端 PRIVMSG ack 的 status 可能为 "ok" 或 "accepted"（对齐 §17.1 注意项）
+            // 鏈嶅姟绔?PRIVMSG ack 鐨?status 鍙兘涓?"ok" 鎴?"accepted"锛堝榻?搂17.1 娉ㄦ剰椤癸級
             bool is_ok = (status == "ok" || status == "accepted");
 
             nlohmann::json out;
@@ -1819,12 +1846,12 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
                 out["error"] = err;
                 EmitResponse(request_id, false, err, out.dump());
             } else {
-                // 把服务端 ack JSON 透传给前端（含 ts / session_id 等元数据）
+                // 鎶婃湇鍔＄ ack JSON 閫忎紶缁欏墠绔紙鍚?ts / session_id 绛夊厓鏁版嵁锛?
                 out["ack"] = ack;
                 EmitResponse(request_id, true, "", out.dump());
             }
         } catch (...) {
-            // ack 解析失败，视为成功（至少服务端回了 222 帧）
+            // ack 瑙ｆ瀽澶辫触锛岃涓烘垚鍔燂紙鑷冲皯鏈嶅姟绔洖浜?222 甯э級
             emit_success(request_id, false);
         }
     };
@@ -1841,13 +1868,13 @@ void CChatRoomBridge::HandleSendMessageViaIrc(const BridgeRequest& req) {
         return;
     }
 
-    // 触发 OpenClaw AI Agent 请求（后台线程，不阻塞 ACK 等待）
+    // 瑙﹀彂 OpenClaw AI Agent 璇锋眰锛堝悗鍙扮嚎绋嬶紝涓嶉樆濉?ACK 绛夊緟锛?
     if (isAgentMention) {
         TRACE(_T("[CChatRoomBridge] HandleSendMessageViaIrc: agent mention detected, triggering OpenClaw request\n"));
         SendOpenClawAgentRequest(channel, message);
     }
 
-    // 30s 超时降级：返回 {sent:true, fallback:true}
+    // 30s 瓒呮椂闄嶇骇锛氳繑鍥?{sent:true, fallback:true}
     std::thread([called, request_id, channel, emit_success]() {
         std::this_thread::sleep_for(std::chrono::seconds(30));
         if (!called->load()) {
@@ -1887,7 +1914,7 @@ bool CChatRoomBridge::HandlePartChannel(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TCP (PART will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendPartNoWait(channel, reason);
 
     auto result = mgr.Part(peer, channel);
@@ -1935,7 +1962,7 @@ bool CChatRoomBridge::HandleKickMember(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (KICK will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendKickNoWait(channel, target, reason);
 
     auto result = mgr.Kick(nickname, channel, target);
@@ -1982,7 +2009,7 @@ bool CChatRoomBridge::HandleBanMember(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (MODE will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendModeNoWait(channel, "+b " + mask);
 
     auto result = mgr.Ban(nickname, channel, mask);
@@ -2029,7 +2056,7 @@ bool CChatRoomBridge::HandleSetTopic(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (TOPIC will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendTopicNoWait(channel, topic);
 
     auto result = mgr.SetTopic(nickname, channel, topic);
@@ -2078,7 +2105,7 @@ bool CChatRoomBridge::HandleSetMode(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (MODE will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendModeNoWait(channel, mode_str);
 
     auto result = mgr.SetChannelMode(nickname, channel, mode_str);
@@ -2127,7 +2154,7 @@ bool CChatRoomBridge::HandlePromoteOperator(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (MODE will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendModeNoWait(channel, "+o " + target);
 
     bool success = mgr.PromoteToOperator(nickname, channel, target);
@@ -2171,7 +2198,7 @@ bool CChatRoomBridge::HandleDemoteOperator(const BridgeRequest& req,
     }
 
     // Use fire-and-forget via TLS (MODE will be echoed back via push).
-    auto& transport = CIrcChatTransport::Instance();
+    auto& transport = ResolveTransport();
     transport.SendModeNoWait(channel, "-o " + target);
 
     bool success = mgr.DemoteOperator(nickname, channel, target);
@@ -2490,7 +2517,7 @@ bool CChatRoomBridge::HandleCloseTopic(const BridgeRequest& req,
     return true;
 }
 
-// ── 群任务帖子管理 ─────────────────────────────────────────────
+// 鈹€鈹€ 缇や换鍔″笘瀛愮鐞?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 void CChatRoomBridge::EmitToWeb(const BridgePush& push) {
     if (!deps_.emit_to_web) {
@@ -2635,7 +2662,7 @@ std::string CChatRoomBridge::BuildPushJson(const BridgePush& push) {
 void CChatRoomBridge::RetryPendingRequests() {
     std::deque<BridgeRequest> requests_to_retry;
 
-    // 取出所有排队的请求
+    // 鍙栧嚭鎵€鏈夋帓闃熺殑璇锋眰
     {
         std::lock_guard<std::mutex> lock(pending_requests_queue_mutex_);
         requests_to_retry = std::move(pending_requests_queue_);
@@ -2647,7 +2674,7 @@ void CChatRoomBridge::RetryPendingRequests() {
 
     TRACE(_T("[CChatRoomBridge] Retrying %d pending requests\n"), static_cast<int>(requests_to_retry.size()));
 
-    // 逐个重试
+    // 閫愪釜閲嶈瘯
     while (!requests_to_retry.empty()) {
         BridgeRequest req = std::move(requests_to_retry.front());
         requests_to_retry.pop_front();
@@ -2655,7 +2682,7 @@ void CChatRoomBridge::RetryPendingRequests() {
         TRACE(_T("[CChatRoomBridge] Retrying request: kind=%s requestId=%s\n"),
               CA2T(req.kind.c_str()), CA2T(req.request_id.c_str()));
 
-        // 使用 HandleWebMessageAsync 异步处理（不走排队逻辑）
+        // 浣跨敤 HandleWebMessageAsync 寮傛澶勭悊锛堜笉璧版帓闃熼€昏緫锛?
         HandleWebMessageAsync(req);
     }
 }
@@ -2667,15 +2694,15 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
 {
     TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: channel=%hs\n"), channel.c_str());
 
-    // 后台线程发送 HTTP POST 请求，对齐 AIAssistant/JsBridge 的 openclaw 调用逻辑
+    // 鍚庡彴绾跨▼鍙戦€?HTTP POST 璇锋眰锛屽榻?AIAssistant/JsBridge 鐨?openclaw 璋冪敤閫昏緫
     std::thread([this, channel, message, openclawHost, openclawPort, openclawPath, timeoutMs]() {
         try {
-            // 1. 剥离 @炎图AI助手 前缀（按 AIAssistant 方式处理两种编码形态）
+            // 1. 鍓ョ @鐐庡浘AI鍔╂墜 鍓嶇紑锛堟寜 AIAssistant 鏂瑰紡澶勭悊涓ょ缂栫爜褰㈡€侊級
             std::string aiPrompt = message;
             size_t pos = std::string::npos;
-            if ((pos = aiPrompt.find("@炎图AI助手")) != std::string::npos) {
+            if ((pos = aiPrompt.find("@鐐庡浘AI鍔╂墜")) != std::string::npos) {
                 aiPrompt.erase(pos, 8);
-            } else if ((pos = aiPrompt.find("@鐐庡浘AI鍔╂墜")) != std::string::npos) {
+            } else if ((pos = aiPrompt.find("@閻愬骸娴楢I閸斺晜澧?)) != std::string::npos) {
                 aiPrompt.erase(pos, 8);
             }
             // Trim whitespace
@@ -2689,7 +2716,7 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
 
             TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: aiPrompt=%hs\n"), aiPrompt.c_str());
 
-            // 2. 构建 AI_TASK_REQUEST JSON（对齐 agent-chat 的 buildOpenClawMessage 格式）
+            // 2. 鏋勫缓 AI_TASK_REQUEST JSON锛堝榻?agent-chat 鐨?buildOpenClawMessage 鏍煎紡锛?
             std::string aiTaskRequestJson;
             {
                 nlohmann::json aiTaskRequest = nlohmann::json::object();
@@ -2710,7 +2737,7 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
                 wrappedMessage += aiPrompt;
             }
 
-            // 3. 构建 HTTP POST 请求体
+            // 3. 鏋勫缓 HTTP POST 璇锋眰浣?
             nlohmann::json requestBody = nlohmann::json::object();
             requestBody["message"] = wrappedMessage;
             requestBody["sessionKey"] = "main";
@@ -2727,7 +2754,7 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
             TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: POST %hs:%d%hs body_len=%zu\n"),
                   openclawHost.c_str(), openclawPort, openclawPath.c_str(), requestBodyJson.size());
 
-            // 4. 发送 HTTP POST 请求到 OpenClaw 服务
+            // 4. 鍙戦€?HTTP POST 璇锋眰鍒?OpenClaw 鏈嶅姟
             DWORD statusCode = 0;
             const std::string responseRaw = HttpPostJson(
                 std::wstring(openclawHost.begin(), openclawHost.end()),
@@ -2738,7 +2765,7 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
             TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: response status=%lu body=%hs\n"),
                   statusCode, responseRaw.c_str());
 
-            // 5. 解析 OpenClaw 响应，提取 AI 回复文本
+            // 5. 瑙ｆ瀽 OpenClaw 鍝嶅簲锛屾彁鍙?AI 鍥炲鏂囨湰
             if (statusCode == 200 && !responseRaw.empty()) {
                 try {
                     auto responseJson = nlohmann::json::parse(responseRaw);
@@ -2751,7 +2778,7 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
                             ? responseJson["error"].get<std::string>() : "OpenClaw returned error";
                         TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: business error=%hs\n"), err.c_str());
                     } else {
-                        // 按优先级提取回复文本：text > reply > message > content > raw
+                        // 鎸変紭鍏堢骇鎻愬彇鍥炲鏂囨湰锛歵ext > reply > message > content > raw
                         if (responseJson.contains("text") && responseJson["text"].is_string()) {
                             aiReply = responseJson["text"].get<std::string>();
                         } else if (responseJson.contains("reply") && responseJson["reply"].is_string()) {
@@ -2765,8 +2792,8 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
                         }
                     }
 
-                    // 6. 将 AI 回复以 Agent 身份广播到频道（session_id=0, from=炎图AI助手）
-                    // 先写入追踪集，push 回调收到回显时会覆写 sender 为"炎图AI助手"
+                    // 6. 灏?AI 鍥炲浠?Agent 韬唤骞挎挱鍒伴閬擄紙session_id=0, from=鐐庡浘AI鍔╂墜锛?
+                    // 鍏堝啓鍏ヨ拷韪泦锛宲ush 鍥炶皟鏀跺埌鍥炴樉鏃朵細瑕嗗啓 sender 涓?鐐庡浘AI鍔╂墜"
                     if (!aiReply.empty()) {
                         {
                             std::lock_guard<std::mutex> lock(pending_agent_replies_mutex_);
@@ -2774,8 +2801,8 @@ void CChatRoomBridge::SendOpenClawAgentRequest(
                         }
                         TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: broadcasting AI reply to %hs\n"),
                               channel.c_str());
-                        auto& transport = CIrcChatTransport::Instance();
-                        transport.SendPrivmsgAsAgentNoWait(channel, aiReply, "炎图AI助手");
+                        auto& transport = ResolveTransport();
+                        transport.SendPrivmsgAsAgentNoWait(channel, aiReply, "鐐庡浘AI鍔╂墜");
                     }
                 } catch (const nlohmann::json::parse_error& e) {
                     TRACE(_T("[CChatRoomBridge] SendOpenClawAgentRequest: JSON parse error=%hs\n"), e.what());

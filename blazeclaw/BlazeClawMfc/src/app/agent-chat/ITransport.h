@@ -20,6 +20,10 @@ namespace blazeclaw::irc {
             uint64_t messages_sent_tcp = 0;
             uint64_t messages_sent_tls = 0;
             uint64_t push_events = 0;
+            uint64_t reconnect_attempts = 0;
+            uint64_t reconnect_successes = 0;
+            uint64_t reconnect_failures = 0;
+            uint64_t last_backoff_ms = 0;
             bool tcp_connected = false;
             bool tls_connected = false;
         };
@@ -62,6 +66,8 @@ namespace blazeclaw::irc {
             const std::string& cmd,
             const std::string& message = "") = 0;
 
+        // Blocking sync helpers: may wait up to socket recv timeout (~5s).
+        // Prefer NoWait / async callback paths from UI threads.
         virtual std::string SendCommandTcp(const std::string& body) = 0;
         virtual std::string SendCommandTls(const std::string& body) = 0;
 
