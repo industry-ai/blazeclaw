@@ -126,6 +126,9 @@
     <ClInclude Include="src\agentchat\AgentChatBridgeStateStore.h" />
     <ClInclude Include="src\agentchat\AgentChatNativeRunner.h" />
     <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
+    <ClInclude Include="src\app\agent-chat\CIrcChatTransport.h" />
+    <ClInclude Include="src\app\agent-chat\IrcMessageParser.h" />
+    <ClInclude Include="src\app\agent-chat\WorkerThread.h" />
     <ClInclude Include="src\app\AudioRingBuffer.h" />
     <ClInclude Include="src\app\BlazeClawMarkdownView.h" />
     <ClInclude Include="src\app\AIChatView.h" />
@@ -140,7 +143,6 @@
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChatMessage.h" />
     <ClInclude Include="src\app\CChatRoomBridge.h" />
-    <ClInclude Include="src\app\CIrcChatTransport.h" />
     <ClInclude Include="src\app\CChannel.h" />
     <ClInclude Include="src\app\CMgrChannels.h" />
     <ClInclude Include="src\app\COperator.h" />
@@ -395,6 +397,8 @@
     <ClCompile Include="src\agentchat\AgentChatBridgeProtocol.cpp" />
     <ClCompile Include="src\agentchat\AgentChatBridgeStateStore.cpp" />
     <ClCompile Include="src\agentchat\AgentChatNativeRunner.cpp" />
+    <ClCompile Include="src\app\agent-chat\CIrcChatTransport.cpp" />
+    <ClCompile Include="src\app\agent-chat\IrcMessageParser.cpp" />
     <ClCompile Include="src\app\AIChatView.cpp" />
     <ClCompile Include="src\app\AudioRingBuffer.cpp" />
     <ClCompile Include="src\app\BlazeClawMarkdownView.cpp" />
@@ -425,7 +429,6 @@
     <ClCompile Include="src\app\ChatView.cpp" />
     <ClCompile Include="src\app\ChatMessage.cpp" />
     <ClCompile Include="src\app\CChatRoomBridge.cpp" />
-    <ClCompile Include="src\app\CIrcChatTransport.cpp" />
     <ClCompile Include="src\app\CChannel.cpp" />
     <ClCompile Include="src\app\CMgrChannels.cpp" />
     <ClCompile Include="src\app\COperator.cpp" />

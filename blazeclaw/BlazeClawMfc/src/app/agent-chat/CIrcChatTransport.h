@@ -8,8 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "AppProtoHeader.h"
-#include "NetworkTimeouts.h"
+#include "../AppProtoHeader.h"
+#include "../NetworkTimeouts.h"
+#include "WorkerThread.h"
 
 namespace blazeclaw::irc {
 
@@ -130,7 +131,7 @@ private:
     void ReconnectLoop(bool is_tcp);
 
     std::atomic<bool> reconnect_running_{ false };
-    std::thread reconnect_thread_;
+    blazeclaw::app::WorkerThread reconnect_worker_;
     std::chrono::milliseconds reconnect_backoff_{ blazeclaw::net::kInitialReconnectBackoff };  // 当前 backoff
 
     std::atomic<bool> initialized_{ false };
@@ -138,7 +139,7 @@ private:
     IrcPushCallback push_callback_;
 
     std::atomic<bool> heartbeat_running_{ false };
-    std::thread heartbeat_thread_;
+    blazeclaw::app::WorkerThread heartbeat_worker_;
     std::atomic<bool> tcp_connected_{ false };
 
     std::function<void(bool is_tcp, bool is_connected)> connection_state_callback_;

@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "CIrcChatTransport.h"
+#include "IrcMessageParser.h"
+#include "WorkerThread.h"
 
 #include <algorithm>
 #include <chrono>
@@ -8,8 +10,8 @@
 #include <set>
 #include <sstream>
 
-#include "CNetwork_c.h"
-#include "Logger.h"
+#include "../CNetwork_c.h"
+#include "../Logger.h"
 
 #include <nlohmann/json.hpp>
 
@@ -295,13 +297,13 @@ void CIrcChatTransport::Shutdown() {
         // ReconnectLoop 正在跑，告诉它退�?
         LOG_INFO("[CIrcChatTransport] Shutdown: signaling ReconnectLoop to exit");
     }
-    if (reconnect_thread_.joinable()) {
-        reconnect_thread_.join();
+    if (reconnect_worker_.Joinable()) {
+        reconnect_worker_.Join();
         LOG_INFO("[CIrcChatTransport] Shutdown: reconnect thread joined");
     }
 
-    if (heartbeat_thread_.joinable()) {
-        heartbeat_thread_.join();
+    if (heartbeat_worker_.Joinable()) {
+        heartbeat_worker_.Join();
         LOG_INFO("[CIrcChatTransport] Shutdown: heartbeat thread joined");
     }
 
@@ -349,13 +351,9 @@ void CIrcChatTransport::ScheduleAutoReconnect(bool is_tcp) {
     // 上一�?reconnect_thread_ 如果�?joinable（ReconnectLoop 自然 return 但没�?join/detach），
     // 直接 reconnect_thread_ = std::thread(...) 会触�?abort�?
     // 这里在每次调度前 join 一下，确保 reconnect_thread_ 不是 joinable 状态�?
-    if (reconnect_thread_.joinable()) {
-        reconnect_thread_.join();
-    }
-    try {
-        reconnect_thread_ = std::thread([this, is_tcp]() { ReconnectLoop(is_tcp); });
-    } catch (const std::exception& e) {
-        LOG_ERROR("[CIrcChatTransport] ScheduleAutoReconnect failed to spawn thread: {}", e.what());
+    reconnect_worker_.Join();
+    if (!reconnect_worker_.Start([this, is_tcp]() { ReconnectLoop(is_tcp); })) {
+        LOG_ERROR("[CIrcChatTransport] ScheduleAutoReconnect failed to spawn thread");
         reconnect_running_.store(false);
     }
 }
@@ -738,38 +736,39 @@ CIrcChatTransport::Diagnostics CIrcChatTransport::GetDiagnostics() const {
 
 std::string CIrcChatTransport::BuildPrivmsgPayload(const std::string& channel,
                                                    const std::string& message) {
-    auto escapeJson = [](const std::string& s) {
-        std::string out;
-        out.reserve(s.size() + 8);
-        for (char c : s) {
-            switch (c) {
-                case '"':  out += "\\\""; break;
-                case '\\': out += "\\\\"; break;
-                case '\n': out += "\\n";  break;
-                case '\r': out += "\\r";  break;
-                case '\t': out += "\\t";  break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        char buf[8];
-                        std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                        out += buf;
-                    } else {
-                        out.push_back(c);
-                    }
-            }
-        }
-        return out;
-    };
-    std::ostringstream oss;
-    oss << "{";
-    oss << "\"cmd\":\"PRIVMSG\",";
-    oss << "\"channel\":\"" << escapeJson(channel) << "\",";
-    oss << "\"message\":\"" << escapeJson(message) << "\",";
-    // ts Unix epoch 秒（墙钟），不是设备启动后的秒数
-    // 对齐 chat-bridge.mjs：Math.floor(Date.now() / 1000)
-    oss << "\"ts\":" << GetCurrentUnixSeconds();
-    oss << "}";
-    return oss.str();
+    //auto escapeJson = [](const std::string& s) {
+    //    std::string out;
+    //    out.reserve(s.size() + 8);
+    //    for (char c : s) {
+    //        switch (c) {
+    //            case '"':  out += "\\\""; break;
+    //            case '\\': out += "\\\\"; break;
+    //            case '\n': out += "\\n";  break;
+    //            case '\r': out += "\\r";  break;
+    //            case '\t': out += "\\t";  break;
+    //            default:
+    //                if (static_cast<unsigned char>(c) < 0x20) {
+    //                    char buf[8];
+    //                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+    //                    out += buf;
+    //                } else {
+    //                    out.push_back(c);
+    //                }
+    //        }
+    //    }
+    //    return out;
+    //};
+    //std::ostringstream oss;
+    //oss << "{";
+    //oss << "\"cmd\":\"PRIVMSG\",";
+    //oss << "\"channel\":\"" << escapeJson(channel) << "\",";
+    //oss << "\"message\":\"" << escapeJson(message) << "\",";
+    //// ts Unix epoch 秒（墙钟），不是设备启动后的秒数
+    //// 对齐 chat-bridge.mjs：Math.floor(Date.now() / 1000)
+    //oss << "\"ts\":" << GetCurrentUnixSeconds();
+    //oss << "}";
+    //return oss.str();
+    return IrcMessageParser::BuildPrivmsgPayload(channel, message);
 }
 
 IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
@@ -1017,7 +1016,8 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // ── 2) Raw IRC line 格式（RFC 1459）──
     // Try to parse as PRIVMSG
     std::string nick, user, host, channel, message;
-    if (ParsePrivmsg(payload, nick, user, host, channel, message)) {
+    if (IrcMessageParser::ParsePrivmsgLine(
+            payload, nick, user, host, channel, message)) {
         event.type = IrcPushEventType::Privmsg;
         event.sender_nick = nick;
         event.sender_user = user;
@@ -1030,16 +1030,24 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // Try as JOIN
     if (payload.find("JOIN") != std::string::npos) {
         event.type = IrcPushEventType::Join;
-        ParseJoinPart(payload, event.sender_nick, event.sender_user,
-                      event.sender_host, event.channel);
+        IrcMessageParser::ParseJoinPartLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel);
         return event;
     }
 
     // Try as PART
     if (payload.find("PART") != std::string::npos) {
         event.type = IrcPushEventType::Part;
-        ParseJoinPart(payload, event.sender_nick, event.sender_user,
-                      event.sender_host, event.channel);
+        IrcMessageParser::ParseJoinPartLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel);
         return event;
     }
 
@@ -1125,8 +1133,13 @@ IrcPushEvent CIrcChatTransport::ParseIrcMessage(const std::string& payload) {
     // Try as NOTICE
     if (payload.find("NOTICE") != std::string::npos) {
         event.type = IrcPushEventType::Notice;
-        ParsePrivmsg(payload, event.sender_nick, event.sender_user,
-                     event.sender_host, event.channel, event.message);
+        IrcMessageParser::ParsePrivmsgLine(
+            payload,
+            event.sender_nick,
+            event.sender_user,
+            event.sender_host,
+            event.channel,
+            event.message);
         return event;
     }
 

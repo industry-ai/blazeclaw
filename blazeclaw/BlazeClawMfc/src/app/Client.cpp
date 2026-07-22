@@ -16,7 +16,7 @@
 #include <nlohmann/json.hpp>
 
 #include "CNetwork_c.h"
-#include "CIrcChatTransport.h"
+#include "agent-chat/CIrcChatTransport.h"
 #include "IoData_cFactory.h"
 #include "LogSinks.h"
 #include "Logger.h"
