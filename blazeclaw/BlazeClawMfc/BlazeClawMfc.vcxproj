@@ -126,6 +126,7 @@
     <ClInclude Include="src\agentchat\AgentChatBridgeStateStore.h" />
     <ClInclude Include="src\agentchat\AgentChatNativeRunner.h" />
     <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
+    <ClInclude Include="src\app\agent-chat\AgentChatEvent.h" />
     <ClInclude Include="src\app\agent-chat\CIrcChatTransport.h" />
     <ClInclude Include="src\app\agent-chat\INetworkClient.h" />
     <ClInclude Include="src\app\agent-chat\IrcMessageParser.h" />
@@ -975,5 +976,3 @@
     <Copy SourceFiles="@(BlazeClawLlamaCppRuntimeAssets)" DestinationFiles="@(BlazeClawLlamaCppRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>
-
-

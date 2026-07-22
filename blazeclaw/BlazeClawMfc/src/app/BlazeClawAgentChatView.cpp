@@ -806,8 +806,11 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				continue;
 			}
 
+			// Streamed responses are produced by the orchestrator and normalized into frontend events
 			const std::string type = eventPayload.value("type", std::string());
-			if (type == "delta")
+			// the normalization/emit sites that convert orchestrator SSE payloads into 
+			// frontend events (`emitToWeb` calls)
+			if (type == "delta")	// partial/streamed updates
 			{
 				TRACE(
 					"CBlazeClawAgentChatView: native bridge delta requestId=%s\n",
@@ -818,7 +821,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 					{ "payload", eventPayload },
 				});
 			}
-			else if (type == "final")
+			else if (type == "final")	// finalized response
 			{
 				TRACE(
 					"CBlazeClawAgentChatView: native bridge final requestId=%s\n",
@@ -829,7 +832,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 					{ "payload", eventPayload },
 				});
 			}
-			else if (type == "error")
+			else if (type == "error")	// errors
 			{
 				TRACE(
 					"CBlazeClawAgentChatView: native bridge error requestId=%s\n",

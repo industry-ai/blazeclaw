@@ -1259,6 +1259,9 @@
     <ClInclude Include="src\app\CChatRoomBridge.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\agent-chat\AgentChatEvent.h">
+      <Filter>agent-chat</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />
