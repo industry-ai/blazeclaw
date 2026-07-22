@@ -835,8 +835,9 @@ namespace blazeclaw::agentchat {
 			if (mapped.core.timestampMs == 0) {
 				mapped.core.timestampMs = CurrentEpochMilliseconds();
 			}
+			const std::string wireEventJson = mapped.ToWireJson();
 			stream += "data: ";
-			stream += mapped.ToWireJson();
+			stream += wireEventJson;
 			stream += "\n\n";
 		}
 

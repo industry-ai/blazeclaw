@@ -7,6 +7,7 @@
 #include "CChatRoomBridge.h"
 #include "Client.h"
 #include "CNetwork_c.h"
+#include "agent-chat/AgentChatEvent.h"
 #include "../agentchat/AgentChatEventPayload.h"
 
 #include <Shlwapi.h>
@@ -809,7 +810,15 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 			auto mappedEvent = blazeclaw::agentchat::AgentChatEventPayload::FromWireObject(eventPayload);
 			mappedEvent.requestId = requestId;
-			const nlohmann::json normalizedEventPayload = mappedEvent.ToWireObject();
+			blazeclaw::agentchat::AgentChatEvent appEvent;
+			appEvent.inner = mappedEvent.core;
+			appEvent.requestId = mappedEvent.requestId;
+			appEvent.runId = mappedEvent.runId;
+			appEvent.state = mappedEvent.state;
+			if (mappedEvent.extra.has_value()) {
+				appEvent.extra = mappedEvent.extra.value();
+			}
+			const nlohmann::json normalizedEventPayload = appEvent.ToWireObject();
 
 			// Streamed responses are produced by the orchestrator and normalized into frontend events
 			const std::string type = normalizedEventPayload.value("type", std::string());

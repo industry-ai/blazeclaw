@@ -18,15 +18,38 @@ namespace blazeclaw::agentchat {
 		std::optional<std::string> state; // e.g., "final", "partial"
 		std::optional<nlohmann::json> extra; // toolCalls, approval, etc.
 
+		[[nodiscard]] nlohmann::json ToWireObject() const {
+			nlohmann::json obj = nlohmann::json::parse(inner.ToWireJson(), nullptr, false);
+			if (obj.is_discarded() || !obj.is_object()) {
+				obj = nlohmann::json::object();
+			}
+
+			if (requestId.has_value()) {
+				obj["requestId"] = requestId.value();
+			}
+			if (runId.has_value()) {
+				obj["runId"] = runId.value();
+			}
+			if (promptRunId.has_value()) {
+				obj["promptRunId"] = promptRunId.value();
+			}
+			if (state.has_value()) {
+				obj["state"] = state.value();
+			}
+			if (extra.has_value()) {
+				obj["extra"] = extra.value();
+			}
+
+			return obj;
+		}
+
 		// Produce the wire JSON expected by the frontend / SSE consumers
-		std::string ToWireJson() const {
-			nlohmann::json obj = nlohmann::json::parse(inner.ToWireJson());
-			if (requestId.has_value()) obj["requestId"] = requestId.value();
-			if (runId.has_value()) obj["runId"] = runId.value();
-			if (promptRunId.has_value()) obj["promptRunId"] = promptRunId.value();
-			if (state.has_value()) obj["state"] = state.value();
-			if (extra.has_value()) obj["extra"] = extra.value();
-			return obj.dump();
+		[[nodiscard]] std::string ToWireJson() const {
+			return ToWireObject().dump(
+				-1,
+				' ',
+				false,
+				nlohmann::json::error_handler_t::replace);
 		}
 	};
 
