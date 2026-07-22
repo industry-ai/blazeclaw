@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "AgentChatBridgeHost.h"
+#include "AgentChatEventPayload.h"
 
 #include <algorithm>
 #include <cctype>
@@ -830,8 +831,12 @@ namespace blazeclaw::agentchat {
 		void AppendSseEvent(
 			std::string& stream,
 			const nlohmann::json& payload) {
+			AgentChatEventPayload mapped = AgentChatEventPayload::FromWireObject(payload);
+			if (mapped.core.timestampMs == 0) {
+				mapped.core.timestampMs = CurrentEpochMilliseconds();
+			}
 			stream += "data: ";
-			stream += JsonDumpCompact(payload);
+			stream += mapped.ToWireJson();
 			stream += "\n\n";
 		}
 

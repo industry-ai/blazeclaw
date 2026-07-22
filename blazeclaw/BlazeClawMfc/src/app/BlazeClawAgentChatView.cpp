@@ -7,6 +7,7 @@
 #include "CChatRoomBridge.h"
 #include "Client.h"
 #include "CNetwork_c.h"
+#include "../agentchat/AgentChatEventPayload.h"
 
 #include <Shlwapi.h>
 #include <nlohmann/json.hpp>
@@ -806,8 +807,12 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				continue;
 			}
 
+			auto mappedEvent = blazeclaw::agentchat::AgentChatEventPayload::FromWireObject(eventPayload);
+			mappedEvent.requestId = requestId;
+			const nlohmann::json normalizedEventPayload = mappedEvent.ToWireObject();
+
 			// Streamed responses are produced by the orchestrator and normalized into frontend events
-			const std::string type = eventPayload.value("type", std::string());
+			const std::string type = normalizedEventPayload.value("type", std::string());
 			// the normalization/emit sites that convert orchestrator SSE payloads into 
 			// frontend events (`emitToWeb` calls)
 			if (type == "delta")	// partial/streamed updates
@@ -818,7 +823,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.delta" },
 					{ "requestId", requestId },
-					{ "payload", eventPayload },
+					{ "payload", normalizedEventPayload },
 				});
 			}
 			else if (type == "final")	// finalized response
@@ -829,7 +834,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.final" },
 					{ "requestId", requestId },
-					{ "payload", eventPayload },
+					{ "payload", normalizedEventPayload },
 				});
 			}
 			else if (type == "error")	// errors
@@ -840,7 +845,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				emitToWeb(nlohmann::json{
 					{ "channel", "agentchat.bridge.stream.error" },
 					{ "requestId", requestId },
-					{ "payload", eventPayload },
+					{ "payload", normalizedEventPayload },
 				});
 			}
 		}

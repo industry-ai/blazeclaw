@@ -124,6 +124,7 @@
     <ClInclude Include="src\agentchat\AgentChatBridgeHttpListener.h" />
     <ClInclude Include="src\agentchat\AgentChatBridgeProtocol.h" />
     <ClInclude Include="src\agentchat\AgentChatBridgeStateStore.h" />
+    <ClInclude Include="src\agentchat\AgentChatEventPayload.h" />
     <ClInclude Include="src\agentchat\AgentChatNativeRunner.h" />
     <ClInclude Include="src\agentchat\AgentChatOrchestratorAdapter.h" />
     <ClInclude Include="src\app\agent-chat\AgentChatEvent.h" />

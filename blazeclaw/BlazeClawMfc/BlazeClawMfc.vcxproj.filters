@@ -1262,6 +1262,7 @@
     <ClInclude Include="src\app\agent-chat\AgentChatEvent.h">
       <Filter>agent-chat</Filter>
     </ClInclude>
+    <ClInclude Include="src\agentchat\AgentChatEventPayload.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />
