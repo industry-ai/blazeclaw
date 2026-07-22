@@ -1,0 +1,668 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Directory Id="dir_f_models" Name="models">
+        <Directory Id="dir_f_models_embeddings" Name="embeddings">
+        </Directory>
+      </Directory>
+      <Directory Id="dir_f_web" Name="web">
+        <Directory Id="dir_f_web_agent_chat_vanilla" Name="agent-chat-vanilla">
+          <Directory Id="dir_f_web_agent_chat_vanilla_html" Name="html">
+            <Directory Id="dir_f_web_agent_chat_vanilla_html_css" Name="css">
+            </Directory>
+            <Directory Id="dir_f_web_agent_chat_vanilla_html_docs" Name="docs">
+            </Directory>
+            <Directory Id="dir_f_web_agent_chat_vanilla_html_js" Name="js">
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_api" Name="api">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_bridge" Name="bridge">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_irc" Name="irc">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_pages" Name="pages">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_panels" Name="panels">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_protocol" Name="protocol">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_stores" Name="stores">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_transport" Name="transport">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html_js_utils" Name="utils">
+              </Directory>
+            </Directory>
+          </Directory>
+          <Directory Id="dir_f_web_agent_chat_vanilla_html_" Name="html-">
+            <Directory Id="dir_f_web_agent_chat_vanilla_html__css" Name="css">
+            </Directory>
+            <Directory Id="dir_f_web_agent_chat_vanilla_html__docs" Name="docs">
+            </Directory>
+            <Directory Id="dir_f_web_agent_chat_vanilla_html__js" Name="js">
+              <Directory Id="dir_f_web_agent_chat_vanilla_html__js_api" Name="api">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html__js_pages" Name="pages">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html__js_stores" Name="stores">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html__js_transport" Name="transport">
+              </Directory>
+              <Directory Id="dir_f_web_agent_chat_vanilla_html__js_utils" Name="utils">
+              </Directory>
+            </Directory>
+          </Directory>
+          <Directory Id="dir_f_web_agent_chat_vanilla_server" Name="server">
+          </Directory>
+        </Directory>
+        <Directory Id="dir_f_web_calendar" Name="calendar">
+        </Directory>
+        <Directory Id="dir_f_web_chat" Name="chat">
+          <Directory Id="dir_f_web_chat_dist" Name="dist">
+          </Directory>
+        </Directory>
+      </Directory>
+    </DirectoryRef>
+  </Fragment>
+  <Fragment>
+    <ComponentGroup Id="PackageComponents">
+      <Component Id="cmp_1" Guid="{BF676140-EDA9-43B5-0084-27481B16F9B8}" Directory="INSTALLFOLDER">
+        <File Id="fil_1" Source="D:\contblazeclaw\blazeclaw\bin\Release\blazeclaw.conf" KeyPath="yes" Name="blazeclaw.conf" />
+      </Component>
+      <Component Id="cmp_2" Guid="{1AD6EEF9-A9A5-13B6-6F40-2519CDC06504}" Directory="INSTALLFOLDER">
+        <File Id="fil_2" Source="D:\contblazeclaw\blazeclaw\bin\Release\BlazeClawAppUtils.idb" KeyPath="yes" Name="BlazeClawAppUtils.idb" />
+      </Component>
+      <Component Id="cmp_3" Guid="{0AD634C4-8AEA-F9D7-839D-407A2953CC70}" Directory="INSTALLFOLDER">
+        <File Id="fil_3" Source="D:\contblazeclaw\blazeclaw\bin\Release\BlazeClawAppUtils.lib" KeyPath="yes" Name="BlazeClawAppUtils.lib" />
+      </Component>
+      <Component Id="cmp_4" Guid="{BC48CB2F-BB60-8FE5-4A92-FD6A6DE61366}" Directory="INSTALLFOLDER">
+        <File Id="fil_4" Source="D:\contblazeclaw\blazeclaw\bin\Release\client.conf" KeyPath="yes" Name="client.conf" />
+      </Component>
+      <Component Id="cmp_5" Guid="{E0276DB5-9402-A63B-1C20-7D76F6F52102}" Directory="INSTALLFOLDER">
+        <File Id="fil_5" Source="D:\contblazeclaw\blazeclaw\bin\Release\client212.conf" KeyPath="yes" Name="client212.conf" />
+      </Component>
+      <Component Id="cmp_6" Guid="{0E203AD5-2E33-E206-815D-A4C272516650}" Directory="INSTALLFOLDER">
+        <File Id="fil_6" Source="D:\contblazeclaw\blazeclaw\bin\Release\cublas64_13.dll" KeyPath="yes" Name="cublas64_13.dll" />
+      </Component>
+      <Component Id="cmp_7" Guid="{4FAB8BE6-B41D-1E09-0AA6-6BF43777E3FE}" Directory="INSTALLFOLDER">
+        <File Id="fil_7" Source="D:\contblazeclaw\blazeclaw\bin\Release\cublasLt64_13.dll" KeyPath="yes" Name="cublasLt64_13.dll" />
+      </Component>
+      <Component Id="cmp_8" Guid="{49747591-70D5-BAA6-A2D1-FAA0639FED08}" Directory="INSTALLFOLDER">
+        <File Id="fil_8" Source="D:\contblazeclaw\blazeclaw\bin\Release\ggml-base.dll" KeyPath="yes" Name="ggml-base.dll" />
+      </Component>
+      <Component Id="cmp_9" Guid="{70A9B01E-9988-E23F-84FD-38C7916A995C}" Directory="INSTALLFOLDER">
+        <File Id="fil_9" Source="D:\contblazeclaw\blazeclaw\bin\Release\ggml-cpu.dll" KeyPath="yes" Name="ggml-cpu.dll" />
+      </Component>
+      <Component Id="cmp_10" Guid="{325AFFAE-B92C-1380-90A9-80A1E598BB8E}" Directory="INSTALLFOLDER">
+        <File Id="fil_10" Source="D:\contblazeclaw\blazeclaw\bin\Release\ggml-cuda.dll" KeyPath="yes" Name="ggml-cuda.dll" />
+      </Component>
+      <Component Id="cmp_11" Guid="{05481AC7-6698-9C0B-9E72-280D6B133409}" Directory="INSTALLFOLDER">
+        <File Id="fil_11" Source="D:\contblazeclaw\blazeclaw\bin\Release\ggml.dll" KeyPath="yes" Name="ggml.dll" />
+      </Component>
+      <Component Id="cmp_12" Guid="{6C85FF0C-E879-E668-A309-4232F3657221}" Directory="INSTALLFOLDER">
+        <File Id="fil_12" Source="D:\contblazeclaw\blazeclaw\bin\Release\libcrypto-3-x64.dll" KeyPath="yes" Name="libcrypto-3-x64.dll" />
+      </Component>
+      <Component Id="cmp_13" Guid="{4D4549CD-4740-DEBD-D06D-FC45B6EDA3AF}" Directory="INSTALLFOLDER">
+        <File Id="fil_13" Source="D:\contblazeclaw\blazeclaw\bin\Release\libcurl-d.dll" KeyPath="yes" Name="libcurl-d.dll" />
+      </Component>
+      <Component Id="cmp_14" Guid="{55B1CCC9-5BFA-7958-60A0-2C0324ED8F31}" Directory="INSTALLFOLDER">
+        <File Id="fil_14" Source="D:\contblazeclaw\blazeclaw\bin\Release\libeay32.lib" KeyPath="yes" Name="libeay32.lib" />
+      </Component>
+      <Component Id="cmp_15" Guid="{D8E52156-A54C-F83D-2556-3F989E484F5B}" Directory="INSTALLFOLDER">
+        <File Id="fil_15" Source="D:\contblazeclaw\blazeclaw\bin\Release\libssl-3-x64.dll" KeyPath="yes" Name="libssl-3-x64.dll" />
+      </Component>
+      <Component Id="cmp_16" Guid="{C827FCD9-8EED-7954-AF83-CCF72F5A4F6E}" Directory="INSTALLFOLDER">
+        <File Id="fil_16" Source="D:\contblazeclaw\blazeclaw\bin\Release\llama-common.dll" KeyPath="yes" Name="llama-common.dll" />
+      </Component>
+      <Component Id="cmp_17" Guid="{C6992323-DFE4-F526-61A2-6D7D583B7FD3}" Directory="INSTALLFOLDER">
+        <File Id="fil_17" Source="D:\contblazeclaw\blazeclaw\bin\Release\llama.dll" KeyPath="yes" Name="llama.dll" />
+      </Component>
+      <Component Id="cmp_18" Guid="{5F953956-2B5E-2164-7DAB-75FCA0587337}" Directory="INSTALLFOLDER">
+        <File Id="fil_18" Source="D:\contblazeclaw\blazeclaw\bin\Release\mfc140ud.dll" KeyPath="yes" Name="mfc140ud.dll" />
+      </Component>
+      <Component Id="cmp_19" Guid="{880558F0-108D-F11C-E0F1-3C996740B15E}" Directory="INSTALLFOLDER">
+        <File Id="fil_19" Source="D:\contblazeclaw\blazeclaw\bin\Release\mtmd.dll" KeyPath="yes" Name="mtmd.dll" />
+      </Component>
+      <Component Id="cmp_20" Guid="{62829A11-F0BB-5A99-E0C8-8EFBB25DB719}" Directory="INSTALLFOLDER">
+        <File Id="fil_20" Source="D:\contblazeclaw\blazeclaw\bin\Release\onnxruntime.dll" KeyPath="yes" Name="onnxruntime.dll" />
+      </Component>
+      <Component Id="cmp_21" Guid="{136A9870-D4F2-32F8-4178-A085C0BFFE5A}" Directory="INSTALLFOLDER">
+        <File Id="fil_21" Source="D:\contblazeclaw\blazeclaw\bin\Release\onnxruntime_providers_cuda.dll" KeyPath="yes" Name="onnxruntime_providers_cuda.dll" />
+      </Component>
+      <Component Id="cmp_22" Guid="{C0191932-E8A9-58B8-69FA-DB4246A971B9}" Directory="INSTALLFOLDER">
+        <File Id="fil_22" Source="D:\contblazeclaw\blazeclaw\bin\Release\onnxruntime_providers_shared.dll" KeyPath="yes" Name="onnxruntime_providers_shared.dll" />
+      </Component>
+      <Component Id="cmp_23" Guid="{F9D6A4A8-FC97-07A5-0B9C-E496552EDFC8}" Directory="INSTALLFOLDER">
+        <File Id="fil_23" Source="D:\contblazeclaw\blazeclaw\bin\Release\onnxruntime_providers_tensorrt.dll" KeyPath="yes" Name="onnxruntime_providers_tensorrt.dll" />
+      </Component>
+      <Component Id="cmp_24" Guid="{2F99D397-109B-9EBD-3B9A-6CEB5EE257CF}" Directory="INSTALLFOLDER">
+        <File Id="fil_24" Source="D:\contblazeclaw\blazeclaw\bin\Release\session_id.txt" KeyPath="yes" Name="session_id.txt" />
+      </Component>
+      <Component Id="cmp_25" Guid="{E909B7D3-E645-CCFC-1A8C-C3E3346FDD01}" Directory="INSTALLFOLDER">
+        <File Id="fil_25" Source="D:\contblazeclaw\blazeclaw\bin\Release\ssleay32.lib" KeyPath="yes" Name="ssleay32.lib" />
+      </Component>
+      <Component Id="cmp_26" Guid="{0D7AF6F4-1780-3590-2B7C-5E0484214E2D}" Directory="INSTALLFOLDER">
+        <File Id="fil_26" Source="D:\contblazeclaw\blazeclaw\bin\Release\vcruntime140.dll" KeyPath="yes" Name="vcruntime140.dll" />
+      </Component>
+      <Component Id="cmp_27" Guid="{AFE6B1FF-81F5-6D8C-CDE6-F5565C8DA3CF}" Directory="INSTALLFOLDER">
+        <File Id="fil_27" Source="D:\contblazeclaw\blazeclaw\bin\Release\vcruntime140_1d.dll" KeyPath="yes" Name="vcruntime140_1d.dll" />
+      </Component>
+      <Component Id="cmp_28" Guid="{8E8113D3-F18C-A0DC-ED18-56071016C652}" Directory="INSTALLFOLDER">
+        <File Id="fil_28" Source="D:\contblazeclaw\blazeclaw\bin\Release\WebView2Loader.dll" KeyPath="yes" Name="WebView2Loader.dll" />
+      </Component>
+      <Component Id="cmp_29" Guid="{97DF1C2F-523A-35F6-67BA-0123ABE7F63A}" Directory="INSTALLFOLDER">
+        <File Id="fil_29" Source="D:\contblazeclaw\blazeclaw\bin\Release\zlibd1.dll" KeyPath="yes" Name="zlibd1.dll" />
+      </Component>
+      <Component Id="cmp_30" Guid="{84BDEA5A-27C0-145F-0F15-D9DF034A5E37}" Directory="dir_f_models_embeddings">
+        <File Id="fil_30" Source="D:\contblazeclaw\blazeclaw\bin\Release\models\embeddings\README.md" KeyPath="yes" Name="README.md" />
+      </Component>
+      <Component Id="cmp_31" Guid="{770C22A8-C635-4222-5926-88566EC80CCF}" Directory="dir_f_web">
+        <File Id="fil_31" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla.zip" KeyPath="yes" Name="agent-chat-vanilla.zip" />
+      </Component>
+      <Component Id="cmp_32" Guid="{EFEC92D1-BAD1-A4A9-2229-9D6A9D6C8005}" Directory="dir_f_web">
+        <File Id="fil_32" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat.zip" KeyPath="yes" Name="chat.zip" />
+      </Component>
+      <Component Id="cmp_33" Guid="{F1AFC72E-1438-AF41-6683-ECDE91728260}" Directory="dir_f_web_agent_chat_vanilla">
+        <File Id="fil_33" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\.env" KeyPath="yes" Name=".env" />
+      </Component>
+      <Component Id="cmp_34" Guid="{F2E20613-7745-7952-B7F3-FA75F84BFE4E}" Directory="dir_f_web_agent_chat_vanilla">
+        <File Id="fil_34" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html.zip" KeyPath="yes" Name="html.zip" />
+      </Component>
+      <Component Id="cmp_35" Guid="{36832A06-7FFF-B233-E006-E9AF34C97C50}" Directory="dir_f_web_agent_chat_vanilla">
+        <File Id="fil_35" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\package.json" KeyPath="yes" Name="package.json" />
+      </Component>
+      <Component Id="cmp_36" Guid="{00A2A997-BE5A-FD20-45C0-EAB286B16510}" Directory="dir_f_web_agent_chat_vanilla_html">
+        <File Id="fil_36" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\index.html" KeyPath="yes" Name="index.html" />
+      </Component>
+      <Component Id="cmp_37" Guid="{8D393249-E299-9E95-7DBE-443EB58FBB42}" Directory="dir_f_web_agent_chat_vanilla_html_css">
+        <File Id="fil_37" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\css\main.css" KeyPath="yes" Name="main.css" />
+      </Component>
+      <Component Id="cmp_38" Guid="{4DDE15F3-C286-0B1E-CF1D-725A3938F749}" Directory="dir_f_web_agent_chat_vanilla_html_css">
+        <File Id="fil_38" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\css\variables.css" KeyPath="yes" Name="variables.css" />
+      </Component>
+      <Component Id="cmp_39" Guid="{066DFF29-D9CC-38B2-59CA-2CC17AA41DC2}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_39" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\api-flow-documentation.md" KeyPath="yes" Name="api-flow-documentation.md" />
+      </Component>
+      <Component Id="cmp_40" Guid="{50B56BB0-5237-E748-AE91-45FF583889C5}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_40" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\app端迁移评估报告.md" KeyPath="yes" Name="app端迁移评估报告.md" />
+      </Component>
+      <Component Id="cmp_41" Guid="{2283789E-0159-A116-6E37-1F0A135997C7}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_41" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\CHAT_REFACTORING_PLAN.md" KeyPath="yes" Name="CHAT_REFACTORING_PLAN.md" />
+      </Component>
+      <Component Id="cmp_42" Guid="{9136E186-DDA2-DBF3-E9C2-9354906EA7E7}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_42" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\GROUP_CHAT_IMPLEMENTATION_PLAN.md" KeyPath="yes" Name="GROUP_CHAT_IMPLEMENTATION_PLAN.md" />
+      </Component>
+      <Component Id="cmp_43" Guid="{F0F188D2-4C8D-4440-33F2-F188A3DBBEDB}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_43" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\IRC_CHATROOM_ARCHITECTURE.md" KeyPath="yes" Name="IRC_CHATROOM_ARCHITECTURE.md" />
+      </Component>
+      <Component Id="cmp_44" Guid="{36E5AC19-F1C6-8DA7-A636-DF00BF2CD13A}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_44" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md" KeyPath="yes" Name="MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md" />
+      </Component>
+      <Component Id="cmp_45" Guid="{1A5685A9-49EE-8ECD-F1EE-97728049C072}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_45" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\product-specification.md" KeyPath="yes" Name="product-specification.md" />
+      </Component>
+      <Component Id="cmp_46" Guid="{9C9DDB4A-1B20-C70D-966A-6962F25177C4}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_46" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\PROJECT_FULL_GUIDE.md" KeyPath="yes" Name="PROJECT_FULL_GUIDE.md" />
+      </Component>
+      <Component Id="cmp_47" Guid="{26F694F1-6AFA-37A4-BC4B-D90F5E4265A8}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_47" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\PROJECT_OVERVIEW.md" KeyPath="yes" Name="PROJECT_OVERVIEW.md" />
+      </Component>
+      <Component Id="cmp_48" Guid="{70E88505-E92A-D3F2-492E-491F7D18D0EA}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_48" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\REFACTORING_PLAN.md" KeyPath="yes" Name="REFACTORING_PLAN.md" />
+      </Component>
+      <Component Id="cmp_49" Guid="{084DD254-7D98-DFEB-7359-B8E0ACE5FA44}" Directory="dir_f_web_agent_chat_vanilla_html_docs">
+        <File Id="fil_49" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\docs\TCP_BRIDGE_IMPLEMENTATION.md" KeyPath="yes" Name="TCP_BRIDGE_IMPLEMENTATION.md" />
+      </Component>
+      <Component Id="cmp_50" Guid="{D8BDBEF5-B62A-27B7-9251-0B431A4AB0B7}" Directory="dir_f_web_agent_chat_vanilla_html_js">
+        <File Id="fil_50" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\app.js" KeyPath="yes" Name="app.js" />
+      </Component>
+      <Component Id="cmp_51" Guid="{385B1611-8919-B355-45D4-2904FC6D1928}" Directory="dir_f_web_agent_chat_vanilla_html_js">
+        <File Id="fil_51" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\config.js" KeyPath="yes" Name="config.js" />
+      </Component>
+      <Component Id="cmp_52" Guid="{022CF3C7-0513-015F-3263-69DD4B70A618}" Directory="dir_f_web_agent_chat_vanilla_html_js_api">
+        <File Id="fil_52" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\api\agentBridgeTransport.js" KeyPath="yes" Name="agentBridgeTransport.js" />
+      </Component>
+      <Component Id="cmp_53" Guid="{3A032C5A-9043-CC2A-805B-E5DBB3F287BD}" Directory="dir_f_web_agent_chat_vanilla_html_js_api">
+        <File Id="fil_53" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\api\authApi.js" KeyPath="yes" Name="authApi.js" />
+      </Component>
+      <Component Id="cmp_54" Guid="{01984116-81ED-CB91-A99C-FF1276BF720C}" Directory="dir_f_web_agent_chat_vanilla_html_js_api">
+        <File Id="fil_54" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\api\chatApi.js" KeyPath="yes" Name="chatApi.js" />
+      </Component>
+      <Component Id="cmp_55" Guid="{4D58DE6C-3956-DEAE-BB28-604B41719217}" Directory="dir_f_web_agent_chat_vanilla_html_js_api">
+        <File Id="fil_55" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\api\httpClient.js" KeyPath="yes" Name="httpClient.js" />
+      </Component>
+      <Component Id="cmp_56" Guid="{9EA58186-5578-E815-E049-48E12767998D}" Directory="dir_f_web_agent_chat_vanilla_html_js_api">
+        <File Id="fil_56" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\api\postApi.js" KeyPath="yes" Name="postApi.js" />
+      </Component>
+      <Component Id="cmp_57" Guid="{667B4DDD-828F-1B79-5CA8-E4001D326B88}" Directory="dir_f_web_agent_chat_vanilla_html_js_bridge">
+        <File Id="fil_57" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\bridge\core.js" KeyPath="yes" Name="core.js" />
+      </Component>
+      <Component Id="cmp_58" Guid="{C374C012-8E4B-59DB-66AA-783FC4C924CF}" Directory="dir_f_web_agent_chat_vanilla_html_js_bridge">
+        <File Id="fil_58" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\bridge\index.js" KeyPath="yes" Name="index.js" />
+      </Component>
+      <Component Id="cmp_59" Guid="{48784931-8D03-4271-186C-8DD34DA66370}" Directory="dir_f_web_agent_chat_vanilla_html_js_bridge">
+        <File Id="fil_59" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\bridge\state.js" KeyPath="yes" Name="state.js" />
+      </Component>
+      <Component Id="cmp_60" Guid="{F3B9F0D7-38E8-D476-9B48-1AEBCDDF9916}" Directory="dir_f_web_agent_chat_vanilla_html_js_irc">
+        <File Id="fil_60" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\irc\api.js" KeyPath="yes" Name="api.js" />
+      </Component>
+      <Component Id="cmp_61" Guid="{415AF401-2C25-FCFF-AAD3-7AB3C72636FA}" Directory="dir_f_web_agent_chat_vanilla_html_js_irc">
+        <File Id="fil_61" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\irc\core.js" KeyPath="yes" Name="core.js" />
+      </Component>
+      <Component Id="cmp_62" Guid="{F8EE0671-64BB-407E-6EFB-4C0CC65BECBE}" Directory="dir_f_web_agent_chat_vanilla_html_js_irc">
+        <File Id="fil_62" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\irc\mock.js" KeyPath="yes" Name="mock.js" />
+      </Component>
+      <Component Id="cmp_63" Guid="{5F684152-8346-32AD-3B2B-0233DDED99FB}" Directory="dir_f_web_agent_chat_vanilla_html_js_irc">
+        <File Id="fil_63" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\irc\store.js" KeyPath="yes" Name="store.js" />
+      </Component>
+      <Component Id="cmp_64" Guid="{0DFC4EFC-55F3-AD57-550A-D4D271F37CCF}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_64" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\ai.js" KeyPath="yes" Name="ai.js" />
+      </Component>
+      <Component Id="cmp_65" Guid="{3AC1A3B3-501F-12BD-3382-6EBAAB269549}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_65" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\auth.js" KeyPath="yes" Name="auth.js" />
+      </Component>
+      <Component Id="cmp_66" Guid="{9A806D41-A4E2-0465-EE5C-9E5AEF36F2ED}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_66" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\chat.js" KeyPath="yes" Name="chat.js" />
+      </Component>
+      <Component Id="cmp_67" Guid="{04258810-649C-73A2-E7B3-2B87D61BE5FE}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_67" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\chatroom.js" KeyPath="yes" Name="chatroom.js" />
+      </Component>
+      <Component Id="cmp_68" Guid="{5EBCDA9C-A0C2-894D-931F-7CB9C9FB72DB}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_68" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\devices.js" KeyPath="yes" Name="devices.js" />
+      </Component>
+      <Component Id="cmp_69" Guid="{48C37F1F-284E-C335-76C4-61B17ABEFF82}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_69" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\me.js" KeyPath="yes" Name="me.js" />
+      </Component>
+      <Component Id="cmp_70" Guid="{AB23BCD3-2A47-BC82-3D98-5037A943F46B}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_70" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\notifications.js" KeyPath="yes" Name="notifications.js" />
+      </Component>
+      <Component Id="cmp_71" Guid="{ECF936C3-E71C-AA62-5B11-37A803282ECE}" Directory="dir_f_web_agent_chat_vanilla_html_js_pages">
+        <File Id="fil_71" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\pages\tasks.js" KeyPath="yes" Name="tasks.js" />
+      </Component>
+      <Component Id="cmp_72" Guid="{874445AE-5EE5-A2E3-43AE-294BDA1CDDB0}" Directory="dir_f_web_agent_chat_vanilla_html_js_panels">
+        <File Id="fil_72" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\panels\devicesPanel.js" KeyPath="yes" Name="devicesPanel.js" />
+      </Component>
+      <Component Id="cmp_73" Guid="{F17E4F3C-ECDC-1881-9BF8-74F070A2872C}" Directory="dir_f_web_agent_chat_vanilla_html_js_panels">
+        <File Id="fil_73" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\panels\postsPanel.js" KeyPath="yes" Name="postsPanel.js" />
+      </Component>
+      <Component Id="cmp_74" Guid="{4B19B66B-9E33-D7F2-4B17-3EEC088D5B0A}" Directory="dir_f_web_agent_chat_vanilla_html_js_protocol">
+        <File Id="fil_74" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\protocol\collaborationChatEnvelope.js" KeyPath="yes" Name="collaborationChatEnvelope.js" />
+      </Component>
+      <Component Id="cmp_75" Guid="{A7C6FDF0-62E3-256C-EE76-CE9E8537BF69}" Directory="dir_f_web_agent_chat_vanilla_html_js_protocol">
+        <File Id="fil_75" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\protocol\collaborationProtocol.js" KeyPath="yes" Name="collaborationProtocol.js" />
+      </Component>
+      <Component Id="cmp_76" Guid="{9B8BAF15-54B7-ED9C-D063-B945C79C67DC}" Directory="dir_f_web_agent_chat_vanilla_html_js_protocol">
+        <File Id="fil_76" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\protocol\interactiveResourceBridge.js" KeyPath="yes" Name="interactiveResourceBridge.js" />
+      </Component>
+      <Component Id="cmp_77" Guid="{24939E6F-46DF-AC8B-1139-82A53EF4E7F9}" Directory="dir_f_web_agent_chat_vanilla_html_js_stores">
+        <File Id="fil_77" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\stores\authStore.js" KeyPath="yes" Name="authStore.js" />
+      </Component>
+      <Component Id="cmp_78" Guid="{824688E1-A77B-B6F5-4B63-B15D85382736}" Directory="dir_f_web_agent_chat_vanilla_html_js_stores">
+        <File Id="fil_78" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\stores\chatHistoryStore.js" KeyPath="yes" Name="chatHistoryStore.js" />
+      </Component>
+      <Component Id="cmp_79" Guid="{2D68B2C2-1F87-41A9-6E6F-77DB72B51233}" Directory="dir_f_web_agent_chat_vanilla_html_js_stores">
+        <File Id="fil_79" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\stores\chatStore.js" KeyPath="yes" Name="chatStore.js" />
+      </Component>
+      <Component Id="cmp_80" Guid="{9BD3FD07-6744-7A65-D6F5-82A89AADD754}" Directory="dir_f_web_agent_chat_vanilla_html_js_stores">
+        <File Id="fil_80" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\stores\uiStore.js" KeyPath="yes" Name="uiStore.js" />
+      </Component>
+      <Component Id="cmp_81" Guid="{31A9CF7E-410D-A14A-7665-CFAD6762E3CE}" Directory="dir_f_web_agent_chat_vanilla_html_js_transport">
+        <File Id="fil_81" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\transport\chatroomTransport.js" KeyPath="yes" Name="chatroomTransport.js" />
+      </Component>
+      <Component Id="cmp_82" Guid="{AF5D5C36-39DF-6558-30EA-F63BEC112E55}" Directory="dir_f_web_agent_chat_vanilla_html_js_transport">
+        <File Id="fil_82" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\transport\httpIrcTransport.js" KeyPath="yes" Name="httpIrcTransport.js" />
+      </Component>
+      <Component Id="cmp_83" Guid="{4D1F5756-15A0-94A2-D5CF-3307FD1D6AEF}" Directory="dir_f_web_agent_chat_vanilla_html_js_transport">
+        <File Id="fil_83" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\transport\mockTransport.js" KeyPath="yes" Name="mockTransport.js" />
+      </Component>
+      <Component Id="cmp_84" Guid="{9241DB34-22E0-93A7-D27A-A21F24003A10}" Directory="dir_f_web_agent_chat_vanilla_html_js_transport">
+        <File Id="fil_84" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\transport\transportFactory.js" KeyPath="yes" Name="transportFactory.js" />
+      </Component>
+      <Component Id="cmp_85" Guid="{02FDC3E1-CB1D-2F56-2184-28426FAA509D}" Directory="dir_f_web_agent_chat_vanilla_html_js_transport">
+        <File Id="fil_85" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\transport\webSocketTransport.js" KeyPath="yes" Name="webSocketTransport.js" />
+      </Component>
+      <Component Id="cmp_86" Guid="{514B43D5-165E-A7D4-0999-6EC31E1E83CB}" Directory="dir_f_web_agent_chat_vanilla_html_js_utils">
+        <File Id="fil_86" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\utils\authErrorMessage.js" KeyPath="yes" Name="authErrorMessage.js" />
+      </Component>
+      <Component Id="cmp_87" Guid="{196600A1-70F0-CD3D-F60F-C7D262FE1E42}" Directory="dir_f_web_agent_chat_vanilla_html_js_utils">
+        <File Id="fil_87" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\utils\avatar.js" KeyPath="yes" Name="avatar.js" />
+      </Component>
+      <Component Id="cmp_88" Guid="{E5FB53F1-7042-FE67-8BAC-094E9FA9F5D7}" Directory="dir_f_web_agent_chat_vanilla_html_js_utils">
+        <File Id="fil_88" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\utils\markdown.js" KeyPath="yes" Name="markdown.js" />
+      </Component>
+      <Component Id="cmp_89" Guid="{950366A3-BC65-4B58-732B-BA3DE57BCE6E}" Directory="dir_f_web_agent_chat_vanilla_html_js_utils">
+        <File Id="fil_89" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\utils\time.js" KeyPath="yes" Name="time.js" />
+      </Component>
+      <Component Id="cmp_90" Guid="{615969E8-A972-4A6C-39FE-0C784EA731FF}" Directory="dir_f_web_agent_chat_vanilla_html_js_utils">
+        <File Id="fil_90" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html\js\utils\toast.js" KeyPath="yes" Name="toast.js" />
+      </Component>
+      <Component Id="cmp_91" Guid="{E7BD15FF-901C-8A30-59A3-D3A425D55A97}" Directory="dir_f_web_agent_chat_vanilla_html_">
+        <File Id="fil_91" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\index.html" KeyPath="yes" Name="index.html" />
+      </Component>
+      <Component Id="cmp_92" Guid="{4E5F56AB-9328-D82D-A8A1-D9036DE88192}" Directory="dir_f_web_agent_chat_vanilla_html__css">
+        <File Id="fil_92" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\css\main.css" KeyPath="yes" Name="main.css" />
+      </Component>
+      <Component Id="cmp_93" Guid="{D1F477D3-00AB-542C-DE1C-4FC8F4405D24}" Directory="dir_f_web_agent_chat_vanilla_html__css">
+        <File Id="fil_93" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\css\variables.css" KeyPath="yes" Name="variables.css" />
+      </Component>
+      <Component Id="cmp_94" Guid="{5E7976DC-F32C-BCE6-F29F-6707465FE0FD}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_94" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\api-flow-documentation.md" KeyPath="yes" Name="api-flow-documentation.md" />
+      </Component>
+      <Component Id="cmp_95" Guid="{AF715EDE-FAD8-A51E-42F4-E7F1DB04E77A}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_95" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\app端迁移评估报告.md" KeyPath="yes" Name="app端迁移评估报告.md" />
+      </Component>
+      <Component Id="cmp_96" Guid="{C17C993F-C9FF-3E18-A3A5-AD4A41B3F825}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_96" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\CHAT_REFACTORING_PLAN.md" KeyPath="yes" Name="CHAT_REFACTORING_PLAN.md" />
+      </Component>
+      <Component Id="cmp_97" Guid="{59928A80-9931-3539-F4C7-0C75ADC23DE6}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_97" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\GROUP_CHAT_IMPLEMENTATION_PLAN.md" KeyPath="yes" Name="GROUP_CHAT_IMPLEMENTATION_PLAN.md" />
+      </Component>
+      <Component Id="cmp_98" Guid="{FEE263D2-6ACE-012C-20C4-3EA3D7EF63CB}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_98" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md" KeyPath="yes" Name="MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md" />
+      </Component>
+      <Component Id="cmp_99" Guid="{D8761C07-EB76-F5B0-7D87-1139EE76855D}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_99" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\product-specification.md" KeyPath="yes" Name="product-specification.md" />
+      </Component>
+      <Component Id="cmp_100" Guid="{A933ED1F-90AD-D0EB-D095-B09343AA62ED}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_100" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\REFACTORING_PLAN.md" KeyPath="yes" Name="REFACTORING_PLAN.md" />
+      </Component>
+      <Component Id="cmp_101" Guid="{BFED5644-C508-1D32-AE8E-F6CB9DE6441F}" Directory="dir_f_web_agent_chat_vanilla_html__docs">
+        <File Id="fil_101" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\docs\TCP_BRIDGE_IMPLEMENTATION.md" KeyPath="yes" Name="TCP_BRIDGE_IMPLEMENTATION.md" />
+      </Component>
+      <Component Id="cmp_102" Guid="{37F0B6E2-FA96-D6D1-84DE-3D946627974B}" Directory="dir_f_web_agent_chat_vanilla_html__js">
+        <File Id="fil_102" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\app.js" KeyPath="yes" Name="app.js" />
+      </Component>
+      <Component Id="cmp_103" Guid="{FE4B5FEB-0B54-476A-C2EE-F2EBE4B638CB}" Directory="dir_f_web_agent_chat_vanilla_html__js">
+        <File Id="fil_103" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\config.js" KeyPath="yes" Name="config.js" />
+      </Component>
+      <Component Id="cmp_104" Guid="{6ABCDB58-C3EB-236F-D02F-3476EDF0F028}" Directory="dir_f_web_agent_chat_vanilla_html__js_api">
+        <File Id="fil_104" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\api\agentBridgeTransport.js" KeyPath="yes" Name="agentBridgeTransport.js" />
+      </Component>
+      <Component Id="cmp_105" Guid="{7EDF9CF2-DA57-BABF-C131-C2AC872BF444}" Directory="dir_f_web_agent_chat_vanilla_html__js_api">
+        <File Id="fil_105" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\api\authApi.js" KeyPath="yes" Name="authApi.js" />
+      </Component>
+      <Component Id="cmp_106" Guid="{5F57A3D3-BFD2-C829-3360-1BED4DB27799}" Directory="dir_f_web_agent_chat_vanilla_html__js_api">
+        <File Id="fil_106" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\api\chatApi.js" KeyPath="yes" Name="chatApi.js" />
+      </Component>
+      <Component Id="cmp_107" Guid="{7D0FC414-AC31-DCB4-10F8-D903DC32F387}" Directory="dir_f_web_agent_chat_vanilla_html__js_api">
+        <File Id="fil_107" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\api\httpClient.js" KeyPath="yes" Name="httpClient.js" />
+      </Component>
+      <Component Id="cmp_108" Guid="{167056DC-1FE1-9D78-6D69-B77F159B0333}" Directory="dir_f_web_agent_chat_vanilla_html__js_api">
+        <File Id="fil_108" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\api\postApi.js" KeyPath="yes" Name="postApi.js" />
+      </Component>
+      <Component Id="cmp_109" Guid="{308DD5C3-8965-6ACF-1E8A-4CAABA0556FE}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_109" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\ai.js" KeyPath="yes" Name="ai.js" />
+      </Component>
+      <Component Id="cmp_110" Guid="{1FA2A6BE-7D07-4BE6-8610-CCD6FB74DE7C}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_110" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\auth.js" KeyPath="yes" Name="auth.js" />
+      </Component>
+      <Component Id="cmp_111" Guid="{CD770EE2-D2CE-5C43-42C6-248EFD8D7D29}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_111" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\chat.js" KeyPath="yes" Name="chat.js" />
+      </Component>
+      <Component Id="cmp_112" Guid="{DC00CD9D-62F6-7215-5393-5C58317EC683}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_112" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\devices.js" KeyPath="yes" Name="devices.js" />
+      </Component>
+      <Component Id="cmp_113" Guid="{705AC44A-8A07-0FF4-F275-16276BF63A5D}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_113" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\me.js" KeyPath="yes" Name="me.js" />
+      </Component>
+      <Component Id="cmp_114" Guid="{D8114175-85F8-0395-E3B2-F030ADFE92E2}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_114" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\notifications.js" KeyPath="yes" Name="notifications.js" />
+      </Component>
+      <Component Id="cmp_115" Guid="{F8E0836E-FF05-B88C-5FB9-0D15F93BF3AA}" Directory="dir_f_web_agent_chat_vanilla_html__js_pages">
+        <File Id="fil_115" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\pages\tasks.js" KeyPath="yes" Name="tasks.js" />
+      </Component>
+      <Component Id="cmp_116" Guid="{6A1AF549-E273-5951-BED3-71D52B7D9E7E}" Directory="dir_f_web_agent_chat_vanilla_html__js_stores">
+        <File Id="fil_116" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\stores\authStore.js" KeyPath="yes" Name="authStore.js" />
+      </Component>
+      <Component Id="cmp_117" Guid="{3CAE7E81-54C8-298F-B3B7-83E01EFB544D}" Directory="dir_f_web_agent_chat_vanilla_html__js_stores">
+        <File Id="fil_117" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\stores\chatStore.js" KeyPath="yes" Name="chatStore.js" />
+      </Component>
+      <Component Id="cmp_118" Guid="{97591779-9536-4E13-EA59-0A28DFAB47C6}" Directory="dir_f_web_agent_chat_vanilla_html__js_stores">
+        <File Id="fil_118" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\stores\uiStore.js" KeyPath="yes" Name="uiStore.js" />
+      </Component>
+      <Component Id="cmp_119" Guid="{189783AF-4811-567E-5A9A-E3B43D10CDF6}" Directory="dir_f_web_agent_chat_vanilla_html__js_transport">
+        <File Id="fil_119" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\transport\chatroomTransport.js" KeyPath="yes" Name="chatroomTransport.js" />
+      </Component>
+      <Component Id="cmp_120" Guid="{342D202A-6A10-0E2A-29B1-3E78083EACE9}" Directory="dir_f_web_agent_chat_vanilla_html__js_transport">
+        <File Id="fil_120" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\transport\httpIrcTransport.js" KeyPath="yes" Name="httpIrcTransport.js" />
+      </Component>
+      <Component Id="cmp_121" Guid="{86BE80FC-15ED-A36C-ECC1-08D043CEFCBA}" Directory="dir_f_web_agent_chat_vanilla_html__js_transport">
+        <File Id="fil_121" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\transport\mockTransport.js" KeyPath="yes" Name="mockTransport.js" />
+      </Component>
+      <Component Id="cmp_122" Guid="{32F8CC64-00FA-3856-A65F-F7B54B890CC8}" Directory="dir_f_web_agent_chat_vanilla_html__js_transport">
+        <File Id="fil_122" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\transport\transportFactory.js" KeyPath="yes" Name="transportFactory.js" />
+      </Component>
+      <Component Id="cmp_123" Guid="{F5A8876A-CD40-F944-4B68-9B21806C8D07}" Directory="dir_f_web_agent_chat_vanilla_html__js_transport">
+        <File Id="fil_123" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\transport\webSocketTransport.js" KeyPath="yes" Name="webSocketTransport.js" />
+      </Component>
+      <Component Id="cmp_124" Guid="{AF17C131-6E0A-95A2-1856-D78AE4C3227B}" Directory="dir_f_web_agent_chat_vanilla_html__js_utils">
+        <File Id="fil_124" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\utils\authErrorMessage.js" KeyPath="yes" Name="authErrorMessage.js" />
+      </Component>
+      <Component Id="cmp_125" Guid="{2FEADAA6-494F-2491-88C8-103B51525537}" Directory="dir_f_web_agent_chat_vanilla_html__js_utils">
+        <File Id="fil_125" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\utils\avatar.js" KeyPath="yes" Name="avatar.js" />
+      </Component>
+      <Component Id="cmp_126" Guid="{9388363B-9497-156F-C641-7AEA626944A9}" Directory="dir_f_web_agent_chat_vanilla_html__js_utils">
+        <File Id="fil_126" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\utils\markdown.js" KeyPath="yes" Name="markdown.js" />
+      </Component>
+      <Component Id="cmp_127" Guid="{B7BB4DF7-C5B9-224C-DE90-665469D8AE86}" Directory="dir_f_web_agent_chat_vanilla_html__js_utils">
+        <File Id="fil_127" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\utils\time.js" KeyPath="yes" Name="time.js" />
+      </Component>
+      <Component Id="cmp_128" Guid="{49D25E24-2FF5-F2F7-2202-EDD823E918D3}" Directory="dir_f_web_agent_chat_vanilla_html__js_utils">
+        <File Id="fil_128" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\html-\js\utils\toast.js" KeyPath="yes" Name="toast.js" />
+      </Component>
+      <Component Id="cmp_129" Guid="{43A277A3-8A0B-40F5-C905-CEC3A1AFFC79}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_129" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\blazeclaw-agent-bridge.ts" KeyPath="yes" Name="blazeclaw-agent-bridge.ts" />
+      </Component>
+      <Component Id="cmp_130" Guid="{75C4312D-C515-E6B3-A047-A00A4FAF57BB}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_130" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\blazeclaw-agent-push-bridge.ts" KeyPath="yes" Name="blazeclaw-agent-push-bridge.ts" />
+      </Component>
+      <Component Id="cmp_131" Guid="{16429772-6117-5FC6-C20E-F1E38322FFD4}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_131" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\blazeclaw-agent-server.ts" KeyPath="yes" Name="blazeclaw-agent-server.ts" />
+      </Component>
+      <Component Id="cmp_132" Guid="{C44D237E-DC25-0A5A-5B4F-CF97A29511EE}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_132" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\blazeclaw-runner.ts" KeyPath="yes" Name="blazeclaw-runner.ts" />
+      </Component>
+      <Component Id="cmp_133" Guid="{EC08BFF9-E037-CEF5-800D-65CF8988E4A0}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_133" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\blazeclaw-shared.ts" KeyPath="yes" Name="blazeclaw-shared.ts" />
+      </Component>
+      <Component Id="cmp_134" Guid="{96501CC7-1EAD-C43D-44A9-5D8184C53141}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_134" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\chat-bridge-dev.mjs" KeyPath="yes" Name="chat-bridge-dev.mjs" />
+      </Component>
+      <Component Id="cmp_135" Guid="{3D53A6BB-236F-5A97-E38B-7F4DF2501C18}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_135" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\chat-bridge.mjs" KeyPath="yes" Name="chat-bridge.mjs" />
+      </Component>
+      <Component Id="cmp_136" Guid="{E9195FB6-8FCB-E301-6116-634BBA0695D7}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_136" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\chat-bridge000.mjs" KeyPath="yes" Name="chat-bridge000.mjs" />
+      </Component>
+      <Component Id="cmp_137" Guid="{E310EFEA-EBFA-6A7D-2CC5-65932DA51E96}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_137" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\collaboration-relay.spec.ts" KeyPath="yes" Name="collaboration-relay.spec.ts" />
+      </Component>
+      <Component Id="cmp_138" Guid="{A86735DF-DE88-9690-C2CA-AC6EE999FEB6}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_138" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\collaboration-relay.ts" KeyPath="yes" Name="collaboration-relay.ts" />
+      </Component>
+      <Component Id="cmp_139" Guid="{E6D6DFA8-2EE7-555A-3C47-929896440B08}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_139" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\cos-object-key.mjs" KeyPath="yes" Name="cos-object-key.mjs" />
+      </Component>
+      <Component Id="cmp_140" Guid="{B4980C5E-6530-4BF8-D81F-6E5604968B65}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_140" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\cos-object-key.spec.mjs" KeyPath="yes" Name="cos-object-key.spec.mjs" />
+      </Component>
+      <Component Id="cmp_141" Guid="{CE6E7D7B-5B19-DA1F-D06F-06A7D69980D6}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_141" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\cos-upload.mjs" KeyPath="yes" Name="cos-upload.mjs" />
+      </Component>
+      <Component Id="cmp_142" Guid="{EA9CC986-6357-F09C-6692-50310A14D207}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_142" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\html-server.mjs" KeyPath="yes" Name="html-server.mjs" />
+      </Component>
+      <Component Id="cmp_143" Guid="{A4977AAB-3736-BCF4-8DB7-6FBC3CEBD5DD}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_143" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-agent-bridge.spec.ts" KeyPath="yes" Name="openclaw-agent-bridge.spec.ts" />
+      </Component>
+      <Component Id="cmp_144" Guid="{020D0F16-3BED-59FA-4453-30720CB930F8}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_144" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-agent-bridge.ts" KeyPath="yes" Name="openclaw-agent-bridge.ts" />
+      </Component>
+      <Component Id="cmp_145" Guid="{47423DA1-C384-6E36-E8AD-30F5BDB743AD}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_145" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-agent-push-bridge.spec.ts" KeyPath="yes" Name="openclaw-agent-push-bridge.spec.ts" />
+      </Component>
+      <Component Id="cmp_146" Guid="{07EF5E46-15C7-B31F-1BE6-FC2A16CD8719}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_146" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-agent-push-bridge.ts" KeyPath="yes" Name="openclaw-agent-push-bridge.ts" />
+      </Component>
+      <Component Id="cmp_147" Guid="{DE433C40-07F6-6804-BD78-E850868D73CE}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_147" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-agent-server.ts" KeyPath="yes" Name="openclaw-agent-server.ts" />
+      </Component>
+      <Component Id="cmp_148" Guid="{8E1B6DE8-0DDE-B2B8-270D-E89CB6A60026}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_148" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-runner.ts" KeyPath="yes" Name="openclaw-runner.ts" />
+      </Component>
+      <Component Id="cmp_149" Guid="{A1ACE33C-DD70-C47E-C03B-44A78BBB2BE3}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_149" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\openclaw-shared.ts" KeyPath="yes" Name="openclaw-shared.ts" />
+      </Component>
+      <Component Id="cmp_150" Guid="{3FA8538C-0A4A-2094-ABD2-B03F5D86AC14}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_150" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\tcp-dump.mjs" KeyPath="yes" Name="tcp-dump.mjs" />
+      </Component>
+      <Component Id="cmp_151" Guid="{C495ABAA-2639-279B-4AA6-FC85F24E290B}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_151" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\tts-bridge.spec.ts" KeyPath="yes" Name="tts-bridge.spec.ts" />
+      </Component>
+      <Component Id="cmp_152" Guid="{C0C70796-F9BA-4579-D074-4B327AECF150}" Directory="dir_f_web_agent_chat_vanilla_server">
+        <File Id="fil_152" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\agent-chat-vanilla\server\tts-bridge.ts" KeyPath="yes" Name="tts-bridge.ts" />
+      </Component>
+      <Component Id="cmp_153" Guid="{19B80024-AB4E-8590-D9FB-5A5A78029A43}" Directory="dir_f_web_calendar">
+        <File Id="fil_153" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\calendar\calendar.html" KeyPath="yes" Name="calendar.html" />
+      </Component>
+      <Component Id="cmp_154" Guid="{B4659D6F-5045-278D-5725-D8C850AACEA3}" Directory="dir_f_web_calendar">
+        <File Id="fil_154" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\calendar\cron-day-dialog.html" KeyPath="yes" Name="cron-day-dialog.html" />
+      </Component>
+      <Component Id="cmp_155" Guid="{01002770-F08D-765D-ADCB-4A49E471F976}" Directory="dir_f_web_calendar">
+        <File Id="fil_155" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\calendar\index.html" KeyPath="yes" Name="index.html" />
+      </Component>
+      <Component Id="cmp_156" Guid="{602D20C9-E3A2-96D7-31C7-5E730E2579FB}" Directory="dir_f_web_calendar">
+        <File Id="fil_156" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\calendar\index.js" KeyPath="yes" Name="index.js" />
+      </Component>
+      <Component Id="cmp_157" Guid="{9E8BE14C-0B2E-39E4-DBDF-97415BC2706B}" Directory="dir_f_web_calendar">
+        <File Id="fil_157" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\calendar\style.css" KeyPath="yes" Name="style.css" />
+      </Component>
+      <Component Id="cmp_158" Guid="{0C764DBA-3CFC-17F8-3419-AE8D6CA8B330}" Directory="dir_f_web_chat">
+        <File Id="fil_158" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\agents-controller.js" KeyPath="yes" Name="agents-controller.js" />
+      </Component>
+      <Component Id="cmp_159" Guid="{F144176C-A548-3EC2-6863-2EE8FF6BEDD2}" Directory="dir_f_web_chat">
+        <File Id="fil_159" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\agents-toggle.js" KeyPath="yes" Name="agents-toggle.js" />
+      </Component>
+      <Component Id="cmp_160" Guid="{38198E96-6CBF-4EE9-B3E2-4E16009547D1}" Directory="dir_f_web_chat">
+        <File Id="fil_160" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\channels-controller.js" KeyPath="yes" Name="channels-controller.js" />
+      </Component>
+      <Component Id="cmp_161" Guid="{CECD53E4-6523-AD68-F629-70E6CB319E3E}" Directory="dir_f_web_chat">
+        <File Id="fil_161" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\channels-state-contract.js" KeyPath="yes" Name="channels-state-contract.js" />
+      </Component>
+      <Component Id="cmp_162" Guid="{4C121CD8-D0CA-AC15-7BB2-E4F83F54BB42}" Directory="dir_f_web_chat">
+        <File Id="fil_162" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-composer.js" KeyPath="yes" Name="chat-composer.js" />
+      </Component>
+      <Component Id="cmp_163" Guid="{7D6E6307-AAC0-358F-2976-D74DBBCA6102}" Directory="dir_f_web_chat">
+        <File Id="fil_163" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-controller-adapter.js" KeyPath="yes" Name="chat-controller-adapter.js" />
+      </Component>
+      <Component Id="cmp_164" Guid="{5C0A8211-0940-21FF-7879-38BA28A95AF7}" Directory="dir_f_web_chat">
+        <File Id="fil_164" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-controller-gui.js" KeyPath="yes" Name="chat-controller-gui.js" />
+      </Component>
+      <Component Id="cmp_165" Guid="{232A2B46-7A6B-A3E3-A02F-3F568EC953E6}" Directory="dir_f_web_chat">
+        <File Id="fil_165" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-controller-legacy.js" KeyPath="yes" Name="chat-controller-legacy.js" />
+      </Component>
+      <Component Id="cmp_166" Guid="{7D5CB91E-7F58-B9BE-EF2C-96ABCDA5B0B7}" Directory="dir_f_web_chat">
+        <File Id="fil_166" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-controller.js" KeyPath="yes" Name="chat-controller.js" />
+      </Component>
+      <Component Id="cmp_167" Guid="{0D0C3923-D1F1-E953-4B48-3381BD843FE8}" Directory="dir_f_web_chat">
+        <File Id="fil_167" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\chat-events.js" KeyPath="yes" Name="chat-events.js" />
+      </Component>
+      <Component Id="cmp_168" Guid="{6550763E-9D61-9338-9ED4-52165F51441A}" Directory="dir_f_web_chat">
+        <File Id="fil_168" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\config-form-coerce.js" KeyPath="yes" Name="config-form-coerce.js" />
+      </Component>
+      <Component Id="cmp_169" Guid="{89B0E652-5910-6A7A-450A-486684B82A66}" Directory="dir_f_web_chat">
+        <File Id="fil_169" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\config-form-utils.js" KeyPath="yes" Name="config-form-utils.js" />
+      </Component>
+      <Component Id="cmp_170" Guid="{B7695468-3036-C343-F9F5-617ED7D9C677}" Directory="dir_f_web_chat">
+        <File Id="fil_170" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\controller-utils.js" KeyPath="yes" Name="controller-utils.js" />
+      </Component>
+      <Component Id="cmp_171" Guid="{DD2F3CE0-4902-D32E-8C61-286C8E96373A}" Directory="dir_f_web_chat">
+        <File Id="fil_171" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\cron-controller.js" KeyPath="yes" Name="cron-controller.js" />
+      </Component>
+      <Component Id="cmp_172" Guid="{01D6AD5A-65BB-9DB8-E1E7-8854271C6097}" Directory="dir_f_web_chat">
+        <File Id="fil_172" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard-host-bootstrap.js" KeyPath="yes" Name="dashboard-host-bootstrap.js" />
+      </Component>
+      <Component Id="cmp_173" Guid="{3749DCAD-AF05-FB0D-B9FD-B88178C98FDB}" Directory="dir_f_web_chat">
+        <File Id="fil_173" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard-host.css" KeyPath="yes" Name="dashboard-host.css" />
+      </Component>
+      <Component Id="cmp_174" Guid="{924F25B2-5078-BE29-B05E-99A0C4F88DE7}" Directory="dir_f_web_chat">
+        <File Id="fil_174" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard.html" KeyPath="yes" Name="dashboard.html" />
+      </Component>
+      <Component Id="cmp_175" Guid="{C30F60D0-19C9-15ED-6539-33638D9B19D4}" Directory="dir_f_web_chat">
+        <File Id="fil_175" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_channels.html" KeyPath="yes" Name="dashboard_channels.html" />
+      </Component>
+      <Component Id="cmp_176" Guid="{47E46805-E886-7438-82CC-34ABF9104619}" Directory="dir_f_web_chat">
+        <File Id="fil_176" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_cron.html" KeyPath="yes" Name="dashboard_cron.html" />
+      </Component>
+      <Component Id="cmp_177" Guid="{4C24B782-2A02-7B1C-0E41-D5FB5D0BD9FB}" Directory="dir_f_web_chat">
+        <File Id="fil_177" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_devices.html" KeyPath="yes" Name="dashboard_devices.html" />
+      </Component>
+      <Component Id="cmp_178" Guid="{2DE1C077-1D28-1EA2-11D7-D589B6745749}" Directory="dir_f_web_chat">
+        <File Id="fil_178" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_dreaming.html" KeyPath="yes" Name="dashboard_dreaming.html" />
+      </Component>
+      <Component Id="cmp_179" Guid="{0BBB9C5A-C3F1-D925-38E1-AD73AF79A894}" Directory="dir_f_web_chat">
+        <File Id="fil_179" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_files.html" KeyPath="yes" Name="dashboard_files.html" />
+      </Component>
+      <Component Id="cmp_180" Guid="{7078AA82-E759-994B-75F8-03989C3612D3}" Directory="dir_f_web_chat">
+        <File Id="fil_180" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_instances.html" KeyPath="yes" Name="dashboard_instances.html" />
+      </Component>
+      <Component Id="cmp_181" Guid="{003205B2-790B-EDF8-A805-66F49F5666B0}" Directory="dir_f_web_chat">
+        <File Id="fil_181" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_nodes.html" KeyPath="yes" Name="dashboard_nodes.html" />
+      </Component>
+      <Component Id="cmp_182" Guid="{02C5D809-E62E-DEF4-2F1F-5E3E22F6BA31}" Directory="dir_f_web_chat">
+        <File Id="fil_182" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_overview.html" KeyPath="yes" Name="dashboard_overview.html" />
+      </Component>
+      <Component Id="cmp_183" Guid="{EF17C5C3-7019-43A7-09BD-8B32E12B2425}" Directory="dir_f_web_chat">
+        <File Id="fil_183" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_skills.html" KeyPath="yes" Name="dashboard_skills.html" />
+      </Component>
+      <Component Id="cmp_184" Guid="{F1445B26-19F7-D571-2CFC-422A8211FE35}" Directory="dir_f_web_chat">
+        <File Id="fil_184" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_tools.html" KeyPath="yes" Name="dashboard_tools.html" />
+      </Component>
+      <Component Id="cmp_185" Guid="{FF6FAA55-6836-F434-5F5D-8D5874E37814}" Directory="dir_f_web_chat">
+        <File Id="fil_185" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dashboard_usage.html" KeyPath="yes" Name="dashboard_usage.html" />
+      </Component>
+      <Component Id="cmp_186" Guid="{ED929C72-B6EF-F1BC-5D55-65445D66927B}" Directory="dir_f_web_chat">
+        <File Id="fil_186" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\devices-controller.js" KeyPath="yes" Name="devices-controller.js" />
+      </Component>
+      <Component Id="cmp_187" Guid="{349F2030-8E16-506C-AD32-0EDA6A413211}" Directory="dir_f_web_chat">
+        <File Id="fil_187" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dreaming-controller.js" KeyPath="yes" Name="dreaming-controller.js" />
+      </Component>
+      <Component Id="cmp_188" Guid="{65A312A1-9C7C-FE1E-082E-A869FAE6D176}" Directory="dir_f_web_chat">
+        <File Id="fil_188" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\files-controller.js" KeyPath="yes" Name="files-controller.js" />
+      </Component>
+      <Component Id="cmp_189" Guid="{D947007D-1770-89A1-EA33-D404A91AE05E}" Directory="dir_f_web_chat">
+        <File Id="fil_189" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\index.css" KeyPath="yes" Name="index.css" />
+      </Component>
+      <Component Id="cmp_190" Guid="{33FEA6F6-A4E3-4B05-AA16-F557148EEB89}" Directory="dir_f_web_chat">
+        <File Id="fil_190" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\index.html" KeyPath="yes" Name="index.html" />
+      </Component>
+      <Component Id="cmp_191" Guid="{09472A1F-9FA9-FD8F-D642-FC4D37B7CDDB}" Directory="dir_f_web_chat">
+        <File Id="fil_191" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\index.js" KeyPath="yes" Name="index.js" />
+      </Component>
+      <Component Id="cmp_192" Guid="{ED77613C-2385-9716-CA4B-D689DA7BE3A5}" Directory="dir_f_web_chat">
+        <File Id="fil_192" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\instances-controller.js" KeyPath="yes" Name="instances-controller.js" />
+      </Component>
+      <Component Id="cmp_193" Guid="{B3570C3B-64F3-5E02-0247-7A848A588404}" Directory="dir_f_web_chat">
+        <File Id="fil_193" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\nodes-controller.js" KeyPath="yes" Name="nodes-controller.js" />
+      </Component>
+      <Component Id="cmp_194" Guid="{B8C2342F-A384-3602-EAEF-2739C696BFF8}" Directory="dir_f_web_chat">
+        <File Id="fil_194" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\observability-controller.js" KeyPath="yes" Name="observability-controller.js" />
+      </Component>
+      <Component Id="cmp_195" Guid="{357C1B50-C168-5DD0-475E-50F429674E4E}" Directory="dir_f_web_chat">
+        <File Id="fil_195" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\scope-errors.js" KeyPath="yes" Name="scope-errors.js" />
+      </Component>
+      <Component Id="cmp_196" Guid="{E2EF20B8-F2CD-D7F5-F8F8-E76B9B5A1151}" Directory="dir_f_web_chat">
+        <File Id="fil_196" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\skills-controller.js" KeyPath="yes" Name="skills-controller.js" />
+      </Component>
+      <Component Id="cmp_197" Guid="{9DCEAD94-FDA7-1D51-E1BB-778B1ECC538A}" Directory="dir_f_web_chat">
+        <File Id="fil_197" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\tools-controller.js" KeyPath="yes" Name="tools-controller.js" />
+      </Component>
+      <Component Id="cmp_198" Guid="{09F5DD6D-DE61-9D33-61E1-B7C62E9065DB}" Directory="dir_f_web_chat">
+        <File Id="fil_198" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\usage-controller.js" KeyPath="yes" Name="usage-controller.js" />
+      </Component>
+      <Component Id="cmp_199" Guid="{9984A162-2607-9D1B-CC94-E4647E81E47E}" Directory="dir_f_web_chat_dist">
+        <File Id="fil_199" Source="D:\contblazeclaw\blazeclaw\bin\Release\web\chat\dist\index.html" KeyPath="yes" Name="index.html" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

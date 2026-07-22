@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:bal="http://schemas.microsoft.com/wix/BalExtension"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <!--
+    BlazeClaw Burn Bundle Definition
+
+    This bundle chains prerequisite installers (VC++ Redist, WebView2) before
+    the main MSI. Candle variables are used so that redistributables can be
+    optionally included by passing -dVCRedistX64=... -dWebView2Installer=...
+
+    Build usage:
+      candle -dProductMsi=path\to\BlazeClaw.msi
+             -dVCRedistX64=path\to\vc_redist.x64.exe
+             -dWebView2Installer=path\to\MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+             Bundle.wxs
+      light Bundle.wixobj -o BlazeClaw-setup.exe
+  -->
+
+  <Bundle Name="BlazeClaw"
+          Version="1.0.0.0"
+          Manufacturer="炎图科技"
+          UpgradeCode="{E3D4F2A5-B7C6-4891-A2D0-F1E3B4C5D6E7}"
+          Copyright="Copyright (c) 2026 炎图科技">
+
+    <!-- 使用标准引导 UI，显示 RTF 许可协议 -->
+    <BootstrapperApplicationRef Id="WixStandardBootstrapperApplication.RtfLicense"/>
+
+    <!--
+      前置依赖检测：通过注册表查询判断是否已安装
+      - VC++ Redist 检测：HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64
+      - WebView2 检测：HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}
+    -->
+    <util:RegistrySearch Id="VCRedistX64Search"
+                        Root="HKLM"
+                        Key="SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+                        Value="Installed"
+                        Variable="VCREDISTX64INSTALLED"
+                        Win64="yes"/>
+    <util:RegistrySearch Id="VCRedistX86Search"
+                        Root="HKLM"
+                        Key="SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x86"
+                        Value="Installed"
+                        Variable="VCREDISTX86INSTALLED"
+                        Win64="no"/>
+    <util:RegistrySearch Id="WebView2Search"
+                        Root="HKLM"
+                        Key="SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                        Variable="WEBVIEW2INSTALLED"/>
+    <util:RegistrySearch Id="WebView2Search64"
+                        Root="HKLM"
+                        Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                        Variable="WEBVIEW2INSTALLED"/>
+
+    <!-- 安装链：按顺序执行 -->
+    <Chain>
+
+      <!--
+        Visual C++ Redistributable 2022 x64
+        仅在传入 -dVCRedistX64 参数时包含
+        DetectCondition 控制是否跳过（已安装则跳过）
+      -->
+      <?if $(var.VCRedistX64) != "" ?>
+      <ExePackage Id="VCRedistX64"
+                  SourceFile="$(var.VCRedistX64)"
+                  Compressed="yes"
+                  DetectCondition="VCREDISTX64INSTALLED = 1"
+                  InstallCommand="/install /quiet /norestart"
+                  RepairCommand="/repair /quiet /norestart"
+                  Permanent="no"
+                  Vital="no"/>
+      <?endif?>
+
+      <!--
+        Visual C++ Redistributable 2022 x86
+        BlazeClaw 主要为 x64，这里作为兼容性保留
+      -->
+      <?if $(var.VCRedistX86) != "" ?>
+      <ExePackage Id="VCRedistX86"
+                  SourceFile="$(var.VCRedistX86)"
+                  Compressed="yes"
+                  DetectCondition="VCREDISTX86INSTALLED = 1"
+                  InstallCommand="/install /quiet /norestart"
+                  RepairCommand="/repair /quiet /norestart"
+                  Permanent="no"
+                  Vital="no"/>
+      <?endif?>
+
+      <!--
+        WebView2 Runtime Evergreen Bootstrapper
+        仅在传入 -dWebView2Installer 参数时包含
+        WebView2 是 BlazeClaw 聊天界面的渲染引擎
+        使用 Microsoft 官方下载链接，支持静默安装
+      -->
+      <?if $(var.WebView2Installer) != "" ?>
+      <ExePackage Id="WebView2Installer"
+                  SourceFile="$(var.WebView2Installer)"
+                  Compressed="yes"
+                  DetectCondition="WEBVIEW2INSTALLED"
+                  InstallCommand="/silent /install"
+                  RepairCommand=""
+                  Permanent="no"
+                  Vital="no"/>
+      <?endif?>
+
+      <!--
+        主 MSI 安装包
+        仅在传入 -dProductMsi 参数时包含
+        DisplayInternalUI="yes" 会显示 MSI 的安装进度界面
+      -->
+      <?if $(var.ProductMsi) != "" ?>
+      <MsiPackage Id="BlazeClawMsi"
+                  SourceFile="$(var.ProductMsi)"
+                  DisplayName="BlazeClaw"
+                  Visible="yes"
+                  Vital="yes"
+                  Compressed="yes"
+                  DisplayInternalUI="yes"/>
+      <?endif?>
+
+    </Chain>
+  </Bundle>
+</Wix>
