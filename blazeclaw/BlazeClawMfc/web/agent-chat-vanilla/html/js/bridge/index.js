@@ -11,6 +11,7 @@ import core from './core.js';
 import state from './state.js';
 import AppConfig from '../config.js';
 import { chatroomBridgeRequest, onChatroomPush } from '../transport/chatroomTransport.js';
+import chatHistoryStore from '../stores/chatHistoryStore.js';
 import {
   resolveInteractiveResourceContext,
   buildHostBridgeContextMessage,
@@ -58,6 +59,26 @@ let _interactiveBridgeState = {
   suppressedTexts: new Map(),
   _messageHandler: null,
 };
+
+// ── 聊天记录本地持久化（对齐 chatHistoryStore 防抖写入）──
+let _persistTimer = null;
+function _syncHistoryStoreUserId() {
+  const uid = state.getUserId() || state.getPhone() || '';
+  chatHistoryStore.setUserId(uid);
+}
+function _persistMessages() {
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    const convs = state.getConversations();
+    for (const conv of convs) {
+      const msgs = state.getMessages(conv.id);
+      if (msgs && msgs.length) {
+        chatHistoryStore.saveMessages(conv.id, msgs);
+      }
+    }
+  }, 1000);
+}
 
 // ── Agent deliveryId 去重（对齐原项目 _GROUP_AGENT_REPLY_RELAY_PREFIX 机制）──
 // C++ 广播 agent 回复时，消息可能含两种标记：
@@ -181,6 +202,7 @@ function _initAuth() {
       sessionId: _storageGet(AUTH_STORAGE_KEYS.sessionId),
       jwt,
     });
+    _syncHistoryStoreUserId();
     state._setters.notify();
   }
 }
@@ -200,6 +222,7 @@ function _applyInjectedAuthInternal(injected) {
   _storageSet(AUTH_STORAGE_KEYS.phone, phone);
   _storageSet(AUTH_STORAGE_KEYS.userId, userId);
   if (sessionId) _storageSet(AUTH_STORAGE_KEYS.sessionId, sessionId);
+  _syncHistoryStoreUserId();
   state._setters.notify();
 }
 
@@ -230,6 +253,8 @@ function init() {
   // 订阅 state 变化，把新消息转发给已打开的 H5 iframe Bridge
   // （_forwardPendingMessages 是幂等的，仅转发 _forwardedMessageIds 中没有的新消息）
   state.subscribe(_notifyInteractiveBridge);
+  // 订阅 state 变化，防抖持久化聊天记录到 localStorage
+  state.subscribe(_persistMessages);
 }
 
 // ── 推送事件处理（实时消息、Agent 流式、群邀请等）──
@@ -662,6 +687,7 @@ async function login(phone, code) {
     _storageSet(AUTH_STORAGE_KEYS.phone, phone);
     _storageSet(AUTH_STORAGE_KEYS.userId, userId);
     if (sessionId) _storageSet(AUTH_STORAGE_KEYS.sessionId, sessionId);
+    _syncHistoryStoreUserId();
     state._setters.notify();
   }
   return r;
@@ -670,6 +696,9 @@ async function logout() {
   try { await core.request('auth.logout', {}); } catch (e) {}
   // 清除 localStorage 鉴权数据（对齐原项目 AuthStore.logout）
   Object.values(AUTH_STORAGE_KEYS).forEach(k => _storageRemove(k));
+  // 清除聊天记录和草稿缓存
+  chatHistoryStore.clearAllMessages();
+  chatHistoryStore.clearDrafts();
   state._setters.resetAuth();
   state._setters.resetAll();
   state._setters.notify();
@@ -734,6 +763,16 @@ async function loadConversations() {
   });
   if (list.length) {
     state._setters.conversations(list);
+    // 从 localStorage 恢复聊天记录（页面刷新后立即显示缓存消息，不等 C++ 推送）
+    list.forEach((conv) => {
+      const localMsgs = chatHistoryStore.loadMessages(conv.id);
+      if (localMsgs.length) {
+        state._setters.messages(conv.id, localMsgs);
+        // 恢复会话最后消息预览
+        const last = localMsgs[localMsgs.length - 1];
+        if (last) { conv.lastMessage = last.text; conv.lastTs = last.ts; }
+      }
+    });
     state._setters.notify();
     // 加入所有频道（与原项目一致：获取列表后批量 join，以便接收推送消息）
     list.forEach((conv) => {
@@ -844,7 +883,12 @@ async function loadConversationHistory(convId) {
   // 规范化历史消息：确保包含 author / createdAt 等 _renderBubble 所需字段
   const messages = rawMessages.map((m) => _normalizeHistoryMessage(m, convId)).filter(Boolean);
   if (messages.length) {
-    state._setters.messages(convId, messages);
+    // 合并而非覆盖：以服务端历史为基准，追加本地缓存中服务端未返回的消息
+    const localMsgs = state.getMessages(convId) || [];
+    const serverIds = new Set(messages.map((m) => m.id));
+    const localOnly = localMsgs.filter((m) => !serverIds.has(m.id));
+    const merged = localOnly.length ? [...messages, ...localOnly] : messages;
+    state._setters.messages(convId, merged);
     state._setters.notify();
   }
   return r;
@@ -1366,6 +1410,60 @@ function _isH5CardUrl(url) {
 }
 
 /**
+ * 检测 AI 协议 JSON 特征字段（对齐 origin-vanilla openclaw-shared.ts hasAiProtocolJsonSignature）
+ * 要求同时含 (outputs|providerId|skillId) 与 (summary|status)，避免误判普通 JSON。
+ */
+function _hasAiProtocolJsonSignature(text) {
+  return /"(?:outputs|providerId|skillId)"\s*:/.test(text) && /"(?:summary|status)"\s*:/.test(text);
+}
+
+/**
+ * 定位 AI_SKILL_RESULT JSON 的起止边界（对齐 origin-vanilla tryExtractAiSkillResultText 的边界查找）
+ * 通过显式标记或特征字段定位起点，再用括号匹配（含字符串/转义感知）找到完整 JSON。
+ * @param {string} raw
+ * @returns {{start:number, end:number}|null} end 为闭合 '}' 的索引（含）
+ */
+function _locateAiSkillJsonBounds(raw) {
+  const explicitIdx = raw.indexOf('AI_SKILL_RESULT');
+  const hasSignature = _hasAiProtocolJsonSignature(raw);
+  if (explicitIdx === -1 && !hasSignature) return null;
+
+  // 无显式标记时，用特征字段定位起点
+  const searchFrom = explicitIdx !== -1 ? explicitIdx : Math.min(
+    raw.indexOf('"outputs"') !== -1 ? raw.indexOf('"outputs"') : Infinity,
+    raw.indexOf('"providerId"') !== -1 ? raw.indexOf('"providerId"') : Infinity,
+    raw.indexOf('"skillId"') !== -1 ? raw.indexOf('"skillId"') : Infinity,
+  );
+  if (searchFrom === Infinity) return null;
+
+  // 从标记位向后找起始 '{'（JSON 可能跟在 "AI_SKILL_RESULT:\n```json\n" 之后）
+  let start = searchFrom;
+  while (start < raw.length) {
+    if (raw[start] === '{') break;
+    start += 1;
+  }
+  if (start >= raw.length || raw[start] !== '{') return null;
+
+  // 括号匹配找闭合 '}'（感知字符串与转义，避免字符串内 '}' 误判）
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth += 1;
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return { start, end: i };
+    }
+  }
+  return null; // 未闭合，无法定位
+}
+
+/**
  * 解析 AI 回复文本，提取卡片附件并清理 JSON 碎片。
  * 对齐原项目 _parseAgentReplyText + _sanitizeAgentReplyText：
  * 1. 尝试解析文本中的 JSON（AI_SKILL_RESULT 格式），提取 webview outputs 作为附件
@@ -1382,44 +1480,84 @@ function _parseAgentReply(text, existingAttachments = []) {
   let cleanText = raw;
   const attachments = [];
 
-  // 1. 尝试查找并解析 JSON（结构化 AI 回复）
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
+  // 1. 定位并解析 AI_SKILL_RESULT 结构化 JSON（对齐 origin-vanilla tryExtractAiSkillResultText）
+  const bounds = _locateAiSkillJsonBounds(raw);
+  if (bounds) {
+    const jsonStr = raw.slice(bounds.start, bounds.end + 1);
+    const beforeJson = raw.slice(0, bounds.start).trim();
+    const afterJson = raw.slice(bounds.end + 1).trim();
+    let extractedText = '';
+    let parsedOk = false;
     try {
-      const obj = JSON.parse(jsonMatch[0]);
-      // AI_SKILL_RESULT 格式：{ outputs: [...], skillId, taskNo, ... }
-      if (obj && (Array.isArray(obj.outputs) || obj.skillId || obj.providerId)) {
-        const textParts = [];
+      const obj = JSON.parse(jsonStr);
+      if (obj && typeof obj === 'object') {
+        const summary = String(obj.summary || '').trim();
+        // outputs 兼容数组与单对象（对齐原项目）
+        let outputs = [];
         if (Array.isArray(obj.outputs)) {
-          for (const output of obj.outputs) {
-            const type = String(output.type || '').trim();
-            if (type === 'text') {
-              textParts.push(String(output.content || output.text || ''));
-            } else if (type === 'webview' || type === 'artifact') {
-              const url = String(output.url || '').trim();
-              if (url && /^https?:\/\//.test(url)) {
-                attachments.push({
-                  type: 'webview',
-                  url,
-                  title: String(output.title || _titleFromUrl(url)),
-                  objectKind: output.objectKind || (output.url && _isH5CardUrl(output.url) ? 'h5_card' : ''),
-                  artifactType: output.artifactType || '',
-                  sourceSkillId: output.sourceSkillId || obj.skillId || '',
-                  taskNo: obj.taskNo || '',
-                  providerId: obj.providerId || '',
-                  skillId: obj.skillId || '',
-                });
-              }
+          outputs = obj.outputs;
+        } else if (obj.outputs && typeof obj.outputs === 'object') {
+          outputs = [obj.outputs];
+        }
+        const textParts = [];
+        for (const output of outputs) {
+          if (!output || typeof output !== 'object') continue;
+          const type = String(output.type || '').trim();
+          if (type === 'text') {
+            // 标准格式：{ type: "text", content: "..." }，兜底 text 字段
+            const c = String(output.content || output.text || '').trim();
+            if (c) textParts.push(c);
+          } else if (type === 'webview' || type === 'webview_content' || type === 'artifact') {
+            const url = String(output.url || '').trim();
+            if (url && /^https?:\/\//.test(url)) {
+              attachments.push({
+                type: 'webview',
+                url,
+                title: String(output.title || _titleFromUrl(url)),
+                objectKind: output.objectKind || (output.url && _isH5CardUrl(output.url) ? 'h5_card' : ''),
+                artifactType: output.artifactType || '',
+                sourceSkillId: output.sourceSkillId || obj.skillId || '',
+                taskNo: obj.taskNo || '',
+                providerId: obj.providerId || '',
+                skillId: obj.skillId || '',
+              });
+            }
+          } else {
+            // 任意带 url 字段的输出 - 保留为附件（对齐原项目兜底）
+            const url = String(output.url || '').trim();
+            if (url && /^https?:\/\//.test(url) && !attachments.some(a => a.url === url)) {
+              attachments.push({
+                type: 'webview',
+                url,
+                title: String(output.title || _titleFromUrl(url)),
+                objectKind: output.url && _isH5CardUrl(output.url) ? 'h5_card' : '',
+                artifactType: '',
+              });
+            }
+            // 直接格式 { text: "..." }
+            if (typeof output.text === 'string' && output.text.trim()) {
+              textParts.push(output.text);
             }
           }
         }
-        // 从原始文本中移除 JSON，保留前后可能有的纯文本
-        const beforeJson = raw.slice(0, jsonMatch.index).trim();
-        const afterJson = raw.slice(jsonMatch.index + jsonMatch[0].length).trim();
-        cleanText = [beforeJson, textParts.join('\n'), afterJson].filter(Boolean).join('\n').trim();
+        extractedText = textParts.join('\n') || summary;
+        if (extractedText) parsedOk = true;
       }
     } catch (e) {
-      // JSON 解析失败，当作纯文本处理
+      // JSON 畸形 - 走正则兜底提取
+    }
+    if (!parsedOk) {
+      // 正则兜底：从畸形 JSON 中提取 summary/content/text（对齐 origin-vanilla regex fallback）
+      const summaryMatch = jsonStr.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const summary = summaryMatch ? summaryMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      const contentMatch = jsonStr.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const content = contentMatch ? contentMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      const textMatch = jsonStr.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const textVal = textMatch ? textMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      extractedText = content || textVal || summary;
+    }
+    if (extractedText) {
+      cleanText = [beforeJson, extractedText, afterJson].filter(Boolean).join('\n').trim();
     }
   }
 
@@ -2171,10 +2309,22 @@ function parseSharedPostMessageContent(raw, convId) {
 }
 
 // ================================================================
+// 草稿持久化（输入框内容本地存储）
+// ================================================================
+function saveComposerDrafts(drafts) {
+  chatHistoryStore.saveDrafts(drafts);
+}
+function loadComposerDrafts() {
+  return chatHistoryStore.loadDrafts();
+}
+
+// ================================================================
 // 重置（登出/切换账号时清理）
 // ================================================================
 async function resetForAuthChange() {
   try { await disconnect(); } catch (e) {}
+  chatHistoryStore.clearAllMessages();
+  chatHistoryStore.clearDrafts();
   state._setters.resetAll();
   state._setters.notify();
 }
@@ -2219,6 +2369,8 @@ export default {
   getGroupInvitationNotifications, getPushNotifications, getLastSeenNotificationsAt, setLastSeenNotificationsAt,
   // utils
   parseSharedPostMessageContent, resetForAuthChange,
+  // drafts
+  saveComposerDrafts, loadComposerDrafts,
   // pub/sub
   subscribe, onPush, isMockMode,
 };

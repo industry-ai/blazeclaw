@@ -7,7 +7,6 @@
 
 import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
-import Toast from '../utils/toast.js';
 
 const MePage = {
   currentPanel: 'home',

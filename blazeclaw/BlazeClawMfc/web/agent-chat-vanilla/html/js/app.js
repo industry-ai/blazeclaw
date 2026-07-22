@@ -8,7 +8,6 @@
 
 import UiStore from './stores/uiStore.js';
 import Bridge from './bridge/index.js';
-import AppConfig from './config.js';
 
 // ── 页面模块映射（懒加载）──
 const pageModules = {
