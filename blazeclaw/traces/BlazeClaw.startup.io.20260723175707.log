@@ -1,0 +1,80 @@
+pid=35800 tick=34297484 io.trace.begin
+path=E:\gitRepo\blazeClaw\blazeclaw\blazeclaw.conf exists=true statMs=0 size=5915
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\added_tokens.json exists=true statMs=0 size=1566
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\config.json exists=true statMs=0 size=1251
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_init.int4.onnx exists=true statMs=0 size=356165
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_init.onnx exists=true statMs=0 size=286423
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_step.int4.onnx exists=true statMs=0 size=355662
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_step.onnx exists=true statMs=0 size=285925
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_weights.data exists=true statMs=0 size=8126930944
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_weights.int4.data exists=true statMs=0 size=2226321408
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\embed_tokens.bin exists=true statMs=0 size=622329856
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\encoder.int4.onnx exists=true statMs=0 size=1270241779
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\encoder.onnx exists=true statMs=0 size=1270241779
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\gitattributes exists=true statMs=0 size=2162
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\optimized exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\preprocessor_config.json exists=true statMs=0 size=298
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\qwen3-asr-1.7b-int4.tar.gz exists=true statMs=0 size=2662920036
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\qwen3-asr-1.7b.tar.gz exists=true statMs=0 size=5372045206
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\README.md exists=true statMs=0 size=3379
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\tokenizer.json exists=true statMs=0 size=11429377
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\tokenizer_config.json exists=true statMs=0 size=12488
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\vocab.json exists=true statMs=0 size=2776833
+pid=35800 tick=34297484 io.trace.end
+pid=56148 tick=35285453 io.trace.begin
+path=E:\gitRepo\blazeClaw\blazeclaw\blazeclaw.conf exists=true statMs=0 size=5915
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\added_tokens.json exists=true statMs=0 size=1566
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\config.json exists=true statMs=0 size=1251
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_init.int4.onnx exists=true statMs=0 size=356165
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_init.onnx exists=true statMs=0 size=286423
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_step.int4.onnx exists=true statMs=0 size=355662
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_step.onnx exists=true statMs=0 size=285925
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_weights.data exists=true statMs=0 size=8126930944
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\decoder_weights.int4.data exists=true statMs=0 size=2226321408
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\embed_tokens.bin exists=true statMs=0 size=622329856
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\encoder.int4.onnx exists=true statMs=0 size=1270241779
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\encoder.onnx exists=true statMs=0 size=1270241779
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\gitattributes exists=true statMs=0 size=2162
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\optimized exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\preprocessor_config.json exists=true statMs=0 size=298
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\qwen3-asr-1.7b-int4.tar.gz exists=true statMs=0 size=2662920036
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\qwen3-asr-1.7b.tar.gz exists=true statMs=0 size=5372045206
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\README.md exists=true statMs=0 size=3379
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\tokenizer.json exists=true statMs=0 size=11429377
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\tokenizer_config.json exists=true statMs=0 size=12488
+path=BlazeClawMfc/models/STT/qwen3-asr-1.7b-onnx\vocab.json exists=true statMs=0 size=2776833
+pid=56148 tick=35285453 io.trace.end
+pid=42960 tick=39003218 io.trace.begin
+path=E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\blazeclaw.conf exists=true statMs=0 size=13009
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\bpe.model exists=true statMs=0 size=244836
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\bpe.vocab exists=true statMs=0 size=12564
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\configuration.json exists=true statMs=0 size=56
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\decoder-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=13091040
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\decoder-epoch-99-avg-1.onnx exists=true statMs=0 size=13876452
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\encoder-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=181895032
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\encoder-epoch-99-avg-1.onnx exists=true statMs=0 size=330083505
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\gitattributes exists=true statMs=0 size=1643
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\joiner-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=3228404
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\joiner-epoch-99-avg-1.onnx exists=true statMs=0 size=12833618
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\README.md exists=true statMs=0 size=296
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\tokens.txt exists=true statMs=0 size=56317
+pid=42960 tick=39003218 io.trace.end
+pid=34784 tick=41823000 io.trace.begin
+path=E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\blazeclaw.conf exists=true statMs=0 size=13009
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en exists=true statMs=0 size=4096
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\bpe.model exists=true statMs=0 size=244836
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\bpe.vocab exists=true statMs=0 size=12564
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\configuration.json exists=true statMs=0 size=56
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\decoder-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=13091040
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\decoder-epoch-99-avg-1.onnx exists=true statMs=0 size=13876452
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\encoder-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=181895032
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\encoder-epoch-99-avg-1.onnx exists=true statMs=0 size=330083505
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\gitattributes exists=true statMs=0 size=1643
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\joiner-epoch-99-avg-1.int8.onnx exists=true statMs=0 size=3228404
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\joiner-epoch-99-avg-1.onnx exists=true statMs=0 size=12833618
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\README.md exists=true statMs=0 size=296
+path=BlazeClawMfc/models/STT/sherpa-onnx-streaming-zipformer-bilingual-zh-en\tokens.txt exists=true statMs=0 size=56317
+pid=34784 tick=41823000 io.trace.end

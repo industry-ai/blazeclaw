@@ -29,6 +29,7 @@
 #include <fstream>
 #include <algorithm>
 #include <chrono>
+#include <future>
 #include <cwctype>
 #include <exception>
 #include <set>
@@ -661,14 +662,36 @@ namespace {
 			std::optional<std::string>(
 				"{\"text\":\"startup-embedding-probe\"}"));
 
-		if (probeResult.find("\"vector\":") != std::string::npos) {
+		// Run embedding probe asynchronously with a short timeout to avoid blocking startup
+		auto probeTask = std::async(std::launch::async, [&services]() {
+			return services.InvokeGatewayMethod(
+				"gateway.embeddings.generate",
+				std::optional<std::string>(
+					"{\"text\":\"startup-embedding-probe\"}"));
+		});
+
+		const auto status = probeTask.wait_for(std::chrono::milliseconds(400));
+		std::string probeResultFinal;
+		if (status == std::future_status::ready) {
+			try {
+				probeResultFinal = probeTask.get();
+			}
+			catch (...) {
+				probeResultFinal = "{\"status\":\"error\",\"message\":\"probe exception\"}";
+			}
+		}
+		else {
+			probeResultFinal = "{\"status\":\"timeout\",\"message\":\"probe timed out\"}";
+		}
+
+		if (probeResultFinal.find("\"vector\":") != std::string::npos) {
 			AppendMainFrameStatusLine(
 				L"[Embeddings] startup.loaded - model probe succeeded");
 			return;
 		}
 
 		const CString errorLine(
-			(L"[Embeddings] startup.error - " + ToWide(probeResult)).c_str());
+			(L"[Embeddings] startup.error - " + ToWide(probeResultFinal)).c_str());
 		AppendMainFrameStatusLine(errorLine);
 	}
 
