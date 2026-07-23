@@ -23,6 +23,8 @@ threshold_overrides:
   # Example: increase allowed file size for model artifacts or pretrained models
   - pattern: "BlazeClawMfc/models/**"
     file_size_mb: 200
+  - pattern: "blazeclaw/BlazeClawMfc/models/**"
+    file_size_mb: 200
   # Example: allow larger docs (pdfs) in docs area
   - pattern: "docs/**"
     file_size_mb: 50

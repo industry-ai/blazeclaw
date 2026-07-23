@@ -11,3 +11,7 @@ vendor/**
 *.jpg
 *.bin
 **/*.lock
+blazeclaw/BlazeClawMfc/models/**
+artifacts/**
+traces/**
+blazeclaw/traces/**

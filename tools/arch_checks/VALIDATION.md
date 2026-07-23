@@ -27,6 +27,11 @@ Interpretation and next actions
   - Add generated/build folders to tools/arch_checks/ignore_patterns.txt so they are excluded by default.
   - Prefer running the checks in Mode=changed (default in CI) so only changed files in PRs are validated.
 
+Recent tuning applied
+- Added threshold override for "blazeclaw/BlazeClawMfc/models/**" to allow large model artifacts without failing file-size checks.
+- Added ignore patterns: blazeclaw/BlazeClawMfc/models/**, artifacts/**, traces/** to tools/arch_checks/ignore_patterns.txt.
+- Expanded docs/boundary_map.yml with tools and repo-wide allowed_paths to reduce initial noise. Owners should tighten these entries over time.
+
 Suggested immediate tuning
 1. Add these patterns to tools/arch_checks/ignore_patterns.txt to suppress generated artifacts:
 
