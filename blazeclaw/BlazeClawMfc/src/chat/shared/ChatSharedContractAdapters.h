@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChatSharedContracts.h"
+#include "ChatGatewayRouteForwarding.h"
 
 #include <chrono>
 #include <functional>
@@ -46,35 +47,37 @@ namespace blazeclaw::chat::shared {
 
 	class LambdaChatRequestOrchestrator final : public IChatRequestOrchestrator {
 	public:
-		using RouteFn = std::function<blazeclaw::gateway::protocol::ResponseFrame(
+		using RouteFn = std::function<std::optional<blazeclaw::gateway::protocol::ResponseFrame>(
 			const blazeclaw::gateway::protocol::RequestFrame& request)>;
+
+		struct UnavailableResponse {
+			std::string code = "route_unavailable";
+			std::string message = "Shared chat orchestrator route is unavailable.";
+		};
 
 		explicit LambdaChatRequestOrchestrator(RouteFn route)
 			: m_route(std::move(route)) {
 		}
 
+		LambdaChatRequestOrchestrator(
+			RouteFn route,
+			UnavailableResponse unavailableResponse)
+			: m_route(std::move(route))
+			, m_unavailableResponse(std::move(unavailableResponse)) {
+		}
+
 		[[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame Route(
 			const blazeclaw::gateway::protocol::RequestFrame& request) const override {
-			if (static_cast<bool>(m_route)) {
-				return m_route(request);
-			}
-
-			return blazeclaw::gateway::protocol::ResponseFrame{
-				.id = request.id,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = blazeclaw::gateway::protocol::ErrorShape{
-					.code = "route_unavailable",
-					.message = "Shared chat orchestrator route is unavailable.",
-					.detailsJson = std::nullopt,
-					.retryable = false,
-					.retryAfterMs = std::nullopt,
-				},
-			};
+			return route_forwarding::ForwardRequest(
+				request,
+				m_route,
+				m_unavailableResponse.code,
+				m_unavailableResponse.message);
 		}
 
 	private:
 		RouteFn m_route;
+		UnavailableResponse m_unavailableResponse;
 	};
 
 	class PassthroughChatStreamEventNormalizer final : public IChatStreamEventNormalizer {

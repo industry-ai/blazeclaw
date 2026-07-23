@@ -360,8 +360,18 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 	auto orchestratorAdapter = std::make_shared<blazeclaw::agentchat::CallbackAgentChatOrchestratorAdapter>();
 	const blazeclaw::chat::shared::LambdaChatRequestOrchestrator requestOrchestrator(
 		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
+			-> std::optional<blazeclaw::gateway::protocol::ResponseFrame>
 		{
-			return app->RouteGatewayRequest(request);
+			if (app == nullptr)
+			{
+				return std::nullopt;
+			}
+			return std::optional<blazeclaw::gateway::protocol::ResponseFrame>(
+				app->RouteGatewayRequest(request));
+		},
+		blazeclaw::chat::shared::LambdaChatRequestOrchestrator::UnavailableResponse{
+			.code = "app_unavailable",
+			.message = "Application context unavailable.",
 		});
 	orchestratorAdapter->SetRouter(
 		[requestOrchestrator](const blazeclaw::gateway::protocol::RequestFrame& request)

@@ -2061,25 +2061,20 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 		{
 			const blazeclaw::chat::shared::LambdaChatRequestOrchestrator requestOrchestrator(
 				[](const blazeclaw::gateway::protocol::RequestFrame& routeRequest)
+					-> std::optional<blazeclaw::gateway::protocol::ResponseFrame>
 				{
 					auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 					if (app == nullptr)
 					{
-						return blazeclaw::gateway::protocol::ResponseFrame{
-							.id = routeRequest.id,
-							.ok = false,
-							.payloadJson = std::nullopt,
-							.error = blazeclaw::gateway::protocol::ErrorShape{
-								.code = "app_unavailable",
-								.message = "Application context unavailable.",
-								.detailsJson = std::nullopt,
-								.retryable = false,
-								.retryAfterMs = std::nullopt,
-							},
-						};
+						return std::nullopt;
 					}
 
-					return app->RouteGatewayRequest(routeRequest);
+					return std::optional<blazeclaw::gateway::protocol::ResponseFrame>(
+						app->RouteGatewayRequest(routeRequest));
+				},
+				blazeclaw::chat::shared::LambdaChatRequestOrchestrator::UnavailableResponse{
+					.code = "app_unavailable",
+					.message = "Application context unavailable.",
 				});
 
 			return requestOrchestrator.Route(request);
