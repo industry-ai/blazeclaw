@@ -52,9 +52,87 @@ namespace {
 			output.push_back(static_cast<wchar_t>(
 				static_cast<unsigned char>(ch)));
 		}
-
 		return output;
 	}
+
+#ifdef _DEBUG
+	// Debug-only startup IO tracing helpers. Compiled out in release builds.
+	std::filesystem::path ResolveStartupIoPath() {
+		wchar_t tempPath[MAX_PATH]{};
+		const DWORD tempLength = GetTempPathW(MAX_PATH, tempPath);
+		if (tempLength > 0 && tempLength < MAX_PATH) {
+			return std::filesystem::path(tempPath) / L"BlazeClaw.startup.io.log";
+		}
+
+		return std::filesystem::current_path() / L"BlazeClaw.startup.io.log";
+	}
+
+	void RecordFileStat(std::wofstream& out, const std::filesystem::path& p) {
+		const auto start = static_cast<unsigned long long>(GetTickCount64());
+		std::error_code ec;
+		const bool exists = std::filesystem::exists(p, ec);
+		const auto end = static_cast<unsigned long long>(GetTickCount64());
+		out << L"path=" << p.wstring()
+			<< L" exists=" << (exists ? L"true" : L"false")
+			<< L" statMs=" << (end - start);
+		if (exists && !ec) {
+			const auto size = std::filesystem::file_size(p, ec);
+			if (!ec) {
+				out << L" size=" << static_cast<unsigned long long>(size);
+			}
+		}
+		out << L"\n";
+	}
+
+	void RecordStartupIoTrace(const blazeclaw::config::AppConfig& config) {
+		std::wofstream out(ResolveStartupIoPath(), std::ios::app);
+		if (!out.is_open()) {
+			return;
+		}
+
+		out << L"pid=" << static_cast<unsigned long>(GetCurrentProcessId())
+			<< L" tick=" << static_cast<unsigned long long>(GetTickCount64())
+			<< L" io.trace.begin\n";
+
+		// Record runtime config file
+		RecordFileStat(out, std::filesystem::absolute(std::filesystem::path(kConfigPath)));
+
+		// Speech recognition related files
+		try {
+			if (!config.speechRecognition.storageRoot.empty()) {
+				const std::filesystem::path root(config.speechRecognition.storageRoot);
+				RecordFileStat(out, root);
+				if (std::filesystem::exists(root)) {
+					for (const auto& e : std::filesystem::directory_iterator(root)) {
+						RecordFileStat(out, e.path());
+					}
+				}
+			}
+			if (!config.speechRecognition.modelPath.empty()) {
+				RecordFileStat(out, std::filesystem::path(config.speechRecognition.modelPath));
+			}
+		}
+		catch (...) {
+			// best-effort; avoid throwing on startup instrumentation
+		}
+
+		// Embeddings model/tokenizer
+		try {
+			if (!config.embeddings.modelPath.empty()) {
+				RecordFileStat(out, std::filesystem::path(config.embeddings.modelPath));
+			}
+			if (!config.embeddings.tokenizerPath.empty()) {
+				RecordFileStat(out, std::filesystem::path(config.embeddings.tokenizerPath));
+			}
+		}
+		catch (...) {
+		}
+
+		out << L"pid=" << static_cast<unsigned long>(GetCurrentProcessId())
+			<< L" tick=" << static_cast<unsigned long long>(GetTickCount64())
+			<< L" io.trace.end\n";
+	}
+#endif
 
 	std::wstring JoinValues(const std::vector<std::wstring>& values) {
 		if (values.empty()) {
@@ -980,6 +1058,11 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		startupServiceError.has_value()
 		? (L"InitInstance.service.start.warning=" + startupServiceError.value())
 		: L"InitInstance.service.start.ok");
+
+		// Record lightweight IO trace for startup artifacts (best-effort)
+#ifdef _DEBUG
+		RecordStartupIoTrace(m_config);
+#endif
 	if (m_serviceManager.IsRunning()) {
 		StartGatewayPumpWorker();
 		AppendStartupCheckpoint(L"InitInstance.gateway.pump.worker.started");
