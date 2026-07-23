@@ -3,15 +3,15 @@ import glob
 import os
 from collections import defaultdict
 
-TRACE_GLOB = 'blazeclaw/traces/*.log'
-IO_GLOB = 'blazeclaw/traces/*io*.log'
+TRACE_GLOB = '**/traces/*.log'
+IO_GLOB = '**/traces/*io*.log'
 
 stage_re = re.compile(r'pid=(\d+) tick=(\d+) stage=(.+)')
 io_path_re = re.compile(r'path=(.+) exists=(true|false) statMs=(\d+)(?: size=(\d+))?')
 
 runs = defaultdict(list)
 
-for fname in glob.glob(TRACE_GLOB):
+for fname in glob.glob(TRACE_GLOB, recursive=True):
     with open(fname, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
             m = stage_re.search(line)
@@ -58,7 +58,7 @@ summaries.sort(key=lambda s: (s['total_ms'] if s['total_ms'] is not None else -1
 
 # Parse IO logs for largest files
 files = []
-for fname in glob.glob(IO_GLOB):
+for fname in glob.glob(IO_GLOB, recursive=True):
     with open(fname, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
             m = io_path_re.search(line)
