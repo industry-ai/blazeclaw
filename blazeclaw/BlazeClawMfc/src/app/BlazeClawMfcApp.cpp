@@ -42,7 +42,26 @@
 #endif
 
 namespace {
-	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
+	constexpr wchar_t kPrimaryConfigPath[] = L"BlazeClawMfc/blazeclaw.conf";
+	constexpr wchar_t kFallbackConfigPath[] = L"blazeclaw.conf";
+
+	std::filesystem::path ResolveRuntimeConfigPath() {
+		const std::filesystem::path cwd = std::filesystem::current_path();
+		const std::filesystem::path primaryPath = cwd / kPrimaryConfigPath;
+		const std::filesystem::path fallbackPath = cwd / kFallbackConfigPath;
+
+		std::error_code ec;
+		if (std::filesystem::exists(primaryPath, ec)) {
+			return std::filesystem::absolute(primaryPath);
+		}
+
+		ec.clear();
+		if (std::filesystem::exists(fallbackPath, ec)) {
+			return std::filesystem::absolute(fallbackPath);
+		}
+
+		return std::filesystem::absolute(primaryPath);
+	}
 
 	std::wstring ToWide(const std::string& value) {
 		std::wstring output;
@@ -95,7 +114,7 @@ namespace {
 			<< L" io.trace.begin\n";
 
 		// Record runtime config file
-		RecordFileStat(out, std::filesystem::absolute(std::filesystem::path(kConfigPath)));
+		RecordFileStat(out, ResolveRuntimeConfigPath());
 
 		// Speech recognition related files
 		try {
@@ -265,9 +284,10 @@ namespace {
 
 	void PersistActiveChatConnection(
 		const blazeclaw::core::ServiceManager& services) {
+		const std::filesystem::path configPath = ResolveRuntimeConfigPath();
 		std::vector<std::wstring> lines;
 		{
-			std::wifstream input(kConfigPath);
+			std::wifstream input(configPath);
 			std::wstring line;
 			while (std::getline(input, line)) {
 				lines.push_back(line);
@@ -285,7 +305,7 @@ namespace {
 			L"chat.activeModel",
 			model.empty() ? L"default" : model);
 
-		std::wofstream output(kConfigPath, std::ios::trunc);
+		std::wofstream output(configPath, std::ios::trunc);
 		if (!output.is_open()) {
 			return;
 		}
@@ -524,11 +544,14 @@ namespace {
 			<< L"\n";
 	}
 
-	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
-		const auto absoluteConfigPath =
-			std::filesystem::absolute(std::filesystem::path(kConfigPath));
+	void AppendStartupConfigStatus(
+		const blazeclaw::config::AppConfig& config,
+		const std::filesystem::path& runtimeConfigPath) {
+		const auto absoluteConfigPath = std::filesystem::absolute(runtimeConfigPath);
 		const auto repoRootConfigPath =
-			std::filesystem::current_path() / L"blazeclaw.conf";
+			std::filesystem::current_path() / kFallbackConfigPath;
+		const auto preferredConfigPath =
+			std::filesystem::current_path() / kPrimaryConfigPath;
 
 		wchar_t modulePath[MAX_PATH]{};
 		const DWORD moduleLength = GetModuleFileNameW(
@@ -568,6 +591,20 @@ namespace {
 				absoluteConfigPath.c_str(),
 				repoRootConfigPath.c_str());
 			AppendMainFrameStatusLine(configMismatchLine);
+		}
+
+		std::error_code preferredCompareEc;
+		const bool usingPreferredPath = std::filesystem::equivalent(
+			absoluteConfigPath,
+			preferredConfigPath,
+			preferredCompareEc);
+		if (!usingPreferredPath) {
+			CString preferredWarningLine;
+			preferredWarningLine.Format(
+				L"[Chat] startup.config.path.preferred.warning - preferred=%s runtime=%s",
+				preferredConfigPath.c_str(),
+				absoluteConfigPath.c_str());
+			AppendMainFrameStatusLine(preferredWarningLine);
 		}
 
 		CString modeLine;
@@ -1028,7 +1065,8 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	theApp.GetTooltipManager()->SetTooltipParams(AFX_TOOLTIP_TYPE_ALL,
 		RUNTIME_CLASS(CMFCToolTipCtrl), &ttParams);
 
-	m_configLoader.LoadFromFile(kConfigPath, m_config);
+	const std::filesystem::path runtimeConfigPath = ResolveRuntimeConfigPath();
+	m_configLoader.LoadFromFile(runtimeConfigPath.wstring(), m_config);
 	AppendStartupCheckpoint(L"InitInstance.config.loaded");
 	if (const auto commandExitCode = TryRunOfflineSttOptimizationCommand(m_config);
 		commandExitCode.has_value()) {
@@ -1206,7 +1244,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		AppendMainFrameStatusLine(startupShellWarningLine);
 	}
 
-	AppendStartupConfigStatus(m_config);
+	AppendStartupConfigStatus(m_config, runtimeConfigPath);
 	if (m_serviceManager.IsRunning()) {
 		AppendStartupLocalModelStatus(m_config, m_serviceManager);
 		AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
