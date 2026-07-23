@@ -1,0 +1,35 @@
+# Arch check defaults and tuning guide
+# - file_size thresholds are in megabytes (MB).
+# - globs use gitignore-style patterns and are evaluated in order (first match wins).
+version: 1
+boundary_map_path: "docs/boundary_map.yml"
+report:
+  json_path: "tools/arch_checks/report.json"
+  junit_path: "tools/arch_checks/report.junit.xml"
+defaults:
+  file_size_mb_default: 5          # default per-file threshold (MB)
+  max_scan_depth: 0               # 0 => unlimited
+ignore_globs:
+  - "build/**"
+  - "out/**"
+  - "third_party/**"
+  - "vendor/**"
+  - "*.png"
+  - "*.jpg"
+  - "*.bin"
+  - "**/*.lock"
+threshold_overrides:
+  # Example: increase allowed file size for model artifacts or pretrained models
+  - pattern: "BlazeClawMfc/models/**"
+    file_size_mb: 200
+  # Example: allow larger docs (pdfs) in docs area
+  - pattern: "docs/**"
+    file_size_mb: 50
+git:
+  # Default base for diff detection in runner; CI should pass PR base explicitly
+  default_base: "origin/main"
+runner:
+  # How the runner will behave when no changed-file list is provided:
+  # - "changed" => only analyze changed files (default for PR runs)
+  # - "all" => analyze entire repo (useful for audits)
+  default_mode: "changed"
