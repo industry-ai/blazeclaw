@@ -4,6 +4,7 @@ This directory contains lightweight tooling to help enforce architecture "fitnes
 
 Implemented so far
 - file-size checker: tools/arch_checks/file_size_check.py
+ - boundary-drift checker: tools/arch_checks/boundary_drift_check.py
 
 Quick start
 
@@ -18,6 +19,16 @@ Quick start
 
    # or provide file list via stdin (one per line)
    git diff --name-only origin/main...HEAD | python tools/arch_checks/file_size_check.py --stdin
+
+Boundary drift checker
+
+- Validate that changed files remain inside declared runtime boundaries:
+
+  git diff --name-only origin/main...HEAD | python tools/arch_checks/boundary_drift_check.py --stdin
+
+Notes
+- Both checkers respect ignore patterns in tools/arch_checks/config.yml and docs/boundary_map.yml global_ignores.
+- Both tools emit a JSON report to the path configured in tools/arch_checks/config.yml (report.json by default).
 
 Config
 - tools/arch_checks/config.yml contains default thresholds, ignore globs, and report paths.
