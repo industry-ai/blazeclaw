@@ -46,3 +46,32 @@ Suggested immediate tuning
 Artifacts
 - Combined report: tools/arch_checks/arch_checks_report.json
 - Per-check reports: tools/arch_checks/file_size_report.json, tools/arch_checks/boundary_report.json
+
+Audit-mode run (sample)
+-----------------------
+
+Run date: 2026-07-23 (audit-mode sample)
+
+Command executed (audit mode, scans all tracked files):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools/arch_checks/run_arch_checks.ps1 -RepoRoot . -Base origin/main -Mode all -Audit
+
+Summary results (audit mode)
+- file-size checker: checked 2602 files, violations 1
+- boundary-drift checker: checked 2602 files, violations 10 (treated as warnings under -Audit)
+
+Top file-size violation (still failing):
+- blazeclaw/skills-openclaw-original/h5-cards/assets/video/activity1.mp4 — 9.563 MB (limit 5 MB)
+
+Top boundary-drift warnings (examples):
+- .gitattributes: no matching boundary
+- .gitignore: no matching boundary
+- Directory.Build.props: no matching boundary
+
+Notes
+- With -Audit, boundary-drift violations are reported but do not cause the runner to exit with failure. File-size violations remain fatal by design.
+- The combined report was written to tools/arch_checks/arch_checks_report.json; per-check reports are in tools/arch_checks/file_size_report.json and tools/arch_checks/boundary_report.json.
+
+Recommended follow-up
+- If you prefer boundary-drift to be non-fatal in CI for a transitional period, add the -Audit flag to the workflow run step or create a separate onboarding job.
+

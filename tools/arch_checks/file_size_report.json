@@ -1,7 +1,7 @@
 {
   "summary": {
-    "checked_count": 2627,
-    "violations_count": 3
+    "checked_count": 2602,
+    "violations_count": 1
   },
   "checked": [
     {
@@ -62,31 +62,6 @@
     {
       "path": "GPU Environment Installation Guide.md",
       "size_mb": 0.007,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "artifacts/gateway-parity/openclaw-vs-blazeclaw-cron-capability-gap.md",
-      "size_mb": 0.004,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "artifacts/gateway-parity/openclaw-vs-blazeclaw-event-diff.json",
-      "size_mb": 0.01,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "artifacts/gateway-parity/openclaw-vs-blazeclaw-event-diff.md",
-      "size_mb": 0.006,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.json",
-      "size_mb": 0.084,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md",
-      "size_mb": 0.031,
       "threshold_mb": 5.0
     },
     {
@@ -222,96 +197,6 @@
     {
       "path": "blazeclaw/BlazeClawMfc/doc/IRC_CHATROOM_ARCHITECTURE.md",
       "size_mb": 0.027,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/README.md",
-      "size_mb": 0.002,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/added_tokens.json",
-      "size_mb": 0.001,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/chat_template.jinja",
-      "size_mb": 0.004,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/config.json",
-      "size_mb": 0.001,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/generation_config.json",
-      "size_mb": 0.0,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/merges.txt",
-      "size_mb": 1.739,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/special_tokens_map.json",
-      "size_mb": 0.001,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/tokenizer.json",
-      "size_mb": 8.695,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/tokenizer_config.json",
-      "size_mb": 0.009,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/vocab.json",
-      "size_mb": 2.648,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/chat_template.jinja",
-      "size_mb": 0.004,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/config.json",
-      "size_mb": 0.008,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/genai_config.json",
-      "size_mb": 0.002,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/model.onnx",
-      "size_mb": 0.516,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/model_config.json",
-      "size_mb": 0.023,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/tokenizer.json",
-      "size_mb": 10.893,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/tokenizer_config.json",
-      "size_mb": 0.001,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/embeddings/README.md",
-      "size_mb": 0.001,
       "threshold_mb": 5.0
     },
     {
@@ -13025,36 +12910,6 @@
       "threshold_mb": 5.0
     },
     {
-      "path": "blazeclaw/traces/BlazeClaw.startup.io.20260723160811.log",
-      "size_mb": 0.004,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/traces/BlazeClaw.startup.io.20260723175707.log",
-      "size_mb": 0.008,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/traces/BlazeClaw.startup.trace.20260723160811.log",
-      "size_mb": 3.751,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/traces/BlazeClaw.startup.trace.20260723175707.log",
-      "size_mb": 3.756,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/traces/ci/BlazeClaw.startup.io.20260723182845.log",
-      "size_mb": 0.01,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/traces/ci/BlazeClaw.startup.trace.20260723182845.log",
-      "size_mb": 3.765,
-      "threshold_mb": 5.0
-    },
-    {
       "path": "blazeclaw/vcpkg.json",
       "size_mb": 0.0,
       "threshold_mb": 5.0
@@ -13106,12 +12961,27 @@
     },
     {
       "path": "tools/arch_checks/README.md",
+      "size_mb": 0.003,
+      "threshold_mb": 5.0
+    },
+    {
+      "path": "tools/arch_checks/VALIDATION.md",
       "size_mb": 0.002,
+      "threshold_mb": 5.0
+    },
+    {
+      "path": "tools/arch_checks/arch_checks_report.json",
+      "size_mb": 4.144,
       "threshold_mb": 5.0
     },
     {
       "path": "tools/arch_checks/boundary_drift_check.py",
       "size_mb": 0.006,
+      "threshold_mb": 5.0
+    },
+    {
+      "path": "tools/arch_checks/boundary_report.json",
+      "size_mb": 0.98,
       "threshold_mb": 5.0
     },
     {
@@ -13125,13 +12995,18 @@
       "threshold_mb": 5.0
     },
     {
+      "path": "tools/arch_checks/file_size_report.json",
+      "size_mb": 0.374,
+      "threshold_mb": 5.0
+    },
+    {
       "path": "tools/arch_checks/ignore_patterns.txt",
       "size_mb": 0.0,
       "threshold_mb": 5.0
     },
     {
       "path": "tools/arch_checks/run_arch_checks.ps1",
-      "size_mb": 0.003,
+      "size_mb": 0.004,
       "threshold_mb": 5.0
     },
     {
@@ -13141,16 +13016,6 @@
     }
   ],
   "violations": [
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/tokenizer.json",
-      "size_mb": 8.695,
-      "threshold_mb": 5.0
-    },
-    {
-      "path": "blazeclaw/BlazeClawMfc/models/chat/Qwen3-14B-ONNX/tokenizer.json",
-      "size_mb": 10.893,
-      "threshold_mb": 5.0
-    },
     {
       "path": "blazeclaw/skills-openclaw-original/h5-cards/assets/video/activity1.mp4",
       "size_mb": 9.563,
