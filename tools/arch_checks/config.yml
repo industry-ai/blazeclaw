@@ -6,6 +6,7 @@ boundary_map_path: "docs/boundary_map.yml"
 report:
   json_path: "tools/arch_checks/report.json"
   junit_path: "tools/arch_checks/report.junit.xml"
+ignore_file: "tools/arch_checks/ignore_patterns.txt"
 defaults:
   file_size_mb_default: 5          # default per-file threshold (MB)
   max_scan_depth: 0               # 0 => unlimited

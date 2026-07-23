@@ -30,6 +30,16 @@ Notes
 - Both checkers respect ignore patterns in tools/arch_checks/config.yml and docs/boundary_map.yml global_ignores.
 - Both tools emit a JSON report to the path configured in tools/arch_checks/config.yml (report.json by default).
 
+Ignore patterns file
+
+- You can centralize ignore patterns in tools/arch_checks/ignore_patterns.txt and reference it from tools/arch_checks/config.yml using the `ignore_file` setting. Patterns are gitignore-style, one per line. Use `#` for comments.
+
+Example entry in config.yml:
+
+  ignore_file: "tools/arch_checks/ignore_patterns.txt"
+
+This file is loaded automatically by both checkers when present.
+
 Config
 - tools/arch_checks/config.yml contains default thresholds, ignore globs, and report paths.
 - docs/boundary_map.yml contains runtime boundary definitions (used by the boundary-drift checker).

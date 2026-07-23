@@ -80,7 +80,23 @@ def main(argv: List[str]) -> int:
         print(f"ERROR: Failed to load config: {e}", file=sys.stderr)
         return 2
 
-    ignore_globs = cfg.get("ignore_globs") or []
+    # Start with explicit ignore globs from config
+    ignore_globs = list(cfg.get("ignore_globs") or [])
+    # If config references an ignore file, load additional patterns (one per line)
+    ignore_file = cfg.get("ignore_file")
+    if ignore_file:
+        try:
+            ignore_path = (repo_root / ignore_file).resolve() if not Path(ignore_file).is_absolute() else Path(ignore_file)
+            if ignore_path.exists():
+                with ignore_path.open("r", encoding="utf-8") as gf:
+                    for line in gf:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        ignore_globs.append(line)
+        except Exception:
+            # non-fatal; proceed with existing ignore_globs
+            pass
 
     files: List[str] = []
     if args.stdin:

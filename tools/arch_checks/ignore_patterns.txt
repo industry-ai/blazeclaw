@@ -1,0 +1,13 @@
+# Ignore patterns for architecture checks
+# One pattern per line, gitignore-style globs. Lines starting with # are comments.
+build/**
+out/**
+third_party/**
+vendor/**
+**/*.dll
+**/*.exe
+**/.git/**
+*.png
+*.jpg
+*.bin
+**/*.lock

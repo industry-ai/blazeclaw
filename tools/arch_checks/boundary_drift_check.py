@@ -81,7 +81,22 @@ def main(argv: List[str]) -> int:
         print(f"ERROR: Failed to load YAML: {e}", file=sys.stderr)
         return 2
 
+    # Start with explicit ignore globs from config
     ignore_globs = list(cfg.get("ignore_globs") or [])
+    # If config references an ignore file, load additional patterns (one per line)
+    ignore_file = cfg.get("ignore_file")
+    if ignore_file:
+        try:
+            ignore_path = (repo_root / ignore_file).resolve() if not Path(ignore_file).is_absolute() else Path(ignore_file)
+            if ignore_path.exists():
+                with ignore_path.open("r", encoding="utf-8") as gf:
+                    for line in gf:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        ignore_globs.append(line)
+        except Exception:
+            pass
     # include boundary_map global ignores if present
     global_ignores = bm.get("global_ignores") or []
     for g in global_ignores:
