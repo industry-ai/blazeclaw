@@ -1,0 +1,9 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 0
+Seed: 2862792626
+Filters: [parity][config][mfc][email]
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 0
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "[parity][config][mfc][email]" --reporter compact --rng-seed 2862792626
+RawLog: ..\blazeclaw\artifacts\catch2\pd-monitoring\trackA-20260723\catch2-raw-20260723-102429-266-5bbd22.log

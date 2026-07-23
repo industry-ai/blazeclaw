@@ -1,0 +1,13 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 3
+Seed: 2862792625
+Filters: [weather-email]
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 1
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "[weather-email]" --reporter compact --rng-seed 2862792625
+RawLog: ..\blazeclaw\artifacts\catch2\pd-monitoring\catch2-raw-20260723-102000.log
+
+Failures (file:line)
+--------------------
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayWeatherEmailRegressionTests.cpp:691 - ContainsExactMatch( pollTrace.assistantTexts, "tools.execute.result tool=weather.lookup status=ok") for: false

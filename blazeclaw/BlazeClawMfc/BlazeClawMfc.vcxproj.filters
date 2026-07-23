@@ -1698,6 +1698,7 @@
       <Filter>web\chat</Filter>
     </None>
     <None Include="web\chat\chat-controller-adapter.js" />
+    <None Include="tools\Evaluate-FixedMonitoringEscalation.ps1" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="agent-chat-bridge">

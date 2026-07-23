@@ -1,0 +1,13 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 42
+Seed: 2862792625
+Filters: [config][priority1]
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 1
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "[config][priority1]" --reporter compact --rng-seed 2862792625
+RawLog: ..\blazeclaw\artifacts\catch2\pd-monitoring\trackA-20260723\catch2-raw-20260723-102429-116-a670c0.log
+
+Failures (file:line)
+--------------------
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ConfigLoaderTests.cpp:476 - parsed[0] == L"鐏緳铏? for: " ??? " == { {?}, {?}, {?}, {?} }

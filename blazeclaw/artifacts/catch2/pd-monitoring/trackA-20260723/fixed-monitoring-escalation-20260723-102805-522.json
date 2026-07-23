@@ -1,0 +1,28 @@
+﻿{
+    "generatedAtUtc":  "2026-07-23T02:28:05.5234926Z",
+    "summaryDir":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723",
+    "summaryFileCount":  12,
+    "overallLevel":  "L2",
+    "failOnLevel":  "L2",
+    "caseResults":  [
+                        {
+                            "CaseId":  "PD-002",
+                            "Severity":  "S2",
+                            "FailingRuns":  2,
+                            "EscalationLevel":  "L2",
+                            "MaxExitCode":  3,
+                            "SummaryFiles":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102347-180-afb70f.json; E:\\gitRepo\\blazeClaw\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102408-758-b8e49d.json"
+                        },
+                        {
+                            "CaseId":  "PD-004",
+                            "Severity":  "S2",
+                            "FailingRuns":  2,
+                            "EscalationLevel":  "L2",
+                            "MaxExitCode":  42,
+                            "SummaryFiles":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102429-116-a670c0.json; E:\\gitRepo\\blazeClaw\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102429-167-eea442.json"
+                        }
+                    ],
+    "unknownFailures":  [
+
+                        ]
+}

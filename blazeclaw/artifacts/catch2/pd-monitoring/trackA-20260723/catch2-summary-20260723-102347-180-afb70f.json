@@ -1,0 +1,18 @@
+﻿{
+    "exitCode":  3,
+    "seed":  2862792625,
+    "filters":  "[weather-email]",
+    "workingDirectory":  "..\\blazeclaw",
+    "testExe":  "..\\blazeclaw\\bin\\Debug\\BlazeClawMfc.Tests.exe",
+    "failedAssertionsParsed":  1,
+    "rerunCommand":  ".\\\\bin\\\\Debug\\\\BlazeClawMfc.Tests.exe \"[weather-email]\" --reporter compact --rng-seed 2862792625",
+    "rawLog":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-raw-20260723-102347-180-afb70f.log",
+    "summaryText":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102347-180-afb70f.txt",
+    "failures":  [
+                     {
+                         "file":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\BlazeClawMfc\\tests\\GatewayWeatherEmailRegressionTests.cpp",
+                         "line":  691,
+                         "message":  "ContainsExactMatch( pollTrace.assistantTexts, \"tools.execute.result tool=weather.lookup status=ok\") for: false"
+                     }
+                 ]
+}

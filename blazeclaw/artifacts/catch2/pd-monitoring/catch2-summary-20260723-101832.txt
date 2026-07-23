@@ -1,0 +1,9 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 2
+Seed: 2862792625
+Filters: GatewayWeatherEmailRegressionTests
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 0
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "GatewayWeatherEmailRegressionTests" --reporter compact --rng-seed 2862792625
+RawLog: ..\blazeclaw\artifacts\catch2\pd-monitoring\catch2-raw-20260723-101832.log

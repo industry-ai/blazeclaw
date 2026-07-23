@@ -49,10 +49,12 @@ if (-not (Test-Path -LiteralPath $workDir)) {
 	throw "Expected test working directory not found: $workDir"
 }
 
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$rawLogPath = Join-Path $OutputDir "catch2-raw-$timestamp.log"
-$summaryTxtPath = Join-Path $OutputDir "catch2-summary-$timestamp.txt"
-$summaryJsonPath = Join-Path $OutputDir "catch2-summary-$timestamp.json"
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$runNonce = [System.Guid]::NewGuid().ToString("N").Substring(0, 6)
+$runId = "$timestamp-$runNonce"
+$rawLogPath = Join-Path $OutputDir "catch2-raw-$runId.log"
+$summaryTxtPath = Join-Path $OutputDir "catch2-summary-$runId.txt"
+$summaryJsonPath = Join-Path $OutputDir "catch2-summary-$runId.json"
 
 $argList = @("--reporter", "compact", "--rng-seed", "$Seed")
 if (-not [string]::IsNullOrWhiteSpace($Filters)) {

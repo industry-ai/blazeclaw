@@ -1,0 +1,18 @@
+﻿{
+    "exitCode":  42,
+    "seed":  2862792626,
+    "filters":  "[config][priority1]",
+    "workingDirectory":  "..\\blazeclaw",
+    "testExe":  "..\\blazeclaw\\bin\\Debug\\BlazeClawMfc.Tests.exe",
+    "failedAssertionsParsed":  1,
+    "rerunCommand":  ".\\\\bin\\\\Debug\\\\BlazeClawMfc.Tests.exe \"[config][priority1]\" --reporter compact --rng-seed 2862792626",
+    "rawLog":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-raw-20260723-102429-167-eea442.log",
+    "summaryText":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102429-167-eea442.txt",
+    "failures":  [
+                     {
+                         "file":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\BlazeClawMfc\\tests\\ConfigLoaderTests.cpp",
+                         "line":  476,
+                         "message":  "parsed[0] == L\"鐏緳铏? for: \" ??? \" == { {?}, {?}, {?}, {?} }"
+                     }
+                 ]
+}

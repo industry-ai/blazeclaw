@@ -1,0 +1,14 @@
+﻿{
+    "exitCode":  3,
+    "seed":  2862792626,
+    "filters":  "[weather-email]",
+    "workingDirectory":  "..\\blazeclaw",
+    "testExe":  "..\\blazeclaw\\bin\\Debug\\BlazeClawMfc.Tests.exe",
+    "failedAssertionsParsed":  0,
+    "rerunCommand":  ".\\\\bin\\\\Debug\\\\BlazeClawMfc.Tests.exe \"[weather-email]\" --reporter compact --rng-seed 2862792626",
+    "rawLog":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-raw-20260723-102408-758-b8e49d.log",
+    "summaryText":  "..\\blazeclaw\\artifacts\\catch2\\pd-monitoring\\trackA-20260723\\catch2-summary-20260723-102408-758-b8e49d.txt",
+    "failures":  [
+
+                 ]
+}
