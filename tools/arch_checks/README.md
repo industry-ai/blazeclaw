@@ -41,3 +41,11 @@ Exit codes
 
 CI
 Include a job step that installs Python and PyYAML, then runs the checker with the changed-file list. Save the JSON report (tools/arch_checks/report.json) as an artifact for triage.
+
+Runner script
+
+Use the PowerShell runner to execute both checks and produce an aggregated report:
+
+  powershell -ExecutionPolicy Bypass -File tools/arch_checks/run_arch_checks.ps1 -RepoRoot . -Base origin/main -Mode changed
+
+The runner writes per-check JSON reports and a combined report at tools/arch_checks/arch_checks_report.json by default.
