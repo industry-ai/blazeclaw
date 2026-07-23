@@ -1,0 +1,18 @@
+﻿{
+    "exitCode":  42,
+    "seed":  2862792625,
+    "filters":  "[config][priority1]",
+    "workingDirectory":  "..\\blazeclaw",
+    "testExe":  "..\\blazeclaw\\bin\\Debug\\BlazeClawMfc.Tests.exe",
+    "failedAssertionsParsed":  1,
+    "rerunCommand":  ".\\\\bin\\\\Debug\\\\BlazeClawMfc.Tests.exe \"[config][priority1]\" --reporter compact --rng-seed 2862792625",
+    "rawLog":  "..\\blazeclaw\\artifacts\\catch2\\trackC-20260723\\catch2-raw-20260723-142414-370-15e152.log",
+    "summaryText":  "..\\blazeclaw\\artifacts\\catch2\\trackC-20260723\\catch2-summary-20260723-142414-370-15e152.txt",
+    "failures":  [
+                     {
+                         "file":  "E:\\gitRepo\\blazeClaw\\blazeclaw\\BlazeClawMfc\\tests\\ConfigLoaderTests.cpp",
+                         "line":  530,
+                         "message":  "config.email.policy.capability.contains(L\"email.send\") for: false"
+                     }
+                 ]
+}

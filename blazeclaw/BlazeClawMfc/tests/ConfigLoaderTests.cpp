@@ -478,6 +478,68 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"ConfigLoader Priority 1 helper API: speech hotword parser trims quoted mixed separators",
+	"[config][priority1][helper][speech][hotwords][trim]") {
+	const auto parsed = blazeclaw::config::speech_normalization::ParseSpeechHotwordsValue(
+		L"[ ' 火龙虾 ' ; \" 云深科技 \" ; ; 火龙虾 ]");
+	REQUIRE(parsed.size() == 3);
+	REQUIRE(parsed[0] == L"火龙虾");
+	REQUIRE(parsed[1] == L"云深科技");
+	REQUIRE(parsed[2] == L"火龙虾");
+
+	auto normalized = parsed;
+	blazeclaw::config::speech_normalization::NormalizeSpeechHotwordsInPlace(normalized);
+	REQUIRE(normalized.size() == 2);
+	REQUIRE(normalized[0] == L"火龙虾");
+	REQUIRE(normalized[1] == L"云深科技");
+}
+
+TEST_CASE(
+	"ConfigLoader Priority 1 contract: speech/model and policy-profile compatibility normalization",
+	"[config][priority1][speech][models][policy][compat]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_priority1_compat_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "priority1-compat.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"speech.activeModelId=Speech/SHERPA-ONNX-STREAMING-ZIPFORMER-BILINGUAL-ZH-EN\n";
+		out << L"speech.model_variant=FP16\n";
+		out << L"speech.streaming.latency_profile=LOW-LATENCY\n";
+		out << L"email.policyProfiles.rolloutMode=ENFORCE\n";
+		out << L"email.policyProfiles.enforceChannel=TeLeGrAm\n";
+		out << L"email.policy.capability.SMTP.actions.authError=continue\n";
+		out << L"email.policy.tool.Send_Email.actions.execError=retry_then_continue\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(
+		config.speechRecognition.activeModelId ==
+		L"speech/sherpa-onnx-streaming-zipformer-bilingual-zh-en");
+	REQUIRE(config.speechRecognition.modelVariant == L"fp16");
+	REQUIRE(config.speechRecognition.streamingLatencyProfile == L"low_latency");
+
+	REQUIRE(config.email.policyProfiles.rolloutMode == L"enforce");
+	REQUIRE(config.email.policyProfiles.enforceChannel == L"telegram");
+	REQUIRE(config.email.policy.capability.contains(L"smtp"));
+	REQUIRE(config.email.policy.tool.contains(L"send_email"));
+	REQUIRE(
+		config.email.policy.capability.at(L"smtp").actions.authError ==
+		L"continue");
+	REQUIRE(
+		config.email.policy.tool.at(L"send_email").actions.execError ==
+		L"retry_then_continue");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
 	"ConfigLoader applies deterministic precedence for repeated models.alias mappings",
 	"[config][models][alias][mapping]") {
 	blazeclaw::config::ConfigLoader loader;

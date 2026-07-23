@@ -1074,7 +1074,7 @@ namespace blazeclaw::config {
 
 			if (trimmedLine.rfind(L"email.policyProfiles.enforceChannel=", 0) == 0) {
 				outConfig.email.policyProfiles.enforceChannel =
-					ToLowerTrim(trimmedLine.substr(35));
+					ToLowerTrim(trimmedLine.substr(36));
 				continue;
 			}
 
@@ -1342,7 +1342,7 @@ namespace blazeclaw::config {
 
 			if (trimmedLine.rfind(L"speech.activeModelId=", 0) == 0) {
 				outConfig.speechRecognition.activeModelId =
-					Trim(trimmedLine.substr(20));
+					Trim(trimmedLine.substr(21));
 				continue;
 			}
 

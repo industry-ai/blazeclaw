@@ -117,7 +117,7 @@ namespace blazeclaw::config::speech_normalization {
 
 		auto values = SplitCsvValues(body);
 		for (auto& value : values) {
-			value = TrimMatchingQuotes(value);
+			value = Trim(TrimMatchingQuotes(value));
 		}
 
 		values.erase(
