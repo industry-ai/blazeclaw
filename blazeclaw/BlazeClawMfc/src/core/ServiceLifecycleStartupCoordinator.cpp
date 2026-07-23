@@ -17,6 +17,7 @@
 #include <string>
 
 #include <Windows.h>
+#include <thread>
 
 namespace blazeclaw::core {
 
@@ -297,7 +298,25 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		if (manager.m_activeConfig.localModel.enabled &&
 			manager.m_localModelRolloutEligible &&
 			localModelStartupLoadEnabled) {
-			localModelLoaded = manager.m_localModelRuntime->LoadModel();
+			// Start local model load asynchronously to avoid blocking UI startup.
+			manager.m_localModelActivationReason = "startup_load_async_started";
+			AppendStartupTrace("ServiceManager.Start.localmodel.asyncLoadStarted");
+			std::thread([&manager]() {
+				const bool ok = manager.m_localModelRuntime->LoadModel();
+				// Refresh snapshot and set activation flags
+				manager.m_localModelRuntimeSnapshot = manager.m_localModelRuntime->Snapshot();
+				if (ok) {
+					manager.m_localModelActivationEnabled = true;
+					manager.m_localModelActivationReason.clear();
+					AppendStartupTrace("ServiceManager.Start.localmodel.asyncLoadCompleted");
+				}
+				else {
+					manager.m_localModelActivationReason = "async_load_failed";
+					AppendStartupTrace("ServiceManager.Start.localmodel.asyncLoadFailed");
+				}
+			}).detach();
+			// Treat as not synchronously loaded for this startup path; background will update state
+			localModelLoaded = false;
 		}
 		else if (manager.m_activeConfig.localModel.enabled &&
 			manager.m_localModelRolloutEligible) {
@@ -328,9 +347,27 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 		}
 		const bool speechStartupLoadEnabled =
 			speechRuntimeHotMode != "on_demand";
-		const bool speechRecognitionLoaded = speechStartupLoadEnabled
-			? manager.m_speechRecognitionRuntime.LoadModel()
-			: true;
+		bool speechRecognitionLoaded = true;
+		if (speechStartupLoadEnabled) {
+			// Perform speech model load asynchronously to reduce startup blocking.
+			manager.m_speechRecognition.status = "loading_async";
+			AppendStartupTrace("ServiceManager.Start.speech.asyncLoadStarted");
+			std::thread([&manager]() {
+				const bool loaded = manager.m_speechRecognitionRuntime.LoadModel();
+				manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
+				if (loaded) {
+					AppendStartupTrace("ServiceManager.Start.speech.asyncLoadCompleted");
+				}
+				else {
+					AppendStartupTrace("ServiceManager.Start.speech.asyncLoadFailed");
+				}
+			}).detach();
+			// Mark as started for startup flow; actual readiness will be reflected in the snapshot.
+			speechRecognitionLoaded = true;
+		}
+		else {
+			speechRecognitionLoaded = true;
+		}
 		manager.m_speechRecognition = manager.m_speechRecognitionRuntime.Snapshot();
 		if (!speechRecognitionLoaded && manager.m_speechRecognition.status.empty()) {
 			manager.m_speechRecognition.status = "load_failed";
