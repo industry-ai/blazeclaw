@@ -3,6 +3,9 @@
 
 #include "../gateway/GatewayJsonUtils.h"
 
+#include <array>
+#include <cctype>
+
 namespace blazeclaw::app::view_helpers {
 
 	std::string ToNarrowUtf8(const std::wstring& value)
@@ -200,6 +203,130 @@ namespace blazeclaw::app::view_helpers {
 		}
 
 		return objects;
+	}
+
+	std::string NormalizeSkillKeyForPath(const std::string& skillKey)
+	{
+		std::string normalized;
+		normalized.reserve(skillKey.size());
+		for (const char ch : skillKey)
+		{
+			if (ch == '_')
+			{
+				normalized.push_back('-');
+				continue;
+			}
+
+			normalized.push_back(static_cast<char>(
+				std::tolower(static_cast<unsigned char>(ch))));
+		}
+
+		return normalized;
+	}
+
+	std::optional<std::filesystem::path> FindEmailConfigHtml(
+		const std::filesystem::path& start)
+	{
+		std::filesystem::path cursor = start;
+		while (!cursor.empty())
+		{
+			const auto configHtml =
+				cursor /
+				L"blazeclaw" /
+				L"skills" /
+				L"imap-smtp-email" /
+				L"config.html";
+			if (std::filesystem::exists(configHtml))
+			{
+				return configHtml;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<std::filesystem::path> FindSkillConfigHtml(
+		const std::filesystem::path& start,
+		const std::string& skillKey)
+	{
+		const std::string normalizedSkillKey = NormalizeSkillKeyForPath(skillKey);
+		if (normalizedSkillKey.empty())
+		{
+			return std::nullopt;
+		}
+
+		const std::array<std::filesystem::path, 3> kSkillRootSuffixes = {
+			std::filesystem::path(L"blazeclaw") / L"skills-bundled",
+			std::filesystem::path(L"blazeclaw") / L"skills",
+			std::filesystem::path(L"blazeclaw") / L"skills-openclaw-original",
+		};
+		const std::array<std::filesystem::path, 3> kWorkspaceRootSuffixes = {
+			std::filesystem::path(L"skills-bundled"),
+			std::filesystem::path(L"skills"),
+			std::filesystem::path(L"skills-openclaw-original"),
+		};
+
+		std::filesystem::path cursor = start;
+		while (!cursor.empty())
+		{
+			const std::wstring skillDir(
+				normalizedSkillKey.begin(),
+				normalizedSkillKey.end());
+
+			for (const auto& suffix : kSkillRootSuffixes)
+			{
+				const auto configHtml =
+					cursor /
+					suffix /
+					std::filesystem::path(skillDir) /
+					L"config.html";
+				if (std::filesystem::exists(configHtml))
+				{
+					return configHtml;
+				}
+			}
+
+			for (const auto& suffix : kWorkspaceRootSuffixes)
+			{
+				const auto configHtml =
+					cursor /
+					suffix /
+					std::filesystem::path(skillDir) /
+					L"config.html";
+				if (std::filesystem::exists(configHtml))
+				{
+					return configHtml;
+				}
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
 	}
 
 } // namespace blazeclaw::app::view_helpers

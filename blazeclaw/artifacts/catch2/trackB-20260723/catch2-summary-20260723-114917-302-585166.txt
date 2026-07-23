@@ -1,0 +1,9 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 0
+Seed: 2862792625
+Filters: [contract][dispatch][skills]
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 0
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "[contract][dispatch][skills]" --reporter compact --rng-seed 2862792625
+RawLog: ..\blazeclaw\artifacts\catch2\trackB-20260723\catch2-raw-20260723-114917-302-585166.log

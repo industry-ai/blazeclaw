@@ -25,6 +25,7 @@
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 #include "ServiceManagerTextHelpers.h"
 #include "ServiceManagerSkillRootsHelpers.h"
+#include "ServiceManagerRoutingIntentHelpers.h"
 
 #include <cctype>
 #include <chrono>
@@ -726,76 +727,6 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		std::string CanonicalizeForRouting(const std::string& message) {
-			std::string canonical = message;
-			const std::wstring wide = Utf8ToWideLocal(message);
-			auto appendToken = [&](const char* token) {
-				if (token == nullptr || *token == '\0') {
-					return;
-				}
-				if (canonical.find(token) == std::string::npos) {
-					canonical.append(" ");
-					canonical.append(token);
-				}
-				};
-
-			if (ContainsAnyWideFragment(
-				wide,
-				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" })) {
-				appendToken("inbox");
-				appendToken("email");
-			}
-			if (ContainsAnyWideFragment(wide, { L"回复", L"回信", L"需要回复", L"尽快回复" })) {
-				appendToken("reply");
-			}
-			if (ContainsAnyWideFragment(wide, { L"2小时", L"两小时", L"两个小时" })) {
-				appendToken("within 2 hours");
-			}
-			return canonical;
-		}
-
-		bool LooksLikeInboxReplyUrgencyIntent(const std::string& message) {
-			const std::string lower = ToLowerAscii(message);
-			const std::wstring wide = Utf8ToWideLocal(message);
-			const bool inboxSignalZh = ContainsAnyWideFragment(
-				wide,
-				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" });
-			const bool inboxSignal = ContainsAnyFragment(
-				lower,
-				{ "inbox", "unread", "mailbox", "email", "mail" }) || inboxSignalZh;
-			const bool replySignalZh = ContainsAnyWideFragment(
-				wide,
-				{ L"回复", L"回信", L"需要回复", L"尽快回复" });
-			const bool replySignal = ContainsAnyFragment(
-				lower,
-				{ "reply", "respond", "needs a reply", "need a reply" }) || replySignalZh;
-			const bool urgencySignalZh = ContainsAnyWideFragment(
-				wide,
-				{ L"2小时", L"两小时", L"两个小时", L"紧急", L"尽快" });
-			const bool urgencySignal = ContainsAnyFragment(
-				lower,
-				{ "within 2 hours", "within two hours", "2h", "2 hours", "urgent" }) ||
-				urgencySignalZh;
-			return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
-		}
-
-		bool LooksLikeInboxIntentAnyLanguage(const std::string& message) {
-			const std::string lower = ToLowerAscii(message);
-			const std::wstring wide = Utf8ToWideLocal(message);
-			const bool inboxSignalZh = ContainsAnyWideFragment(
-				wide,
-				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" });
-			const bool replySignalZh = ContainsAnyWideFragment(
-				wide,
-				{ L"回复", L"回信", L"需要回复", L"尽快回复" });
-			const bool inboxSignal = ContainsAnyFragment(
-				lower,
-				{ "inbox", "unread", "mailbox", "email", "mail" }) || inboxSignalZh;
-			const bool replySignal = ContainsAnyFragment(
-				lower,
-				{ "reply", "respond", "needs a reply", "need a reply" }) || replySignalZh;
-			return inboxSignal && replySignal;
-		}
 
 		std::string TrimAsciiLocal(const std::string& value) {
 			const auto first = std::find_if_not(
@@ -881,14 +812,6 @@ namespace blazeclaw::core {
 			return prompt;
 		}
 
-		bool LooksLikeTwoHourUrgencyAnyLanguage(const std::string& message) {
-			const std::string lower = ToLowerAscii(message);
-			const std::wstring wide = Utf8ToWideLocal(message);
-			return ContainsAnyFragment(
-				lower,
-				{ "within 2 hours", "within two hours", "2h", "2 hours" }) ||
-				ContainsAnyWideFragment(wide, { L"2小时", L"两小时", L"两个小时" });
-		}
 
 		bool LooksLikeJsonObjectShapeLocal(const std::string& value) {
 			const std::wstring trimmed = Trim(Utf8ToWideLocal(value));
@@ -1439,13 +1362,13 @@ namespace blazeclaw::core {
 				return std::nullopt;
 			}
 
-			if (!LooksLikeInboxIntentAnyLanguage(commandBodyNormalized)) {
+			if (!servicemanager_routing_intent::LooksLikeInboxIntentAnyLanguage(commandBodyNormalized)) {
 				return std::nullopt;
 			}
 
 			nlohmann::json params = nlohmann::json::object();
 			params["unseen"] = true;
-			params["recent"] = LooksLikeTwoHourUrgencyAnyLanguage(commandBodyNormalized)
+			params["recent"] = servicemanager_routing_intent::LooksLikeTwoHourUrgencyAnyLanguage(commandBodyNormalized)
 				? "2h"
 				: "24h";
 			params["limit"] = 20;
@@ -3378,7 +3301,7 @@ namespace blazeclaw::core {
 		const std::string& commandBodyNormalized) const
 	{
 		const std::string canonicalCommandBody =
-			CanonicalizeForRouting(commandBodyNormalized);
+			servicemanager_routing_intent::CanonicalizeForRouting(commandBodyNormalized);
 		const auto resolvedSkillInvocation =
 			m_skillCommandInvocationService.ResolveInvocation(
 				ToWide(canonicalCommandBody),
@@ -3401,8 +3324,8 @@ namespace blazeclaw::core {
 				return std::string("image-generator.generate");
 			}
 
-			if (LooksLikeInboxIntentAnyLanguage(canonicalCommandBody) ||
-				LooksLikeInboxReplyUrgencyIntent(canonicalCommandBody)) {
+			if (servicemanager_routing_intent::LooksLikeInboxIntentAnyLanguage(canonicalCommandBody) ||
+				servicemanager_routing_intent::LooksLikeInboxReplyUrgencyIntent(canonicalCommandBody)) {
 				return std::string("imap_smtp_email.imap.search");
 			}
 			return std::nullopt;
@@ -3416,7 +3339,7 @@ namespace blazeclaw::core {
 		const std::string& commandBodyNormalized) const
 	{
 		const std::string canonicalCommandBody =
-			CanonicalizeForRouting(commandBodyNormalized);
+			servicemanager_routing_intent::CanonicalizeForRouting(commandBodyNormalized);
 		const auto slashRewrite =
 			m_skillCommandInvocationService.RewriteInvocationPromptUtf8(
 				canonicalCommandBody,
@@ -3443,7 +3366,7 @@ namespace blazeclaw::core {
 		const std::optional<std::string>& resolvedToolTarget) const
 	{
 		const std::string canonicalCommandBody =
-			CanonicalizeForRouting(commandBodyNormalized);
+			servicemanager_routing_intent::CanonicalizeForRouting(commandBodyNormalized);
 
 		if (resolvedToolTarget.has_value()) {
 			const auto runtimeTools = m_gatewayHost.ListRuntimeTools();
@@ -3487,7 +3410,7 @@ namespace blazeclaw::core {
 			const std::string& commandBodyNormalized) const
 	{
 		const std::string canonicalCommandBody =
-			CanonicalizeForRouting(commandBodyNormalized);
+			servicemanager_routing_intent::CanonicalizeForRouting(commandBodyNormalized);
 
 		GeneratedOpenClawRoutingDecisionDiagnostics diagnostics;
 		const std::optional<std::string> resolvedGeneratedToolTarget =

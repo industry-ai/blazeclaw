@@ -495,6 +495,7 @@
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\ServiceManagerRoutingIntentHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />

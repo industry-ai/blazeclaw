@@ -1,0 +1,13 @@
+﻿Catch2 Summary
+-------------
+ExitCode: 42
+Seed: 2862792625
+Filters: [contract][gateway][servicemanager][skills]
+WorkingDirectory: ..\blazeclaw
+FailedAssertionsParsed: 1
+ReproCommand: .\\bin\\Debug\\BlazeClawMfc.Tests.exe "[contract][gateway][servicemanager][skills]" --reporter compact --rng-seed 2862792625
+RawLog: ..\blazeclaw\artifacts\catch2\trackB-20260723\catch2-raw-20260723-114423-197-c6db56.log
+
+Failures (file:line)
+--------------------
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ServiceManagerStartupPhaseContractTests.cpp:700 - runtimeHandlers.find("gateway.skills.update") != std::string::npos for: 18446744073709551615 (0xffffffffffffffff)

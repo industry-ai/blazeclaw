@@ -1,0 +1,14 @@
+﻿{
+    "exitCode":  0,
+    "seed":  2862792625,
+    "filters":  "[parity][config][mfc][email]",
+    "workingDirectory":  "..\\blazeclaw",
+    "testExe":  "..\\blazeclaw\\bin\\Debug\\BlazeClawMfc.Tests.exe",
+    "failedAssertionsParsed":  0,
+    "rerunCommand":  ".\\\\bin\\\\Debug\\\\BlazeClawMfc.Tests.exe \"[parity][config][mfc][email]\" --reporter compact --rng-seed 2862792625",
+    "rawLog":  "..\\blazeclaw\\artifacts\\catch2\\trackB-20260723\\catch2-raw-20260723-113407-252-578a06.log",
+    "summaryText":  "..\\blazeclaw\\artifacts\\catch2\\trackB-20260723\\catch2-summary-20260723-113407-252-578a06.txt",
+    "failures":  [
+
+                 ]
+}
