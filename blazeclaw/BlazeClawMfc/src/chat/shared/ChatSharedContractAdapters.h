@@ -2,6 +2,7 @@
 
 #include "ChatSharedContracts.h"
 
+#include <chrono>
 #include <functional>
 #include <mutex>
 #include <unordered_set>
@@ -82,6 +83,74 @@ namespace blazeclaw::chat::shared {
 			const nlohmann::json& eventPayload) const override {
 			return eventPayload;
 		}
+	};
+
+	struct StreamShapeConformanceResult {
+		bool hasType = false;
+		bool hasTimestamp = false;
+		bool hasOptionalRequestId = false;
+		bool hasOptionalRunId = false;
+		bool hasOptionalState = false;
+	};
+
+	class ConformantChatStreamEventNormalizer final : public IChatStreamEventNormalizer {
+	public:
+		explicit ConformantChatStreamEventNormalizer(
+			std::string fallbackType = "delta")
+			: m_fallbackType(std::move(fallbackType)) {
+		}
+
+		[[nodiscard]] nlohmann::json Normalize(
+			const nlohmann::json& eventPayload) const override {
+			nlohmann::json normalized = eventPayload;
+			if (!normalized.is_object()) {
+				normalized = nlohmann::json::object();
+			}
+
+			if (!normalized.contains("type") || !normalized["type"].is_string()) {
+				normalized["type"] = m_fallbackType;
+			}
+
+			if (!normalized.contains("timestamp") || !normalized["timestamp"].is_number_unsigned()) {
+				normalized["timestamp"] = CurrentEpochMilliseconds();
+			}
+
+			return normalized;
+		}
+
+		[[nodiscard]] static StreamShapeConformanceResult Check(
+			const nlohmann::json& payload) {
+			StreamShapeConformanceResult result;
+			if (!payload.is_object()) {
+				return result;
+			}
+
+			result.hasType =
+				payload.contains("type") &&
+				payload["type"].is_string();
+			result.hasTimestamp =
+				payload.contains("timestamp") &&
+				payload["timestamp"].is_number_unsigned();
+			result.hasOptionalRequestId =
+				payload.contains("requestId") &&
+				payload["requestId"].is_string();
+			result.hasOptionalRunId =
+				payload.contains("runId") &&
+				payload["runId"].is_string();
+			result.hasOptionalState =
+				payload.contains("state") &&
+				payload["state"].is_string();
+			return result;
+		}
+
+	private:
+		[[nodiscard]] static std::uint64_t CurrentEpochMilliseconds() {
+			using namespace std::chrono;
+			return static_cast<std::uint64_t>(duration_cast<milliseconds>(
+				system_clock::now().time_since_epoch()).count());
+		}
+
+		std::string m_fallbackType;
 	};
 
 	class InMemoryChatSessionStateStore final : public IChatSessionStateStore {

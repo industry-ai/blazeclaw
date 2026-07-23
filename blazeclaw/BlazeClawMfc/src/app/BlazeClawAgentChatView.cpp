@@ -42,8 +42,8 @@ namespace
 	static_assert(
 		std::is_base_of_v<
 			blazeclaw::chat::shared::IChatStreamEventNormalizer,
-			blazeclaw::chat::shared::PassthroughChatStreamEventNormalizer>,
-		"PassthroughChatStreamEventNormalizer must implement IChatStreamEventNormalizer");
+			blazeclaw::chat::shared::ConformantChatStreamEventNormalizer>,
+		"ConformantChatStreamEventNormalizer must implement IChatStreamEventNormalizer");
 
 	static_assert(
 		std::is_base_of_v<
@@ -848,9 +848,18 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			if (mappedEvent.extra.has_value()) {
 				appEvent.extra = mappedEvent.extra.value();
 			}
-			const blazeclaw::chat::shared::PassthroughChatStreamEventNormalizer normalizer;
+			const blazeclaw::chat::shared::ConformantChatStreamEventNormalizer normalizer("delta");
 			const nlohmann::json normalizedEventPayload =
 				normalizer.Normalize(appEvent.ToWireObject());
+			const auto conformance =
+				blazeclaw::chat::shared::ConformantChatStreamEventNormalizer::Check(normalizedEventPayload);
+			if (!conformance.hasType || !conformance.hasTimestamp)
+			{
+				TRACE(
+					"CBlazeClawAgentChatView: non-conformant stream payload requestId=%s\n",
+					requestId.c_str());
+				continue;
+			}
 
 			// Streamed responses are produced by the orchestrator and normalized into frontend events
 			const std::string type = normalizedEventPayload.value("type", std::string());

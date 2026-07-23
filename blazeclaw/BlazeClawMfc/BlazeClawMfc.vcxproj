@@ -153,6 +153,7 @@
     <ClInclude Include="src\app\CChannel.h" />
     <ClInclude Include="src\app\CMgrChannels.h" />
     <ClInclude Include="src\app\COperator.h" />
+    <ClInclude Include="src\app\core-chat\CoreChatEvent.h" />
     <ClInclude Include="src\app\CPeer.h" />
     <ClInclude Include="src\app\CTopic.h" />
     <ClInclude Include="src\app\CronTasksDialog.h" />

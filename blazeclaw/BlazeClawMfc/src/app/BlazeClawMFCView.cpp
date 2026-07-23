@@ -38,6 +38,7 @@
 #include "config_bridge/EmailConfigHandler.h"
 #include "BlazeClawMFCViewTextHelpers.h"
 #include "WebViewBridgeSupport.h"
+#include "core-chat/CoreChatEvent.h"
 #include "../chat/shared/ChatSharedContractAdapters.h"
 
 static_assert(
@@ -45,6 +46,12 @@ static_assert(
 		blazeclaw::chat::shared::IChatRequestOrchestrator,
 		blazeclaw::chat::shared::LambdaChatRequestOrchestrator>,
 	"LambdaChatRequestOrchestrator must implement IChatRequestOrchestrator");
+
+static_assert(
+	std::is_base_of_v<
+		blazeclaw::chat::shared::IChatStreamEventNormalizer,
+		blazeclaw::chat::shared::ConformantChatStreamEventNormalizer>,
+	"ConformantChatStreamEventNormalizer must implement IChatStreamEventNormalizer");
 #include "WebViewStartupConfigBridge.h"
 
 #include <functional>
@@ -2629,11 +2636,27 @@ void CBlazeClawMFCView::EmitOpenClawChatEvents(
 			continue;
 		}
 
+		blazeclaw::corechat::CoreChatEvent coreEvent =
+			blazeclaw::corechat::CoreChatEvent::FromWireObject(eventPayload);
+		if (!coreEvent.sessionId.has_value() && !m_bridgeSessionId.empty())
+		{
+			coreEvent.sessionId = m_bridgeSessionId;
+		}
+
+		const blazeclaw::chat::shared::ConformantChatStreamEventNormalizer normalizer("delta");
+		const nlohmann::json normalizedPayload = normalizer.Normalize(coreEvent.ToWireObject());
+		const auto conformance =
+			blazeclaw::chat::shared::ConformantChatStreamEventNormalizer::Check(normalizedPayload);
+		if (!conformance.hasType || !conformance.hasTimestamp)
+		{
+			continue;
+		}
+
 		const std::uint64_t seq = m_bridge.NextEventSeq();
 		nlohmann::json frameJson = {
 			{ "type", "event" },
 			{ "event", "chat" },
-			{ "payload", eventPayload },
+			{ "payload", normalizedPayload },
 			{ "seq", seq },
 		};
 		PostOpenClawWsFrameJson(frameJson.dump());
