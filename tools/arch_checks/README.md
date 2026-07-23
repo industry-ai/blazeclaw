@@ -59,3 +59,11 @@ Use the PowerShell runner to execute both checks and produce an aggregated repor
   powershell -ExecutionPolicy Bypass -File tools/arch_checks/run_arch_checks.ps1 -RepoRoot . -Base origin/main -Mode changed
 
 The runner writes per-check JSON reports and a combined report at tools/arch_checks/arch_checks_report.json by default.
+
+Audit mode
+
+The runner supports an audit mode which treats boundary-drift failures as warnings (non-fatal). Use the `-Audit` flag to enable:
+
+  powershell -ExecutionPolicy Bypass -File tools/arch_checks/run_arch_checks.ps1 -RepoRoot . -Base origin/main -Mode changed -Audit
+
+When audit mode is enabled the final exit code will only reflect file-size violations; boundary-drift violations will still be reported in JSON but will not cause the runner to exit with failure. Use this mode during initial adoption while teams refine docs/boundary_map.yml.

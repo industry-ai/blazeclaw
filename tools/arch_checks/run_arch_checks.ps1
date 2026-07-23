@@ -29,7 +29,8 @@ param(
 	[ValidateSet("changed","all")][string]$Mode = "changed",
 	[string]$Config = "tools/arch_checks/config.yml",
 	[string]$ReportDir = "tools/arch_checks",
-	[string]$Python = "python"
+	[string]$Python = "python",
+	[switch]$Audit
 )
 
 Set-StrictMode -Version Latest
@@ -76,8 +77,15 @@ try {
 	$bdExit = $LASTEXITCODE
 	Write-Log "boundary-drift checker exit code: $bdExit"
 
+	if ($Audit) {
+		Write-Log "Audit mode enabled: boundary-drift violations will be treated as warnings (non-fatal)."
+	}
+
 	# Aggregate reports
-	$agg = @{ summary = @{ file_size_exit = $fsExit; boundary_exit = $bdExit } ; reports = @{ } }
+	# Adjust effective exit for boundary checks if audit mode is enabled
+	$effectiveBoundaryExit = if ($Audit) { 0 } else { $bdExit }
+
+	$agg = @{ summary = @{ file_size_exit = $fsExit; boundary_exit = $bdExit; effective_boundary_exit = $effectiveBoundaryExit } ; reports = @{ } }
 	if (Test-Path $fileSizeReport) {
 		try { $agg.reports.file_size = Get-Content $fileSizeReport -Raw | ConvertFrom-Json } catch { $agg.reports.file_size = @{ error = 'failed_to_parse' } }
 	}
@@ -89,7 +97,7 @@ try {
 	$agg | ConvertTo-Json -Depth 5 | Out-File -FilePath $combinedReport -Encoding utf8
 	Write-Log "Wrote combined report to $combinedReport"
 
-	if ($fsExit -ne 0 -or $bdExit -ne 0) {
+	if ($fsExit -ne 0 -or $effectiveBoundaryExit -ne 0) {
 		Write-Log "One or more checks failed. See reports for details."
 		exit 1
 	}
