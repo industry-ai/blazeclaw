@@ -38,6 +38,13 @@
 #include "config_bridge/EmailConfigHandler.h"
 #include "BlazeClawMFCViewTextHelpers.h"
 #include "WebViewBridgeSupport.h"
+#include "../chat/shared/ChatSharedContractAdapters.h"
+
+static_assert(
+	std::is_base_of_v<
+		blazeclaw::chat::shared::IChatRequestOrchestrator,
+		blazeclaw::chat::shared::LambdaChatRequestOrchestrator>,
+	"LambdaChatRequestOrchestrator must implement IChatRequestOrchestrator");
 #include "WebViewStartupConfigBridge.h"
 
 #include <functional>
@@ -2045,24 +2052,30 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 	bridgeDeps.routeGatewayRequest =
 		[](const blazeclaw::gateway::protocol::RequestFrame& request)
 		{
-			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-			if (app == nullptr)
-			{
-				return blazeclaw::gateway::protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = blazeclaw::gateway::protocol::ErrorShape{
-						.code = "app_unavailable",
-						.message = "Application context unavailable.",
-						.detailsJson = std::nullopt,
-						.retryable = false,
-						.retryAfterMs = std::nullopt,
-					},
-				};
-			}
+			const blazeclaw::chat::shared::LambdaChatRequestOrchestrator requestOrchestrator(
+				[](const blazeclaw::gateway::protocol::RequestFrame& routeRequest)
+				{
+					auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+					if (app == nullptr)
+					{
+						return blazeclaw::gateway::protocol::ResponseFrame{
+							.id = routeRequest.id,
+							.ok = false,
+							.payloadJson = std::nullopt,
+							.error = blazeclaw::gateway::protocol::ErrorShape{
+								.code = "app_unavailable",
+								.message = "Application context unavailable.",
+								.detailsJson = std::nullopt,
+								.retryable = false,
+								.retryAfterMs = std::nullopt,
+							},
+						};
+					}
 
-			return app->RouteGatewayRequest(request);
+					return app->RouteGatewayRequest(routeRequest);
+				});
+
+			return requestOrchestrator.Route(request);
 		};
 	bridgeDeps.appendChatStatusStage =
 		[](const wchar_t* stage)

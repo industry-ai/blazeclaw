@@ -9,6 +9,7 @@
 #include "CNetwork_c.h"
 #include "agent-chat/AgentChatEvent.h"
 #include "../agentchat/AgentChatEventPayload.h"
+#include "../chat/shared/ChatSharedContractAdapters.h"
 
 #include <Shlwapi.h>
 #include <nlohmann/json.hpp>
@@ -32,6 +33,30 @@ constexpr LPCWSTR AGENTCHAT_INDEX_FILE = L"index.html";
 
 namespace
 {
+	static_assert(
+		std::is_base_of_v<
+			blazeclaw::chat::shared::IChatRequestOrchestrator,
+			blazeclaw::chat::shared::LambdaChatRequestOrchestrator>,
+		"LambdaChatRequestOrchestrator must implement IChatRequestOrchestrator");
+
+	static_assert(
+		std::is_base_of_v<
+			blazeclaw::chat::shared::IChatStreamEventNormalizer,
+			blazeclaw::chat::shared::PassthroughChatStreamEventNormalizer>,
+		"PassthroughChatStreamEventNormalizer must implement IChatStreamEventNormalizer");
+
+	static_assert(
+		std::is_base_of_v<
+			blazeclaw::chat::shared::IChatSessionStateStore,
+			blazeclaw::chat::shared::InMemoryChatSessionStateStore>,
+		"InMemoryChatSessionStateStore must implement IChatSessionStateStore");
+
+	static_assert(
+		std::is_base_of_v<
+			blazeclaw::chat::shared::IChatTelemetryHooks,
+			blazeclaw::chat::shared::NullChatTelemetryHooks>,
+		"NullChatTelemetryHooks must implement IChatTelemetryHooks");
+
 	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
 	std::string WideToUtf8(const std::wstring& value)
@@ -333,10 +358,15 @@ bool CBlazeClawAgentChatView::StartNativeRuntime()
 
 	auto bridgeHost = std::make_unique<blazeclaw::agentchat::AgentChatBridgeHost>();
 	auto orchestratorAdapter = std::make_shared<blazeclaw::agentchat::CallbackAgentChatOrchestratorAdapter>();
-	orchestratorAdapter->SetRouter(
+	const blazeclaw::chat::shared::LambdaChatRequestOrchestrator requestOrchestrator(
 		[app](const blazeclaw::gateway::protocol::RequestFrame& request)
 		{
 			return app->RouteGatewayRequest(request);
+		});
+	orchestratorAdapter->SetRouter(
+		[requestOrchestrator](const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			return requestOrchestrator.Route(request);
 		});
 	bridgeHost->SetOrchestratorAdapter(orchestratorAdapter);
 	bool httpListenerFallbackApplied = false;
@@ -818,7 +848,9 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			if (mappedEvent.extra.has_value()) {
 				appEvent.extra = mappedEvent.extra.value();
 			}
-			const nlohmann::json normalizedEventPayload = appEvent.ToWireObject();
+			const blazeclaw::chat::shared::PassthroughChatStreamEventNormalizer normalizer;
+			const nlohmann::json normalizedEventPayload =
+				normalizer.Normalize(appEvent.ToWireObject());
 
 			// Streamed responses are produced by the orchestrator and normalized into frontend events
 			const std::string type = normalizedEventPayload.value("type", std::string());
