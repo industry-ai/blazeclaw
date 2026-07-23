@@ -1,9 +1,11 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
    AgentChat 重构版 - 聊天主页面（UI 渲染层）
-   业务逻辑（消息收发/群管理/任务/Agent/语音/设备投递）通过 Bridge -> postMessage 交由 C++ 处理
+   业务逻辑（消息收发/群管理/任务/Agent/设备投递）通过 Bridge -> postMessage 交由 C++ 处理
+   语音转文字前端直接调用阿里云 DashScope ASR，不走 C++ 也不依赖 chat-bridge 服务
    ================================================================ */
 
 import Bridge from '../bridge/index.js';
+import AppConfig from '../config.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
 import TimeUtils from '../utils/time.js';
@@ -84,6 +86,11 @@ const ChatPage = {
 
   init() {
     this.container = document.getElementById('page-chat');
+    // 从 localStorage 恢复草稿
+    const savedDrafts = Bridge.loadComposerDrafts();
+    if (savedDrafts && typeof savedDrafts === 'object') {
+      this.composerDrafts = savedDrafts;
+    }
     this._scheduleRender = this._debounce(() => {
       if (this.createGroupDialogOpen || this.postCreatorOpen || this.postDetailOpen || this.postsPanelOpen || this.topicCreatorOpen || this.joinTopicConfirmOpen || this.devicesPanelOpen) return;
       this.render();
@@ -1047,6 +1054,11 @@ const ChatPage = {
     const next = String(value || '');
     if (next) this.composerDrafts[conversationId] = next;
     else delete this.composerDrafts[conversationId];
+    // 防抖持久化草稿到 localStorage
+    if (this._draftSaveTimer) clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = setTimeout(() => {
+      Bridge.saveComposerDrafts(this.composerDrafts);
+    }, 500);
   },
 
   _captureComposerState() {
@@ -1669,7 +1681,7 @@ const ChatPage = {
         throw new Error('麦克风没有收到声音，请检查权限或靠近麦克风');
       }
 
-      const text = await Bridge.transcribeAudio(audio, 'zh-CN');
+      const text = await this._transcribeAudio(audio, 'zh-CN');
       this.voiceState = 'idle';
       this.voiceErrorMessage = '';
 
@@ -1781,6 +1793,43 @@ const ChatPage = {
     this._voiceAudioContext = null;
     this._voiceInputMeterAvailable = false;
     this._voiceMaxInputLevel = 0;
+  },
+
+  // 语音转文字：前端直接调用阿里云 DashScope ASR，不走 C++ 也不依赖 chat-bridge 服务
+  // 对齐服务端 _speechTranscribeDashScope 的 OpenAI 兼容路径（qwen3-asr-flash，无需 ffmpeg）
+  async _transcribeAudio(audioBlob, lang = 'zh-CN') {
+    const apiKey = AppConfig.getDashscopeApiKey();
+    if (!apiKey) throw new Error('语音转文字未配置：请设置 dashscopeApiKey');
+
+    const model = AppConfig.getDashscopeAsrModel();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('音频读取失败'));
+      reader.readAsDataURL(audioBlob);
+    });
+
+    const resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'input_audio', input_audio: { data: dataUrl } }],
+        }],
+      }),
+    });
+    const raw = await resp.text();
+    if (!resp.ok) throw new Error(raw || 'DashScope ASR 识别失败');
+    const data = JSON.parse(raw);
+    const text = data?.choices?.[0]?.message?.content || '';
+    const transcript = (typeof text === 'string' ? text : '').replace(/\s+/g, ' ').trim();
+    if (!transcript) throw new Error('没有识别到文字，请再说一遍');
+    return transcript.slice(0, 2000);
   },
 
   // ── Helpers ──

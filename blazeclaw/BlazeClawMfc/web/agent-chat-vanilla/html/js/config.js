@@ -12,6 +12,9 @@ const AppConfig = (() => {
     webSmsLoginEnabled: false,
     debugSmsCode: '123456',
     debugSessionId: '',
+    // 语音转文字（DashScope ASR）
+    dashscopeApiKey: 'sk-072289a981b34d9e97e606ea2a3ebe78',
+    dashscopeAsrModel: 'qwen3-asr-flash',
   };
 
   function _env(key, fallback) {
@@ -39,7 +42,15 @@ const AppConfig = (() => {
     return _env('debugSessionId', defaults.debugSessionId);
   }
 
-  return { defaults, getCurrentAi, isWebSmsLoginEnabled, getDebugSmsCode, getDebugSessionId };
+  function getDashscopeApiKey() {
+    return String(_env('dashscopeApiKey', defaults.dashscopeApiKey)).trim();
+  }
+
+  function getDashscopeAsrModel() {
+    return String(_env('dashscopeAsrModel', defaults.dashscopeAsrModel)).trim() || defaults.dashscopeAsrModel;
+  }
+
+  return { defaults, getCurrentAi, isWebSmsLoginEnabled, getDebugSmsCode, getDebugSessionId, getDashscopeApiKey, getDashscopeAsrModel };
 })();
 
 export default AppConfig;
