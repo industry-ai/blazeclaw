@@ -202,6 +202,7 @@
     <ClInclude Include="src\app\webview_routers\WebViewGatewayRpcRouter.h" />
     <ClInclude Include="src\app\webview_routers\WebViewRouterContext.h" />
     <ClInclude Include="src\app\webview_routers\WebViewSpeechRpcRouter.h" />
+    <ClInclude Include="src\chat\shared\ChatStateTelemetryConsolidation.h" />
     <ClInclude Include="src\config\ConfigLoader.h" />
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\diagnostics\CDiagnosticsReportBuilder.h" />
@@ -713,6 +714,7 @@
     <ClCompile Include="tests\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
     <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp" />
     <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
+    <ClCompile Include="tests\ChatStreamParityAndRollbackTests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />
     <ClCompile Include="tests\GatewayChatMultiActiveModelsContractTests.cpp" />

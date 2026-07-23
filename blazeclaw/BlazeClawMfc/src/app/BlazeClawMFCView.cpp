@@ -40,6 +40,7 @@
 #include "WebViewBridgeSupport.h"
 #include "core-chat/CoreChatEvent.h"
 #include "../chat/shared/ChatSharedContractAdapters.h"
+#include "../chat/shared/ChatStateTelemetryConsolidation.h"
 
 static_assert(
 	std::is_base_of_v<
@@ -2610,6 +2611,9 @@ bool CBlazeClawMFCView::ShouldEmitSpeechLifecycleEvent(const std::string& payloa
 void CBlazeClawMFCView::EmitOpenClawChatEvents(
 	const std::string& eventsArrayJson)
 {
+	static blazeclaw::chat::shared::SharedChatDiagnosticsCollector s_coreDiagnostics;
+	static blazeclaw::chat::shared::StreamParityValidator s_coreParity;
+
 	if (eventsArrayJson.empty())
 	{
 		return;
@@ -2644,7 +2648,29 @@ void CBlazeClawMFCView::EmitOpenClawChatEvents(
 			blazeclaw::chat::shared::ConformantChatStreamEventNormalizer::Check(normalizedPayload);
 		if (!conformance.hasType || !conformance.hasTimestamp)
 		{
+			s_coreDiagnostics.RecordConformanceFailure();
 			continue;
+		}
+
+		const std::string type = normalizedPayload.value("type", std::string());
+		s_coreDiagnostics.RecordStreamType(type);
+		const std::string sessionId = normalizedPayload.value("sessionId", std::string());
+		const std::string correlationId =
+			sessionId.empty() ? m_bridgeSessionId : sessionId;
+		const std::string timestampText = std::to_string(
+			normalizedPayload.value("timestamp", static_cast<std::uint64_t>(0)));
+		const std::string idempotencyKey = correlationId + "|" + type + "|" + timestampText;
+		if (!s_coreDiagnostics.ObserveIdempotencyKey(idempotencyKey))
+		{
+			TRACE("CBlazeClawMFCView: duplicate stream idempotency key session=%s\n", correlationId.c_str());
+		}
+		if (!s_coreParity.Observe(correlationId, type))
+		{
+			s_coreDiagnostics.RecordParityViolation();
+			TRACE(
+				"CBlazeClawMFCView: stream parity violation session=%s type=%s\n",
+				correlationId.c_str(),
+				type.c_str());
 		}
 
 		const std::uint64_t seq = m_bridge.NextEventSeq();
@@ -2656,6 +2682,13 @@ void CBlazeClawMFCView::EmitOpenClawChatEvents(
 		};
 		PostOpenClawWsFrameJson(frameJson.dump());
 	}
+
+	const auto snapshot = s_coreDiagnostics.Snapshot();
+	const nlohmann::json snapshotJson =
+		blazeclaw::chat::shared::SharedChatDiagnosticsCollector::BuildSnapshotJson(
+			"core-chat",
+			snapshot);
+	TRACE("CBlazeClawMFCView: %s\n", snapshotJson.dump().c_str());
 }
 
 void CBlazeClawMFCView::EnsureOpenClawBridgeShim()

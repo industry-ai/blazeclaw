@@ -10,6 +10,7 @@
 #include "agent-chat/AgentChatEvent.h"
 #include "../agentchat/AgentChatEventPayload.h"
 #include "../chat/shared/ChatSharedContractAdapters.h"
+#include "../chat/shared/ChatStateTelemetryConsolidation.h"
 
 #include <Shlwapi.h>
 #include <nlohmann/json.hpp>
@@ -56,6 +57,18 @@ namespace
 			blazeclaw::chat::shared::IChatTelemetryHooks,
 			blazeclaw::chat::shared::NullChatTelemetryHooks>,
 		"NullChatTelemetryHooks must implement IChatTelemetryHooks");
+
+	blazeclaw::chat::shared::SharedChatDiagnosticsCollector& AgentChatDiagnostics()
+	{
+		static blazeclaw::chat::shared::SharedChatDiagnosticsCollector collector;
+		return collector;
+	}
+
+	blazeclaw::chat::shared::StreamParityValidator& AgentChatParityValidator()
+	{
+		static blazeclaw::chat::shared::StreamParityValidator validator;
+		return validator;
+	}
 
 	//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	// 2026/06/28, jicheng, add dual mode support for agent chat bridge
@@ -536,6 +549,28 @@ void CBlazeClawAgentChatView::StartConfiguredRuntime()
 		}
 		break;
 	}
+
+	const std::string mode =
+		m_runtimeModeResolved == blazeclaw::config::AgentChatRuntimeMode::Legacy
+		? "legacy"
+		: (m_runtimeModeResolved == blazeclaw::config::AgentChatRuntimeMode::Native
+			? "native"
+			: "auto");
+	if (!blazeclaw::chat::shared::RollbackSafetyEvaluator::IsSafeModeTransition(
+		mode,
+		m_nativeRuntimeStarted,
+		m_nodeRuntimeStartedByMode))
+	{
+		AgentChatDiagnostics().RecordParityViolation();
+		const nlohmann::json snapshotJson =
+			blazeclaw::chat::shared::SharedChatDiagnosticsCollector::BuildSnapshotJson(
+				"agent-chat-runtime",
+				AgentChatDiagnostics().Snapshot());
+		TRACE(
+			"CBlazeClawAgentChatView: rollback safety validation failed mode=%s payload=%s\n",
+			mode.c_str(),
+			snapshotJson.dump().c_str());
+	}
 }
 //-------------------------------------------------------------------
 
@@ -672,6 +707,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 			std::lock_guard<std::mutex> lock(m_webBridgeMutex);
 			m_cancelledAgentBridgeRequestIds.insert(requestId);
 		}
+		AgentChatDiagnostics().CancelRequest(requestId);
 		TRACE(
 			"CBlazeClawAgentChatView: native bridge request aborted requestId=%s\n",
 			requestId.c_str());
@@ -749,6 +785,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		}
 		m_activeAgentBridgeRequestIds.insert(requestId);
 		m_cancelledAgentBridgeRequestIds.erase(requestId);
+		AgentChatDiagnostics().BeginRequest(requestId);
 	}
 
 	auto finalizeRequest = [this, &requestId]()
@@ -756,6 +793,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 		std::lock_guard<std::mutex> lock(m_webBridgeMutex);
 		m_activeAgentBridgeRequestIds.erase(requestId);
 		m_cancelledAgentBridgeRequestIds.erase(requestId);
+		AgentChatDiagnostics().CompleteRequest(requestId);
 	};
 
 	auto isCancelled = [this, &requestId]()
@@ -865,6 +903,7 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				blazeclaw::chat::shared::ConformantChatStreamEventNormalizer::Check(normalizedEventPayload);
 			if (!conformance.hasType || !conformance.hasTimestamp)
 			{
+				AgentChatDiagnostics().RecordConformanceFailure();
 				TRACE(
 					"CBlazeClawAgentChatView: non-conformant stream payload requestId=%s\n",
 					requestId.c_str());
@@ -873,6 +912,24 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 
 			// Streamed responses are produced by the orchestrator and normalized into frontend events
 			const std::string type = normalizedEventPayload.value("type", std::string());
+			AgentChatDiagnostics().RecordStreamType(type);
+			const std::string timestampText = std::to_string(
+				normalizedEventPayload.value("timestamp", static_cast<std::uint64_t>(0)));
+			const std::string idempotencyKey = requestId + "|" + type + "|" + timestampText;
+			if (!AgentChatDiagnostics().ObserveIdempotencyKey(idempotencyKey))
+			{
+				TRACE(
+					"CBlazeClawAgentChatView: duplicate stream idempotency key requestId=%s\n",
+					requestId.c_str());
+			}
+			if (!AgentChatParityValidator().Observe(requestId, type))
+			{
+				AgentChatDiagnostics().RecordParityViolation();
+				TRACE(
+					"CBlazeClawAgentChatView: stream parity violation requestId=%s type=%s\n",
+					requestId.c_str(),
+					type.c_str());
+			}
 			// the normalization/emit sites that convert orchestrator SSE payloads into 
 			// frontend events (`emitToWeb` calls)
 			if (type == "delta")	// partial/streamed updates
@@ -909,6 +966,15 @@ LRESULT CBlazeClawAgentChatView::OnWebMessageReceived(WPARAM, LPARAM)
 				});
 			}
 		}
+
+		const auto snapshot = AgentChatDiagnostics().Snapshot();
+		const nlohmann::json snapshotJson =
+			blazeclaw::chat::shared::SharedChatDiagnosticsCollector::BuildSnapshotJson(
+				"agent-chat",
+				snapshot);
+		TRACE(
+			"CBlazeClawAgentChatView: %s\n",
+			snapshotJson.dump().c_str());
 
 		emitToWeb(nlohmann::json{
 			{ "channel", "agentchat.bridge.response" },

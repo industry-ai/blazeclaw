@@ -670,6 +670,7 @@
     <ClCompile Include="src\app\CChatRoomBridge.cpp">
       <Filter>agent-chat</Filter>
     </ClCompile>
+    <ClCompile Include="tests\ChatStreamParityAndRollbackTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1266,6 +1267,7 @@
       <Filter>agent-chat</Filter>
     </ClInclude>
     <ClInclude Include="src\app\core-chat\CoreChatEvent.h" />
+    <ClInclude Include="src\chat\shared\ChatStateTelemetryConsolidation.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

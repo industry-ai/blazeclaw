@@ -95,6 +95,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatListenerFallbackDiagnosticsContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeRequestTimeObservabilityContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\ChatStreamParityAndRollbackTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillPortingPlanPresenceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsCatalogServiceOpenClawOriginalImportTests.cpp" />
