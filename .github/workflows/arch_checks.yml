@@ -45,6 +45,7 @@ jobs:
 
   arch_checks_audit:
     name: Run architecture fitness checks (audit onboarding)
+    if: github.ref == 'refs/heads/chat'
     runs-on: windows-latest
     needs: arch_checks
     steps:
