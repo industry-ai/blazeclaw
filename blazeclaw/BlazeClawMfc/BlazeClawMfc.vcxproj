@@ -229,6 +229,7 @@
     <ClInclude Include="src\core\ServiceManagerTextToSpeechHelpers.h" />
     <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
     <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
+    <ClInclude Include="src\core\skills\Skill.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
     <ClInclude Include="src\core\runtime\pch.h" />
     <ClInclude Include="src\core\runtime\SpeechRecognition\ISpeechRecognitionRuntime.h" />
@@ -513,6 +514,7 @@
     <ClCompile Include="src\core\ServiceManagerTextToSpeechHelpers.cpp" />
     <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp" />
     <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp" />
+    <ClCompile Include="src\core\skills\Skill.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\StreamingAudioSourceRegistry.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\engines\SherpaZipformerStreamingEngine.cpp" />
