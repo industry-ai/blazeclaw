@@ -26,6 +26,7 @@
 #include "ServiceManagerTextHelpers.h"
 #include "ServiceManagerSkillRootsHelpers.h"
 #include "ServiceManagerRoutingIntentHelpers.h"
+#include "ServiceManagerLifecycleHelpers.h"
 
 #include <cctype>
 #include <chrono>
@@ -77,9 +78,9 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
-		bool SuppressStartupMigrationsFromEnv() {
-			return servicemanager_text::SuppressStartupMigrationsFromEnv();
-		}
+		// Delegated to ServiceManagerLifecycleHelpers to keep lifecycle helpers
+		// in a focused TU. Use servicemanager_lifecycle::SuppressStartupMigrationsFromEnv()
+		// at call sites instead of a local forwarder.
 
 		std::wstring Utf8ToWideLocal(const std::string& value) {
 			return servicemanager_text::Utf8ToWideLocal(value);
@@ -269,10 +270,8 @@ namespace blazeclaw::core {
 			return WideToUtf8Local(truncated);
 		}
 
-		void AppendStartupTrace(const char* stage) {
-			CServiceBootstrapCoordinator coordinator;
-			coordinator.AppendStartupTrace(stage);
-		}
+		// Appended startup trace is forwarded via ServiceManagerLifecycleHelpers.
+		// Call servicemanager_lifecycle::AppendStartupTrace(stage) where needed.
 
 		std::wstring ToWide(const std::string& value) {
 			if (value.empty()) {
@@ -3221,7 +3220,7 @@ namespace blazeclaw::core {
 		if (m_running) {
 			return true;
 		}
-		AppendStartupTrace("ServiceManager.Start.begin");
+		servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.begin");
 
 		ConfigurePolicies(config);
 		InitializeModules();
@@ -3750,7 +3749,7 @@ namespace blazeclaw::core {
 	bool ServiceManager::FinalizeStartup(
 		const blazeclaw::config::AppConfig& config)
 	{
-		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
+		servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
 		m_state.gatewayLifecycle.transitions.clear();
 		m_state.gatewayLifecycle.startupMigrationsApplied.clear();
 		RecordGatewayStartupConfigSnapshot();
@@ -3764,13 +3763,13 @@ namespace blazeclaw::core {
 					.config = config,
 					.gatewayHost = m_gatewayHost,
 					.appendTrace = [this](const char* stage) {
-						AppendStartupTrace(stage);
+						servicemanager_lifecycle::AppendStartupTrace(stage);
 					},
 					.queueManagedConfigInternalWriteHash =
 						[this](const std::uint64_t hash) {
 						QueueManagedConfigInternalWriteHash(hash);
 					},
-					.suppressStartupMigrations = SuppressStartupMigrationsFromEnv(),
+					.suppressStartupMigrations = servicemanager_lifecycle::SuppressStartupMigrationsFromEnv(),
 					.appliedStartupMigrationsOut =
 						&m_state.gatewayLifecycle.startupMigrationsApplied,
 				});
@@ -3827,7 +3826,7 @@ namespace blazeclaw::core {
 				},
 				GatewayManagedConfigReloader::Callbacks{
 					.appendTrace = [this](const char* stage) {
-						AppendStartupTrace(stage);
+						servicemanager_lifecycle::AppendStartupTrace(stage);
 					},
 					.onWarning = [this](const std::wstring& warning) {
 						m_skillsCatalog.diagnostics.warnings.push_back(warning);
@@ -3866,7 +3865,7 @@ namespace blazeclaw::core {
 						GatewayRuntimeBootstrapCoordinator::CloseContext{
 							.gatewayHost = m_gatewayHost,
 							.appendTrace = [this](const char* stage) {
-								AppendStartupTrace(stage);
+								servicemanager_lifecycle::AppendStartupTrace(stage);
 							},
 						});
 				for (const auto& warning : closePreludeWarnings) {
@@ -3927,7 +3926,7 @@ namespace blazeclaw::core {
 			ExecuteGatewayStartupFailureCleanup(config, startupResult);
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"gateway startup failed; running in degraded local mode.");
-			AppendStartupTrace("ServiceManager.Start.gateway.failed");
+			servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.failed");
 			RecordGatewayLifecycleTransition("startup.failed.degraded_mode");
 			m_running = true;
 			PublishGatewaySkillsStateProjection();
@@ -3935,14 +3934,14 @@ namespace blazeclaw::core {
 		}
 
 		if (startupResult.degraded) {
-			AppendStartupTrace("ServiceManager.Start.gateway.degraded");
+			servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.degraded");
 			RecordGatewayLifecycleTransition("startup.degraded");
 		}
 
 		m_running = true;
 		RefreshOpenClawOriginalRuntimeTools(config);
 		EmitOpenClawOriginalTelemetry();
-		AppendStartupTrace("ServiceManager.Start.gateway.afterStart");
+		servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.afterStart");
 		RecordGatewayLifecycleTransition("startup.ready");
 		return true;
 	}
@@ -3998,7 +3997,7 @@ namespace blazeclaw::core {
 	void ServiceManager::ExecuteGatewayStartupFailureCleanup(
 		const blazeclaw::config::AppConfig& config,
 		const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult) {
-		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.begin");
+		servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.begin");
 		m_state.gatewayLifecycle.cleanupPath = "startup_failure";
 		RecordGatewayLifecycleTransition("startup_failure_cleanup.begin");
 		BeginShutdownPreludeRecording();
@@ -4021,7 +4020,7 @@ namespace blazeclaw::core {
 				.config = config,
 				.gatewayHost = m_gatewayHost,
 				.appendTrace = [this](const char* stage) {
-					AppendStartupTrace(stage);
+					servicemanager_lifecycle::AppendStartupTrace(stage);
 				},
 			},
 			startupResult);
@@ -4029,7 +4028,7 @@ namespace blazeclaw::core {
 		FinalizeShutdownPreludeEvidence();
 		m_state.gatewayLifecycle.startupFailureCleanupExecuted = true;
 		RecordGatewayLifecycleTransition("startup_failure_cleanup.done");
-		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.done");
+		servicemanager_lifecycle::AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.done");
 	}
 
 	void ServiceManager::ExecuteNonGatewayRuntimeCleanup() {
@@ -4450,7 +4449,7 @@ namespace blazeclaw::core {
 					std::move(deltaJson);
 				RecordGatewayLifecycleTransition(
 					"managed_reload.extension_surface_method_snapshot");
-				AppendStartupTrace(
+				servicemanager_lifecycle::AppendStartupTrace(
 					"GatewayRuntimeExtensionSurface.reload.method_surface.delta");
 			}
 		}
