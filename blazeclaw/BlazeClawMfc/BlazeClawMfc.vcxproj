@@ -721,6 +721,7 @@
     <ClCompile Include="tests\GatewayChatMultiActiveModelsContractTests.cpp" />
     <ClCompile Include="tests\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />
     <ClCompile Include="tests\GatewayToolRegistrySkillsDualReadParityTests.cpp" />
+    <ClCompile Include="tests\ServiceManagerRoutingIntentTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
     <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp" />

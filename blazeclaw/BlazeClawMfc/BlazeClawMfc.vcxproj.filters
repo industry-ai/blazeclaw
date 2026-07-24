@@ -671,6 +671,8 @@
       <Filter>agent-chat</Filter>
     </ClCompile>
     <ClCompile Include="tests\ChatStreamParityAndRollbackTests.cpp" />
+    <ClCompile Include="src\core\ServiceManagerRoutingIntentHelpers.cpp" />
+    <ClCompile Include="tests\ServiceManagerRoutingIntentTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
