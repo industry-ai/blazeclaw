@@ -1877,7 +1877,7 @@ void CChatView::RemoveItemAt(int index)
 	{
 		const int lastIndex = static_cast<int>(m_items.GetSize() - 1);
 		m_wndMsgList.SetCurSel(lastIndex);
-		m_wndMsgList.SetTopIndex(max(0, lastIndex - 1));
+		m_wndMsgList.SetTopIndex(std::max(0, lastIndex - 1));
 	}
 
 	m_wndMsgList.Invalidate();
@@ -1898,7 +1898,7 @@ void CChatView::UpdateItemAt(int index, const CString& strText, BOOL bSelf)
 	if (inserted != LB_ERR && inserted != LB_ERRSPACE)
 	{
 		m_wndMsgList.SetCurSel(inserted);
-		m_wndMsgList.SetTopIndex(max(0, inserted - 1));
+		m_wndMsgList.SetTopIndex(std::max(0, inserted - 1));
 	}
 
 	m_wndMsgList.Invalidate();
@@ -1963,7 +1963,7 @@ int CChatView::AppendMessage(const CString& strText, BOOL bSelf)
 		m_wndMsgList.Invalidate();
 		m_wndMsgList.UpdateWindow();
 		m_wndMsgList.SetCurSel(nIndex);
-		m_wndMsgList.SetTopIndex(max(0, nIndex - 1));
+		m_wndMsgList.SetTopIndex(std::max(0, nIndex - 1));
 	}
 
 	return nIndex;
@@ -2031,7 +2031,7 @@ void CChatView::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMIS)
 		return;
 	}
 
-	const int maxBubbleWidth = max(120, (int)(rcClient.Width() * 0.70f));
+	const int maxBubbleWidth = std::max(120, (int)(rcClient.Width() * 0.70f));
 	const int maxTextWidth = maxBubbleWidth - 2 * bubblePaddingH;
 
 	CFont* pOldFont = pDC->SelectObject(m_wndMsgList.GetFont());
@@ -2046,7 +2046,7 @@ void CChatView::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMIS)
 	int itemH = bubbleH + 2 * outerMarginV;
 
 	m_wndMsgList.ReleaseDC(pDC);
-	lpMIS->itemHeight = max(28, itemH);
+	lpMIS->itemHeight = std::max(28, itemH);
 }
 
 void CChatView::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDIS)
@@ -2076,7 +2076,7 @@ void CChatView::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDIS)
 	const int tail = 10;
 
 	const int itemWidth = rcItem.Width();
-	const int maxBubbleWidth = max(120, (int)(itemWidth * 0.70f));
+	const int maxBubbleWidth = std::max(120, (int)(itemWidth * 0.70f));
 	const int maxTextWidth = maxBubbleWidth - 2 * bubblePaddingH;
 
 	CRect rcCalc(0, 0, maxTextWidth, 0);
@@ -2084,7 +2084,7 @@ void CChatView::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDIS)
 	CFont* pOldFont = dc.SelectObject(m_wndMsgList.GetFont());
 	dc.DrawText(item.text, rcCalc, DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX);
 
-	const int bubbleW = min(maxBubbleWidth, rcCalc.Width() + 2 * bubblePaddingH);
+	const int bubbleW = std::min(maxBubbleWidth, rcCalc.Width() + 2 * bubblePaddingH);
 	const int bubbleH = rcCalc.Height() + 2 * bubblePaddingV;
 
 	CRect rcBubble;

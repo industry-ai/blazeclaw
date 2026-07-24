@@ -67,7 +67,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\nlohmann;$(ProjectDir)third_party\catch2\single_include;$(LlamaCppIncludeDir);$(SolutionDir)FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\include;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\include;E:\gitRepo\blazeClaw\blazeclaw\vcpkg_installed\x64-windows\x64-windows\include;D:\Anaconda3\Library\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINDOWS;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINDOWS;_AFXDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -95,7 +95,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir)src;$(LlamaCppIncludeDir);$(SolutionDir)FunASR\runtime\onnxruntime\third_party\kaldi-native-fbank;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\build\native\include;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\include;E:\gitRepo\blazeClaw\blazeclaw\vcpkg_installed\x64-windows\x64-windows\include;D:\Anaconda3\Library\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINDOWS;_AFXDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINDOWS;_AFXDLL;NDEBUG;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -225,6 +225,7 @@
     <ClInclude Include="src\core\ServiceManagerLifecycleHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerLocalModelHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerSpeechRuntimeHelpers.h" />
+    <ClInclude Include="src\core\ServiceManagerTextToSpeechHelpers.h" />
     <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
     <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
@@ -507,6 +508,7 @@
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.cpp" />
+    <ClCompile Include="src\core\ServiceManagerTextToSpeechHelpers.cpp" />
     <ClCompile Include="src\core\SkillsCommandInvocationParityValidationService.cpp" />
     <ClCompile Include="src\core\SkillsFutureStabilityValidationService.cpp" />
     <ClCompile Include="src\core\SpeechTranscriptionCoordinator.cpp" />
@@ -731,6 +733,7 @@
     <ClCompile Include="tests\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="tests\ServiceManagerRoutingIntentTests.cpp" />
     <ClCompile Include="tests\ServiceManagerSpeechRuntimeTests.cpp" />
+    <ClCompile Include="tests\ServiceManagerTextToSpeechTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
     <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp" />

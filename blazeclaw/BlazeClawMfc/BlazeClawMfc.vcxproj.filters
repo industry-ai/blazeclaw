@@ -679,6 +679,8 @@
     <ClCompile Include="tests\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="src\core\ServiceManagerSpeechRuntimeHelpers.cpp" />
     <ClCompile Include="tests\ServiceManagerSpeechRuntimeTests.cpp" />
+    <ClCompile Include="src\core\ServiceManagerTextToSpeechHelpers.cpp" />
+    <ClCompile Include="tests\ServiceManagerTextToSpeechTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1279,6 +1281,7 @@
     <ClInclude Include="src\core\ServiceManagerLifecycleHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerLocalModelHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerSpeechRuntimeHelpers.h" />
+    <ClInclude Include="src\core\ServiceManagerTextToSpeechHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

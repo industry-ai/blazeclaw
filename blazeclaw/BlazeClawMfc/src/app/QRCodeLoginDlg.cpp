@@ -108,7 +108,7 @@ void CQRCodeLoginDlg::OnPaint()
 
     int qrSize = (int)m_qrData.size();
     int padding = 4;
-    int availableSize = min(rc.Width(), rc.Height()) - padding * 2;
+    int availableSize = std::min(rc.Width(), rc.Height()) - padding * 2;
     int scale = availableSize / qrSize;
     if (scale < 1) scale = 1;
     int qrPixelSize = scale * qrSize;

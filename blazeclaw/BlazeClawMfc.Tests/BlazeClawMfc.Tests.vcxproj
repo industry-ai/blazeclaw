@@ -76,6 +76,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerLocalModelHelpers.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerTextToSpeechHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerSpeechRuntimeHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerSpeechRuntimeTests.cpp" />
