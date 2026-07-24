@@ -123,7 +123,7 @@ namespace blazeclaw::core::servicemanager_routing_intent {
 			lower,
 			{ "within 2 hours", "within two hours", "2h", "2 hours", "urgent" }) ||
 			urgencySignalZh;
-		return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
+	return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
 	}
 
 	bool LooksLikeInboxIntentAnyLanguage(const std::string& message)
