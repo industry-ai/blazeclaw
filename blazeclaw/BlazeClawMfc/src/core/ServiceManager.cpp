@@ -78,10 +78,6 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
-		// Delegated to ServiceManagerLifecycleHelpers to keep lifecycle helpers
-		// in a focused TU. Use servicemanager_lifecycle::SuppressStartupMigrationsFromEnv()
-		// at call sites instead of a local forwarder.
-
 		std::wstring Utf8ToWideLocal(const std::string& value) {
 			return servicemanager_text::Utf8ToWideLocal(value);
 		}
@@ -269,9 +265,6 @@ namespace blazeclaw::core {
 				: normalizedPrompt;
 			return WideToUtf8Local(truncated);
 		}
-
-		// Appended startup trace is forwarded via ServiceManagerLifecycleHelpers.
-		// Call servicemanager_lifecycle::AppendStartupTrace(stage) where needed.
 
 		std::wstring ToWide(const std::string& value) {
 			if (value.empty()) {
