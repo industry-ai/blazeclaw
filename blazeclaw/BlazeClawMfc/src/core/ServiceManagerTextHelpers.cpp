@@ -8,8 +8,6 @@
 
 namespace blazeclaw::core::servicemanager_text {
 
-	namespace {
-
 		std::wstring Trim(const std::wstring& value) {
 			const auto first = std::find_if_not(
 				value.begin(),
@@ -43,7 +41,9 @@ namespace blazeclaw::core::servicemanager_text {
 			return lowered;
 		}
 
-	} // namespace
+} // namespace blazeclaw::core::servicemanager_text
+
+namespace blazeclaw::core::servicemanager_text {
 
 	bool SuppressStartupMigrationsFromEnv() {
 		wchar_t* raw = nullptr;

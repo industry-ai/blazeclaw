@@ -7,6 +7,7 @@
 #include <string>
 
 #include "../config/ConfigModels.h"
+#include "ServiceManagerTextHelpers.h"
 
 namespace blazeclaw::core::servicemanager_speech {
 
@@ -42,28 +43,13 @@ namespace blazeclaw::core::servicemanager_speech {
 
 namespace blazeclaw::core::servicemanager_speech {
 
+	// Reuse existing ServiceManager text helpers to preserve a single
+	// implementation of Trim/ToLower used across the ServiceManager TUs.
 	static std::wstring TrimLocal(const std::wstring& value) {
-		const auto first = std::find_if_not(
-			value.begin(),
-			value.end(),
-			[](const wchar_t ch) { return std::iswspace(ch) != 0; });
-		const auto last = std::find_if_not(
-			value.rbegin(),
-			value.rend(),
-			[](const wchar_t ch) { return std::iswspace(ch) != 0; }).base();
-
-		if (first >= last) {
-			return {};
-		}
-
-		return std::wstring(first, last);
+		return blazeclaw::core::servicemanager_text::Trim(value);
 	}
-
 	static std::wstring ToLowerLocal(const std::wstring& value) {
-		std::wstring lowered = value;
-		std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-			[](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
-		return lowered;
+		return blazeclaw::core::servicemanager_text::ToLower(value);
 	}
 
 	bool ApplySpeechRecognitionConfigReload(
