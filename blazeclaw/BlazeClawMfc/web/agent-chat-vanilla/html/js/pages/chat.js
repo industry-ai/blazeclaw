@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
    AgentChat 重构版 - 聊天主页面（UI 渲染层）
    业务逻辑（消息收发/群管理/任务/Agent/设备投递）通过 Bridge -> postMessage 交由 C++ 处理
    语音转文字前端直接调用阿里云 DashScope ASR，不走 C++ 也不依赖 chat-bridge 服务
@@ -261,7 +261,7 @@ const ChatPage = {
     const isGroup = activeConv?.type === 'group';
 
     return `
-    <div class="desktop-shell" style="position:relative;z-index:10;margin:1rem;height:calc(100dvh - 2rem);display:grid;grid-template-columns:21.5rem minmax(0,1fr) 0;overflow:hidden;border-radius:2rem;border:1px solid rgba(255,255,255,0.45);background:var(--app-surface);box-shadow:0 28px 70px rgba(95,73,170,0.12);backdrop-filter:blur(24px);">
+    <div class="desktop-shell" style="position:relative;z-index:10;margin:1rem;height:calc(100dvh - 2rem);display:grid;grid-template-columns:20rem minmax(0,1fr) 0;overflow:hidden;border-radius:2rem;border:1px solid rgba(255,255,255,0.45);background:var(--app-surface);box-shadow:0 28px 70px rgba(95,73,170,0.12);backdrop-filter:blur(24px);">
       <!-- Sidebar -->
       <aside class="ds-sidebar" style="display:flex;flex-direction:column;min-height:0;border-right:1px solid rgba(226,232,240,0.7);background:var(--app-surface-strong);">
         ${this._renderSidebar(convs, activeId)}
@@ -779,6 +779,7 @@ const ChatPage = {
         const cardLabel = isH5Card ? 'H5 卡片' : '互动资源';
         const cardBtnText = isH5Card ? '查看卡片' : '打开';
         const cardTitle = att.title || cardLabel;
+        console.log('[chat] cardTitle 来源:', { cardTitle, attTitle: att.title, cardLabel, url: att.url, fullAtt: att });
         const cardSummary = att.summary || '';
         const cardIdx = att._cardIdx || 0;
         // 提取附件元数据用于 postMessage bridge（对齐 Vue 版 taskMetadataFromAttachment）
@@ -2303,7 +2304,10 @@ const ChatPage = {
           const resourceUrl = forwardBtn.dataset.resourceUrl || card.dataset.resourceUrl;
           const cardTitle = forwardBtn.dataset.cardTitle || 'H5 卡片';
           if (resourceUrl) {
-            this._showForwardModal(resourceUrl, cardTitle);
+            // 提取完整附件元数据（对齐 Vue 版 attachment 全字段传递）
+            const attMeta = this._extractAttMetaFromCard(card, resourceUrl, cardTitle);
+            const attachment = { type: 'webview', ...attMeta };
+            this._showForwardModal(attachment, cardTitle);
           }
         };
       }
@@ -2353,8 +2357,8 @@ const ChatPage = {
   },
 
   // 对齐 Vue 版 ForwardModal：转发资源到其他会话
-  _showForwardModal(resourceUrl, cardTitle) {
-    if (!resourceUrl) return;
+  _showForwardModal(attachment, cardTitle) {
+    if (!attachment || !attachment.url) return;
     const existing = document.querySelector('.forward-modal-overlay');
     if (existing) existing.remove();
 
@@ -2404,9 +2408,11 @@ const ChatPage = {
       item.onmouseenter = () => { item.style.background = 'var(--app-brand-soft)'; };
       item.onmouseleave = () => { item.style.background = 'transparent'; };
       item.onclick = () => {
-        // 对齐 Vue 版 forwardTo：发送消息 + 附件到目标会话
-        Bridge.sendUserMessage(`[转发卡片] ${cardTitle}`, conv.id, {
-          attachments: [{ type: 'webview', url: resourceUrl, title: cardTitle }],
+        // 对齐 Vue 版 forwardTo：将完整附件编码为信封，发送到目标会话
+        const displayText = `[转发卡片] ${cardTitle}`;
+        const encodedText = Bridge.encodeForwardAttachment(displayText, cardTitle, [attachment]);
+        Bridge.sendUserMessage(encodedText, conv.id, {
+          attachments: [attachment],
         });
         Toast.show(`已转发到 ${conv.name || conv.id}`, 'success');
         overlay.remove();
@@ -2441,6 +2447,7 @@ const ChatPage = {
       { id: 'device_open', label: '投递到设备', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' },
       { id: 'device_speak', label: '播报到设备', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>' },
       { id: 'save_local', label: '保存到本地', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' },
+      { id: 'forward', label: '转发', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>' },
     ];
 
     actions.forEach(action => {
@@ -2514,6 +2521,14 @@ const ChatPage = {
         } else if (action.id === 'device_speak') {
           // 对齐协议 §5.3 + §7：播报到设备
           this._dispatchSpeakToDevice(resourceUrl);
+        } else if (action.id === 'forward') {
+          // 对齐 Vue 版 executeAttachmentAction -> triggerSecondaryShare -> openForwardModal
+          const cardTitle = card?.dataset?.cardTitle || 'H5 卡片';
+          const attMeta = card
+            ? this._extractAttMetaFromCard(card, resourceUrl, cardTitle)
+            : { url: resourceUrl, title: cardTitle };
+          const attachment = { type: 'webview', ...attMeta };
+          this._showForwardModal(attachment, cardTitle);
         }
       };
       menu.appendChild(item);

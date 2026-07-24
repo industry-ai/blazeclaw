@@ -81,7 +81,7 @@ img {
 /* 左侧主导航 */
 .side-nav {
   flex: 0 0 auto;
-  width: 168px;
+  width: 140px;
   height: 100%;
   display: flex;
   flex-direction: column;

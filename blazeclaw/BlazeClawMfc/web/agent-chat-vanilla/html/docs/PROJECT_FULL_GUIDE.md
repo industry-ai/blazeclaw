@@ -36,8 +36,8 @@ AgentChat Vanilla 是一个基于原生 ES Modules 的 SPA 聊天应用，**无�
 
 启动流程：
 1. `DOMContentLoaded` 触发后，`UiStore.initTheme()` 初始化主题
-2. `Bridge.init()` 初始化桥接，恢复鉴权状态（localStorage / C++ 注入）
-3. `_connectChat()` 连接聊天（拉取会话列表 + join 频道）
+2. `Bridge.init()` 初始化桥接，恢复鉴权状态（localStorage / C++ 注入），同步 chatHistoryStore userId
+3. `_connectChat()` 连接聊天（拉取会话列表 + join 频道 + 从 localStorage 恢复聊天记录）
 4. 监听 `__auth_injected__` 事件（C++ 运行时注入鉴权）
 5. 监听 `hashchange` 实现 SPA 路由
 6. `_navigateTo(route)` 懒加载对应页面模块
@@ -204,7 +204,8 @@ agent-chat-vanilla/
     │   └── interactiveResourceBridge.js  # H5 卡片交互桥接
     │
     ├── stores/
-    │   └── uiStore.js          # UI 状态管理（主题/视图栈/任务详情）
+    │   ├── uiStore.js          # UI 状态管理（主题/视图栈/任务详情）
+    │   └── chatHistoryStore.js  # 聊天记录本地持久化（localStorage）
     │
     └── utils/                  # UI 工具
         ├── avatar.js           #   头像颜色生成
@@ -237,6 +238,11 @@ agent-chat-vanilla/
 │              chatroomTransport.js                       │
 │              C++ 通信封装层                              │
 │              (chatroom.bridge.* 协议)                   │
+├─────────────────────────────────────────────────────────┤
+│              chatHistoryStore.js                        │
+│              本地持久化层（localStorage）                 │
+│              聊天消息 / 草稿 按用户隔离存储               │
+│              防抖写入 + 容量限制 + 临时态过滤              │
 └─────────────────────────────────────────────────────────┘
          ↑
     config.js / protocol/ / utils/ / stores/uiStore.js
@@ -283,6 +289,7 @@ agent-chat-vanilla/
 | 切换会话 | 点击侧栏会话项激活，自动 join 频道 | `Bridge.setActiveConversation(id)` / `join_channel` |
 | 消息收发 | 乐观更新（sending->sent/failed），支持重试 | `Bridge.sendUserMessage()` / `send_message` |
 | AI 流式回复 | 发送到 AI 空间或 @AI助手 时触发，先建占位气泡再流式拼接 | `Bridge._requestAgentReply()` / `agent.turn` |
+| 聊天记录本地存储 | 聊天消息持久化到 localStorage，刷新后恢复；输入框草稿同步保存 | `chatHistoryStore` / `Bridge.saveComposerDrafts()` / `Bridge.loadComposerDrafts()` |
 | 群聊看板面板 | 右侧抽屉展示群任务/作业/活动帖子 | `Bridge.loadGroupPosts()` / `list_posts` |
 | 群成员管理 | 拉取成员、邀请/移除成员 | `Bridge.getRoomMembers()` / `get_room_info` |
 | 设备面板 | 右侧抽屉的设备绑定流程（三步） | `Bridge.createDeviceBindSession()` / `devices.bind.*` |
@@ -302,6 +309,7 @@ agent-chat-vanilla/
 - **状态恢复**：`_captureComposerState` / `_restoreComposerState` 保留输入框内容、滚动位置、面板开关状态
 - **Mixin 复用**：通过 `PostsPanelMixin` 与 `DevicesPanelMixin` 把右侧抽屉逻辑混入 ChatPage
 - **Agent 流式**：发送方通过 `onAgentStream` 订阅 delta/final；接收方通过 `_remoteStreamingMsgs` 跟踪表创建/更新 streaming 占位气泡
+- **聊天记录持久化**：`Bridge.init()` 中订阅 state 变化，防抖 1s 后将消息写入 `chatHistoryStore`（localStorage）；`loadConversations()` 时从 localStorage 恢复消息缓存，用户刷新后立即看到历史消息，不等 C++ 推送；草稿在 `_setComposerDraft` 中防抖 500ms 持久化
 
 #### 关键协议
 
@@ -498,9 +506,70 @@ export const mockMessages = { "#tech-talk": [...], ... };
 
 ---
 
-## 六、数据来源总结
+## 六、数据持久化（localStorage）
 
-### 6.1 真实服务板块（6 个）
+### 6.1 持久化模块
+
+**文件**：[js/stores/chatHistoryStore.js](file:///d:/project/new-c++/Debug/web/agent-chat-vanilla/html/js/stores/chatHistoryStore.js)
+
+聊天记录本地化存储模块，负责将聊天消息和输入框草稿持久化到 localStorage，使页面刷新后仍可恢复聊天记录。
+
+### 6.2 持久化数据概览
+
+| 数据类型 | localStorage Key | 持久化 | 说明 |
+|---------|-----------------|--------|------|
+| 鉴权信息 | `auth.jwt` / `auth.session_id` / `auth.user_id` / `auth.phone` | 是 | 鉴权恢复，刷新后保持登录态 |
+| UI 主题 | `agentchat-ui-theme` | 是 | 浅色/深色/跟随系统 |
+| **聊天消息** | `agentchat:history:{userId}:{convId}` | **是** | 按用户+会话隔离，每会话上限 200 条 |
+| **输入框草稿** | `agentchat:drafts:{userId}` | **是** | 按用户隔离，存为 JSON 对象 |
+
+### 6.3 设计要点
+
+- **用户隔离**：所有聊天数据按 userId 命名空间隔离，不同用户数据互不干扰
+- **防抖写入**：消息持久化两层防抖（state.subscribe 层 1s + chatHistoryStore 层 500ms/会话），草稿持久化 500ms 防抖，避免频繁 IO
+- **容量限制**：每个会话最多保存 200 条消息，超出自动截断尾部旧消息
+- **临时态过滤**：仅持久化已完成消息（`status !== 'streaming'` 且 `delivery !== 'sending'`），跳过 AI 流式占位和乐观发送中的消息
+- **容错降级**：所有 localStorage 操作 try-catch 包裹，localStorage 不可用时静默降级
+- **合并而非覆盖**：`loadConversationHistory` 加载 C++ 历史时，以服务端历史为基准合并本地缓存中服务端未返回的消息
+
+### 6.4 数据生命周期
+
+```
+页面加载
+  ↓
+Bridge.init() → _initAuth() → chatHistoryStore.setUserId(userId)
+  ↓
+Bridge.connect() → loadConversations()
+  ↓
+  从 localStorage 加载每个会话的消息缓存 → state._setters.messages(convId, localMsgs)
+  ↓
+  立即渲染（不等 C++ 推送）
+  ↓
+C++ 实时推送到达 → _appendOrDedupMessage 去重合并
+  ↓
+state.notify() → _persistMessages() 防抖 1s → chatHistoryStore.saveMessages() 防抖 500ms → localStorage
+
+登出 → chatHistoryStore.clearAllMessages() + clearDrafts() → 清空缓存
+```
+
+### 6.5 关键方法
+
+| 方法 | 模块 | 说明 |
+|------|------|------|
+| `chatHistoryStore.setUserId(uid)` | chatHistoryStore | 设置当前用户 ID，用于命名空间隔离 |
+| `chatHistoryStore.saveMessages(convId, msgs)` | chatHistoryStore | 防抖保存会话消息（过滤临时态、截断 200 条） |
+| `chatHistoryStore.loadMessages(convId)` | chatHistoryStore | 加载会话的本地缓存消息 |
+| `chatHistoryStore.clearAllMessages()` | chatHistoryStore | 清除当前用户所有会话的消息缓存 |
+| `chatHistoryStore.saveDrafts(drafts)` | chatHistoryStore | 保存草稿对象到 localStorage |
+| `chatHistoryStore.loadDrafts()` | chatHistoryStore | 加载草稿对象 |
+| `Bridge.saveComposerDrafts(drafts)` | bridge/index.js | 页面调用入口，委托 chatHistoryStore |
+| `Bridge.loadComposerDrafts()` | bridge/index.js | 页面调用入口，委托 chatHistoryStore |
+
+---
+
+## 七、数据来源总结
+
+### 7.1 真实服务板块（6 个）
 
 | 板块 | 通信通道 | 关键 C++ kind |
 |------|---------|-------------|
@@ -511,13 +580,13 @@ export const mockMessages = { "#tech-talk": [...], ... };
 | 个人中心（me） | `agentchat.bridge.*` + 本地 | 主题切换为本地 localStorage |
 | 设备管理（devices） | `agentchat.bridge.*` | `devices.*` 系列 |
 
-### 6.2 本地模拟数据板块（1 个）
+### 7.2 本地模拟数据板块（1 个）
 
 | 板块 | 数据来源 | 说明 |
 |------|---------|------|
 | 聊天室（chatroom） | [js/irc/mock.js](file:///d:/project/new-c++/Debug/web/agent-chat-vanilla/html/js/irc/mock.js) | 3 个内置频道、固定用户"林晓"、所有操作为内存修改 |
 
-### 6.3 判定依据
+### 7.3 判定依据
 
 1. **Bridge 层非 mock 模式**：`isMockMode()` 返回 `false`
 2. **直连 C++ 原生宿主**：使用 `window.chrome.webview.postMessage`
@@ -548,6 +617,6 @@ npx serve -p 8080
 
 ---
 
-## 八、相关文档
+## 九、相关文档
 
 - [IRC_CHATROOM_ARCHITECTURE.md](./IRC_CHATROOM_ARCHITECTURE.md) - 聊天室 C++ 架构设计文档（RFC 1459）

@@ -96,13 +96,15 @@ public:
     // Disconnect
     void Close();
 
+    // Check if connected
+    bool IsConnected() const { return is_connected_.load(); }
+
     // Read a framed message; returns false on EOF/error.
     // Detailed error type is stored in last_recv_status_ — call get_last_recv_status()
     // AFTER ReadMessage returns false to distinguish timeout (retry/continue) from
     // fatal errors (Eof/FatalError → trigger reconnect).
  
-    bool ReadMessage(AppProtoHeader& outHeader, std::string& outPayload,
-                     int recv_timeout_ms = -1);
+    bool ReadMessage(AppProtoHeader& outHeader, std::string& outPayload);
 
     // Query the detailed result of the last ReadMessage call.
     // Call this ONLY after ReadMessage returns false to determine error type.
@@ -246,12 +248,10 @@ mutable std::mutex async_mutex_;
     std::chrono::milliseconds heartbeat_step_ms_{ blazeclaw::net::kHeartbeatStepMs };
 
     bool send_all(const char* data, int len);
-    // 接收:recv 超时由 socket 层 SO_RCVTIMEO 控制(Connect() 里 setsockopt),
-    // recv_timeout_ms 参数保留仅为 API 兼容,内部不使用。
-    // recv_all 必须明确告诉调用方"这是超时，不是 EOF"。
-    // 之前只返回 bool，PushReceiver 只能靠 get_last_error() 推测，而 Windows 上
-    // recv=0 时 get_last_error() 也是 0，会和 timeout 混在一起走 fatal 分支。
-    RecvStatus recv_all(char* buf, int len, int recv_timeout_ms = -1);
+    // recv_all 返回 bool（true=成功,false=失败）。
+    // 失败的具体原因(Eof/Timeout/FatalError)存入 last_recv_status_，
+    // 调用方通过 get_last_recv_status() 查询，以区分"服务端暂时无数据(Timeout)"和"连接断开(Eof/FatalError)"。
+    bool recv_all(char* buf, int len);
 
     void initOpenSSL();
     void cleanupOpenSSL();

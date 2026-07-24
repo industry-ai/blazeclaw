@@ -28,6 +28,20 @@ import {
   isCollaborationChatMessage,
   parseCollaborationChatMessage,
 } from '../protocol/collaborationChatEnvelope.js';
+import {
+  createAgentTaskNo,
+  buildOpenClawMessage,
+} from '../protocol/aiTaskRequest.js';
+import {
+  appendInlineAttachments,
+  stripInlineLinks,
+  sanitizeAgentReply,
+  dedupeAttachments,
+  isImageUrl,
+  isGeneratedH5CardUrl,
+  titleFromUrl,
+} from '../protocol/agentReplyParser.js';
+import { tryParseReminderDraft, hasReminderKeyword } from '../protocol/reminderParser.js';
 
 let _initialized = false;
 let _connected = false;
@@ -255,6 +269,9 @@ function init() {
   state.subscribe(_notifyInteractiveBridge);
   // 订阅 state 变化，防抖持久化聊天记录到 localStorage
   state.subscribe(_persistMessages);
+
+  // 启动通知轮询定时器（每5秒检查到期提醒）
+  _startNotificationPolling();
 }
 
 // ── 推送事件处理（实时消息、Agent 流式、群邀请等）──
@@ -273,6 +290,16 @@ function _appendOrDedupMessage(convId, msg) {
   // agentDeliveryId 去重（对齐原项目：发送者本地已展示带相同 deliveryId 的 agent 消息时，丢弃服务端广播的重复消息）
   if (msg.agentDeliveryId && list.some((m) => m.agentDeliveryId === msg.agentDeliveryId)) {
     console.log('[bridge] duplicate agent delivery ignored', { convId, agentDeliveryId: msg.agentDeliveryId });
+    return;
+  }
+
+  // AI 回复文本去重：agent.turn.final 已更新占位气泡后，chat.push 可能再推送一遍相同回复。
+  // 此时占位已是 complete 状态，无法通过 agentDeliveryId 去重（可能无 deliveryId），
+  // 通过文本匹配丢弃重复的 agent 消息。
+  if (msg.author === 'agent' && msg.text && list.some((m) =>
+    m.author === 'agent' && m.status === 'complete' && m.text === msg.text
+  )) {
+    console.log('[bridge] duplicate agent reply ignored', { convId, text: msg.text.slice(0, 80) });
     return;
   }
 
@@ -337,10 +364,15 @@ function _handlePush(msg) {
       // 兼容 data 在 payload.data 或 payload 本身的情况
       const d = payload.data || payload;
       const evt = String(payload.event || d.event || '').toUpperCase();
+      // isAgent 检测：匹配事件类型或 sender 中的 agent 关键词。
+      // 注意：sender 可能是 UTF-8 被当作 GBK 解读的乱码（如 "炎图AI助手" -> "鐐"鐐庡浘AI鍔╂墜"），
+      // 此时 "炎图"/"小炎" 不匹配，但 ASCII 的 "AI" 仍然保留，用 includes('AI') 兜底。
+      const _senderStr = String(d.sender || d.from || d.authorId || '');
       const isAgent = evt === 'AGENT_BROADCAST' ||
-        String(d.sender || d.from || d.authorId || '').toLowerCase().includes('agent') ||
-        String(d.sender || d.from || '').toLowerCase().includes('炎图') ||
-        String(d.sender || d.from || '').toLowerCase().includes('小炎');
+        _senderStr.toLowerCase().includes('agent') ||
+        _senderStr.includes('炎图') ||
+        _senderStr.includes('小炎') ||
+        _senderStr.includes('AI');
       if (evt === 'PRIVMSG' || evt === 'MESSAGE' || evt === 'AGENT_BROADCAST' ||
           evt === 'IRC_MESSAGE' || !evt) {
         // 兼容多种字段名
@@ -369,7 +401,14 @@ function _handlePush(msg) {
           break;
         }
         // 统一解码 agent 消息：relay 信封 -> delivery marker -> 解析卡片附件/清理 JSON
-        const decoded = _decodeAgentMessage(text, isAgent);
+        // 如果存在 streaming agent 占位符，且消息来自本地用户（C++ 可能通过 sender session
+        // 转发 AI 回复）或 sender 已匹配 agent 关键词，才强制 isAgent=true 走完整解析管线。
+        // 其他群成员的消息不应覆盖 AI 占位气泡，而应追加到列表末尾。
+        const _hasStreamingPlaceholder = (state.getMessages(convId) || []).some(
+          (m) => m.author === 'agent' && m.status === 'streaming'
+        );
+        const _forceAgent = _hasStreamingPlaceholder && (isSelf || isAgent);
+        const decoded = _decodeAgentMessage(text, isAgent || _forceAgent);
 
         // 占位消息更新：如果有 streaming 占位且当前消息是 AI 回复（非用户回显、非其他用户），
         // 更新占位而非新增消息。C++ 可能通过 chat.push 推送 AI 回复（sender 可能不是 agent）。
@@ -382,9 +421,11 @@ function _handlePush(msg) {
               (m.delivery === 'sending' || m.delivery === 'sent') &&
               m.text === decoded.text && m.convId === convId
             );
+            // 用户回显 -> 直接丢弃，不更新占位也不追加新消息
+            if (isEcho) break;
             // 排除其他用户的普通消息（既非自身也非 agent）
             const isOtherUser = !isSelf && !decoded.isAgent;
-            if (!isEcho && !isOtherUser) {
+            if (!isOtherUser) {
               // 是 prompt/系统指令而非 AI 回复 -> 丢弃，保持 streaming 占位等待真正回复
               if (_isPromptText(decoded.text)) {
                 break;
@@ -515,14 +556,21 @@ function _handleChatroomPush(push) {
     const selfId = state.getSessionId();
     const isSelf = sender && (sender === selfId || sender === state.getPhone() || sender === state.getUserId());
 
-    // 判断是否为 Agent 消息
+    // 判断是否为 Agent 消息（同 chat.push handler：含 includes('AI') 乱码兜底）
     const isAgent = String(sender).toLowerCase().includes('agent') ||
-      String(sender).toLowerCase().includes('炎图') ||
-      String(sender).toLowerCase().includes('小炎') ||
+      String(sender).includes('炎图') ||
+      String(sender).includes('小炎') ||
+      String(sender).includes('AI') ||
       payload.isAgent === true;
 
     // 统一解码 agent 消息：relay 信封 -> delivery marker -> 解析卡片附件/清理 JSON
-    const decoded = _decodeAgentMessage(message, isAgent);
+    // 同 chat.push handler 逻辑：仅当消息来自本地用户或 sender 已匹配 agent 关键词时，
+    // 才强制 isAgent=true。其他群成员的消息不覆盖 AI 占位气泡。
+    const _hasStreamingPlaceholder = (state.getMessages(channel) || []).some(
+      (m) => m.author === 'agent' && m.status === 'streaming'
+    );
+    const _forceAgent = _hasStreamingPlaceholder && (isSelf || isAgent);
+    const decoded = _decodeAgentMessage(message, isAgent || _forceAgent);
 
     // 占位消息更新：同 chat.push handler 的逻辑
     {
@@ -533,8 +581,10 @@ function _handleChatroomPush(push) {
           (m.delivery === 'sending' || m.delivery === 'sent') &&
           m.text === decoded.text && m.convId === channel
         );
+        // 用户回显 -> 直接丢弃，不更新占位也不追加新消息
+        if (isEcho) return;
         const isOtherUser = !isSelf && !decoded.isAgent;
-        if (!isEcho && !isOtherUser) {
+        if (!isOtherUser) {
           // 是 prompt/系统指令而非 AI 回复 -> 丢弃，保持 streaming 占位等待真正回复
           if (_isPromptText(decoded.text)) {
             return;
@@ -774,10 +824,10 @@ async function loadConversations() {
       }
     });
     state._setters.notify();
-    // 加入所有频道（与原项目一致：获取列表后批量 join，以便接收推送消息）
-    list.forEach((conv) => {
-      chatroomBridgeRequest('join_channel', { channel: conv.id }).catch(() => {});
-    });
+    // 暂时取消自动加入所有频道（新功能验证阶段避免干扰）
+    // list.forEach((conv) => {
+    //   chatroomBridgeRequest('join_channel', { channel: conv.id }).catch(() => {});
+    // });
   }
   return list;
 }
@@ -813,6 +863,7 @@ async function sendUserMessage(text, convId, options = {}) {
     authorId: state.getUserId() || 'self',
     authorName: '我',
     text,
+    attachments: options.attachments || [],
     ts: now,
     createdAt: now,
     delivery: 'sending',
@@ -829,6 +880,12 @@ async function sendUserMessage(text, convId, options = {}) {
   const shouldCallAgent = options.callAgent || (conv && (conv.type === 'agent' || conv.scope === 'personal_workspace')) || /@.+AI助手/.test(text);
   if (shouldCallAgent) {
     _requestAgentReply(text, convId);
+  }
+
+  // 个人提醒：检测 @炎图AI助手 + 提醒关键词，解析时间并创建任务
+  // 对齐 agent 项目 sendMessageService.ts _createPersonalReminderTaskFromMessage
+  if (shouldCallAgent && hasReminderKeyword(text)) {
+    _tryCreateReminderTask(text, convId, optimisticMsg.id);
   }
 
   try {
@@ -913,7 +970,8 @@ function _normalizeHistoryMessage(m, convId) {
   const isSelf = senderId && (senderId === selfId || senderId === state.getPhone() || senderId === state.getUserId());
   const isAgent = m.isAgent || String(m.sender || '').toLowerCase().includes('agent')
     || String(m.from || '').includes('炎图')
-    || String(m.sender || m.from || '').toLowerCase().includes('小炎');
+    || String(m.sender || m.from || '').toLowerCase().includes('小炎')
+    || String(m.sender || m.from || '').includes('AI');
 
   const ts = m.ts || m.timestamp || m.timestamp_ms || m.createdAt || Date.now();
 
@@ -1330,6 +1388,75 @@ async function reschedulePersonalTask(taskId, newDueAt) {
   return core.request('tasks.personal.reschedule', { taskId, newDueAt });
 }
 
+// ── 个人提醒触发：解析消息文本，创建本地任务 + 发送给 C++ ──
+// 对齐 agent 项目 sessionStore.ts _createPersonalReminderTaskFromMessage
+function _tryCreateReminderTask(text, convId, messageId) {
+  var draft = tryParseReminderDraft(text);
+  if (!draft) return null;
+
+  var taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  var reminderId = 'rem-' + taskId;
+  var task = {
+    id: taskId,
+    ownerUserId: state.getUserId() || 'self',
+    creatorUserId: state.getUserId() || 'self',
+    title: draft.title,
+    summary: '提醒时间：' + draft.delayLabel,
+    sourceConversationId: convId,
+    createdFromMessageId: messageId,
+    dueAt: draft.dueAt,
+    status: 'pending',
+    deliveryTarget: { type: 'conversation', conversationId: convId },
+    reminderId: reminderId,
+    createdAt: Date.now(),
+    syncStatus: 'syncing',
+  };
+
+  // 本地立即创建（UI 即时显示任务卡片）
+  state._setters.appendPersonalTask(task);
+  state._setters.notify();
+
+  // 异步发送给 C++ 持久化 + 注册 cron 定时
+  createPersonalTask({
+    id: taskId,
+    ownerUserId: task.ownerUserId,
+    creatorUserId: task.creatorUserId,
+    title: task.title,
+    summary: task.summary,
+    dueAt: String(task.dueAt),
+    status: 'pending',
+    sourceConversationId: convId,
+    createdFromMessageId: messageId,
+    reminderId: reminderId,
+  }).then(function (resp) {
+    var serverTaskId = (resp && (resp.taskId || resp.id)) || taskId;
+    state._setters.updatePersonalTask(taskId, { syncStatus: 'synced', serverTaskId: serverTaskId });
+    state._setters.notify();
+  }).catch(function (e) {
+    console.warn('[bridge] createPersonalTask failed:', e && e.message);
+    state._setters.updatePersonalTask(taskId, { syncStatus: 'failed', syncError: String(e && e.message || e) });
+    state._setters.notify();
+  });
+
+  return task;
+}
+
+// ── 通知轮询定时器 ──
+// 每 5 秒检查是否有任务到期，触发 UI 刷新让通知面板和红点更新
+// 对齐 agent 项目 useNowTick(5_000) 的轮询机制
+var _notificationTimer = null;
+function _startNotificationPolling() {
+  if (_notificationTimer) return;
+  _notificationTimer = setInterval(function () {
+    var now = Date.now();
+    var hasDue = (state.getPersonalTasksForCurrentUser() || []).some(function (t) {
+      return t.status === 'pending' && t.dueAt && t.dueAt <= now;
+    });
+    if (hasDue) state._setters.notify();
+  }, 5000);
+}
+
+
 // ================================================================
 // 设备通道
 // ================================================================
@@ -1397,7 +1524,9 @@ function _titleFromUrl(url) {
   try {
     const u = new URL(url);
     const last = u.pathname.split('/').filter(Boolean).pop() || u.hostname;
-    return decodeURIComponent(last).replace(/\.\w+$/, '') || u.hostname;
+    // return decodeURIComponent(last).replace(/\.\w+$/, '') || u.hostname;
+    return decodeURIComponent(last).replace(/\.html?$/i, '');
+
   } catch (e) {
     return String(url || '').slice(0, 40);
   }
@@ -1561,31 +1690,22 @@ function _parseAgentReply(text, existingAttachments = []) {
     }
   }
 
-  // 2. 从纯文本中提取 URL 作为 webview 附件
-  const urlRegex = /https?:\/\/[^\s"'<>\]\\]+/gi;
-  const found = cleanText.match(urlRegex) || [];
-  for (const url of found) {
-    if (attachments.some(a => a.url === url)) continue;
-    const isH5 = _isH5CardUrl(url);
-    attachments.push({
-      type: 'webview',
-      url,
-      title: _titleFromUrl(url),
-      objectKind: isH5 ? 'h5_card' : '',
-      artifactType: isH5 ? 'html' : '',
-    });
-  }
+  // 2. 从文本中提取 URL 作为附件（对齐 agent 项目 appendInlineWebviewAttachments）
+  // 同时匹配 markdown 链接 [label](url) 和裸 URL，比旧版仅匹配裸 URL 更完整
+  appendInlineAttachments(cleanText, attachments);
 
-  // 3. 合并 C++ 推送的附件（去重）
-  const seenUrls = new Set(attachments.map(a => a.url).filter(Boolean));
+  // 3. 合并 C++ 推送的附件 + 去重（对齐 agent 项目 dedupeAttachments）
   for (const att of existingAttachments) {
-    if (att.url && seenUrls.has(att.url)) continue;
-    if (att.url) seenUrls.add(att.url);
     attachments.push(att);
   }
+  const dedupedAttachments = dedupeAttachments(attachments);
 
-  // 4. H5 卡片存在时简化低信息文本
-  const hasH5Card = attachments.some(a =>
+  // 4. 从文本中移除已提取为附件的 URL（对齐 agent 项目 stripAttachedInlineLinks）
+  // 这样文本中不再重复显示 URL，用户看到的是干净文本 + 下方卡片
+  cleanText = stripInlineLinks(cleanText, dedupedAttachments);
+
+  // 5. H5 卡片存在时简化低信息文本
+  const hasH5Card = dedupedAttachments.some(a =>
     a.objectKind === 'h5_card' || a.sourceSkillId === 'h5-cards' ||
     a.artifactType === 'html' || (a.url && _isH5CardUrl(a.url))
   );
@@ -1596,10 +1716,14 @@ function _parseAgentReply(text, existingAttachments = []) {
     }
   }
 
-  // 5. 移除残留的 JSON 碎片行（如单独的 "outputs": [...] 片段）
+  // 6. 移除残留的 JSON 碎片行（如单独的 "outputs": [...] 片段）
   cleanText = cleanText.replace(/^[\s]*[\{\}".\[\]:,\d]+[\s]*$/gm, '').trim();
 
-  return { text: cleanText || raw, attachments };
+  // 7. 清洗 AI 回复文本（对齐 agent 项目 sanitizeAgentVisibleReply）
+  // 去除思考过程、工具细节、乱码、协议泄露等不应展示给用户的内容
+  cleanText = sanitizeAgentReply(cleanText, dedupedAttachments);
+
+  return { text: cleanText || raw, attachments: dedupedAttachments };
 }
 
 // 检测文本是否是 prompt/系统指令而非 AI 回复
@@ -1705,7 +1829,39 @@ async function _requestAgentReply(text, convId) {
   });
 
   try {
-    const result = await core.request('agent.turn', { text, conversationId: convId, ai: AppConfig.getCurrentAi() });
+    // 按照协议文档 §2.3 构建 AI_TASK_REQUEST，嵌入 prompt 文本发送给 AI 引擎。
+    // 对齐 agent 项目 openclawAgentProvider.ts buildOpenClawMessage。
+
+    // 对齐 agent 项目 sendMessageService.ts stripAgentMention：
+    // 群聊 @提及场景下，发送给 AI 的 input.text 应为去除 @XX AI助手 前缀的纯用户意图文本。
+    // 如 "@炎图AI助手 打开樱花大冒险" -> "打开樱花大冒险"
+    // 否则 AI 会把 @提及 当作查询内容，导致回复格式异常。
+    const userQuery = String(text || '')
+      .replace(/\u200B/g, '')                          // 1. 去除零宽空格
+      .replace(/@\S+AI助手\s*/g, '')                   // 2. 去除 @XX AI助手 前缀
+      .trim() || text.trim();
+
+    const taskNo = createAgentTaskNo();
+    const metadata = {
+      taskNo,
+      providerId: AppConfig.getCurrentAi(),
+      conversationId: convId,
+      userId: state.getUserId() || undefined,
+      userPhone: state.getPhone() || undefined,
+    };
+    // 构建会话上下文（对齐 agent 项目 agentRuntimeService.ts normalizeConversationContext）
+    // 取最近 4 条消息（排除当前用户消息），用于后续追问场景
+    const recentMsgs = (state.getMessages(convId) || [])
+      .filter((m) => m && m.text && !m._isLocalStream && m.id !== agentMsgId)
+      .slice(-4)
+      .map((m) => {
+        const role = m.author === 'agent' || m.isAgent ? '助手' : '用户';
+        return `${role}: ${String(m.text).slice(0, 160)}`;
+      });
+    const prompt = buildOpenClawMessage(userQuery, metadata, undefined, recentMsgs);
+    console.log('[bridge] agent.turn prompt:\n', prompt);
+    console.log('[bridge] agent.turn userQuery:', userQuery, '| taskNo:', taskNo);
+    const result = await core.request('agent.turn', { text: prompt, conversationId: convId, ai: AppConfig.getCurrentAi(), taskNo });
     if (!done) {
       const rawText = (result && (result.text || result.message || result.content))
         || (typeof result === 'string' ? result : '');
@@ -2308,6 +2464,36 @@ function parseSharedPostMessageContent(raw, convId) {
   return state.parseSharedPostMessageContent(raw, convId);
 }
 
+/**
+ * 对齐 agent 项目 postShareEnvelope.ts encodeForwardAttachmentContent：
+ * 将转发附件编码为 HTML 注释信封格式，附加到显示文本后。
+ * 格式：displayText\n<!-- agent-chat:forward-attachment <base64> -->
+ * 接收方通过 parseSharedPostMessageContent 解析信封，还原 displayText 和 attachments。
+ * 使用 HTML 注释 + base64 编码，避免服务端文本透传时 JSON 被截断或转义。
+ */
+const FORWARD_ATTACHMENT_START = '<!-- agent-chat:forward-attachment ';
+const FORWARD_ATTACHMENT_END = ' -->';
+
+function _toBase64Utf8(value) {
+  var bytes = new TextEncoder().encode(value);
+  var binary = '';
+  for (var i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }
+  return btoa(binary);
+}
+
+function _fromBase64Utf8(value) {
+  var binary = atob(value);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+  return new TextDecoder().decode(bytes);
+}
+
+function encodeForwardAttachment(displayText, title, attachments) {
+  var envelope = { version: 1, title: title, attachments: attachments };
+  var token = _toBase64Utf8(JSON.stringify(envelope));
+  return displayText + '\n' + FORWARD_ATTACHMENT_START + token + FORWARD_ATTACHMENT_END;
+}
+
 // ================================================================
 // 草稿持久化（输入框内容本地存储）
 // ================================================================
@@ -2368,7 +2554,7 @@ export default {
   // notifications
   getGroupInvitationNotifications, getPushNotifications, getLastSeenNotificationsAt, setLastSeenNotificationsAt,
   // utils
-  parseSharedPostMessageContent, resetForAuthChange,
+  parseSharedPostMessageContent, encodeForwardAttachment, resetForAuthChange,
   // drafts
   saveComposerDrafts, loadComposerDrafts,
   // pub/sub

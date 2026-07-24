@@ -153,15 +153,12 @@ $buildFiles = Get-ChildItem -Path $buildPath -Recurse -File -ErrorAction Silentl
     $_.Name -notlike "*BlazeClaw.exe" -and
     -not $_.Attributes.HasFlag([IO.FileAttributes]::Hidden) -and
     $_.DirectoryName -notlike "*WebView2*" -and
-    $_.Name -notlike "*.pdb" -and               # 排除调试符号
-    $_.Name -notlike "*.log" -and               # 排除日志文件
-    $_.Name -notlike "*_test*" -and             # 排除测试文件
+    $_.Name -notlike "*.pdb" -and
+    $_.Name -notlike "*.log" -and
+    $_.Name -notlike "*_test*" -and
     $_.Name -notlike "*Tests*" -and
-    $_.Name -notlike "vcruntime140d.dll" -and   # 排除 Debug 运行时
-    $_.Name -notlike "ucrtbased.dll" -and       # 排除 Debug UCRT
-    $_.Name -notlike "msvcr*d.dll" -and
-    $_.Name -notlike "msvcp*d.dll" -and
-    $_.Name -notlike "*.ilk"                    # 增量链接文件
+    $_.Name -notlike "*.ilk" -and
+    $_.Name -ne "session_id.txt"
 }
 $allFiles += $buildFiles
 
