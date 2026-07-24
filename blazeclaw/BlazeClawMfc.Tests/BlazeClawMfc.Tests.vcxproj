@@ -80,6 +80,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerSpeechRuntimeHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerSpeechRuntimeTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerTextToSpeechTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />

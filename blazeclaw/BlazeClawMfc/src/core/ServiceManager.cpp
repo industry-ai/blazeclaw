@@ -28,6 +28,7 @@
 #include "ServiceManagerLifecycleHelpers.h"
 #include "ServiceManagerLocalModelHelpers.h"
 #include "ServiceManagerSpeechRuntimeHelpers.h"
+#include "ServiceManagerTextToSpeechHelpers.h"
 
 #include <cctype>
 #include <chrono>
@@ -44,6 +45,7 @@
 
 namespace blazeclaw::core {
 
+	// (TTS facade forwarding implementations are defined later in this TU.)
 	namespace {
 
 		std::wstring Trim(const std::wstring& value) {
@@ -114,1326 +116,442 @@ namespace blazeclaw::core {
 			return output;
 		}
 
-		std::uint64_t CurrentEpochMs();
+	} // namespace
 
-		bool IsLlamaLocalModelId(const std::string& modelId) {
-			return servicemanager_text::IsLlamaLocalModelId(modelId);
+	// ServiceManager TTS facade forwarding implementations (placed after
+	// anonymous helpers to avoid symbol/namespace collisions)
+
+	bool ServiceManager::TextToSpeechEnabled() const noexcept {
+		return servicemanager_tts::TextToSpeechEnabled();
+	}
+
+	std::string ServiceManager::StartTextToSpeech(
+		const std::string& text,
+		const std::string& provider,
+		const std::string& model,
+		const std::string& voice,
+		const std::string& runId) {
+		m_textToSpeech.speakRequestsStarted += 1;
+		m_textToSpeech.enabled = true;
+		m_textToSpeech.ready = m_running;
+		m_textToSpeech.provider = provider.empty() ? "default" : provider;
+		m_textToSpeech.model = model.empty() ? "default" : model;
+		m_textToSpeech.voice = voice.empty() ? "default" : voice;
+		m_textToSpeech.activeUtteranceId =
+			runId.empty()
+			? std::string("utterance-") + std::to_string(m_textToSpeech.speakRequestsStarted)
+			: runId + "-" + std::to_string(m_textToSpeech.speakRequestsStarted);
+		m_textToSpeech.speaking = true;
+		m_textToSpeech.status = "speaking";
+		m_textToSpeech.error.reset();
+		m_textToSpeech.speakRequestsCompleted += 1;
+
+		return servicemanager_tts::StartTextToSpeech(text, voice, model);
+	}
+
+	void ServiceManager::StopTextToSpeech(const std::string& utteranceId) {
+		m_textToSpeech.stopRequests += 1;
+		m_textToSpeech.speaking = false;
+		m_textToSpeech.status = "stopped";
+		if (!utteranceId.empty()) {
+			m_textToSpeech.activeUtteranceId = utteranceId;
+		}
+		servicemanager_tts::StopTextToSpeech(utteranceId);
+	}
+
+	texttospeech::TextToSpeechRuntimeSnapshot ServiceManager::CollectTextToSpeechSnapshot() const noexcept {
+		return servicemanager_tts::CollectTextToSpeechSnapshot();
+	}
+
+	std::uint64_t CurrentEpochMs();
+
+	bool IsLlamaLocalModelId(const std::string& modelId) {
+		return servicemanager_text::IsLlamaLocalModelId(modelId);
+	}
+
+	std::string ToNarrow(const std::wstring& value) {
+		return servicemanager_text::ToNarrowAscii(value);
+	}
+
+
+	std::wstring TrimWideLocal(const std::wstring& value) {
+		const auto first = std::find_if_not(
+			value.begin(),
+			value.end(),
+			[](const wchar_t ch) {
+				return std::iswspace(ch) != 0;
+			});
+		const auto last = std::find_if_not(
+			value.rbegin(),
+			value.rend(),
+			[](const wchar_t ch) {
+				return std::iswspace(ch) != 0;
+			})
+			.base();
+
+		if (first >= last) {
+			return {};
 		}
 
-		std::string ToNarrow(const std::wstring& value) {
-			return servicemanager_text::ToNarrowAscii(value);
+		return std::wstring(first, last);
+	}
+
+	std::string NarrowTrimmedOrEmpty(const std::wstring& value) {
+		const std::wstring trimmed = TrimWideLocal(value);
+		if (trimmed.empty()) {
+			return {};
 		}
 
+		return ToNarrow(trimmed);
+	}
 
-		std::wstring TrimWideLocal(const std::wstring& value) {
+	std::string NormalizeFlatJsonMapToObject(const std::wstring& rawValue) {
+		const std::wstring trimmedWide = TrimWideLocal(rawValue);
+		if (trimmedWide.empty()) {
+			return {};
+		}
+
+		const std::string narrow = ToNarrow(trimmedWide);
+		if (blazeclaw::gateway::json::Trim(narrow).empty()) {
+			return {};
+		}
+
+		nlohmann::json parsed =
+			nlohmann::json::parse(narrow, nullptr, false);
+		if (parsed.is_discarded()) {
+			return {};
+		}
+
+		if (parsed.is_object()) {
+			return parsed.dump();
+		}
+
+		if (!parsed.is_array()) {
+			return {};
+		}
+
+		nlohmann::json normalized = nlohmann::json::object();
+		for (const auto& entry : parsed) {
+			if (!entry.is_object()) {
+				continue;
+			}
+
+			const auto idIt = entry.find("id");
+			if (idIt == entry.end() || !idIt->is_string()) {
+				continue;
+			}
+
+			const std::string id =
+				blazeclaw::gateway::json::Trim(idIt->get<std::string>());
+			if (id.empty()) {
+				continue;
+			}
+
+			normalized[id] = entry;
+		}
+
+		return normalized.dump();
+	}
+
+	void DrainPipeAvailable(HANDLE readPipe, std::string& output) {
+		if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
+			return;
+		}
+
+		for (;;) {
+			DWORD available = 0;
+			if (!PeekNamedPipe(
+				readPipe,
+				nullptr,
+				0,
+				nullptr,
+				&available,
+				nullptr) || available == 0) {
+				break;
+			}
+
+			char buffer[4096]{};
+			const DWORD toRead =
+				available > sizeof(buffer)
+				? static_cast<DWORD>(sizeof(buffer))
+				: available;
+			DWORD bytesRead = 0;
+			if (!ReadFile(readPipe, buffer, toRead, &bytesRead, nullptr) ||
+				bytesRead == 0) {
+				break;
+			}
+
+			output.append(buffer, buffer + bytesRead);
+		}
+	}
+
+	std::uint64_t Fnv1a64(const std::string& value) {
+		constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+		constexpr std::uint64_t kPrime = 1099511628211ULL;
+		std::uint64_t hash = kOffset;
+		for (const unsigned char ch : value) {
+			hash ^= static_cast<std::uint64_t>(ch);
+			hash *= kPrime;
+		}
+		return hash;
+	}
+
+	std::string BuildHexLower(std::uint64_t value) {
+		std::ostringstream out;
+		out << std::hex << std::nouppercase << value;
+		return out.str();
+	}
+
+	std::string BuildNormalizedPromptPreview(
+		const std::wstring& normalizedPrompt,
+		const std::size_t maxChars) {
+		if (maxChars == 0) {
+			return {};
+		}
+
+		const std::wstring truncated =
+			normalizedPrompt.size() > maxChars
+			? normalizedPrompt.substr(0, maxChars)
+			: normalizedPrompt;
+		return WideToUtf8Local(truncated);
+	}
+
+	std::wstring ToWide(const std::string& value) {
+		if (value.empty()) {
+			return {};
+		}
+
+		const int needed = MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0);
+		if (needed <= 0) {
+			return {};
+		}
+
+		std::wstring output(static_cast<std::size_t>(needed), L'\0');
+		MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			needed);
+		return output;
+	}
+
+	std::string EscapeJsonUtf8(const std::string& value) {
+		std::string escaped;
+		escaped.reserve(value.size() + 8);
+		for (const char ch : value) {
+			switch (ch) {
+			case '"':
+				escaped += "\\\"";
+				break;
+			case '\\':
+				escaped += "\\\\";
+				break;
+			case '\n':
+				escaped += "\\n";
+				break;
+			case '\r':
+				escaped += "\\r";
+				break;
+			case '\t':
+				escaped += "\\t";
+				break;
+			default:
+				escaped.push_back(ch);
+				break;
+			}
+		}
+
+		return escaped;
+	}
+
+	void EmitDeepSeekDiagnostic(
+		const char* stage,
+		const std::string& detail) {
+		const std::string safeStage =
+			(stage == nullptr || std::string(stage).empty())
+			? "unknown"
+			: std::string(stage);
+		TRACE(
+			"[DeepSeek][%s] %s\n",
+			safeStage.c_str(),
+			detail.c_str());
+	}
+
+	std::string MaskSecretForTrace(const std::wstring& value) {
+		if (value.empty()) {
+			return "<empty>";
+		}
+
+		if (value.size() <= 4) {
+			return "<len=" + std::to_string(value.size()) + ">";
+		}
+
+		const std::wstring masked =
+			value.substr(0, 2) +
+			L"***" +
+			value.substr(value.size() - 2) +
+			L"<len=" + std::to_wstring(value.size()) + L">";
+		return ToNarrow(masked);
+	}
+
+	void EmitBaiduRuntimeDiagnostic(
+		const char* stage,
+		const std::string& detail) {
+		const std::string safeStage =
+			(stage == nullptr || std::string(stage).empty())
+			? "unknown"
+			: std::string(stage);
+		TRACE(
+			"[BaiduRuntime][%s] %s\n",
+			safeStage.c_str(),
+			detail.c_str());
+	}
+
+	std::string TruncateDiagnosticText(
+		const std::string& value,
+		const std::size_t maxChars = 1200) {
+		if (value.size() <= maxChars) {
+			return value;
+		}
+
+		if (maxChars <= 24) {
+			return value.substr(0, maxChars);
+		}
+
+		return value.substr(0, maxChars - 24) + "...(truncated)";
+	}
+
+	std::string LastNonEmptyLine(const std::string& text) {
+		std::string line;
+		for (std::size_t i = text.size(); i > 0; --i) {
+			const char ch = text[i - 1];
+			if (ch == '\n' || ch == '\r') {
+				if (!line.empty()) {
+					std::reverse(line.begin(), line.end());
+					return blazeclaw::gateway::json::Trim(line);
+				}
+				continue;
+			}
+
+			line.push_back(ch);
+		}
+
+		if (line.empty()) {
+			return {};
+		}
+
+		std::reverse(line.begin(), line.end());
+		return blazeclaw::gateway::json::Trim(line);
+	}
+
+	std::optional<nlohmann::json> TryParseTrailingJsonObject(const std::string& text) {
+		const std::string candidate = LastNonEmptyLine(text);
+		if (candidate.empty()) {
+			return std::nullopt;
+		}
+
+		nlohmann::json parsed = nlohmann::json::parse(candidate, nullptr, false);
+		if (!parsed.is_object()) {
+			return std::nullopt;
+		}
+
+		return parsed;
+	}
+
+	std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
+		auto trimLocal = [](const std::wstring& value) {
 			const auto first = std::find_if_not(
 				value.begin(),
 				value.end(),
-				[](const wchar_t ch) {
-					return std::iswspace(ch) != 0;
-				});
+				[](const wchar_t ch) { return std::iswspace(ch) != 0; });
 			const auto last = std::find_if_not(
 				value.rbegin(),
 				value.rend(),
-				[](const wchar_t ch) {
-					return std::iswspace(ch) != 0;
-				})
+				[](const wchar_t ch) { return std::iswspace(ch) != 0; })
 				.base();
 
 			if (first >= last) {
-				return {};
+				return std::wstring{};
 			}
 
 			return std::wstring(first, last);
-		}
-
-		std::string NarrowTrimmedOrEmpty(const std::wstring& value) {
-			const std::wstring trimmed = TrimWideLocal(value);
-			if (trimmed.empty()) {
-				return {};
-			}
-
-			return ToNarrow(trimmed);
-		}
-
-		std::string NormalizeFlatJsonMapToObject(const std::wstring& rawValue) {
-			const std::wstring trimmedWide = TrimWideLocal(rawValue);
-			if (trimmedWide.empty()) {
-				return {};
-			}
-
-			const std::string narrow = ToNarrow(trimmedWide);
-			if (blazeclaw::gateway::json::Trim(narrow).empty()) {
-				return {};
-			}
-
-			nlohmann::json parsed =
-				nlohmann::json::parse(narrow, nullptr, false);
-			if (parsed.is_discarded()) {
-				return {};
-			}
-
-			if (parsed.is_object()) {
-				return parsed.dump();
-			}
-
-			if (!parsed.is_array()) {
-				return {};
-			}
-
-			nlohmann::json normalized = nlohmann::json::object();
-			for (const auto& entry : parsed) {
-				if (!entry.is_object()) {
-					continue;
-				}
-
-				const auto idIt = entry.find("id");
-				if (idIt == entry.end() || !idIt->is_string()) {
-					continue;
-				}
-
-				const std::string id =
-					blazeclaw::gateway::json::Trim(idIt->get<std::string>());
-				if (id.empty()) {
-					continue;
-				}
-
-				normalized[id] = entry;
-			}
-
-			return normalized.dump();
-		}
-
-		void DrainPipeAvailable(HANDLE readPipe, std::string& output) {
-			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
-				return;
-			}
-
-			for (;;) {
-				DWORD available = 0;
-				if (!PeekNamedPipe(
-					readPipe,
-					nullptr,
-					0,
-					nullptr,
-					&available,
-					nullptr) || available == 0) {
-					break;
-				}
-
-				char buffer[4096]{};
-				const DWORD toRead =
-					available > sizeof(buffer)
-					? static_cast<DWORD>(sizeof(buffer))
-					: available;
-				DWORD bytesRead = 0;
-				if (!ReadFile(readPipe, buffer, toRead, &bytesRead, nullptr) ||
-					bytesRead == 0) {
-					break;
-				}
-
-				output.append(buffer, buffer + bytesRead);
-			}
-		}
-
-		std::uint64_t Fnv1a64(const std::string& value) {
-			constexpr std::uint64_t kOffset = 14695981039346656037ULL;
-			constexpr std::uint64_t kPrime = 1099511628211ULL;
-			std::uint64_t hash = kOffset;
-			for (const unsigned char ch : value) {
-				hash ^= static_cast<std::uint64_t>(ch);
-				hash *= kPrime;
-			}
-			return hash;
-		}
-
-		std::string BuildHexLower(std::uint64_t value) {
-			std::ostringstream out;
-			out << std::hex << std::nouppercase << value;
-			return out.str();
-		}
-
-		std::string BuildNormalizedPromptPreview(
-			const std::wstring& normalizedPrompt,
-			const std::size_t maxChars) {
-			if (maxChars == 0) {
-				return {};
-			}
-
-			const std::wstring truncated =
-				normalizedPrompt.size() > maxChars
-				? normalizedPrompt.substr(0, maxChars)
-				: normalizedPrompt;
-			return WideToUtf8Local(truncated);
-		}
-
-		std::wstring ToWide(const std::string& value) {
-			if (value.empty()) {
-				return {};
-			}
-
-			const int needed = MultiByteToWideChar(
-				CP_UTF8,
-				0,
-				value.c_str(),
-				static_cast<int>(value.size()),
-				nullptr,
-				0);
-			if (needed <= 0) {
-				return {};
-			}
-
-			std::wstring output(static_cast<std::size_t>(needed), L'\0');
-			MultiByteToWideChar(
-				CP_UTF8,
-				0,
-				value.c_str(),
-				static_cast<int>(value.size()),
-				output.data(),
-				needed);
-			return output;
-		}
-
-		std::string EscapeJsonUtf8(const std::string& value) {
-			std::string escaped;
-			escaped.reserve(value.size() + 8);
-			for (const char ch : value) {
-				switch (ch) {
-				case '"':
-					escaped += "\\\"";
-					break;
-				case '\\':
-					escaped += "\\\\";
-					break;
-				case '\n':
-					escaped += "\\n";
-					break;
-				case '\r':
-					escaped += "\\r";
-					break;
-				case '\t':
-					escaped += "\\t";
-					break;
-				default:
-					escaped.push_back(ch);
-					break;
-				}
-			}
-
-			return escaped;
-		}
-
-		void EmitDeepSeekDiagnostic(
-			const char* stage,
-			const std::string& detail) {
-			const std::string safeStage =
-				(stage == nullptr || std::string(stage).empty())
-				? "unknown"
-				: std::string(stage);
-			TRACE(
-				"[DeepSeek][%s] %s\n",
-				safeStage.c_str(),
-				detail.c_str());
-		}
-
-		std::string MaskSecretForTrace(const std::wstring& value) {
-			if (value.empty()) {
-				return "<empty>";
-			}
-
-			if (value.size() <= 4) {
-				return "<len=" + std::to_string(value.size()) + ">";
-			}
-
-			const std::wstring masked =
-				value.substr(0, 2) +
-				L"***" +
-				value.substr(value.size() - 2) +
-				L"<len=" + std::to_wstring(value.size()) + L">";
-			return ToNarrow(masked);
-		}
-
-		void EmitBaiduRuntimeDiagnostic(
-			const char* stage,
-			const std::string& detail) {
-			const std::string safeStage =
-				(stage == nullptr || std::string(stage).empty())
-				? "unknown"
-				: std::string(stage);
-			TRACE(
-				"[BaiduRuntime][%s] %s\n",
-				safeStage.c_str(),
-				detail.c_str());
-		}
-
-		std::string TruncateDiagnosticText(
-			const std::string& value,
-			const std::size_t maxChars = 1200) {
-			if (value.size() <= maxChars) {
-				return value;
-			}
-
-			if (maxChars <= 24) {
-				return value.substr(0, maxChars);
-			}
-
-			return value.substr(0, maxChars - 24) + "...(truncated)";
-		}
-
-		std::string LastNonEmptyLine(const std::string& text) {
-			std::string line;
-			for (std::size_t i = text.size(); i > 0; --i) {
-				const char ch = text[i - 1];
-				if (ch == '\n' || ch == '\r') {
-					if (!line.empty()) {
-						std::reverse(line.begin(), line.end());
-						return blazeclaw::gateway::json::Trim(line);
-					}
-					continue;
-				}
-
-				line.push_back(ch);
-			}
-
-			if (line.empty()) {
-				return {};
-			}
-
-			std::reverse(line.begin(), line.end());
-			return blazeclaw::gateway::json::Trim(line);
-		}
-
-		std::optional<nlohmann::json> TryParseTrailingJsonObject(const std::string& text) {
-			const std::string candidate = LastNonEmptyLine(text);
-			if (candidate.empty()) {
-				return std::nullopt;
-			}
-
-			nlohmann::json parsed = nlohmann::json::parse(candidate, nullptr, false);
-			if (!parsed.is_object()) {
-				return std::nullopt;
-			}
-
-			return parsed;
-		}
-
-		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
-			auto trimLocal = [](const std::wstring& value) {
-				const auto first = std::find_if_not(
-					value.begin(),
-					value.end(),
-					[](const wchar_t ch) { return std::iswspace(ch) != 0; });
-				const auto last = std::find_if_not(
-					value.rbegin(),
-					value.rend(),
-					[](const wchar_t ch) { return std::iswspace(ch) != 0; })
-					.base();
-
-				if (first >= last) {
-					return std::wstring{};
-				}
-
-				return std::wstring(first, last);
-				};
-
-			auto toLowerWideLocal = [](std::wstring value) {
-				std::transform(
-					value.begin(),
-					value.end(),
-					value.begin(),
-					[](const wchar_t ch) {
-						return static_cast<wchar_t>(std::towlower(ch));
-					});
-				return value;
-				};
-
-			std::vector<std::filesystem::path> candidates;
-
-			const std::vector<std::wstring> configFolders = {
-				L"baidu-search",
-				L"baidu-search-search-web",
-				L"baidu-search-search",
-				L"baidu_search_search_web",
 			};
 
-			wchar_t profilePath[MAX_PATH]{};
-			const DWORD chars = GetEnvironmentVariableW(
-				L"USERPROFILE",
-				profilePath,
-				MAX_PATH);
-			if (chars > 0 && chars < MAX_PATH) {
-				for (const auto& folder : configFolders) {
-					candidates.push_back(
-						std::filesystem::path(profilePath) /
-						L".config" /
-						folder /
-						L".env");
-				}
-			}
+		auto toLowerWideLocal = [](std::wstring value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](const wchar_t ch) {
+					return static_cast<wchar_t>(std::towlower(ch));
+				});
+			return value;
+			};
 
-			std::error_code ec;
-			const auto cwd = std::filesystem::current_path(ec);
-			if (!ec) {
+		std::vector<std::filesystem::path> candidates;
+
+		const std::vector<std::wstring> configFolders = {
+			L"baidu-search",
+			L"baidu-search-search-web",
+			L"baidu-search-search",
+			L"baidu_search_search_web",
+		};
+
+		wchar_t profilePath[MAX_PATH]{};
+		const DWORD chars = GetEnvironmentVariableW(
+			L"USERPROFILE",
+			profilePath,
+			MAX_PATH);
+		if (chars > 0 && chars < MAX_PATH) {
+			for (const auto& folder : configFolders) {
 				candidates.push_back(
-					cwd /
+					std::filesystem::path(profilePath) /
+					L".config" /
+					folder /
+					L".env");
+			}
+		}
+
+		std::error_code ec;
+		const auto cwd = std::filesystem::current_path(ec);
+		if (!ec) {
+			candidates.push_back(
+				cwd /
+				L"blazeclaw" /
+				L"skills" /
+				L"baidu-search" /
+				L".env");
+			candidates.push_back(
+				cwd /
+				L"skills" /
+				L"baidu-search" /
+				L".env");
+		}
+
+		wchar_t modulePath[MAX_PATH]{};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+			std::filesystem::path cursor =
+				std::filesystem::path(modulePath).parent_path();
+			while (!cursor.empty()) {
+				candidates.push_back(
+					cursor /
 					L"blazeclaw" /
 					L"skills" /
 					L"baidu-search" /
 					L".env");
 				candidates.push_back(
-					cwd /
+					cursor /
 					L"skills" /
 					L"baidu-search" /
 					L".env");
-			}
-
-			wchar_t modulePath[MAX_PATH]{};
-			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
-				std::filesystem::path cursor =
-					std::filesystem::path(modulePath).parent_path();
-				while (!cursor.empty()) {
-					candidates.push_back(
-						cursor /
-						L"blazeclaw" /
-						L"skills" /
-						L"baidu-search" /
-						L".env");
-					candidates.push_back(
-						cursor /
-						L"skills" /
-						L"baidu-search" /
-						L".env");
-
-					if (!cursor.has_parent_path()) {
-						break;
-					}
-
-					auto parent = cursor.parent_path();
-					if (parent == cursor) {
-						break;
-					}
-
-					cursor = parent;
-				}
-			}
-
-			for (const auto& path : candidates) {
-				std::error_code existsError;
-				if (!std::filesystem::exists(path, existsError) || existsError) {
-					continue;
-				}
-
-				std::wifstream input(path);
-				if (!input.is_open()) {
-					continue;
-				}
-
-				std::wstring line;
-				while (std::getline(input, line)) {
-					const std::wstring trimmedLine = trimLocal(line);
-					if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
-						continue;
-					}
-
-					const auto equals = trimmedLine.find(L'=');
-					if (equals == std::wstring::npos || equals == 0) {
-						continue;
-					}
-
-					const std::wstring key =
-						toLowerWideLocal(trimLocal(trimmedLine.substr(0, equals)));
-					std::wstring value = trimLocal(trimmedLine.substr(equals + 1));
-					if (value.size() >= 2 &&
-						((value.front() == L'"' && value.back() == L'"') ||
-							(value.front() == L'\'' && value.back() == L'\''))) {
-						value = value.substr(1, value.size() - 2);
-					}
-
-					if (value.empty()) {
-						continue;
-					}
-
-					if (key == L"baidu_api_key" || key == L"api_key") {
-						return value;
-					}
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		void EnsureBaiduApiKeyRuntimeEnv() {
-			wchar_t* inheritedValue = nullptr;
-			std::size_t inheritedLength = 0;
-			std::wstring inheritedKey;
-			if (_wdupenv_s(
-				&inheritedValue,
-				&inheritedLength,
-				L"BAIDU_API_KEY") == 0 &&
-				inheritedValue != nullptr) {
-				inheritedKey.assign(inheritedValue);
-				free(inheritedValue);
-			}
-
-			const auto persisted = ResolveBaiduApiKeyFromPersistedConfig();
-			if (persisted.has_value() && !persisted->empty()) {
-				_wputenv_s(L"BAIDU_API_KEY", persisted.value().c_str());
-				EmitBaiduRuntimeDiagnostic(
-					"env",
-					"BAIDU_API_KEY source=persisted set=true value=" +
-					MaskSecretForTrace(persisted.value()));
-				return;
-			}
-
-			if (!inheritedKey.empty()) {
-				EmitBaiduRuntimeDiagnostic(
-					"env",
-					"BAIDU_API_KEY source=process set=false inherited=true value=" +
-					MaskSecretForTrace(inheritedKey));
-				return;
-			}
-
-			EmitBaiduRuntimeDiagnostic(
-				"env",
-				"BAIDU_API_KEY source=none set=false inherited=false value=<empty>");
-
-			wchar_t* envValue = nullptr;
-			std::size_t envLength = 0;
-			if (_wdupenv_s(
-				&envValue,
-				&envLength,
-				L"BAIDU_API_KEY") == 0 &&
-				envValue != nullptr) {
-				free(envValue);
-			}
-		}
-
-		bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
-			wchar_t* value = nullptr;
-			std::size_t length = 0;
-			if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr ||
-				length == 0) {
-				if (value != nullptr) {
-					free(value);
-				}
-
-				return fallback;
-			}
-
-			std::wstring normalized;
-			normalized.reserve(length);
-			for (std::size_t i = 0; i < length && value[i] != L'\0'; ++i) {
-				normalized.push_back(static_cast<wchar_t>(std::towlower(value[i])));
-			}
-			free(value);
-
-			if (normalized == L"1" || normalized == L"true" || normalized == L"yes" ||
-				normalized == L"on") {
-				return true;
-			}
-
-			if (normalized == L"0" || normalized == L"false" || normalized == L"no" ||
-				normalized == L"off") {
-				return false;
-			}
-
-			return fallback;
-		}
-
-		bool PersistSkillConfigEnvViaHostDocument(
-			const std::string& skill,
-			const std::string& envContent,
-			std::string& outError,
-			std::filesystem::path& outPath) {
-			CBlazeClawMFCDoc* activeDoc = nullptr;
-			auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-			if (mainFrame != nullptr) {
-				auto* activeChild = DYNAMIC_DOWNCAST(
-					CMDIChildWndEx,
-					mainFrame->MDIGetActive());
-				if (activeChild != nullptr) {
-					auto* activeView = DYNAMIC_DOWNCAST(
-						CBlazeClawMFCView,
-						activeChild->GetActiveView());
-					if (activeView != nullptr) {
-						activeDoc = activeView->GetDocument();
-					}
-				}
-			}
-
-			if (activeDoc == nullptr) {
-				outError = "No active document context for skill update.";
-				return false;
-			}
-
-			return activeDoc->SaveSkillConfigEnv(
-				skill,
-				envContent,
-				outError,
-				&outPath);
-		}
-
-		void RefreshSkillViewViaHostWindow() {
-			auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-			if (mainFrame != nullptr) {
-				mainFrame->RefreshSkillView();
-			}
-		}
-
-		std::string ToLowerAscii(const std::string& value) {
-			std::string lowered = value;
-			std::transform(
-				lowered.begin(),
-				lowered.end(),
-				lowered.begin(),
-				[](const unsigned char ch) {
-					return static_cast<char>(std::tolower(ch));
-				});
-			return lowered;
-		}
-
-		bool ContainsAnyFragment(
-			const std::string& lowerText,
-			std::initializer_list<const char*> fragments) {
-			for (const auto* fragment : fragments) {
-				if (fragment == nullptr || *fragment == '\0') {
-					continue;
-				}
-				if (lowerText.find(fragment) != std::string::npos) {
-					return true;
-				}
-			}
-			return false;
-		}
-
-		bool ContainsAnyWideFragment(
-			const std::wstring& text,
-			std::initializer_list<const wchar_t*> fragments) {
-			for (const auto* fragment : fragments) {
-				if (fragment == nullptr || *fragment == L'\0') {
-					continue;
-				}
-				if (text.find(fragment) != std::wstring::npos) {
-					return true;
-				}
-			}
-			return false;
-		}
-
-
-		std::string TrimAsciiLocal(const std::string& value) {
-			const auto first = std::find_if_not(
-				value.begin(),
-				value.end(),
-				[](const unsigned char ch) {
-					return std::isspace(ch) != 0;
-				});
-			const auto last = std::find_if_not(
-				value.rbegin(),
-				value.rend(),
-				[](const unsigned char ch) {
-					return std::isspace(ch) != 0;
-				}).base();
-
-			if (first >= last) {
-				return {};
-			}
-
-			return std::string(first, last);
-		}
-
-		std::optional<std::string> TryExtractImageGeneratorPrompt(
-			const std::string& commandBodyNormalized) {
-			const std::string trimmed = TrimAsciiLocal(commandBodyNormalized);
-			if (trimmed.empty() || trimmed.front() == '/') {
-				return std::nullopt;
-			}
-
-			const std::string lower = ToLowerAscii(trimmed);
-			const bool hasImageGenerator =
-				lower.find("image-generator") != std::string::npos ||
-				lower.find("image generator") != std::string::npos;
-			if (!hasImageGenerator) {
-				return std::nullopt;
-			}
-
-			const std::wstring wide = Utf8ToWideLocal(trimmed);
-			const bool hasInvokeSignal =
-				ContainsAnyFragment(
-					lower,
-					{ "call", "invoke", "use", "run", "with" }) ||
-				ContainsAnyWideFragment(
-					wide,
-					{ L"调用", L"使用", L"用", L"请用" });
-			if (!hasInvokeSignal) {
-				return std::nullopt;
-			}
-
-			std::string prompt;
-			const std::size_t generatePos = lower.find("生成");
-			if (generatePos != std::string::npos) {
-				prompt = TrimAsciiLocal(trimmed.substr(generatePos + std::string("生成").size()));
-			}
-
-			if (prompt.empty()) {
-				const std::size_t tokenPos = lower.find("image-generator");
-				if (tokenPos != std::string::npos) {
-					prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image-generator").size()));
-				}
-			}
-
-			if (prompt.empty()) {
-				const std::size_t tokenPos = lower.find("image generator");
-				if (tokenPos != std::string::npos) {
-					prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image generator").size()));
-				}
-			}
-
-			if (!prompt.empty()) {
-				while (!prompt.empty() &&
-					(prompt.front() == '`' ||
-						prompt.front() == '"' ||
-						prompt.front() == '\'' ||
-						prompt.front() == ',' ||
-						prompt.front() == ':' ||
-						prompt.front() == ';')) {
-					prompt.erase(prompt.begin());
-				}
-				prompt = TrimAsciiLocal(prompt);
-			}
-
-			return prompt;
-		}
-
-
-		bool LooksLikeJsonObjectShapeLocal(const std::string& value) {
-			const std::wstring trimmed = Trim(Utf8ToWideLocal(value));
-			if (trimmed.size() < 2) {
-				return false;
-			}
-
-			return trimmed.front() == L'{' && trimmed.back() == L'}';
-		}
-
-		std::wstring NormalizeInlineTriggerText(const std::wstring& input) {
-			std::wstring normalized;
-			normalized.reserve(input.size());
-			bool previousSpace = false;
-			for (const auto ch : input) {
-				const wchar_t lowered =
-					static_cast<wchar_t>(std::towlower(ch));
-				const bool isAlphaNum =
-					(lowered >= L'a' && lowered <= L'z') ||
-					(lowered >= L'0' && lowered <= L'9') ||
-					(lowered >= 0x4E00 && lowered <= 0x9FFF);
-				if (isAlphaNum) {
-					normalized.push_back(lowered);
-					previousSpace = false;
-					continue;
-				}
-
-				if (!previousSpace) {
-					normalized.push_back(L' ');
-					previousSpace = true;
-				}
-			}
-
-			return Trim(normalized);
-		}
-
-		bool ContainsNormalizedTriggerHint(
-			const std::wstring& normalizedPrompt,
-			const std::wstring& triggerHint) {
-			const std::wstring normalizedHint =
-				NormalizeInlineTriggerText(triggerHint);
-			if (normalizedHint.empty()) {
-				return false;
-			}
-
-			const std::wstring promptNoSpace = [&normalizedPrompt]() {
-				std::wstring value;
-				value.reserve(normalizedPrompt.size());
-				for (const auto ch : normalizedPrompt) {
-					if (ch != L' ') {
-						value.push_back(ch);
-					}
-				}
-				return value;
-			}();
-			const std::wstring hintNoSpace = [&normalizedHint]() {
-				std::wstring value;
-				value.reserve(normalizedHint.size());
-				for (const auto ch : normalizedHint) {
-					if (ch != L' ') {
-						value.push_back(ch);
-					}
-				}
-				return value;
-			}();
-
-			if (promptNoSpace.empty() || hintNoSpace.empty()) {
-				return false;
-			}
-
-			if (normalizedPrompt == normalizedHint) {
-				return true;
-			}
-
-			if (promptNoSpace == hintNoSpace) {
-				return true;
-			}
-
-			if (normalizedPrompt.find(normalizedHint) != std::wstring::npos) {
-				return true;
-			}
-
-			return promptNoSpace.find(hintNoSpace) != std::wstring::npos;
-		}
-
-		enum class GeneratedTriggerMatchMode {
-			None = 0,
-			SpaceStrippedContains = 1,
-			Contains = 2,
-			NormalizedExact = 3,
-			Exact = 4,
-		};
-
-		struct GeneratedTriggerHintMatchResult {
-			GeneratedTriggerMatchMode mode = GeneratedTriggerMatchMode::None;
-			int score = 0;
-			std::wstring normalizedHint;
-			std::size_t normalizedHintNoSpaceLength = 0;
-		};
-
-		struct GeneratedOpenClawRoutingDecisionDiagnostics {
-			std::wstring normalizedPrompt;
-			std::size_t candidateCountConsidered = 0;
-			std::wstring matchedSkillKey;
-			std::wstring matchedTriggerHint;
-			GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
-		};
-
-		std::wstring RemoveWideSpaces(const std::wstring& value) {
-			std::wstring collapsed;
-			collapsed.reserve(value.size());
-			for (const auto ch : value) {
-				if (ch != L' ') {
-					collapsed.push_back(ch);
-				}
-			}
-			return collapsed;
-		}
-
-		GeneratedTriggerHintMatchResult EvaluateGeneratedTriggerHintMatch(
-			const std::wstring& normalizedPrompt,
-			const std::wstring& triggerHint) {
-			GeneratedTriggerHintMatchResult result;
-			if (!ContainsNormalizedTriggerHint(normalizedPrompt, triggerHint)) {
-				return result;
-			}
-
-			result.normalizedHint = NormalizeInlineTriggerText(triggerHint);
-			if (result.normalizedHint.empty() || normalizedPrompt.empty()) {
-				return result;
-			}
-
-			const std::wstring promptNoSpace = RemoveWideSpaces(normalizedPrompt);
-			const std::wstring hintNoSpace = RemoveWideSpaces(result.normalizedHint);
-			if (promptNoSpace.empty() || hintNoSpace.empty()) {
-				return result;
-			}
-
-			result.normalizedHintNoSpaceLength = hintNoSpace.size();
-			if (normalizedPrompt == result.normalizedHint) {
-				result.mode = GeneratedTriggerMatchMode::Exact;
-				result.score = 400;
-				return result;
-			}
-
-			if (promptNoSpace == hintNoSpace) {
-				result.mode = GeneratedTriggerMatchMode::NormalizedExact;
-				result.score = 300;
-				return result;
-			}
-
-			if (normalizedPrompt.find(result.normalizedHint) != std::wstring::npos) {
-				result.mode = GeneratedTriggerMatchMode::Contains;
-				result.score = 200;
-				return result;
-			}
-
-			if (promptNoSpace.find(hintNoSpace) != std::wstring::npos) {
-				result.mode = GeneratedTriggerMatchMode::SpaceStrippedContains;
-				result.score = 100;
-				return result;
-			}
-
-			return result;
-		}
-
-		std::string GeneratedTriggerMatchModeToTelemetry(
-			const GeneratedTriggerMatchMode mode) {
-			switch (mode) {
-			case GeneratedTriggerMatchMode::Exact:
-				return "exact";
-			case GeneratedTriggerMatchMode::NormalizedExact:
-				return "normalized-exact";
-			case GeneratedTriggerMatchMode::Contains:
-				return "contains";
-			case GeneratedTriggerMatchMode::SpaceStrippedContains:
-				return "space-stripped contains";
-			default:
-				return "none";
-			}
-		}
-
-		std::wstring NormalizeOpenClawGeneratedToolToken(
-			const std::wstring& rawToken) {
-			std::wstring token;
-			token.reserve(rawToken.size());
-			for (const auto ch : rawToken) {
-				const wchar_t lowered =
-					static_cast<wchar_t>(std::towlower(ch));
-				const bool alphaNum =
-					(lowered >= L'a' && lowered <= L'z') ||
-					(lowered >= L'0' && lowered <= L'9');
-				if (alphaNum) {
-					token.push_back(lowered);
-					continue;
-				}
-
-				if (lowered == L'-' || lowered == L'_' || lowered == L'.' ||
-					lowered == L'/' || lowered == L'\\') {
-					if (!token.empty() && token.back() != L'_') {
-						token.push_back(L'_');
-					}
-				}
-			}
-
-			while (!token.empty() && token.front() == L'_') {
-				token.erase(token.begin());
-			}
-			while (!token.empty() && token.back() == L'_') {
-				token.pop_back();
-			}
-
-			if (token.empty()) {
-				token = L"openclaw_skill";
-			}
-
-			return token;
-		}
-
-		std::string BuildGeneratedOpenClawToolName(
-			const OpenClawOriginalExtractedRuntimeContractSpec& extracted,
-			const std::wstring& fallbackSkillName) {
-			std::wstring key = Trim(extracted.skillKey);
-			if (key.empty()) {
-				key = Trim(fallbackSkillName);
-			}
-
-			const std::wstring normalizedToken =
-				NormalizeOpenClawGeneratedToolToken(key);
-			return ToNarrow(normalizedToken) + ".openclaw.generated";
-		}
-
-		bool IsGeneratedOpenClawToolId(const std::string& toolId) {
-			const std::string trimmed =
-				blazeclaw::gateway::json::Trim(toolId);
-			return !trimmed.empty() &&
-				trimmed.size() >= std::string(".openclaw.generated").size() &&
-				trimmed.rfind(".openclaw.generated") ==
-				(trimmed.size() - std::string(".openclaw.generated").size());
-		}
-
-		const SkillsCatalogEntry* FindGeneratedOpenClawCatalogEntryByToolId(
-			const std::vector<SkillsCatalogEntry>& catalogEntries,
-			const std::string& toolId) {
-			for (const auto& entry : catalogEntries) {
-				if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
-					!entry.openClawOriginalActivationState.has_value() ||
-					entry.openClawOriginalActivationState.value() !=
-					SkillsOpenClawOriginalActivationState::ToolEnabled ||
-					!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
-					!entry.openClawOriginalExtractedRuntimeContract->complete) {
-					continue;
-				}
-
-				const std::string generatedToolName =
-					BuildGeneratedOpenClawToolName(
-						entry.openClawOriginalExtractedRuntimeContract.value(),
-						entry.skillName);
-				if (generatedToolName == toolId) {
-					return &entry;
-				}
-			}
-
-			return nullptr;
-		}
-
-		std::optional<blazeclaw::gateway::ToolExecuteResultV2>
-			TryExecuteGeneratedOpenClawConstantOutputTool(
-				const std::vector<SkillsCatalogEntry>& catalogEntries,
-				const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-			if (!IsGeneratedOpenClawToolId(request.tool)) {
-				return std::nullopt;
-			}
-
-			const SkillsCatalogEntry* matchedEntry =
-				FindGeneratedOpenClawCatalogEntryByToolId(catalogEntries, request.tool);
-			if (matchedEntry == nullptr) {
-				return std::nullopt;
-			}
-
-			const auto& extracted =
-				matchedEntry->openClawOriginalExtractedRuntimeContract.value();
-			if (!extracted.output.has_value()) {
-				return std::nullopt;
-			}
-
-			const auto startedAtMs = CurrentEpochMs();
-			blazeclaw::gateway::ToolExecuteResultV2 result;
-			result.tool = request.tool;
-			result.executed = true;
-			result.status = "ok";
-			result.errorCode.clear();
-			result.errorMessage.clear();
-			result.correlationId = request.correlationId;
-			result.startedAtMs = startedAtMs;
-
-			nlohmann::json payload = nlohmann::json::object();
-			const auto& output = extracted.output.value();
-			const std::string outputKind = ToNarrow(Trim(output.kind));
-			const std::string outputTitle = ToNarrow(Trim(output.title));
-			const std::string outputUrl = ToNarrow(Trim(output.url));
-
-			if (!outputKind.empty()) {
-				payload["kind"] = outputKind;
-			}
-			if (!outputTitle.empty()) {
-				payload["title"] = outputTitle;
-			}
-			if (!outputUrl.empty()) {
-				payload["url"] = outputUrl;
-			}
-
-			if (!outputKind.empty() || !outputUrl.empty()) {
-				nlohmann::json outputItem = nlohmann::json::object();
-				if (!outputKind.empty()) {
-					outputItem["type"] = outputKind;
-				}
-				if (!outputTitle.empty()) {
-					outputItem["title"] = outputTitle;
-				}
-				if (!outputUrl.empty()) {
-					outputItem["url"] = outputUrl;
-				}
-				payload["outputs"] = nlohmann::json::array({ outputItem });
-			}
-
-			const std::wstring rawJsonPayload = Trim(output.jsonPayload);
-			if (!rawJsonPayload.empty()) {
-				const std::string rawPayload = ToNarrow(rawJsonPayload);
-				const auto parsed = nlohmann::json::parse(
-					rawPayload,
-					nullptr,
-					false);
-				if (!parsed.is_discarded()) {
-					payload["contractPayload"] = parsed;
-				}
-				else {
-					payload["contractPayloadRaw"] = rawPayload;
-				}
-			}
-
-			payload["source"] = "openclaw.generated.runtime-contract";
-			payload["skill"] = ToNarrow(matchedEntry->skillName);
-			result.result = payload.dump();
-
-			result.completedAtMs = CurrentEpochMs();
-			result.latencyMs = result.completedAtMs >= result.startedAtMs
-				? (result.completedAtMs - result.startedAtMs)
-				: 0;
-			return result;
-		}
-
-		struct GeneratedOpenClawOutputTuple {
-			std::string kind;
-			std::string title;
-			std::string url;
-		};
-
-		std::optional<GeneratedOpenClawOutputTuple>
-			ExtractGeneratedOpenClawOutputKindTitleAndUrl(
-				const blazeclaw::gateway::ToolExecuteResultV2& result) {
-			const std::string trimmedResult =
-				blazeclaw::gateway::json::Trim(result.result);
-			if (trimmedResult.empty()) {
-				return std::nullopt;
-			}
-
-			auto readKindTitleAndUrl = [](const nlohmann::json& node)
-				-> std::optional<GeneratedOpenClawOutputTuple> {
-				if (!node.is_object()) {
-					return std::nullopt;
-				}
-
-				std::string kind;
-				const auto typeIt = node.find("type");
-				if (typeIt != node.end() && typeIt->is_string()) {
-					kind = blazeclaw::gateway::json::Trim(
-						typeIt->get<std::string>());
-				}
-				const auto kindIt = node.find("kind");
-				if (kind.empty() && kindIt != node.end() && kindIt->is_string()) {
-					kind = blazeclaw::gateway::json::Trim(
-						kindIt->get<std::string>());
-				}
-
-				const auto urlIt = node.find("url");
-				if (urlIt == node.end() || !urlIt->is_string()) {
-					return std::nullopt;
-				}
-
-				std::string title;
-				const auto titleIt = node.find("title");
-				if (titleIt != node.end() && titleIt->is_string()) {
-					title = blazeclaw::gateway::json::Trim(
-						titleIt->get<std::string>());
-				}
-				return GeneratedOpenClawOutputTuple{
-					.kind = kind,
-					.title = title,
-					.url = blazeclaw::gateway::json::Trim(urlIt->get<std::string>()),
-				};
-			};
-
-			if (trimmedResult.front() == '{' && trimmedResult.back() == '}') {
-				const auto parsed = nlohmann::json::parse(
-					trimmedResult,
-					nullptr,
-					false);
-				if (!parsed.is_discarded() && parsed.is_object()) {
-					if (const auto direct = readKindTitleAndUrl(parsed);
-						direct.has_value() && !direct->url.empty()) {
-						return direct;
-					}
-
-					const auto outputsIt = parsed.find("outputs");
-					if (outputsIt != parsed.end() && outputsIt->is_array()) {
-						for (const auto& item : *outputsIt) {
-							if (const auto nested = readKindTitleAndUrl(item);
-								nested.has_value() && !nested->url.empty()) {
-								return nested;
-							}
-						}
-					}
-				}
-			}
-
-			if (trimmedResult.rfind("http://", 0) == 0 ||
-				trimmedResult.rfind("https://", 0) == 0) {
-				return GeneratedOpenClawOutputTuple{
-					.kind = std::string(),
-					.title = std::string(),
-					.url = trimmedResult,
-				};
-			}
-
-			return std::nullopt;
-		}
-
-		std::optional<std::string> ResolveGeneratedOpenClawToolTargetFromTriggerHints(
-			const std::vector<SkillsCatalogEntry>& catalogEntries,
-			const std::string& commandBodyNormalized,
-			GeneratedOpenClawRoutingDecisionDiagnostics* diagnostics = nullptr) {
-			GeneratedOpenClawRoutingDecisionDiagnostics localDiagnostics;
-			GeneratedOpenClawRoutingDecisionDiagnostics& activeDiagnostics =
-				diagnostics == nullptr ? localDiagnostics : *diagnostics;
-			activeDiagnostics = GeneratedOpenClawRoutingDecisionDiagnostics{};
-
-			activeDiagnostics.normalizedPrompt =
-				NormalizeInlineTriggerText(Utf8ToWideLocal(commandBodyNormalized));
-			const std::wstring& normalizedPrompt = activeDiagnostics.normalizedPrompt;
-			if (normalizedPrompt.empty()) {
-				return std::nullopt;
-			}
-
-			struct CandidateMatch {
-				int score = 0;
-				std::size_t hintLength = 0;
-				std::wstring skillKey;
-				std::wstring triggerHint;
-				std::string generatedToolName;
-				GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
-			};
-
-			std::optional<CandidateMatch> bestMatch;
-
-			for (const auto& entry : catalogEntries) {
-				if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
-					!entry.openClawOriginalActivationState.has_value() ||
-					entry.openClawOriginalActivationState.value() !=
-					SkillsOpenClawOriginalActivationState::ToolEnabled ||
-					!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
-					!entry.openClawOriginalExtractedRuntimeContract->complete) {
-					continue;
-				}
-
-				const auto& extracted =
-					entry.openClawOriginalExtractedRuntimeContract.value();
-				if (extracted.triggerHints.empty()) {
-					continue;
-				}
-
-				const std::string generatedToolName =
-					BuildGeneratedOpenClawToolName(
-						extracted,
-						entry.skillName);
-				if (generatedToolName.empty()) {
-					continue;
-				}
-
-				for (const auto& triggerHint : extracted.triggerHints) {
-					++activeDiagnostics.candidateCountConsidered;
-					const auto matchResult = EvaluateGeneratedTriggerHintMatch(
-						normalizedPrompt,
-						triggerHint);
-					if (matchResult.mode == GeneratedTriggerMatchMode::None) {
-						continue;
-					}
-
-					CandidateMatch candidate;
-					candidate.score = matchResult.score;
-					candidate.hintLength = matchResult.normalizedHintNoSpaceLength;
-					candidate.skillKey = extracted.skillKey.empty()
-						? entry.skillName
-						: extracted.skillKey;
-					candidate.triggerHint = triggerHint;
-					candidate.generatedToolName = generatedToolName;
-					candidate.matchMode = matchResult.mode;
-
-					const bool shouldReplace = !bestMatch.has_value() ||
-						candidate.score > bestMatch->score ||
-						(candidate.score == bestMatch->score &&
-							candidate.hintLength > bestMatch->hintLength) ||
-						(candidate.score == bestMatch->score &&
-							candidate.hintLength == bestMatch->hintLength &&
-							candidate.skillKey < bestMatch->skillKey);
-					if (shouldReplace) {
-						bestMatch = candidate;
-					}
-				}
-			}
-
-			if (bestMatch.has_value()) {
-				activeDiagnostics.matchedSkillKey = bestMatch->skillKey;
-				activeDiagnostics.matchedTriggerHint = bestMatch->triggerHint;
-				activeDiagnostics.matchMode = bestMatch->matchMode;
-				return bestMatch->generatedToolName;
-			}
-
-			return std::nullopt;
-		}
-
-		std::optional<std::string> BuildInlineArgsForResolvedTool(
-			const std::string& resolvedToolId,
-			const std::string& commandBodyNormalized) {
-			if (resolvedToolId == "image-generator.generate") {
-				nlohmann::json params = nlohmann::json::object();
-				params["prompt"] = TryExtractImageGeneratorPrompt(commandBodyNormalized)
-					.value_or(commandBodyNormalized);
-				return params.dump();
-			}
-
-			if (resolvedToolId != "imap_smtp_email.imap.search") {
-				return std::nullopt;
-			}
-
-			// Respect explicit JSON object payloads from advanced callers.
-			if (LooksLikeJsonObjectShapeLocal(commandBodyNormalized)) {
-				return std::nullopt;
-			}
-
-			if (!servicemanager_routing_intent::LooksLikeInboxIntentAnyLanguage(commandBodyNormalized)) {
-				return std::nullopt;
-			}
-
-			nlohmann::json params = nlohmann::json::object();
-			params["unseen"] = true;
-			params["recent"] = servicemanager_routing_intent::LooksLikeTwoHourUrgencyAnyLanguage(commandBodyNormalized)
-				? "2h"
-				: "24h";
-			params["limit"] = 20;
-			return params.dump();
-		}
-
-		std::optional<std::string> BuildInlineFriendlyTextForResolvedTool(
-			const std::string& resolvedToolId,
-			const blazeclaw::gateway::ToolExecuteResultV2& result) {
-			if (IsGeneratedOpenClawToolId(resolvedToolId)) {
-				const auto output =
-					ExtractGeneratedOpenClawOutputKindTitleAndUrl(result);
-				if (output.has_value()) {
-					std::string formatted = "url=" + output->url;
-					if (!output->title.empty()) {
-						formatted = "title=" + output->title + "; " + formatted;
-					}
-					if (!output->kind.empty()) {
-						formatted = "type=" + output->kind + "; " + formatted;
-					}
-					return formatted;
-				}
-			}
-
-			if (resolvedToolId != "imap_smtp_email.imap.search") {
-				return std::nullopt;
-			}
-
-			const std::string trimmedResult =
-				ToNarrow(Trim(Utf8ToWideLocal(result.result)));
-			if (trimmedResult.empty()) {
-				return std::nullopt;
-			}
-
-			try {
-				const auto parsed = nlohmann::json::parse(trimmedResult);
-				if (parsed.is_array()) {
-					if (parsed.empty()) {
-						return std::string(
-							"I checked your inbox in the recent window and found no messages "
-							"that need a reply.");
-					}
-					return std::string("I found ") +
-						std::to_string(parsed.size()) +
-						" inbox message(s) from the recent window for reply triage.";
-				}
-			}
-			catch (...) {
-				// Preserve default rendering when tool output is not JSON.
-			}
-
-			return std::nullopt;
-		}
-
-		std::filesystem::path ResolveWorkspaceRootForSkills(
-			const std::filesystem::path& startPath) {
-			std::error_code ec;
-			auto cursor = std::filesystem::absolute(startPath, ec);
-			if (ec) {
-				return startPath;
-			}
-
-			while (!cursor.empty()) {
-				const auto directSkills = cursor / L"skills";
-				if (std::filesystem::is_directory(directSkills, ec) && !ec) {
-					return cursor;
-				}
-
-				const auto nestedSkills = cursor / L"blazeclaw" / L"skills";
-				if (std::filesystem::is_directory(nestedSkills, ec) && !ec) {
-					return cursor;
-				}
 
 				if (!cursor.has_parent_path()) {
 					break;
@@ -1446,1302 +564,2133 @@ namespace blazeclaw::core {
 
 				cursor = parent;
 			}
-
-			return startPath;
 		}
 
-		std::string NormalizeDirectoryPathUtf8(const std::filesystem::path& path) {
-			return servicemanager_skill_roots::NormalizeDirectoryPathUtf8(path);
-		}
-
-		std::vector<std::string> BuildCanonicalSkillRootSnapshot(
-			const std::filesystem::path& workspaceRoot,
-			const blazeclaw::config::AppConfig& config) {
-			return servicemanager_skill_roots::BuildCanonicalSkillRootSnapshot(
-				workspaceRoot,
-				config);
-		}
-
-		std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
-			std::vector<std::string> values;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
-				if (env != nullptr) {
-					free(env);
-				}
-				return values;
+		for (const auto& path : candidates) {
+			std::error_code existsError;
+			if (!std::filesystem::exists(path, existsError) || existsError) {
+				continue;
 			}
 
-			std::wstring token;
-			for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
-				if (env[i] == L',' || env[i] == L';') {
-					const auto trimmed = Trim(token);
-					if (!trimmed.empty()) {
-						values.push_back(ToNarrow(trimmed));
-					}
-					token.clear();
+			std::wifstream input(path);
+			if (!input.is_open()) {
+				continue;
+			}
+
+			std::wstring line;
+			while (std::getline(input, line)) {
+				const std::wstring trimmedLine = trimLocal(line);
+				if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
 					continue;
 				}
 
-				token.push_back(env[i]);
-			}
-
-			const auto trimmed = Trim(token);
-			if (!trimmed.empty()) {
-				values.push_back(ToNarrow(trimmed));
-			}
-
-			free(env);
-			return values;
-		}
-
-		std::uint64_t ParseUInt64EnvValue(
-			const wchar_t* key,
-			const std::uint64_t fallback) {
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
-				if (env != nullptr) {
-					free(env);
+				const auto equals = trimmedLine.find(L'=');
+				if (equals == std::wstring::npos || equals == 0) {
+					continue;
 				}
-				return fallback;
-			}
 
-			const std::wstring rawValue(env);
-			free(env);
+				const std::wstring key =
+					toLowerWideLocal(trimLocal(trimmedLine.substr(0, equals)));
+				std::wstring value = trimLocal(trimmedLine.substr(equals + 1));
+				if (value.size() >= 2 &&
+					((value.front() == L'"' && value.back() == L'"') ||
+						(value.front() == L'\'' && value.back() == L'\''))) {
+					value = value.substr(1, value.size() - 2);
+				}
 
-			const std::wstring trimmed = Trim(rawValue);
-			if (trimmed.empty()) {
-				return fallback;
-			}
+				if (value.empty()) {
+					continue;
+				}
 
-			try {
-				return static_cast<std::uint64_t>(std::stoull(trimmed));
-			}
-			catch (...) {
-				return fallback;
+				if (key == L"baidu_api_key" || key == L"api_key") {
+					return value;
+				}
 			}
 		}
 
-		double ParseDoubleEnvValue(const wchar_t* key, const double fallback) {
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
-				if (env != nullptr) {
-					free(env);
-				}
-				return fallback;
-			}
+		return std::nullopt;
+	}
 
-			const std::wstring rawValue(env);
-			free(env);
-
-			const std::wstring trimmed = Trim(rawValue);
-			if (trimmed.empty()) {
-				return fallback;
-			}
-
-			try {
-				return std::stod(trimmed);
-			}
-			catch (...) {
-				return fallback;
-			}
+	void EnsureBaiduApiKeyRuntimeEnv() {
+		wchar_t* inheritedValue = nullptr;
+		std::size_t inheritedLength = 0;
+		std::wstring inheritedKey;
+		if (_wdupenv_s(
+			&inheritedValue,
+			&inheritedLength,
+			L"BAIDU_API_KEY") == 0 &&
+			inheritedValue != nullptr) {
+			inheritedKey.assign(inheritedValue);
+			free(inheritedValue);
 		}
 
-		bool ContainsCaseInsensitive(
-			const std::vector<std::string>& values,
-			const std::string& candidate) {
-			if (candidate.empty()) {
-				return false;
+		const auto persisted = ResolveBaiduApiKeyFromPersistedConfig();
+		if (persisted.has_value() && !persisted->empty()) {
+			_wputenv_s(L"BAIDU_API_KEY", persisted.value().c_str());
+			EmitBaiduRuntimeDiagnostic(
+				"env",
+				"BAIDU_API_KEY source=persisted set=true value=" +
+				MaskSecretForTrace(persisted.value()));
+			return;
+		}
+
+		if (!inheritedKey.empty()) {
+			EmitBaiduRuntimeDiagnostic(
+				"env",
+				"BAIDU_API_KEY source=process set=false inherited=true value=" +
+				MaskSecretForTrace(inheritedKey));
+			return;
+		}
+
+		EmitBaiduRuntimeDiagnostic(
+			"env",
+			"BAIDU_API_KEY source=none set=false inherited=false value=<empty>");
+
+		wchar_t* envValue = nullptr;
+		std::size_t envLength = 0;
+		if (_wdupenv_s(
+			&envValue,
+			&envLength,
+			L"BAIDU_API_KEY") == 0 &&
+			envValue != nullptr) {
+			free(envValue);
+		}
+	}
+
+	bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
+		wchar_t* value = nullptr;
+		std::size_t length = 0;
+		if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr ||
+			length == 0) {
+			if (value != nullptr) {
+				free(value);
 			}
 
-			const std::string loweredCandidate = ToLowerAscii(candidate);
-			for (const auto& value : values) {
-				if (ToLowerAscii(value) == loweredCandidate) {
-					return true;
-				}
-			}
+			return fallback;
+		}
 
+		std::wstring normalized;
+		normalized.reserve(length);
+		for (std::size_t i = 0; i < length && value[i] != L'\0'; ++i) {
+			normalized.push_back(static_cast<wchar_t>(std::towlower(value[i])));
+		}
+		free(value);
+
+		if (normalized == L"1" || normalized == L"true" || normalized == L"yes" ||
+			normalized == L"on") {
+			return true;
+		}
+
+		if (normalized == L"0" || normalized == L"false" || normalized == L"no" ||
+			normalized == L"off") {
 			return false;
 		}
 
-		std::wstring TrimWide(const std::wstring& value) {
-			const auto first = std::find_if_not(
-				value.begin(),
-				value.end(),
-				[](const wchar_t ch) {
-					return std::iswspace(ch) != 0;
-				});
-			const auto last = std::find_if_not(
-				value.rbegin(),
-				value.rend(),
-				[](const wchar_t ch) {
-					return std::iswspace(ch) != 0;
-				})
-				.base();
+		return fallback;
+	}
 
-			if (first >= last) {
-				return {};
+	bool PersistSkillConfigEnvViaHostDocument(
+		const std::string& skill,
+		const std::string& envContent,
+		std::string& outError,
+		std::filesystem::path& outPath) {
+		CBlazeClawMFCDoc* activeDoc = nullptr;
+		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame != nullptr) {
+			auto* activeChild = DYNAMIC_DOWNCAST(
+				CMDIChildWndEx,
+				mainFrame->MDIGetActive());
+			if (activeChild != nullptr) {
+				auto* activeView = DYNAMIC_DOWNCAST(
+					CBlazeClawMFCView,
+					activeChild->GetActiveView());
+				if (activeView != nullptr) {
+					activeDoc = activeView->GetDocument();
+				}
+			}
+		}
+
+		if (activeDoc == nullptr) {
+			outError = "No active document context for skill update.";
+			return false;
+		}
+
+		return activeDoc->SaveSkillConfigEnv(
+			skill,
+			envContent,
+			outError,
+			&outPath);
+	}
+
+	void RefreshSkillViewViaHostWindow() {
+		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame != nullptr) {
+			mainFrame->RefreshSkillView();
+		}
+	}
+
+	std::string ToLowerAscii(const std::string& value) {
+		std::string lowered = value;
+		std::transform(
+			lowered.begin(),
+			lowered.end(),
+			lowered.begin(),
+			[](const unsigned char ch) {
+				return static_cast<char>(std::tolower(ch));
+			});
+		return lowered;
+	}
+
+	bool ContainsAnyFragment(
+		const std::string& lowerText,
+		std::initializer_list<const char*> fragments) {
+		for (const auto* fragment : fragments) {
+			if (fragment == nullptr || *fragment == '\0') {
+				continue;
+			}
+			if (lowerText.find(fragment) != std::string::npos) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool ContainsAnyWideFragment(
+		const std::wstring& text,
+		std::initializer_list<const wchar_t*> fragments) {
+		for (const auto* fragment : fragments) {
+			if (fragment == nullptr || *fragment == L'\0') {
+				continue;
+			}
+			if (text.find(fragment) != std::wstring::npos) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+	std::string TrimAsciiLocal(const std::string& value) {
+		const auto first = std::find_if_not(
+			value.begin(),
+			value.end(),
+			[](const unsigned char ch) {
+				return std::isspace(ch) != 0;
+			});
+		const auto last = std::find_if_not(
+			value.rbegin(),
+			value.rend(),
+			[](const unsigned char ch) {
+				return std::isspace(ch) != 0;
+			}).base();
+
+		if (first >= last) {
+			return {};
+		}
+
+		return std::string(first, last);
+	}
+
+	std::optional<std::string> TryExtractImageGeneratorPrompt(
+		const std::string& commandBodyNormalized) {
+		const std::string trimmed = TrimAsciiLocal(commandBodyNormalized);
+		if (trimmed.empty() || trimmed.front() == '/') {
+			return std::nullopt;
+		}
+
+		const std::string lower = ToLowerAscii(trimmed);
+		const bool hasImageGenerator =
+			lower.find("image-generator") != std::string::npos ||
+			lower.find("image generator") != std::string::npos;
+		if (!hasImageGenerator) {
+			return std::nullopt;
+		}
+
+		const std::wstring wide = Utf8ToWideLocal(trimmed);
+		const bool hasInvokeSignal =
+			ContainsAnyFragment(
+				lower,
+				{ "call", "invoke", "use", "run", "with" }) ||
+			ContainsAnyWideFragment(
+				wide,
+				{ L"调用", L"使用", L"用", L"请用" });
+		if (!hasInvokeSignal) {
+			return std::nullopt;
+		}
+
+		std::string prompt;
+		const std::size_t generatePos = lower.find("生成");
+		if (generatePos != std::string::npos) {
+			prompt = TrimAsciiLocal(trimmed.substr(generatePos + std::string("生成").size()));
+		}
+
+		if (prompt.empty()) {
+			const std::size_t tokenPos = lower.find("image-generator");
+			if (tokenPos != std::string::npos) {
+				prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image-generator").size()));
+			}
+		}
+
+		if (prompt.empty()) {
+			const std::size_t tokenPos = lower.find("image generator");
+			if (tokenPos != std::string::npos) {
+				prompt = TrimAsciiLocal(trimmed.substr(tokenPos + std::string("image generator").size()));
+			}
+		}
+
+		if (!prompt.empty()) {
+			while (!prompt.empty() &&
+				(prompt.front() == '`' ||
+					prompt.front() == '"' ||
+					prompt.front() == '\'' ||
+					prompt.front() == ',' ||
+					prompt.front() == ':' ||
+					prompt.front() == ';')) {
+				prompt.erase(prompt.begin());
+			}
+			prompt = TrimAsciiLocal(prompt);
+		}
+
+		return prompt;
+	}
+
+
+	bool LooksLikeJsonObjectShapeLocal(const std::string& value) {
+		const std::wstring trimmed = Trim(Utf8ToWideLocal(value));
+		if (trimmed.size() < 2) {
+			return false;
+		}
+
+		return trimmed.front() == L'{' && trimmed.back() == L'}';
+	}
+
+	std::wstring NormalizeInlineTriggerText(const std::wstring& input) {
+		std::wstring normalized;
+		normalized.reserve(input.size());
+		bool previousSpace = false;
+		for (const auto ch : input) {
+			const wchar_t lowered =
+				static_cast<wchar_t>(std::towlower(ch));
+			const bool isAlphaNum =
+				(lowered >= L'a' && lowered <= L'z') ||
+				(lowered >= L'0' && lowered <= L'9') ||
+				(lowered >= 0x4E00 && lowered <= 0x9FFF);
+			if (isAlphaNum) {
+				normalized.push_back(lowered);
+				previousSpace = false;
+				continue;
 			}
 
-			return std::wstring(first, last);
+			if (!previousSpace) {
+				normalized.push_back(L' ');
+				previousSpace = true;
+			}
 		}
 
-		std::wstring ToLowerWide(std::wstring value) {
-			std::transform(
-				value.begin(),
-				value.end(),
-				value.begin(),
-				[](const wchar_t ch) {
-					return static_cast<wchar_t>(std::towlower(ch));
-				});
+		return Trim(normalized);
+	}
+
+	bool ContainsNormalizedTriggerHint(
+		const std::wstring& normalizedPrompt,
+		const std::wstring& triggerHint) {
+		const std::wstring normalizedHint =
+			NormalizeInlineTriggerText(triggerHint);
+		if (normalizedHint.empty()) {
+			return false;
+		}
+
+		const std::wstring promptNoSpace = [&normalizedPrompt]() {
+			std::wstring value;
+			value.reserve(normalizedPrompt.size());
+			for (const auto ch : normalizedPrompt) {
+				if (ch != L' ') {
+					value.push_back(ch);
+				}
+			}
 			return value;
+			}();
+		const std::wstring hintNoSpace = [&normalizedHint]() {
+			std::wstring value;
+			value.reserve(normalizedHint.size());
+			for (const auto ch : normalizedHint) {
+				if (ch != L' ') {
+					value.push_back(ch);
+				}
+			}
+			return value;
+			}();
+
+		if (promptNoSpace.empty() || hintNoSpace.empty()) {
+			return false;
 		}
 
-		std::vector<std::wstring> SplitCommaDelimitedWide(
-			const std::wstring& rawValue) {
-			std::vector<std::wstring> values;
-			std::wstring token;
-			for (const wchar_t ch : rawValue) {
-				if (ch == L',' || ch == L';') {
-					const std::wstring trimmed = TrimWide(token);
-					if (!trimmed.empty()) {
-						values.push_back(trimmed);
+		if (normalizedPrompt == normalizedHint) {
+			return true;
+		}
+
+		if (promptNoSpace == hintNoSpace) {
+			return true;
+		}
+
+		if (normalizedPrompt.find(normalizedHint) != std::wstring::npos) {
+			return true;
+		}
+
+		return promptNoSpace.find(hintNoSpace) != std::wstring::npos;
+	}
+
+	enum class GeneratedTriggerMatchMode {
+		None = 0,
+		SpaceStrippedContains = 1,
+		Contains = 2,
+		NormalizedExact = 3,
+		Exact = 4,
+	};
+
+	struct GeneratedTriggerHintMatchResult {
+		GeneratedTriggerMatchMode mode = GeneratedTriggerMatchMode::None;
+		int score = 0;
+		std::wstring normalizedHint;
+		std::size_t normalizedHintNoSpaceLength = 0;
+	};
+
+	struct GeneratedOpenClawRoutingDecisionDiagnostics {
+		std::wstring normalizedPrompt;
+		std::size_t candidateCountConsidered = 0;
+		std::wstring matchedSkillKey;
+		std::wstring matchedTriggerHint;
+		GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+	};
+
+	std::wstring RemoveWideSpaces(const std::wstring& value) {
+		std::wstring collapsed;
+		collapsed.reserve(value.size());
+		for (const auto ch : value) {
+			if (ch != L' ') {
+				collapsed.push_back(ch);
+			}
+		}
+		return collapsed;
+	}
+
+	GeneratedTriggerHintMatchResult EvaluateGeneratedTriggerHintMatch(
+		const std::wstring& normalizedPrompt,
+		const std::wstring& triggerHint) {
+		GeneratedTriggerHintMatchResult result;
+		if (!ContainsNormalizedTriggerHint(normalizedPrompt, triggerHint)) {
+			return result;
+		}
+
+		result.normalizedHint = NormalizeInlineTriggerText(triggerHint);
+		if (result.normalizedHint.empty() || normalizedPrompt.empty()) {
+			return result;
+		}
+
+		const std::wstring promptNoSpace = RemoveWideSpaces(normalizedPrompt);
+		const std::wstring hintNoSpace = RemoveWideSpaces(result.normalizedHint);
+		if (promptNoSpace.empty() || hintNoSpace.empty()) {
+			return result;
+		}
+
+		result.normalizedHintNoSpaceLength = hintNoSpace.size();
+		if (normalizedPrompt == result.normalizedHint) {
+			result.mode = GeneratedTriggerMatchMode::Exact;
+			result.score = 400;
+			return result;
+		}
+
+		if (promptNoSpace == hintNoSpace) {
+			result.mode = GeneratedTriggerMatchMode::NormalizedExact;
+			result.score = 300;
+			return result;
+		}
+
+		if (normalizedPrompt.find(result.normalizedHint) != std::wstring::npos) {
+			result.mode = GeneratedTriggerMatchMode::Contains;
+			result.score = 200;
+			return result;
+		}
+
+		if (promptNoSpace.find(hintNoSpace) != std::wstring::npos) {
+			result.mode = GeneratedTriggerMatchMode::SpaceStrippedContains;
+			result.score = 100;
+			return result;
+		}
+
+		return result;
+	}
+
+	std::string GeneratedTriggerMatchModeToTelemetry(
+		const GeneratedTriggerMatchMode mode) {
+		switch (mode) {
+		case GeneratedTriggerMatchMode::Exact:
+			return "exact";
+		case GeneratedTriggerMatchMode::NormalizedExact:
+			return "normalized-exact";
+		case GeneratedTriggerMatchMode::Contains:
+			return "contains";
+		case GeneratedTriggerMatchMode::SpaceStrippedContains:
+			return "space-stripped contains";
+		default:
+			return "none";
+		}
+	}
+
+	std::wstring NormalizeOpenClawGeneratedToolToken(
+		const std::wstring& rawToken) {
+		std::wstring token;
+		token.reserve(rawToken.size());
+		for (const auto ch : rawToken) {
+			const wchar_t lowered =
+				static_cast<wchar_t>(std::towlower(ch));
+			const bool alphaNum =
+				(lowered >= L'a' && lowered <= L'z') ||
+				(lowered >= L'0' && lowered <= L'9');
+			if (alphaNum) {
+				token.push_back(lowered);
+				continue;
+			}
+
+			if (lowered == L'-' || lowered == L'_' || lowered == L'.' ||
+				lowered == L'/' || lowered == L'\\') {
+				if (!token.empty() && token.back() != L'_') {
+					token.push_back(L'_');
+				}
+			}
+		}
+
+		while (!token.empty() && token.front() == L'_') {
+			token.erase(token.begin());
+		}
+		while (!token.empty() && token.back() == L'_') {
+			token.pop_back();
+		}
+
+		if (token.empty()) {
+			token = L"openclaw_skill";
+		}
+
+		return token;
+	}
+
+	std::string BuildGeneratedOpenClawToolName(
+		const OpenClawOriginalExtractedRuntimeContractSpec& extracted,
+		const std::wstring& fallbackSkillName) {
+		std::wstring key = Trim(extracted.skillKey);
+		if (key.empty()) {
+			key = Trim(fallbackSkillName);
+		}
+
+		const std::wstring normalizedToken =
+			NormalizeOpenClawGeneratedToolToken(key);
+		return ToNarrow(normalizedToken) + ".openclaw.generated";
+	}
+
+	bool IsGeneratedOpenClawToolId(const std::string& toolId) {
+		const std::string trimmed =
+			blazeclaw::gateway::json::Trim(toolId);
+		return !trimmed.empty() &&
+			trimmed.size() >= std::string(".openclaw.generated").size() &&
+			trimmed.rfind(".openclaw.generated") ==
+			(trimmed.size() - std::string(".openclaw.generated").size());
+	}
+
+	const SkillsCatalogEntry* FindGeneratedOpenClawCatalogEntryByToolId(
+		const std::vector<SkillsCatalogEntry>& catalogEntries,
+		const std::string& toolId) {
+		for (const auto& entry : catalogEntries) {
+			if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+				!entry.openClawOriginalActivationState.has_value() ||
+				entry.openClawOriginalActivationState.value() !=
+				SkillsOpenClawOriginalActivationState::ToolEnabled ||
+				!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
+				!entry.openClawOriginalExtractedRuntimeContract->complete) {
+				continue;
+			}
+
+			const std::string generatedToolName =
+				BuildGeneratedOpenClawToolName(
+					entry.openClawOriginalExtractedRuntimeContract.value(),
+					entry.skillName);
+			if (generatedToolName == toolId) {
+				return &entry;
+			}
+		}
+
+		return nullptr;
+	}
+
+	std::optional<blazeclaw::gateway::ToolExecuteResultV2>
+		TryExecuteGeneratedOpenClawConstantOutputTool(
+			const std::vector<SkillsCatalogEntry>& catalogEntries,
+			const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+		if (!IsGeneratedOpenClawToolId(request.tool)) {
+			return std::nullopt;
+		}
+
+		const SkillsCatalogEntry* matchedEntry =
+			FindGeneratedOpenClawCatalogEntryByToolId(catalogEntries, request.tool);
+		if (matchedEntry == nullptr) {
+			return std::nullopt;
+		}
+
+		const auto& extracted =
+			matchedEntry->openClawOriginalExtractedRuntimeContract.value();
+		if (!extracted.output.has_value()) {
+			return std::nullopt;
+		}
+
+		const auto startedAtMs = CurrentEpochMs();
+		blazeclaw::gateway::ToolExecuteResultV2 result;
+		result.tool = request.tool;
+		result.executed = true;
+		result.status = "ok";
+		result.errorCode.clear();
+		result.errorMessage.clear();
+		result.correlationId = request.correlationId;
+		result.startedAtMs = startedAtMs;
+
+		nlohmann::json payload = nlohmann::json::object();
+		const auto& output = extracted.output.value();
+		const std::string outputKind = ToNarrow(Trim(output.kind));
+		const std::string outputTitle = ToNarrow(Trim(output.title));
+		const std::string outputUrl = ToNarrow(Trim(output.url));
+
+		if (!outputKind.empty()) {
+			payload["kind"] = outputKind;
+		}
+		if (!outputTitle.empty()) {
+			payload["title"] = outputTitle;
+		}
+		if (!outputUrl.empty()) {
+			payload["url"] = outputUrl;
+		}
+
+		if (!outputKind.empty() || !outputUrl.empty()) {
+			nlohmann::json outputItem = nlohmann::json::object();
+			if (!outputKind.empty()) {
+				outputItem["type"] = outputKind;
+			}
+			if (!outputTitle.empty()) {
+				outputItem["title"] = outputTitle;
+			}
+			if (!outputUrl.empty()) {
+				outputItem["url"] = outputUrl;
+			}
+			payload["outputs"] = nlohmann::json::array({ outputItem });
+		}
+
+		const std::wstring rawJsonPayload = Trim(output.jsonPayload);
+		if (!rawJsonPayload.empty()) {
+			const std::string rawPayload = ToNarrow(rawJsonPayload);
+			const auto parsed = nlohmann::json::parse(
+				rawPayload,
+				nullptr,
+				false);
+			if (!parsed.is_discarded()) {
+				payload["contractPayload"] = parsed;
+			}
+			else {
+				payload["contractPayloadRaw"] = rawPayload;
+			}
+		}
+
+		payload["source"] = "openclaw.generated.runtime-contract";
+		payload["skill"] = ToNarrow(matchedEntry->skillName);
+		result.result = payload.dump();
+
+		result.completedAtMs = CurrentEpochMs();
+		result.latencyMs = result.completedAtMs >= result.startedAtMs
+			? (result.completedAtMs - result.startedAtMs)
+			: 0;
+		return result;
+	}
+
+	struct GeneratedOpenClawOutputTuple {
+		std::string kind;
+		std::string title;
+		std::string url;
+	};
+
+	std::optional<GeneratedOpenClawOutputTuple>
+		ExtractGeneratedOpenClawOutputKindTitleAndUrl(
+			const blazeclaw::gateway::ToolExecuteResultV2& result) {
+		const std::string trimmedResult =
+			blazeclaw::gateway::json::Trim(result.result);
+		if (trimmedResult.empty()) {
+			return std::nullopt;
+		}
+
+		auto readKindTitleAndUrl = [](const nlohmann::json& node)
+			-> std::optional<GeneratedOpenClawOutputTuple> {
+			if (!node.is_object()) {
+				return std::nullopt;
+			}
+
+			std::string kind;
+			const auto typeIt = node.find("type");
+			if (typeIt != node.end() && typeIt->is_string()) {
+				kind = blazeclaw::gateway::json::Trim(
+					typeIt->get<std::string>());
+			}
+			const auto kindIt = node.find("kind");
+			if (kind.empty() && kindIt != node.end() && kindIt->is_string()) {
+				kind = blazeclaw::gateway::json::Trim(
+					kindIt->get<std::string>());
+			}
+
+			const auto urlIt = node.find("url");
+			if (urlIt == node.end() || !urlIt->is_string()) {
+				return std::nullopt;
+			}
+
+			std::string title;
+			const auto titleIt = node.find("title");
+			if (titleIt != node.end() && titleIt->is_string()) {
+				title = blazeclaw::gateway::json::Trim(
+					titleIt->get<std::string>());
+			}
+			return GeneratedOpenClawOutputTuple{
+				.kind = kind,
+				.title = title,
+				.url = blazeclaw::gateway::json::Trim(urlIt->get<std::string>()),
+			};
+			};
+
+		if (trimmedResult.front() == '{' && trimmedResult.back() == '}') {
+			const auto parsed = nlohmann::json::parse(
+				trimmedResult,
+				nullptr,
+				false);
+			if (!parsed.is_discarded() && parsed.is_object()) {
+				if (const auto direct = readKindTitleAndUrl(parsed);
+					direct.has_value() && !direct->url.empty()) {
+					return direct;
+				}
+
+				const auto outputsIt = parsed.find("outputs");
+				if (outputsIt != parsed.end() && outputsIt->is_array()) {
+					for (const auto& item : *outputsIt) {
+						if (const auto nested = readKindTitleAndUrl(item);
+							nested.has_value() && !nested->url.empty()) {
+							return nested;
+						}
 					}
-					token.clear();
+				}
+			}
+		}
+
+		if (trimmedResult.rfind("http://", 0) == 0 ||
+			trimmedResult.rfind("https://", 0) == 0) {
+			return GeneratedOpenClawOutputTuple{
+				.kind = std::string(),
+				.title = std::string(),
+				.url = trimmedResult,
+			};
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<std::string> ResolveGeneratedOpenClawToolTargetFromTriggerHints(
+		const std::vector<SkillsCatalogEntry>& catalogEntries,
+		const std::string& commandBodyNormalized,
+		GeneratedOpenClawRoutingDecisionDiagnostics* diagnostics = nullptr) {
+		GeneratedOpenClawRoutingDecisionDiagnostics localDiagnostics;
+		GeneratedOpenClawRoutingDecisionDiagnostics& activeDiagnostics =
+			diagnostics == nullptr ? localDiagnostics : *diagnostics;
+		activeDiagnostics = GeneratedOpenClawRoutingDecisionDiagnostics{};
+
+		activeDiagnostics.normalizedPrompt =
+			NormalizeInlineTriggerText(Utf8ToWideLocal(commandBodyNormalized));
+		const std::wstring& normalizedPrompt = activeDiagnostics.normalizedPrompt;
+		if (normalizedPrompt.empty()) {
+			return std::nullopt;
+		}
+
+		struct CandidateMatch {
+			int score = 0;
+			std::size_t hintLength = 0;
+			std::wstring skillKey;
+			std::wstring triggerHint;
+			std::string generatedToolName;
+			GeneratedTriggerMatchMode matchMode = GeneratedTriggerMatchMode::None;
+		};
+
+		std::optional<CandidateMatch> bestMatch;
+
+		for (const auto& entry : catalogEntries) {
+			if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+				!entry.openClawOriginalActivationState.has_value() ||
+				entry.openClawOriginalActivationState.value() !=
+				SkillsOpenClawOriginalActivationState::ToolEnabled ||
+				!entry.openClawOriginalExtractedRuntimeContract.has_value() ||
+				!entry.openClawOriginalExtractedRuntimeContract->complete) {
+				continue;
+			}
+
+			const auto& extracted =
+				entry.openClawOriginalExtractedRuntimeContract.value();
+			if (extracted.triggerHints.empty()) {
+				continue;
+			}
+
+			const std::string generatedToolName =
+				BuildGeneratedOpenClawToolName(
+					extracted,
+					entry.skillName);
+			if (generatedToolName.empty()) {
+				continue;
+			}
+
+			for (const auto& triggerHint : extracted.triggerHints) {
+				++activeDiagnostics.candidateCountConsidered;
+				const auto matchResult = EvaluateGeneratedTriggerHintMatch(
+					normalizedPrompt,
+					triggerHint);
+				if (matchResult.mode == GeneratedTriggerMatchMode::None) {
 					continue;
 				}
 
-				token.push_back(ch);
+				CandidateMatch candidate;
+				candidate.score = matchResult.score;
+				candidate.hintLength = matchResult.normalizedHintNoSpaceLength;
+				candidate.skillKey = extracted.skillKey.empty()
+					? entry.skillName
+					: extracted.skillKey;
+				candidate.triggerHint = triggerHint;
+				candidate.generatedToolName = generatedToolName;
+				candidate.matchMode = matchResult.mode;
+
+				const bool shouldReplace = !bestMatch.has_value() ||
+					candidate.score > bestMatch->score ||
+					(candidate.score == bestMatch->score &&
+						candidate.hintLength > bestMatch->hintLength) ||
+					(candidate.score == bestMatch->score &&
+						candidate.hintLength == bestMatch->hintLength &&
+						candidate.skillKey < bestMatch->skillKey);
+				if (shouldReplace) {
+					bestMatch = candidate;
+				}
+			}
+		}
+
+		if (bestMatch.has_value()) {
+			activeDiagnostics.matchedSkillKey = bestMatch->skillKey;
+			activeDiagnostics.matchedTriggerHint = bestMatch->triggerHint;
+			activeDiagnostics.matchMode = bestMatch->matchMode;
+			return bestMatch->generatedToolName;
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<std::string> BuildInlineArgsForResolvedTool(
+		const std::string& resolvedToolId,
+		const std::string& commandBodyNormalized) {
+		if (resolvedToolId == "image-generator.generate") {
+			nlohmann::json params = nlohmann::json::object();
+			params["prompt"] = TryExtractImageGeneratorPrompt(commandBodyNormalized)
+				.value_or(commandBodyNormalized);
+			return params.dump();
+		}
+
+		if (resolvedToolId != "imap_smtp_email.imap.search") {
+			return std::nullopt;
+		}
+
+		// Respect explicit JSON object payloads from advanced callers.
+		if (LooksLikeJsonObjectShapeLocal(commandBodyNormalized)) {
+			return std::nullopt;
+		}
+
+		if (!servicemanager_routing_intent::LooksLikeInboxIntentAnyLanguage(commandBodyNormalized)) {
+			return std::nullopt;
+		}
+
+		nlohmann::json params = nlohmann::json::object();
+		params["unseen"] = true;
+		params["recent"] = servicemanager_routing_intent::LooksLikeTwoHourUrgencyAnyLanguage(commandBodyNormalized)
+			? "2h"
+			: "24h";
+		params["limit"] = 20;
+		return params.dump();
+	}
+
+	std::optional<std::string> BuildInlineFriendlyTextForResolvedTool(
+		const std::string& resolvedToolId,
+		const blazeclaw::gateway::ToolExecuteResultV2& result) {
+		if (IsGeneratedOpenClawToolId(resolvedToolId)) {
+			const auto output =
+				ExtractGeneratedOpenClawOutputKindTitleAndUrl(result);
+			if (output.has_value()) {
+				std::string formatted = "url=" + output->url;
+				if (!output->title.empty()) {
+					formatted = "title=" + output->title + "; " + formatted;
+				}
+				if (!output->kind.empty()) {
+					formatted = "type=" + output->kind + "; " + formatted;
+				}
+				return formatted;
+			}
+		}
+
+		if (resolvedToolId != "imap_smtp_email.imap.search") {
+			return std::nullopt;
+		}
+
+		const std::string trimmedResult =
+			ToNarrow(Trim(Utf8ToWideLocal(result.result)));
+		if (trimmedResult.empty()) {
+			return std::nullopt;
+		}
+
+		try {
+			const auto parsed = nlohmann::json::parse(trimmedResult);
+			if (parsed.is_array()) {
+				if (parsed.empty()) {
+					return std::string(
+						"I checked your inbox in the recent window and found no messages "
+						"that need a reply.");
+				}
+				return std::string("I found ") +
+					std::to_string(parsed.size()) +
+					" inbox message(s) from the recent window for reply triage.";
+			}
+		}
+		catch (...) {
+			// Preserve default rendering when tool output is not JSON.
+		}
+
+		return std::nullopt;
+	}
+
+	std::filesystem::path ResolveWorkspaceRootForSkills(
+		const std::filesystem::path& startPath) {
+		std::error_code ec;
+		auto cursor = std::filesystem::absolute(startPath, ec);
+		if (ec) {
+			return startPath;
+		}
+
+		while (!cursor.empty()) {
+			const auto directSkills = cursor / L"skills";
+			if (std::filesystem::is_directory(directSkills, ec) && !ec) {
+				return cursor;
 			}
 
-			const std::wstring trimmed = TrimWide(token);
-			if (!trimmed.empty()) {
-				values.push_back(trimmed);
+			const auto nestedSkills = cursor / L"blazeclaw" / L"skills";
+			if (std::filesystem::is_directory(nestedSkills, ec) && !ec) {
+				return cursor;
 			}
 
+			if (!cursor.has_parent_path()) {
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor) {
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return startPath;
+	}
+
+	std::string NormalizeDirectoryPathUtf8(const std::filesystem::path& path) {
+		return servicemanager_skill_roots::NormalizeDirectoryPathUtf8(path);
+	}
+
+	std::vector<std::string> BuildCanonicalSkillRootSnapshot(
+		const std::filesystem::path& workspaceRoot,
+		const blazeclaw::config::AppConfig& config) {
+		return servicemanager_skill_roots::BuildCanonicalSkillRootSnapshot(
+			workspaceRoot,
+			config);
+	}
+
+	std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
+		std::vector<std::string> values;
+		wchar_t* env = nullptr;
+		std::size_t len = 0;
+		if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+			if (env != nullptr) {
+				free(env);
+			}
 			return values;
 		}
 
-		const std::wstring* FindFrontmatterFieldCaseInsensitive(
-			const SkillFrontmatter& frontmatter,
-			const std::wstring& key) {
-			const std::wstring loweredKey = ToLowerWide(key);
-			for (const auto& item : frontmatter.fields) {
-				if (ToLowerWide(item.first) == loweredKey) {
-					return &item.second;
+		std::wstring token;
+		for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
+			if (env[i] == L',' || env[i] == L';') {
+				const auto trimmed = Trim(token);
+				if (!trimmed.empty()) {
+					values.push_back(ToNarrow(trimmed));
 				}
+				token.clear();
+				continue;
 			}
 
-			return nullptr;
+			token.push_back(env[i]);
 		}
 
-		const std::wstring* ResolveNormalizedField(
-			const SkillFrontmatter& frontmatter,
-			const std::vector<std::wstring>& blazeclawKeys,
-			const std::vector<std::wstring>& openclawKeys,
-			std::vector<std::string>& outSources) {
-			for (const auto& key : blazeclawKeys) {
-				if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
-					value != nullptr && !TrimWide(*value).empty()) {
-					outSources.push_back("metadata.blazeclaw");
-					return value;
-				}
-			}
-
-			for (const auto& key : openclawKeys) {
-				if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
-					value != nullptr && !TrimWide(*value).empty()) {
-					outSources.push_back("metadata.openclaw");
-					return value;
-				}
-			}
-
-			return nullptr;
+		const auto trimmed = Trim(token);
+		if (!trimmed.empty()) {
+			values.push_back(ToNarrow(trimmed));
 		}
 
-		std::vector<std::string> UniqueNarrowValues(
-			const std::vector<std::wstring>& values) {
-			std::vector<std::string> output;
-			for (const auto& value : values) {
-				const std::string narrow = ToNarrow(value);
-				if (narrow.empty()) {
-					continue;
-				}
+		free(env);
+		return values;
+	}
 
-				if (std::find(output.begin(), output.end(), narrow) != output.end()) {
-					continue;
-				}
-
-				output.push_back(narrow);
+	std::uint64_t ParseUInt64EnvValue(
+		const wchar_t* key,
+		const std::uint64_t fallback) {
+		wchar_t* env = nullptr;
+		std::size_t len = 0;
+		if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+			if (env != nullptr) {
+				free(env);
 			}
-
-			return output;
+			return fallback;
 		}
 
-		std::wstring BuildAuthProfilesSignature(
-			const blazeclaw::config::AuthProfilesConfig& config) {
-			std::wostringstream stream;
-			stream << L"order=";
-			for (const auto& entryId : config.order) {
-				stream << entryId << L";";
-			}
+		const std::wstring rawValue(env);
+		free(env);
 
-			stream << L"|entries=";
-			for (const auto& [entryId, entry] : config.entries) {
-				stream << entryId << L":"
-					<< entry.provider << L":"
-					<< entry.credentialRef << L":"
-					<< entry.cooldownSeconds << L":"
-					<< (entry.enabled ? L"1" : L"0") << L";";
-			}
-
-			return stream.str();
+		const std::wstring trimmed = Trim(rawValue);
+		if (trimmed.empty()) {
+			return fallback;
 		}
 
-		bool HasAuthSensitiveConfigChanges(
-			const blazeclaw::config::AppConfig& currentConfig,
-			const blazeclaw::config::AppConfig& nextConfig) {
-			if (currentConfig.chat.activeProvider !=
-				nextConfig.chat.activeProvider) {
+		try {
+			return static_cast<std::uint64_t>(std::stoull(trimmed));
+		}
+		catch (...) {
+			return fallback;
+		}
+	}
+
+	double ParseDoubleEnvValue(const wchar_t* key, const double fallback) {
+		wchar_t* env = nullptr;
+		std::size_t len = 0;
+		if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+			if (env != nullptr) {
+				free(env);
+			}
+			return fallback;
+		}
+
+		const std::wstring rawValue(env);
+		free(env);
+
+		const std::wstring trimmed = Trim(rawValue);
+		if (trimmed.empty()) {
+			return fallback;
+		}
+
+		try {
+			return std::stod(trimmed);
+		}
+		catch (...) {
+			return fallback;
+		}
+	}
+
+	bool ContainsCaseInsensitive(
+		const std::vector<std::string>& values,
+		const std::string& candidate) {
+		if (candidate.empty()) {
+			return false;
+		}
+
+		const std::string loweredCandidate = ToLowerAscii(candidate);
+		for (const auto& value : values) {
+			if (ToLowerAscii(value) == loweredCandidate) {
 				return true;
 			}
+		}
 
-			if (currentConfig.deepseekApiKey != nextConfig.deepseekApiKey) {
-				return true;
+		return false;
+	}
+
+	std::wstring TrimWide(const std::wstring& value) {
+		const auto first = std::find_if_not(
+			value.begin(),
+			value.end(),
+			[](const wchar_t ch) {
+				return std::iswspace(ch) != 0;
+			});
+		const auto last = std::find_if_not(
+			value.rbegin(),
+			value.rend(),
+			[](const wchar_t ch) {
+				return std::iswspace(ch) != 0;
+			})
+			.base();
+
+		if (first >= last) {
+			return {};
+		}
+
+		return std::wstring(first, last);
+	}
+
+	std::wstring ToLowerWide(std::wstring value) {
+		std::transform(
+			value.begin(),
+			value.end(),
+			value.begin(),
+			[](const wchar_t ch) {
+				return static_cast<wchar_t>(std::towlower(ch));
+			});
+		return value;
+	}
+
+	std::vector<std::wstring> SplitCommaDelimitedWide(
+		const std::wstring& rawValue) {
+		std::vector<std::wstring> values;
+		std::wstring token;
+		for (const wchar_t ch : rawValue) {
+			if (ch == L',' || ch == L';') {
+				const std::wstring trimmed = TrimWide(token);
+				if (!trimmed.empty()) {
+					values.push_back(trimmed);
+				}
+				token.clear();
+				continue;
 			}
 
-			return BuildAuthProfilesSignature(currentConfig.authProfiles) !=
-				BuildAuthProfilesSignature(nextConfig.authProfiles);
+			token.push_back(ch);
 		}
 
-
-		std::uint64_t CurrentEpochMs() {
-			const auto now = std::chrono::system_clock::now();
-			return static_cast<std::uint64_t>(
-				std::chrono::duration_cast<std::chrono::milliseconds>(
-					now.time_since_epoch())
-				.count());
+		const std::wstring trimmed = TrimWide(token);
+		if (!trimmed.empty()) {
+			values.push_back(trimmed);
 		}
 
-		void RegisterImageGeneratorRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host,
-			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
-			const auto skillRoot = toolPolicy.imageGeneratorSkillRoot;
-			for (const auto& spec : tools::BuildImageGeneratorToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "image",
-						.enabled = true,
-					},
-					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
+		return values;
+	}
 
-						if (!skillRoot.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "skill_runtime_missing";
-							result.errorMessage = "image-generator skill root not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
+	const std::wstring* FindFrontmatterFieldCaseInsensitive(
+		const SkillFrontmatter& frontmatter,
+		const std::wstring& key) {
+		const std::wstring loweredKey = ToLowerWide(key);
+		for (const auto& item : frontmatter.fields) {
+			if (ToLowerWide(item.first) == loweredKey) {
+				return &item.second;
+			}
+		}
 
-						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
-						if (!std::filesystem::exists(scriptPath)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "script_missing";
-							result.errorMessage = "image-generator script not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
+		return nullptr;
+	}
 
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args_json";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-						}
+	const std::wstring* ResolveNormalizedField(
+		const SkillFrontmatter& frontmatter,
+		const std::vector<std::wstring>& blazeclawKeys,
+		const std::vector<std::wstring>& openclawKeys,
+		std::vector<std::string>& outSources) {
+		for (const auto& key : blazeclawKeys) {
+			if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
+				value != nullptr && !TrimWide(*value).empty()) {
+				outSources.push_back("metadata.blazeclaw");
+				return value;
+			}
+		}
 
-						if (params.is_string()) {
-							params = nlohmann::json::object(
-								{ { "prompt", params.get<std::string>() } });
-						}
+		for (const auto& key : openclawKeys) {
+			if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
+				value != nullptr && !TrimWide(*value).empty()) {
+				outSources.push_back("metadata.openclaw");
+				return value;
+			}
+		}
 
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
+		return nullptr;
+	}
 
-						std::string argsErrorCode;
-						std::string argsErrorMessage;
-						const auto cliArgs = tools::BuildImageGeneratorCliArgs(
-							spec,
-							params,
-							argsErrorCode,
-							argsErrorMessage);
-						if (!cliArgs.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = argsErrorCode.empty()
-								? "invalid_arguments"
-								: argsErrorCode;
-							result.errorMessage = argsErrorMessage.empty()
-								? "tool arguments are invalid"
-								: argsErrorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
+	std::vector<std::string> UniqueNarrowValues(
+		const std::vector<std::wstring>& values) {
+		std::vector<std::string> output;
+		for (const auto& value : values) {
+			const std::string narrow = ToNarrow(value);
+			if (narrow.empty()) {
+				continue;
+			}
 
-						std::uint64_t timeoutMs = 180000;
-						if (request.deadlineEpochMs.has_value()) {
-							const std::uint64_t now = CurrentEpochMs();
-							if (request.deadlineEpochMs.value() <= now) {
-								result.executed = false;
-								result.status = "timed_out";
-								result.errorCode = "deadline_exceeded";
-								result.errorMessage = "request deadline already elapsed";
-								result.completedAtMs = now;
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
+			if (std::find(output.begin(), output.end(), narrow) != output.end()) {
+				continue;
+			}
 
-							timeoutMs = request.deadlineEpochMs.value() - now;
-						}
+			output.push_back(narrow);
+		}
 
-						const auto process = tools::ExecutePythonSkillProcess(
-							scriptPath,
-							cliArgs.value(),
-							timeoutMs);
+		return output;
+	}
 
+	std::wstring BuildAuthProfilesSignature(
+		const blazeclaw::config::AuthProfilesConfig& config) {
+		std::wostringstream stream;
+		stream << L"order=";
+		for (const auto& entryId : config.order) {
+			stream << entryId << L";";
+		}
+
+		stream << L"|entries=";
+		for (const auto& [entryId, entry] : config.entries) {
+			stream << entryId << L":"
+				<< entry.provider << L":"
+				<< entry.credentialRef << L":"
+				<< entry.cooldownSeconds << L":"
+				<< (entry.enabled ? L"1" : L"0") << L";";
+		}
+
+		return stream.str();
+	}
+
+	bool HasAuthSensitiveConfigChanges(
+		const blazeclaw::config::AppConfig& currentConfig,
+		const blazeclaw::config::AppConfig& nextConfig) {
+		if (currentConfig.chat.activeProvider !=
+			nextConfig.chat.activeProvider) {
+			return true;
+		}
+
+		if (currentConfig.deepseekApiKey != nextConfig.deepseekApiKey) {
+			return true;
+		}
+
+		return BuildAuthProfilesSignature(currentConfig.authProfiles) !=
+			BuildAuthProfilesSignature(nextConfig.authProfiles);
+	}
+
+
+	std::uint64_t CurrentEpochMs() {
+		const auto now = std::chrono::system_clock::now();
+		return static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				now.time_since_epoch())
+			.count());
+	}
+
+	void RegisterImageGeneratorRuntimeTools(
+		blazeclaw::gateway::GatewayHost& host,
+		const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
+		const auto skillRoot = toolPolicy.imageGeneratorSkillRoot;
+		for (const auto& spec : tools::BuildImageGeneratorToolRuntimeSpecs()) {
+			host.RegisterRuntimeToolV2(
+				blazeclaw::gateway::ToolCatalogEntry{
+					.id = spec.id,
+					.label = spec.label,
+					.category = "image",
+					.enabled = true,
+				},
+				[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					blazeclaw::gateway::ToolExecuteResultV2 result;
+					result.tool = request.tool.empty() ? spec.id : request.tool;
+					result.correlationId = request.correlationId;
+					result.startedAtMs = CurrentEpochMs();
+
+					if (!skillRoot.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "skill_runtime_missing";
+						result.errorMessage = "image-generator skill root not found";
 						result.completedAtMs = CurrentEpochMs();
 						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
 
-						if (!process.started) {
+					const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+					if (!std::filesystem::exists(scriptPath)) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "script_missing";
+						result.errorMessage = "image-generator script not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					nlohmann::json params = nlohmann::json::object();
+					if (request.argsJson.has_value() && !request.argsJson->empty()) {
+						try {
+							params = nlohmann::json::parse(request.argsJson.value());
+						}
+						catch (...) {
 							result.executed = false;
 							result.status = "error";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "process_start_failed"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "failed to start image-generator process"
-								: process.errorMessage;
+							result.errorCode = "invalid_args_json";
+							result.errorMessage = "argsJson is not valid JSON";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
 							return result;
 						}
+					}
 
-						if (process.timedOut) {
+					if (params.is_string()) {
+						params = nlohmann::json::object(
+							{ { "prompt", params.get<std::string>() } });
+					}
+
+					if (!params.is_object()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "invalid_arguments";
+						result.errorMessage = "tool args must be a JSON object";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::string argsErrorCode;
+					std::string argsErrorMessage;
+					const auto cliArgs = tools::BuildImageGeneratorCliArgs(
+						spec,
+						params,
+						argsErrorCode,
+						argsErrorMessage);
+					if (!cliArgs.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = argsErrorCode.empty()
+							? "invalid_arguments"
+							: argsErrorCode;
+						result.errorMessage = argsErrorMessage.empty()
+							? "tool arguments are invalid"
+							: argsErrorMessage;
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::uint64_t timeoutMs = 180000;
+					if (request.deadlineEpochMs.has_value()) {
+						const std::uint64_t now = CurrentEpochMs();
+						if (request.deadlineEpochMs.value() <= now) {
 							result.executed = false;
 							result.status = "timed_out";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "deadline_exceeded"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "image-generator execution timed out"
-								: process.errorMessage;
+							result.errorCode = "deadline_exceeded";
+							result.errorMessage = "request deadline already elapsed";
+							result.completedAtMs = now;
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
 							return result;
 						}
 
-						if (process.exitCode != 0) {
-							result.executed = false;
-							result.status = "script_runtime_error";
-							result.result = process.output;
-							result.errorCode = "script_runtime_error";
-							result.errorMessage = process.output.empty()
-								? "image-generator process exited non-zero"
-								: TruncateDiagnosticText(process.output);
-							return result;
-						}
+						timeoutMs = request.deadlineEpochMs.value() - now;
+					}
 
-						nlohmann::json outputEnvelope = nlohmann::json::object();
-						if (const auto generatedJson = TryParseTrailingJsonObject(process.output);
-							generatedJson.has_value()) {
-							outputEnvelope = generatedJson.value();
+					const auto process = tools::ExecutePythonSkillProcess(
+						scriptPath,
+						cliArgs.value(),
+						timeoutMs);
+
+					result.completedAtMs = CurrentEpochMs();
+					result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+					if (!process.started) {
+						result.executed = false;
+						result.status = "error";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "process_start_failed"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "failed to start image-generator process"
+							: process.errorMessage;
+						return result;
+					}
+
+					if (process.timedOut) {
+						result.executed = false;
+						result.status = "timed_out";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "deadline_exceeded"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "image-generator execution timed out"
+							: process.errorMessage;
+						return result;
+					}
+
+					if (process.exitCode != 0) {
+						result.executed = false;
+						result.status = "script_runtime_error";
+						result.result = process.output;
+						result.errorCode = "script_runtime_error";
+						result.errorMessage = process.output.empty()
+							? "image-generator process exited non-zero"
+							: TruncateDiagnosticText(process.output);
+						return result;
+					}
+
+					nlohmann::json outputEnvelope = nlohmann::json::object();
+					if (const auto generatedJson = TryParseTrailingJsonObject(process.output);
+						generatedJson.has_value()) {
+						outputEnvelope = generatedJson.value();
+					}
+					else {
+						outputEnvelope["success"] = true;
+						outputEnvelope["raw"] = process.output;
+					}
+
+					const std::string localPath = outputEnvelope.value("local_path", "");
+					const std::string cosKey = outputEnvelope.value("cos_key", "");
+					const auto uploadScript =
+						skillRoot.value().parent_path() / L"upload-to-oss" / L"main.py";
+					if (!localPath.empty() &&
+						!cosKey.empty() &&
+						std::filesystem::exists(uploadScript)) {
+						const auto uploadResult = tools::ExecutePythonSkillProcess(
+							uploadScript,
+							{ "upload", localPath, "image-generator/" + cosKey },
+							60000);
+						outputEnvelope["uploadExecuted"] = uploadResult.started;
+						if (uploadResult.started &&
+							!uploadResult.timedOut &&
+							uploadResult.exitCode == 0) {
+							const std::string uploadedUrl = LastNonEmptyLine(uploadResult.output);
+							if (!uploadedUrl.empty()) {
+								outputEnvelope["url"] = uploadedUrl;
+							}
 						}
 						else {
-							outputEnvelope["success"] = true;
-							outputEnvelope["raw"] = process.output;
+							outputEnvelope["uploadError"] = TruncateDiagnosticText(uploadResult.output);
+						}
+					}
+
+					result.executed = true;
+					result.status = "ok";
+					result.errorCode.clear();
+					result.errorMessage.clear();
+					result.result = outputEnvelope.dump();
+					return result;
+				});
+		}
+	}
+
+
+
+
+	void RegisterBaiduSearchRuntimeTools(
+		blazeclaw::gateway::GatewayHost& host,
+		const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
+		const auto skillRoot = toolPolicy.baiduSearchSkillRoot;
+		for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
+			host.RegisterRuntimeToolV2(
+				blazeclaw::gateway::ToolCatalogEntry{
+					.id = spec.id,
+					.label = spec.label,
+					.category = "search",
+					.enabled = true,
+				},
+				[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					blazeclaw::gateway::ToolExecuteResultV2 result;
+					result.tool = request.tool.empty() ? spec.id : request.tool;
+					result.correlationId = request.correlationId;
+					result.startedAtMs = CurrentEpochMs();
+
+					EnsureBaiduApiKeyRuntimeEnv();
+					wchar_t* baiduApiKey = nullptr;
+					std::size_t baiduApiKeyLen = 0;
+					const bool hasBaiduApiKey =
+						(_wdupenv_s(&baiduApiKey, &baiduApiKeyLen, L"BAIDU_API_KEY") == 0 &&
+							baiduApiKey != nullptr &&
+							baiduApiKeyLen > 0);
+					if (baiduApiKey != nullptr) {
+						free(baiduApiKey);
+					}
+					if (!hasBaiduApiKey) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "baidu_api_key_missing";
+						result.errorMessage =
+							"BAIDU_API_KEY missing in runtime environment and persisted skill config.";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					if (!skillRoot.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "skill_runtime_missing";
+						result.errorMessage = "baidu-search skill root not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+					if (!std::filesystem::exists(scriptPath)) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "script_missing";
+						result.errorMessage = "tool script not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					nlohmann::json params = nlohmann::json::object();
+					if (request.argsJson.has_value() && !request.argsJson->empty()) {
+						try {
+							params = nlohmann::json::parse(request.argsJson.value());
+						}
+						catch (...) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_args_json";
+							result.errorMessage = "argsJson is not valid JSON";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+					}
+
+					if (params.is_string()) {
+						params = nlohmann::json::object(
+							{ {"query", params.get<std::string>()} });
+					}
+
+					if (!params.is_object()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "invalid_arguments";
+						result.errorMessage = "tool args must be a JSON object";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::string argsErrorCode;
+					std::string argsErrorMessage;
+					const auto cliArgs = tools::BuildBaiduSearchCliArgs(
+						spec,
+						params,
+						argsErrorCode,
+						argsErrorMessage);
+					if (!cliArgs.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = argsErrorCode.empty()
+							? "invalid_arguments"
+							: argsErrorCode;
+						result.errorMessage = argsErrorMessage.empty()
+							? "tool arguments are invalid"
+							: argsErrorMessage;
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::uint64_t timeoutMs = 45000;
+					if (request.deadlineEpochMs.has_value()) {
+						const std::uint64_t now = CurrentEpochMs();
+						if (request.deadlineEpochMs.value() <= now) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.errorCode = "deadline_exceeded";
+							result.errorMessage = "request deadline already elapsed";
+							result.completedAtMs = now;
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
 						}
 
-						const std::string localPath = outputEnvelope.value("local_path", "");
-						const std::string cosKey = outputEnvelope.value("cos_key", "");
-						const auto uploadScript =
-							skillRoot.value().parent_path() / L"upload-to-oss" / L"main.py";
-						if (!localPath.empty() &&
-							!cosKey.empty() &&
-							std::filesystem::exists(uploadScript)) {
-							const auto uploadResult = tools::ExecutePythonSkillProcess(
-								uploadScript,
-								{ "upload", localPath, "image-generator/" + cosKey },
-								60000);
-							outputEnvelope["uploadExecuted"] = uploadResult.started;
-							if (uploadResult.started &&
-								!uploadResult.timedOut &&
-								uploadResult.exitCode == 0) {
-								const std::string uploadedUrl = LastNonEmptyLine(uploadResult.output);
-								if (!uploadedUrl.empty()) {
-									outputEnvelope["url"] = uploadedUrl;
-								}
-							}
-							else {
-								outputEnvelope["uploadError"] = TruncateDiagnosticText(uploadResult.output);
-							}
-						}
+						timeoutMs = request.deadlineEpochMs.value() - now;
+					}
 
+					const auto process = tools::ExecutePythonSkillProcess(
+						scriptPath,
+						cliArgs.value(),
+						timeoutMs);
+
+					result.completedAtMs = CurrentEpochMs();
+					result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+					if (!process.started) {
+						EmitBaiduRuntimeDiagnostic(
+							"process_start_failed",
+							"errorCode=" + process.errorCode +
+							" message=" + process.errorMessage);
+						result.executed = false;
+						result.status = "error";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "process_start_failed"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "failed to start tool process"
+							: process.errorMessage;
+						return result;
+					}
+
+					if (process.timedOut) {
+						EmitBaiduRuntimeDiagnostic(
+							"process_timeout",
+							"errorCode=" + process.errorCode +
+							" output=" +
+							TruncateDiagnosticText(process.output));
+						result.executed = false;
+						result.status = "timed_out";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "deadline_exceeded"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "tool execution timed out"
+							: process.errorMessage;
+						return result;
+					}
+
+					result.result = process.output;
+					if (process.exitCode == 0) {
 						result.executed = true;
 						result.status = "ok";
 						result.errorCode.clear();
 						result.errorMessage.clear();
-						result.result = outputEnvelope.dump();
 						return result;
-					});
-			}
+					}
+
+					result.executed = false;
+					const std::string classifiedFailure =
+						tools::ClassifyBaiduFailureCode(process.output);
+					const std::string normalizedFailure =
+						classifiedFailure == "process_exit_nonzero"
+						? "script_runtime_error"
+						: classifiedFailure;
+					EmitBaiduRuntimeDiagnostic(
+						"process_nonzero",
+						"exitCode=" +
+						std::to_string(static_cast<unsigned long long>(process.exitCode)) +
+						" classifiedFailure=" + classifiedFailure +
+						" normalizedFailure=" + normalizedFailure +
+						" output=" + TruncateDiagnosticText(process.output));
+					result.status = normalizedFailure;
+					result.errorCode = normalizedFailure;
+					if (!result.result.empty()) {
+						result.errorMessage = result.result;
+					}
+					else {
+						result.errorMessage =
+							"tool process returned non-zero exit code " +
+							std::to_string(static_cast<unsigned long long>(process.exitCode));
+					}
+					return result;
+				});
 		}
+	}
 
+	void RegisterContentPolishingRuntimeTools(
+		blazeclaw::gateway::GatewayHost& host) {
+		for (const auto& spec : tools::BuildContentPolishingToolRuntimeSpecs()) {
+			host.RegisterRuntimeToolV2(
+				blazeclaw::gateway::ToolCatalogEntry{
+					.id = spec.id,
+					.label = spec.label,
+					.category = "transform",
+					.enabled = true,
+				},
+				[spec](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					blazeclaw::gateway::ToolExecuteResultV2 result;
+					result.tool = request.tool.empty() ? spec.id : request.tool;
+					result.correlationId = request.correlationId;
+					result.startedAtMs = CurrentEpochMs();
 
-
-
-		void RegisterBaiduSearchRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host,
-			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
-			const auto skillRoot = toolPolicy.baiduSearchSkillRoot;
-			for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "search",
-						.enabled = true,
-					},
-					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
-
-						EnsureBaiduApiKeyRuntimeEnv();
-						wchar_t* baiduApiKey = nullptr;
-						std::size_t baiduApiKeyLen = 0;
-						const bool hasBaiduApiKey =
-							(_wdupenv_s(&baiduApiKey, &baiduApiKeyLen, L"BAIDU_API_KEY") == 0 &&
-								baiduApiKey != nullptr &&
-								baiduApiKeyLen > 0);
-						if (baiduApiKey != nullptr) {
-							free(baiduApiKey);
+					nlohmann::json params = nlohmann::json::object();
+					if (request.argsJson.has_value() && !request.argsJson->empty()) {
+						try {
+							params = nlohmann::json::parse(request.argsJson.value());
 						}
-						if (!hasBaiduApiKey) {
+						catch (...) {
 							result.executed = false;
 							result.status = "error";
-							result.errorCode = "baidu_api_key_missing";
-							result.errorMessage =
-								"BAIDU_API_KEY missing in runtime environment and persisted skill config.";
+							result.errorCode = "invalid_args_json";
+							result.errorMessage = "argsJson is not valid JSON";
 							result.completedAtMs = CurrentEpochMs();
 							result.latencyMs = result.completedAtMs - result.startedAtMs;
 							return result;
 						}
+					}
 
-						if (!skillRoot.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "skill_runtime_missing";
-							result.errorMessage = "baidu-search skill root not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
+					if (params.is_string()) {
+						params = nlohmann::json::object(
+							{ { "text", params.get<std::string>() } });
+					}
 
-						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
-						if (!std::filesystem::exists(scriptPath)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "script_missing";
-							result.errorMessage = "tool script not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args_json";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
+					if (params.is_array()) {
+						nlohmann::json coerced = nlohmann::json::object();
+						for (const auto& el : params) {
+							if (el.is_object()) {
+								coerced = el;
+								break;
 							}
 						}
+						params = std::move(coerced);
+					}
 
-						if (params.is_string()) {
+					if (!params.is_object()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "invalid_arguments";
+						result.errorMessage = "tool args must be a JSON object";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					const auto text =
+						spec.id == "summarize.extract"
+						? tools::ExtractTextArgument(params)
+						: tools::ExtractHumanizerTextArgument(params);
+					if (!text.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "invalid_arguments";
+						result.errorMessage =
+							spec.id == "summarize.extract"
+							? "text_must_include_a_usable_draft_content_segment"
+							: "text_or_summary_is_required";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					if (spec.id == "summarize.extract") {
+						result.executed = true;
+						result.status = "ok";
+						result.result = tools::BuildSummarizeExtractOutput(text.value());
+					}
+					else {
+						result.executed = true;
+						result.status = "ok";
+						result.result = tools::BuildHumanizerRewriteOutput(text.value());
+					}
+
+					result.errorCode.clear();
+					result.errorMessage.clear();
+					result.completedAtMs = CurrentEpochMs();
+					result.latencyMs = result.completedAtMs - result.startedAtMs;
+					return result;
+				});
+		}
+	}
+
+	void RegisterImapSmtpRuntimeTools(
+		blazeclaw::gateway::GatewayHost& host,
+		const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
+		const auto skillRoot = toolPolicy.imapSmtpSkillRoot;
+		for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
+			host.RegisterRuntimeToolV2(
+				blazeclaw::gateway::ToolCatalogEntry{
+					.id = spec.id,
+					.label = spec.label,
+					.category = "email",
+					.enabled = true,
+				},
+				[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					blazeclaw::gateway::ToolExecuteResultV2 result;
+					result.tool = request.tool.empty() ? spec.id : request.tool;
+					result.correlationId = request.correlationId;
+					result.startedAtMs = CurrentEpochMs();
+
+					if (!skillRoot.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "skill_runtime_missing";
+						result.errorMessage = "imap-smtp-email skill root not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+					if (!std::filesystem::exists(scriptPath)) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "script_missing";
+						result.errorMessage = "tool script not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					const auto nodeModulesImap =
+						skillRoot.value() / L"node_modules" / L"imap";
+					if (!std::filesystem::exists(nodeModulesImap)) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "node_dependencies_missing";
+						result.errorMessage =
+							"imap-smtp-email Node dependencies are not installed "
+							"(missing node_modules/imap). From the skill directory run: "
+							"npm ci   (Windows: .\\setup.ps1 installs dependencies.)";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					nlohmann::json params = nlohmann::json::object();
+					if (request.argsJson.has_value() && !request.argsJson->empty()) {
+						try {
+							params = nlohmann::json::parse(request.argsJson.value());
+						}
+						catch (...) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_args_json";
+							result.errorMessage = "argsJson is not valid JSON";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+					}
+
+					if (!params.is_object()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "invalid_arguments";
+						result.errorMessage = "tool args must be a JSON object";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::string argsErrorCode;
+					std::string argsErrorMessage;
+					const auto cliArgs = tools::BuildImapSmtpCliArgs(
+						spec,
+						params,
+						argsErrorCode,
+						argsErrorMessage);
+					if (!cliArgs.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = argsErrorCode.empty()
+							? "invalid_arguments"
+							: argsErrorCode;
+						result.errorMessage = argsErrorMessage.empty()
+							? "tool arguments are invalid"
+							: argsErrorMessage;
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					std::uint64_t timeoutMs = 120000;
+					if (request.deadlineEpochMs.has_value()) {
+						const std::uint64_t now = CurrentEpochMs();
+						if (request.deadlineEpochMs.value() <= now) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.errorCode = "deadline_exceeded";
+							result.errorMessage = "request deadline already elapsed";
+							result.completedAtMs = now;
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						timeoutMs = request.deadlineEpochMs.value() - now;
+					}
+
+					const auto process = tools::ExecuteNodeSkillProcess(
+						scriptPath,
+						cliArgs.value(),
+						timeoutMs);
+
+					result.completedAtMs = CurrentEpochMs();
+					result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+					if (!process.started) {
+						result.executed = false;
+						result.status = "error";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "process_start_failed"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "failed to start tool process"
+							: process.errorMessage;
+						return result;
+					}
+
+					if (process.timedOut) {
+						result.executed = false;
+						result.status = "timed_out";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "deadline_exceeded"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "tool execution timed out"
+							: process.errorMessage;
+						return result;
+					}
+
+					result.result = process.output;
+					if (process.exitCode == 0) {
+						result.executed = true;
+						result.status = "ok";
+						result.errorCode.clear();
+						result.errorMessage.clear();
+						return result;
+					}
+
+					result.executed = false;
+					result.status = "error";
+					result.errorCode = "process_exit_nonzero";
+					{
+						std::string nonZeroMsg =
+							"tool process returned non-zero exit code " +
+							std::to_string(
+								static_cast<unsigned long long>(process.exitCode));
+						if (!process.output.empty()) {
+							nonZeroMsg += " output=";
+							std::string snippet = process.output;
+							constexpr std::size_t kMaxSnippet = 800;
+							if (snippet.size() > kMaxSnippet) {
+								snippet.resize(kMaxSnippet);
+								snippet += "...[truncated]";
+							}
+							for (char& ch : snippet) {
+								if (ch == '\r' || ch == '\n' || ch == '\t') {
+									ch = ' ';
+								}
+							}
+							nonZeroMsg += snippet;
+						}
+						result.errorMessage = std::move(nonZeroMsg);
+					}
+					return result;
+				});
+		}
+	}
+
+	void RegisterBraveSearchRuntimeTools(
+		blazeclaw::gateway::GatewayHost& host,
+		const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
+		const auto skillRoot = toolPolicy.braveSearchSkillRoot;
+		const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
+		const auto webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot;
+		const auto baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot;
+		const bool enableOpenClawWebBrowsingFallback =
+			toolPolicy.enableOpenClawWebBrowsingFallback;
+		const bool requireApiKey = toolPolicy.braveRequireApiKey;
+		const bool hasApiKey = toolPolicy.braveApiKeyPresent;
+		const std::uint64_t searchTimeoutMsDefault = ParseUInt64EnvValue(
+			L"BLAZECLAW_WEB_SEARCH_TIMEOUT_MS",
+			45000);
+		const std::uint64_t fallbackTimeoutMsDefault = ParseUInt64EnvValue(
+			L"BLAZECLAW_WEB_SEARCH_FALLBACK_TIMEOUT_MS",
+			15000);
+		for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
+			host.RegisterRuntimeToolV2(
+				blazeclaw::gateway::ToolCatalogEntry{
+					.id = spec.id,
+					.label = spec.label,
+					.category = "search",
+					.enabled = true,
+				},
+				[spec,
+				skillRoot,
+				openClawWebBrowsingSkillRoot,
+				webBrowsingSkillRoot,
+				baiduSearchSkillRoot,
+				enableOpenClawWebBrowsingFallback,
+				requireApiKey,
+				hasApiKey,
+				searchTimeoutMsDefault,
+				fallbackTimeoutMsDefault](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					blazeclaw::gateway::ToolExecuteResultV2 result;
+					result.tool = request.tool.empty() ? spec.id : request.tool;
+					result.correlationId = request.correlationId;
+					result.startedAtMs = CurrentEpochMs();
+
+					if (requireApiKey && !hasApiKey) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "brave_api_key_missing";
+						result.errorMessage =
+							"BRAVE_API_KEY is required by runtime policy";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					if (!skillRoot.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "skill_runtime_missing";
+						result.errorMessage = "brave-search skill root not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+					if (!std::filesystem::exists(scriptPath)) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "script_missing";
+						result.errorMessage = "tool script not found";
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
+
+					nlohmann::json params = nlohmann::json::object();
+					if (request.argsJson.has_value() && !request.argsJson->empty()) {
+						try {
+							params = nlohmann::json::parse(request.argsJson.value());
+						}
+						catch (...) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_args_json";
+							result.errorMessage = "argsJson is not valid JSON";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+					}
+
+					if (params.is_string()) {
+						if (tools::IsBraveSearchWebToolId(spec.id)) {
 							params = nlohmann::json::object(
 								{ {"query", params.get<std::string>()} });
 						}
-
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::string argsErrorCode;
-						std::string argsErrorMessage;
-						const auto cliArgs = tools::BuildBaiduSearchCliArgs(
-							spec,
-							params,
-							argsErrorCode,
-							argsErrorMessage);
-						if (!cliArgs.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = argsErrorCode.empty()
-								? "invalid_arguments"
-								: argsErrorCode;
-							result.errorMessage = argsErrorMessage.empty()
-								? "tool arguments are invalid"
-								: argsErrorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::uint64_t timeoutMs = 45000;
-						if (request.deadlineEpochMs.has_value()) {
-							const std::uint64_t now = CurrentEpochMs();
-							if (request.deadlineEpochMs.value() <= now) {
-								result.executed = false;
-								result.status = "timed_out";
-								result.errorCode = "deadline_exceeded";
-								result.errorMessage = "request deadline already elapsed";
-								result.completedAtMs = now;
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-
-							timeoutMs = request.deadlineEpochMs.value() - now;
-						}
-
-						const auto process = tools::ExecutePythonSkillProcess(
-							scriptPath,
-							cliArgs.value(),
-							timeoutMs);
-
-						result.completedAtMs = CurrentEpochMs();
-						result.latencyMs = result.completedAtMs - result.startedAtMs;
-
-						if (!process.started) {
-							EmitBaiduRuntimeDiagnostic(
-								"process_start_failed",
-								"errorCode=" + process.errorCode +
-								" message=" + process.errorMessage);
-							result.executed = false;
-							result.status = "error";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "process_start_failed"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "failed to start tool process"
-								: process.errorMessage;
-							return result;
-						}
-
-						if (process.timedOut) {
-							EmitBaiduRuntimeDiagnostic(
-								"process_timeout",
-								"errorCode=" + process.errorCode +
-								" output=" +
-								TruncateDiagnosticText(process.output));
-							result.executed = false;
-							result.status = "timed_out";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "deadline_exceeded"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "tool execution timed out"
-								: process.errorMessage;
-							return result;
-						}
-
-						result.result = process.output;
-						if (process.exitCode == 0) {
-							result.executed = true;
-							result.status = "ok";
-							result.errorCode.clear();
-							result.errorMessage.clear();
-							return result;
-						}
-
-						result.executed = false;
-						const std::string classifiedFailure =
-							tools::ClassifyBaiduFailureCode(process.output);
-						const std::string normalizedFailure =
-							classifiedFailure == "process_exit_nonzero"
-							? "script_runtime_error"
-							: classifiedFailure;
-						EmitBaiduRuntimeDiagnostic(
-							"process_nonzero",
-							"exitCode=" +
-							std::to_string(static_cast<unsigned long long>(process.exitCode)) +
-							" classifiedFailure=" + classifiedFailure +
-							" normalizedFailure=" + normalizedFailure +
-							" output=" + TruncateDiagnosticText(process.output));
-						result.status = normalizedFailure;
-						result.errorCode = normalizedFailure;
-						if (!result.result.empty()) {
-							result.errorMessage = result.result;
-						}
-						else {
-							result.errorMessage =
-								"tool process returned non-zero exit code " +
-								std::to_string(static_cast<unsigned long long>(process.exitCode));
-						}
-						return result;
-					});
-			}
-		}
-
-		void RegisterContentPolishingRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host) {
-			for (const auto& spec : tools::BuildContentPolishingToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "transform",
-						.enabled = true,
-					},
-					[spec](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
-
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args_json";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-						}
-
-						if (params.is_string()) {
+						else if (tools::IsBraveFetchContentToolId(spec.id)) {
 							params = nlohmann::json::object(
-								{ { "text", params.get<std::string>() } });
+								{ {"url", params.get<std::string>()} });
 						}
+					}
 
-						if (params.is_array()) {
-							nlohmann::json coerced = nlohmann::json::object();
-							for (const auto& el : params) {
-								if (el.is_object()) {
-									coerced = el;
-									break;
-								}
-							}
-							params = std::move(coerced);
-						}
-
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						const auto text =
-							spec.id == "summarize.extract"
-							? tools::ExtractTextArgument(params)
-							: tools::ExtractHumanizerTextArgument(params);
-						if (!text.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage =
-								spec.id == "summarize.extract"
-								? "text_must_include_a_usable_draft_content_segment"
-								: "text_or_summary_is_required";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						if (spec.id == "summarize.extract") {
-							result.executed = true;
-							result.status = "ok";
-							result.result = tools::BuildSummarizeExtractOutput(text.value());
-						}
-						else {
-							result.executed = true;
-							result.status = "ok";
-							result.result = tools::BuildHumanizerRewriteOutput(text.value());
-						}
-
-						result.errorCode.clear();
-						result.errorMessage.clear();
-						result.completedAtMs = CurrentEpochMs();
-						result.latencyMs = result.completedAtMs - result.startedAtMs;
-						return result;
-					});
-			}
-		}
-
-		void RegisterImapSmtpRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host,
-			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
-			const auto skillRoot = toolPolicy.imapSmtpSkillRoot;
-			for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "email",
-						.enabled = true,
-					},
-					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
-
-						if (!skillRoot.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "skill_runtime_missing";
-							result.errorMessage = "imap-smtp-email skill root not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
-						if (!std::filesystem::exists(scriptPath)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "script_missing";
-							result.errorMessage = "tool script not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						const auto nodeModulesImap =
-							skillRoot.value() / L"node_modules" / L"imap";
-						if (!std::filesystem::exists(nodeModulesImap)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "node_dependencies_missing";
-							result.errorMessage =
-								"imap-smtp-email Node dependencies are not installed "
-								"(missing node_modules/imap). From the skill directory run: "
-								"npm ci   (Windows: .\\setup.ps1 installs dependencies.)";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args_json";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-						}
-
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::string argsErrorCode;
-						std::string argsErrorMessage;
-						const auto cliArgs = tools::BuildImapSmtpCliArgs(
-							spec,
-							params,
-							argsErrorCode,
-							argsErrorMessage);
-						if (!cliArgs.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = argsErrorCode.empty()
-								? "invalid_arguments"
-								: argsErrorCode;
-							result.errorMessage = argsErrorMessage.empty()
-								? "tool arguments are invalid"
-								: argsErrorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::uint64_t timeoutMs = 120000;
-						if (request.deadlineEpochMs.has_value()) {
-							const std::uint64_t now = CurrentEpochMs();
-							if (request.deadlineEpochMs.value() <= now) {
-								result.executed = false;
-								result.status = "timed_out";
-								result.errorCode = "deadline_exceeded";
-								result.errorMessage = "request deadline already elapsed";
-								result.completedAtMs = now;
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-
-							timeoutMs = request.deadlineEpochMs.value() - now;
-						}
-
-						const auto process = tools::ExecuteNodeSkillProcess(
-							scriptPath,
-							cliArgs.value(),
-							timeoutMs);
-
-						result.completedAtMs = CurrentEpochMs();
-						result.latencyMs = result.completedAtMs - result.startedAtMs;
-
-						if (!process.started) {
-							result.executed = false;
-							result.status = "error";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "process_start_failed"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "failed to start tool process"
-								: process.errorMessage;
-							return result;
-						}
-
-						if (process.timedOut) {
-							result.executed = false;
-							result.status = "timed_out";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "deadline_exceeded"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "tool execution timed out"
-								: process.errorMessage;
-							return result;
-						}
-
-						result.result = process.output;
-						if (process.exitCode == 0) {
-							result.executed = true;
-							result.status = "ok";
-							result.errorCode.clear();
-							result.errorMessage.clear();
-							return result;
-						}
-
+					if (!params.is_object()) {
 						result.executed = false;
 						result.status = "error";
-						result.errorCode = "process_exit_nonzero";
-						{
-							std::string nonZeroMsg =
-								"tool process returned non-zero exit code " +
-								std::to_string(
-									static_cast<unsigned long long>(process.exitCode));
-							if (!process.output.empty()) {
-								nonZeroMsg += " output=";
-								std::string snippet = process.output;
-								constexpr std::size_t kMaxSnippet = 800;
-								if (snippet.size() > kMaxSnippet) {
-									snippet.resize(kMaxSnippet);
-									snippet += "...[truncated]";
-								}
-								for (char& ch : snippet) {
-									if (ch == '\r' || ch == '\n' || ch == '\t') {
-										ch = ' ';
-									}
-								}
-								nonZeroMsg += snippet;
-							}
-							result.errorMessage = std::move(nonZeroMsg);
-						}
-						return result;
-					});
-			}
-		}
-
-		void RegisterBraveSearchRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host,
-			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
-			const auto skillRoot = toolPolicy.braveSearchSkillRoot;
-			const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
-			const auto webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot;
-			const auto baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot;
-			const bool enableOpenClawWebBrowsingFallback =
-				toolPolicy.enableOpenClawWebBrowsingFallback;
-			const bool requireApiKey = toolPolicy.braveRequireApiKey;
-			const bool hasApiKey = toolPolicy.braveApiKeyPresent;
-			const std::uint64_t searchTimeoutMsDefault = ParseUInt64EnvValue(
-				L"BLAZECLAW_WEB_SEARCH_TIMEOUT_MS",
-				45000);
-			const std::uint64_t fallbackTimeoutMsDefault = ParseUInt64EnvValue(
-				L"BLAZECLAW_WEB_SEARCH_FALLBACK_TIMEOUT_MS",
-				15000);
-			for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "search",
-						.enabled = true,
-					},
-					[spec,
-					skillRoot,
-					openClawWebBrowsingSkillRoot,
-					webBrowsingSkillRoot,
-					baiduSearchSkillRoot,
-					enableOpenClawWebBrowsingFallback,
-					requireApiKey,
-					hasApiKey,
-					searchTimeoutMsDefault,
-					fallbackTimeoutMsDefault](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
-
-						if (requireApiKey && !hasApiKey) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "brave_api_key_missing";
-							result.errorMessage =
-								"BRAVE_API_KEY is required by runtime policy";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						if (!skillRoot.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "skill_runtime_missing";
-							result.errorMessage = "brave-search skill root not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
-						if (!std::filesystem::exists(scriptPath)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "script_missing";
-							result.errorMessage = "tool script not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args_json";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-						}
-
-						if (params.is_string()) {
-							if (tools::IsBraveSearchWebToolId(spec.id)) {
-								params = nlohmann::json::object(
-									{ {"query", params.get<std::string>()} });
-							}
-							else if (tools::IsBraveFetchContentToolId(spec.id)) {
-								params = nlohmann::json::object(
-									{ {"url", params.get<std::string>()} });
-							}
-						}
-
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_arguments";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::string argsErrorCode;
-						std::string argsErrorMessage;
-						const auto cliArgs = tools::BuildBraveSearchCliArgs(
-							spec,
-							params,
-							argsErrorCode,
-							argsErrorMessage);
-						if (!cliArgs.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = argsErrorCode.empty()
-								? "invalid_arguments"
-								: argsErrorCode;
-							result.errorMessage = argsErrorMessage.empty()
-								? "tool arguments are invalid"
-								: argsErrorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::uint64_t timeoutMs =
-							tools::IsBraveSearchWebToolId(spec.id) ? searchTimeoutMsDefault : 30000;
-						if (request.deadlineEpochMs.has_value()) {
-							const std::uint64_t now = CurrentEpochMs();
-							if (request.deadlineEpochMs.value() <= now) {
-								result.executed = false;
-								result.status = "timed_out";
-								result.errorCode = "deadline_exceeded";
-								result.errorMessage = "request deadline already elapsed";
-								result.completedAtMs = now;
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-
-							timeoutMs = request.deadlineEpochMs.value() - now;
-						}
-
-						const auto process = tools::ExecuteNodeSkillProcess(
-							scriptPath,
-							cliArgs.value(),
-							timeoutMs);
-
+						result.errorCode = "invalid_arguments";
+						result.errorMessage = "tool args must be a JSON object";
 						result.completedAtMs = CurrentEpochMs();
 						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
 
-						if (!process.started) {
-							result.executed = false;
-							result.status = "error";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "process_start_failed"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "failed to start tool process"
-								: process.errorMessage;
-							if (result.result.empty()) {
-								result.result = result.errorMessage;
-							}
+					std::string argsErrorCode;
+					std::string argsErrorMessage;
+					const auto cliArgs = tools::BuildBraveSearchCliArgs(
+						spec,
+						params,
+						argsErrorCode,
+						argsErrorMessage);
+					if (!cliArgs.has_value()) {
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = argsErrorCode.empty()
+							? "invalid_arguments"
+							: argsErrorCode;
+						result.errorMessage = argsErrorMessage.empty()
+							? "tool arguments are invalid"
+							: argsErrorMessage;
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+						return result;
+					}
 
-							if (tools::IsBraveSearchWebToolId(spec.id) &&
-								spec.id == "web_browsing.search.web" &&
-								webBrowsingSkillRoot.has_value() &&
-								params.contains("query") &&
-								params["query"].is_string()) {
-								const std::string query =
-									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
-								if (!query.empty()) {
-									std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
-									if (request.deadlineEpochMs.has_value()) {
-										const std::uint64_t now = CurrentEpochMs();
-										if (request.deadlineEpochMs.value() <= now) {
-											fallbackTimeoutMs = 0;
-										}
-										else {
-											fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
-										}
-									}
-
-									if (fallbackTimeoutMs > 0) {
-										const auto primaryPythonScriptPath =
-											webBrowsingSkillRoot.value() /
-											L"scripts" /
-											L"search_web.py";
-										if (std::filesystem::exists(primaryPythonScriptPath)) {
-											const auto pythonFallbackProcess = tools::ExecutePythonSkillProcess(
-												primaryPythonScriptPath,
-												std::vector<std::string>{ query },
-												fallbackTimeoutMs);
-											if (pythonFallbackProcess.started &&
-												!pythonFallbackProcess.timedOut &&
-												pythonFallbackProcess.exitCode == 0) {
-												result.executed = true;
-												result.status = "ok";
-												result.result =
-													pythonFallbackProcess.output +
-													"\n[fallback=web_browsing_python_primary]";
-												result.errorCode.clear();
-												result.errorMessage.clear();
-												result.completedAtMs = CurrentEpochMs();
-												result.latencyMs =
-													result.completedAtMs - result.startedAtMs;
-												return result;
-											}
-										}
-									}
-								}
-							}
-
-							if (spec.id == "web_browsing.search.web" &&
-								baiduSearchSkillRoot.has_value() &&
-								params.contains("query") &&
-								params["query"].is_string()) {
-								const std::string query =
-									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
-								if (!query.empty()) {
-									std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
-									if (request.deadlineEpochMs.has_value()) {
-										const std::uint64_t now = CurrentEpochMs();
-										if (request.deadlineEpochMs.value() <= now) {
-											fallbackTimeoutMs = 0;
-										}
-										else {
-											fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
-										}
-									}
-
-									if (fallbackTimeoutMs > 0) {
-										const auto fallbackScriptPath =
-											baiduSearchSkillRoot.value() /
-											L"scripts" /
-											L"search.py";
-										if (std::filesystem::exists(fallbackScriptPath)) {
-											nlohmann::json fallbackParams = nlohmann::json::object();
-											fallbackParams["query"] = query;
-											if (params.contains("count") &&
-												params["count"].is_number_integer()) {
-												fallbackParams["count"] = params["count"];
-											}
-
-											std::string fallbackArgsErrorCode;
-											std::string fallbackArgsErrorMessage;
-											const auto fallbackCliArgs =
-												tools::BuildBaiduSearchCliArgs(
-													tools::BaiduSearchToolRuntimeSpec{
-														.id = "baidu-search.search.web",
-														.label = "Baidu Web Search",
-														.script = "scripts/search.py",
-													},
-													fallbackParams,
-													fallbackArgsErrorCode,
-													fallbackArgsErrorMessage);
-											if (fallbackCliArgs.has_value()) {
-												const auto fallbackProcess = tools::ExecutePythonSkillProcess(
-													fallbackScriptPath,
-													fallbackCliArgs.value(),
-													fallbackTimeoutMs);
-												if (fallbackProcess.started &&
-													!fallbackProcess.timedOut &&
-													fallbackProcess.exitCode == 0) {
-													result.executed = true;
-													result.status = "ok";
-													result.result =
-														fallbackProcess.output +
-														"\n[fallback=baidu_search_python]";
-													result.errorCode.clear();
-													result.errorMessage.clear();
-													result.completedAtMs = CurrentEpochMs();
-													result.latencyMs =
-														result.completedAtMs - result.startedAtMs;
-													return result;
-												}
-											}
-										}
-									}
-								}
-							}
-							return result;
-						}
-
-						if (process.timedOut) {
+					std::uint64_t timeoutMs =
+						tools::IsBraveSearchWebToolId(spec.id) ? searchTimeoutMsDefault : 30000;
+					if (request.deadlineEpochMs.has_value()) {
+						const std::uint64_t now = CurrentEpochMs();
+						if (request.deadlineEpochMs.value() <= now) {
 							result.executed = false;
 							result.status = "timed_out";
-							result.result = process.output;
-							result.errorCode = process.errorCode.empty()
-								? "deadline_exceeded"
-								: process.errorCode;
-							result.errorMessage = process.errorMessage.empty()
-								? "tool execution timed out"
-								: process.errorMessage;
+							result.errorCode = "deadline_exceeded";
+							result.errorMessage = "request deadline already elapsed";
+							result.completedAtMs = now;
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
 							return result;
 						}
 
-						result.result = process.output;
-						if (process.exitCode == 0) {
-							result.executed = true;
-							result.status = "ok";
-							result.errorCode.clear();
-							result.errorMessage.clear();
-							return result;
-						}
+						timeoutMs = request.deadlineEpochMs.value() - now;
+					}
 
+					const auto process = tools::ExecuteNodeSkillProcess(
+						scriptPath,
+						cliArgs.value(),
+						timeoutMs);
+
+					result.completedAtMs = CurrentEpochMs();
+					result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+					if (!process.started) {
 						result.executed = false;
-						const std::string classifiedFailure =
-							tools::ClassifyBraveFailureCode(process.output);
-						const bool canAttemptBaiduFallback =
+						result.status = "error";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "process_start_failed"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "failed to start tool process"
+							: process.errorMessage;
+						if (result.result.empty()) {
+							result.result = result.errorMessage;
+						}
+
+						if (tools::IsBraveSearchWebToolId(spec.id) &&
 							spec.id == "web_browsing.search.web" &&
-							classifiedFailure == "network_error" &&
-							tools::IsBraveNetworkTimeoutFailure(process.output) &&
+							webBrowsingSkillRoot.has_value() &&
+							params.contains("query") &&
+							params["query"].is_string()) {
+							const std::string query =
+								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+							if (!query.empty()) {
+								std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
+								if (request.deadlineEpochMs.has_value()) {
+									const std::uint64_t now = CurrentEpochMs();
+									if (request.deadlineEpochMs.value() <= now) {
+										fallbackTimeoutMs = 0;
+									}
+									else {
+										fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+									}
+								}
+
+								if (fallbackTimeoutMs > 0) {
+									const auto primaryPythonScriptPath =
+										webBrowsingSkillRoot.value() /
+										L"scripts" /
+										L"search_web.py";
+									if (std::filesystem::exists(primaryPythonScriptPath)) {
+										const auto pythonFallbackProcess = tools::ExecutePythonSkillProcess(
+											primaryPythonScriptPath,
+											std::vector<std::string>{ query },
+											fallbackTimeoutMs);
+										if (pythonFallbackProcess.started &&
+											!pythonFallbackProcess.timedOut &&
+											pythonFallbackProcess.exitCode == 0) {
+											result.executed = true;
+											result.status = "ok";
+											result.result =
+												pythonFallbackProcess.output +
+												"\n[fallback=web_browsing_python_primary]";
+											result.errorCode.clear();
+											result.errorMessage.clear();
+											result.completedAtMs = CurrentEpochMs();
+											result.latencyMs =
+												result.completedAtMs - result.startedAtMs;
+											return result;
+										}
+									}
+								}
+							}
+						}
+
+						if (spec.id == "web_browsing.search.web" &&
 							baiduSearchSkillRoot.has_value() &&
 							params.contains("query") &&
-							params["query"].is_string();
-						if (canAttemptBaiduFallback) {
+							params["query"].is_string()) {
 							const std::string query =
 								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 							if (!query.empty()) {
@@ -2793,7 +2742,7 @@ namespace blazeclaw::core {
 												result.status = "ok";
 												result.result =
 													fallbackProcess.output +
-													"\n[fallback=baidu_search_python_network_error]";
+													"\n[fallback=baidu_search_python]";
 												result.errorCode.clear();
 												result.errorMessage.clear();
 												result.completedAtMs = CurrentEpochMs();
@@ -2806,39 +2755,85 @@ namespace blazeclaw::core {
 								}
 							}
 						}
-						const bool canAttemptOpenClawFallback =
-							enableOpenClawWebBrowsingFallback &&
-							spec.id == "web_browsing.search.web" &&
-							classifiedFailure == "network_error" &&
-							tools::IsBraveNetworkTimeoutFailure(process.output) &&
-							openClawWebBrowsingSkillRoot.has_value() &&
-							params.contains("query") &&
-							params["query"].is_string();
+						return result;
+					}
 
-						if (canAttemptOpenClawFallback) {
-							const std::string query =
-								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
-							if (!query.empty()) {
-								std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
-								if (request.deadlineEpochMs.has_value()) {
-									const std::uint64_t now = CurrentEpochMs();
-									if (request.deadlineEpochMs.value() <= now) {
-										fallbackTimeoutMs = 0;
-									}
-									else {
-										fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
-									}
+					if (process.timedOut) {
+						result.executed = false;
+						result.status = "timed_out";
+						result.result = process.output;
+						result.errorCode = process.errorCode.empty()
+							? "deadline_exceeded"
+							: process.errorCode;
+						result.errorMessage = process.errorMessage.empty()
+							? "tool execution timed out"
+							: process.errorMessage;
+						return result;
+					}
+
+					result.result = process.output;
+					if (process.exitCode == 0) {
+						result.executed = true;
+						result.status = "ok";
+						result.errorCode.clear();
+						result.errorMessage.clear();
+						return result;
+					}
+
+					result.executed = false;
+					const std::string classifiedFailure =
+						tools::ClassifyBraveFailureCode(process.output);
+					const bool canAttemptBaiduFallback =
+						spec.id == "web_browsing.search.web" &&
+						classifiedFailure == "network_error" &&
+						tools::IsBraveNetworkTimeoutFailure(process.output) &&
+						baiduSearchSkillRoot.has_value() &&
+						params.contains("query") &&
+						params["query"].is_string();
+					if (canAttemptBaiduFallback) {
+						const std::string query =
+							tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+						if (!query.empty()) {
+							std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
+							if (request.deadlineEpochMs.has_value()) {
+								const std::uint64_t now = CurrentEpochMs();
+								if (request.deadlineEpochMs.value() <= now) {
+									fallbackTimeoutMs = 0;
 								}
+								else {
+									fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+								}
+							}
 
-								if (fallbackTimeoutMs > 0) {
-									const auto fallbackScriptPath =
-										openClawWebBrowsingSkillRoot.value() /
-										L"scripts" /
-										L"search_web.py";
-									if (std::filesystem::exists(fallbackScriptPath)) {
+							if (fallbackTimeoutMs > 0) {
+								const auto fallbackScriptPath =
+									baiduSearchSkillRoot.value() /
+									L"scripts" /
+									L"search.py";
+								if (std::filesystem::exists(fallbackScriptPath)) {
+									nlohmann::json fallbackParams = nlohmann::json::object();
+									fallbackParams["query"] = query;
+									if (params.contains("count") &&
+										params["count"].is_number_integer()) {
+										fallbackParams["count"] = params["count"];
+									}
+
+									std::string fallbackArgsErrorCode;
+									std::string fallbackArgsErrorMessage;
+									const auto fallbackCliArgs =
+										tools::BuildBaiduSearchCliArgs(
+											tools::BaiduSearchToolRuntimeSpec{
+												.id = "baidu-search.search.web",
+												.label = "Baidu Web Search",
+												.script = "scripts/search.py",
+											},
+											fallbackParams,
+											fallbackArgsErrorCode,
+											fallbackArgsErrorMessage);
+									if (fallbackCliArgs.has_value()) {
 										const auto fallbackProcess = tools::ExecutePythonSkillProcess(
 											fallbackScriptPath,
-											std::vector<std::string>{ query },
+											fallbackCliArgs.value(),
 											fallbackTimeoutMs);
 										if (fallbackProcess.started &&
 											!fallbackProcess.timedOut &&
@@ -2847,7 +2842,7 @@ namespace blazeclaw::core {
 											result.status = "ok";
 											result.result =
 												fallbackProcess.output +
-												"\n[fallback=openclaw_python]";
+												"\n[fallback=baidu_search_python_network_error]";
 											result.errorCode.clear();
 											result.errorMessage.clear();
 											result.completedAtMs = CurrentEpochMs();
@@ -2859,71 +2854,123 @@ namespace blazeclaw::core {
 								}
 							}
 						}
+					}
+					const bool canAttemptOpenClawFallback =
+						enableOpenClawWebBrowsingFallback &&
+						spec.id == "web_browsing.search.web" &&
+						classifiedFailure == "network_error" &&
+						tools::IsBraveNetworkTimeoutFailure(process.output) &&
+						openClawWebBrowsingSkillRoot.has_value() &&
+						params.contains("query") &&
+						params["query"].is_string();
 
-						result.status = classifiedFailure;
-						result.errorCode = classifiedFailure;
-						if (!result.result.empty()) {
-							result.errorMessage = result.result;
+					if (canAttemptOpenClawFallback) {
+						const std::string query =
+							tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+						if (!query.empty()) {
+							std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
+							if (request.deadlineEpochMs.has_value()) {
+								const std::uint64_t now = CurrentEpochMs();
+								if (request.deadlineEpochMs.value() <= now) {
+									fallbackTimeoutMs = 0;
+								}
+								else {
+									fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+								}
+							}
+
+							if (fallbackTimeoutMs > 0) {
+								const auto fallbackScriptPath =
+									openClawWebBrowsingSkillRoot.value() /
+									L"scripts" /
+									L"search_web.py";
+								if (std::filesystem::exists(fallbackScriptPath)) {
+									const auto fallbackProcess = tools::ExecutePythonSkillProcess(
+										fallbackScriptPath,
+										std::vector<std::string>{ query },
+										fallbackTimeoutMs);
+									if (fallbackProcess.started &&
+										!fallbackProcess.timedOut &&
+										fallbackProcess.exitCode == 0) {
+										result.executed = true;
+										result.status = "ok";
+										result.result =
+											fallbackProcess.output +
+											"\n[fallback=openclaw_python]";
+										result.errorCode.clear();
+										result.errorMessage.clear();
+										result.completedAtMs = CurrentEpochMs();
+										result.latencyMs =
+											result.completedAtMs - result.startedAtMs;
+										return result;
+									}
+								}
+							}
 						}
-						else {
-							result.errorMessage =
-								"tool process returned non-zero exit code " +
-								std::to_string(static_cast<unsigned long long>(process.exitCode));
-						}
-						return result;
-					});
+					}
+
+					result.status = classifiedFailure;
+					result.errorCode = classifiedFailure;
+					if (!result.result.empty()) {
+						result.errorMessage = result.result;
+					}
+					else {
+						result.errorMessage =
+							"tool process returned non-zero exit code " +
+							std::to_string(static_cast<unsigned long long>(process.exitCode));
+					}
+					return result;
+				});
+		}
+	}
+
+	std::string WideToNarrowAscii(const std::wstring& value) {
+		std::string output;
+		output.reserve(value.size());
+		for (const auto ch : value) {
+			output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+		}
+
+		return output;
+	}
+
+	bool IsOneOfChannels(
+		const std::vector<std::wstring>& enabledChannels,
+		const std::wstring& candidate) {
+		for (const auto& channel : enabledChannels) {
+			if (_wcsicmp(channel.c_str(), candidate.c_str()) == 0) {
+				return true;
 			}
 		}
 
-		std::string WideToNarrowAscii(const std::wstring& value) {
-			std::string output;
-			output.reserve(value.size());
-			for (const auto ch : value) {
-				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
+		return false;
+	}
 
-			return output;
+	std::string BuildOpenClawOriginalTelemetryPayload(
+		const std::wstring& skillName,
+		const std::string& activationState,
+		const std::size_t diagnosticsCount) {
+		return std::string("{\"skill\":") +
+			blazeclaw::gateway::JsonString(WideToNarrowAscii(skillName)) +
+			",\"state\":" +
+			blazeclaw::gateway::JsonString(activationState) +
+			",\"diagnostics\":" +
+			std::to_string(diagnosticsCount) +
+			"}";
+	}
+
+	std::wstring ToWideLocal(const std::string& value) {
+		if (value.empty()) {
+			return {};
 		}
 
-		bool IsOneOfChannels(
-			const std::vector<std::wstring>& enabledChannels,
-			const std::wstring& candidate) {
-			for (const auto& channel : enabledChannels) {
-				if (_wcsicmp(channel.c_str(), candidate.c_str()) == 0) {
-					return true;
-				}
-			}
-
-			return false;
+		std::wstring wide;
+		wide.reserve(value.size());
+		for (const unsigned char ch : value) {
+			wide.push_back(static_cast<wchar_t>(std::towlower(ch)));
 		}
-
-		std::string BuildOpenClawOriginalTelemetryPayload(
-			const std::wstring& skillName,
-			const std::string& activationState,
-			const std::size_t diagnosticsCount) {
-			return std::string("{\"skill\":") +
-				blazeclaw::gateway::JsonString(WideToNarrowAscii(skillName)) +
-				",\"state\":" +
-				blazeclaw::gateway::JsonString(activationState) +
-				",\"diagnostics\":" +
-				std::to_string(diagnosticsCount) +
-				"}";
-		}
-
-		std::wstring ToWideLocal(const std::string& value) {
-			if (value.empty()) {
-				return {};
-			}
-
-			std::wstring wide;
-			wide.reserve(value.size());
-			for (const unsigned char ch : value) {
-				wide.push_back(static_cast<wchar_t>(std::towlower(ch)));
-			}
-			return wide;
-		}
-
-	} // namespace
+		return wide;
+	}
 
 	ServiceManager::ServiceManager()
 		: m_operatorDiagnosticsAssembler(
@@ -3309,7 +3356,7 @@ namespace blazeclaw::core {
 				ResolveGeneratedOpenClawToolTargetFromTriggerHints(
 					m_skillsCatalog.entries,
 					canonicalCommandBody);
-				generatedTarget.has_value()) {
+					generatedTarget.has_value()) {
 				return generatedTarget.value();
 			}
 
@@ -3575,22 +3622,22 @@ namespace blazeclaw::core {
 		}
 		const blazeclaw::gateway::ToolExecuteResultV2 toolResult =
 			[&]() {
-				const blazeclaw::gateway::ToolExecuteRequestV2 executeRequest{
-					.tool = resolvedSkillInvocationToolTarget.value(),
-					.argsJson = std::optional<std::string>(inlineArgs),
-					.correlationId = request.runId,
-					.deadlineEpochMs = std::nullopt,
-				};
+			const blazeclaw::gateway::ToolExecuteRequestV2 executeRequest{
+				.tool = resolvedSkillInvocationToolTarget.value(),
+				.argsJson = std::optional<std::string>(inlineArgs),
+				.correlationId = request.runId,
+				.deadlineEpochMs = std::nullopt,
+			};
 
-				if (const auto generatedResult =
-					TryExecuteGeneratedOpenClawConstantOutputTool(
-						m_skillsCatalog.entries,
-						executeRequest);
-					generatedResult.has_value()) {
-					return generatedResult.value();
-				}
+			if (const auto generatedResult =
+				TryExecuteGeneratedOpenClawConstantOutputTool(
+					m_skillsCatalog.entries,
+					executeRequest);
+				generatedResult.has_value()) {
+				return generatedResult.value();
+			}
 
-				return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
+			return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
 			}();
 
 		if (!toolResult.executed) {

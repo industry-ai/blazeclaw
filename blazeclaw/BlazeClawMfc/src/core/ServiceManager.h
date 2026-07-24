@@ -136,6 +136,17 @@ namespace blazeclaw::core {
 		[[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
 		[[nodiscard]] const SkillsRunSnapshot& RunSkillsSnapshot() const noexcept;
 
+	// Text-to-Speech facade
+	[[nodiscard]] bool TextToSpeechEnabled() const noexcept;
+	std::string StartTextToSpeech(
+		const std::string& text,
+		const std::string& provider,
+		const std::string& model,
+		const std::string& voice,
+		const std::string& runId);
+	void StopTextToSpeech(const std::string& utteranceId);
+	[[nodiscard]] texttospeech::TextToSpeechRuntimeSnapshot CollectTextToSpeechSnapshot() const noexcept;
+
 		// Gateway integration surface
 		[[nodiscard]] std::string InvokeGatewayMethod(
 			const std::string& method,
