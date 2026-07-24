@@ -3,6 +3,7 @@
 
 #include "EmbeddingsService.h"
 #include "ServiceManager.h"
+#include "ServiceManagerSnapshotHelpers.h"
 #include "../app/CMgrMessage.h"
 #include "../gateway/Telemetry.h"
 
@@ -434,19 +435,21 @@ namespace blazeclaw::core {
 				}
 			};
 
+			// Forward to the snapshot helper to collect the gateway-facing
+			// speech status. This keeps GatewayHostBindingCoordinator small and
+			// centralizes snapshot normalization logic.
+			using namespace blazeclaw::core::servicemanager_snapshot;
+			const auto snap = CollectGatewayStatusSnapshot(manager.m_activeConfig);
+			const auto tts = manager.CollectTextToSpeechSnapshot();
 			blazeclaw::gateway::GatewayHost::SpeechStatusResult status;
-			status.supported = true;
+			status.supported = snap.supported;
 			status.ready = manager.IsRunning();
-			status.speaking = manager.m_textToSpeech.speaking;
-			status.utteranceId = manager.m_textToSpeech.activeUtteranceId;
-			status.provider = manager.m_textToSpeech.provider;
-			status.model = manager.m_textToSpeech.model;
-			status.voice = manager.m_textToSpeech.voice;
-			status.status = manager.m_textToSpeech.status;
-			if (manager.m_textToSpeech.error.has_value()) {
-				status.errorCode = errorCodeToString(manager.m_textToSpeech.error->code);
-				status.errorMessage = manager.m_textToSpeech.error->message;
-			}
+			status.speaking = tts.speaking;
+			status.utteranceId = tts.activeUtteranceId;
+			status.provider = tts.provider;
+			status.model = tts.model;
+			status.voice = tts.voice;
+			status.status = snap.status;
 			return status;
 			});
 
@@ -499,51 +502,40 @@ namespace blazeclaw::core {
 
 		manager.m_gatewayHost.SetSpeechSpeakCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechSpeakRequest& request) {
-			manager.m_textToSpeech.speakRequestsStarted += 1;
-			manager.m_textToSpeech.enabled = true;
-			manager.m_textToSpeech.ready = manager.IsRunning();
-			manager.m_textToSpeech.provider = request.provider.empty() ? "default" : request.provider;
-			manager.m_textToSpeech.model = request.model.empty() ? "default" : request.model;
-			manager.m_textToSpeech.voice = request.voice.empty() ? "default" : request.voice;
-			manager.m_textToSpeech.activeUtteranceId =
-				request.runId.empty()
-				? std::string("utterance-") + std::to_string(manager.m_textToSpeech.speakRequestsStarted)
-				: request.runId + "-" + std::to_string(manager.m_textToSpeech.speakRequestsStarted);
-			manager.m_textToSpeech.speaking = true;
-			manager.m_textToSpeech.status = "speaking";
-			manager.m_textToSpeech.error.reset();
-			manager.m_textToSpeech.speakRequestsCompleted += 1;
+			const auto utteranceId = manager.StartTextToSpeech(
+				request.text,
+				request.provider,
+				request.model,
+				request.voice,
+				request.runId);
+			const auto tts = manager.CollectTextToSpeechSnapshot();
 
 			blazeclaw::gateway::GatewayHost::SpeechSpeakResult result;
 			result.ok = true;
 			result.cancelled = false;
-			result.speaking = manager.m_textToSpeech.speaking;
-			result.utteranceId = manager.m_textToSpeech.activeUtteranceId;
+			result.speaking = tts.speaking;
+			result.utteranceId = tts.activeUtteranceId.empty() ? utteranceId : tts.activeUtteranceId;
 			result.normalizedText = request.text;
 			result.audioPath =
-				"artifacts/tts/" + manager.m_textToSpeech.activeUtteranceId + ".wav";
-			result.voice = manager.m_textToSpeech.voice;
-			result.provider = manager.m_textToSpeech.provider;
-			result.model = manager.m_textToSpeech.model;
+				"artifacts/tts/" + result.utteranceId + ".wav";
+			result.voice = tts.voice;
+			result.provider = tts.provider;
+			result.model = tts.model;
 			result.latencyMs = 0;
-			result.status = manager.m_textToSpeech.status;
+			result.status = tts.status;
 			return result;
 			});
 
 		manager.m_gatewayHost.SetSpeechStopCallback([&manager](
 			const blazeclaw::gateway::GatewayHost::SpeechStopRequest& request) {
-			manager.m_textToSpeech.stopRequests += 1;
-			manager.m_textToSpeech.speaking = false;
-			manager.m_textToSpeech.status = "stopped";
-			if (!request.utteranceId.empty()) {
-				manager.m_textToSpeech.activeUtteranceId = request.utteranceId;
-			}
+			manager.StopTextToSpeech(request.utteranceId);
+			const auto tts = manager.CollectTextToSpeechSnapshot();
 
 			blazeclaw::gateway::GatewayHost::SpeechStopResult result;
 			result.ok = true;
 			result.stopped = true;
-			result.utteranceId = manager.m_textToSpeech.activeUtteranceId;
-			result.status = manager.m_textToSpeech.status;
+			result.utteranceId = tts.activeUtteranceId;
+			result.status = tts.status;
 			return result;
 			});
 	}

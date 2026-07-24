@@ -18,4 +18,15 @@ namespace blazeclaw::core::servicemanager_tts {
 	// Collect current TTS runtime snapshot for UI/tests.
 	texttospeech::TextToSpeechRuntimeSnapshot CollectTextToSpeechSnapshot();
 
+	// Stateful helpers for moving TTS snapshot ownership out of ServiceManager.
+	texttospeech::TextToSpeechRuntimeSnapshot StartTextToSpeechState(
+		bool running,
+		const std::string& provider,
+		const std::string& model,
+		const std::string& voice,
+		const std::string& runId);
+
+	texttospeech::TextToSpeechRuntimeSnapshot StopTextToSpeechState(
+		const std::string& utteranceId);
+
 } // namespace blazeclaw::core::servicemanager_tts

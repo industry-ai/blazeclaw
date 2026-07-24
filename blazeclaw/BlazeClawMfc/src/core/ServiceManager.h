@@ -33,6 +33,7 @@
 #include "SpeechTranscriptionCoordinator.h"
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 #include "runtime/TextToSpeech/ITextToSpeechRuntime.h"
+#include "ServiceManagerSnapshotHelpers.h"
 #include "SkillsStartupCoordinator.h"
 #include "SubagentRegistryService.h"
 #include "HookCatalogService.h"
@@ -146,6 +147,10 @@ namespace blazeclaw::core {
 		const std::string& runId);
 	void StopTextToSpeech(const std::string& utteranceId);
 	[[nodiscard]] texttospeech::TextToSpeechRuntimeSnapshot CollectTextToSpeechSnapshot() const noexcept;
+
+	// Snapshot forwarding facades (delegates to servicemanager_snapshot helper)
+	[[nodiscard]] blazeclaw::core::servicemanager_snapshot::GatewayStatusSnapshot CollectGatewayStatusSnapshot() const noexcept;
+	[[nodiscard]] blazeclaw::core::servicemanager_snapshot::RuntimeHealthSnapshot CollectRuntimeHealthSnapshot() const noexcept;
 
 		// Gateway integration surface
 		[[nodiscard]] std::string InvokeGatewayMethod(
@@ -482,7 +487,6 @@ namespace blazeclaw::core {
 		speechrecognition::SpeechRecognitionRuntime m_speechRecognitionRuntime;
 		SpeechTranscriptionCoordinator m_speechTranscriptionCoordinator;
 		speechrecognition::SpeechRecognitionRuntimeSnapshot m_speechRecognition;
-		texttospeech::TextToSpeechRuntimeSnapshot m_textToSpeech;
 		std::unique_ptr<localmodel::ITextGenerationRuntime> m_localModelRuntime;
 		localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
 		bool m_localModelRolloutEligible = false;

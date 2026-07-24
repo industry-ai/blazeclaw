@@ -29,6 +29,7 @@
 #include "ServiceManagerLocalModelHelpers.h"
 #include "ServiceManagerSpeechRuntimeHelpers.h"
 #include "ServiceManagerTextToSpeechHelpers.h"
+#include "ServiceManagerSnapshotHelpers.h"
 
 #include <cctype>
 #include <chrono>
@@ -131,36 +132,37 @@ namespace blazeclaw::core {
 		const std::string& model,
 		const std::string& voice,
 		const std::string& runId) {
-		m_textToSpeech.speakRequestsStarted += 1;
-		m_textToSpeech.enabled = true;
-		m_textToSpeech.ready = m_running;
-		m_textToSpeech.provider = provider.empty() ? "default" : provider;
-		m_textToSpeech.model = model.empty() ? "default" : model;
-		m_textToSpeech.voice = voice.empty() ? "default" : voice;
-		m_textToSpeech.activeUtteranceId =
-			runId.empty()
-			? std::string("utterance-") + std::to_string(m_textToSpeech.speakRequestsStarted)
-			: runId + "-" + std::to_string(m_textToSpeech.speakRequestsStarted);
-		m_textToSpeech.speaking = true;
-		m_textToSpeech.status = "speaking";
-		m_textToSpeech.error.reset();
-		m_textToSpeech.speakRequestsCompleted += 1;
-
+		auto snapshot = servicemanager_tts::StartTextToSpeechState(
+			m_running,
+			provider,
+			model,
+			voice,
+			runId);
+		(void)snapshot;
 		return servicemanager_tts::StartTextToSpeech(text, voice, model);
 	}
 
 	void ServiceManager::StopTextToSpeech(const std::string& utteranceId) {
-		m_textToSpeech.stopRequests += 1;
-		m_textToSpeech.speaking = false;
-		m_textToSpeech.status = "stopped";
-		if (!utteranceId.empty()) {
-			m_textToSpeech.activeUtteranceId = utteranceId;
-		}
+		auto snapshot = servicemanager_tts::StopTextToSpeechState(utteranceId);
+		(void)snapshot;
 		servicemanager_tts::StopTextToSpeech(utteranceId);
 	}
 
 	texttospeech::TextToSpeechRuntimeSnapshot ServiceManager::CollectTextToSpeechSnapshot() const noexcept {
 		return servicemanager_tts::CollectTextToSpeechSnapshot();
+	}
+
+	// Snapshot forwarding facades (delegates to servicemanager_snapshot helper)
+	blazeclaw::core::servicemanager_snapshot::GatewayStatusSnapshot ServiceManager::CollectGatewayStatusSnapshot() const noexcept {
+		// Delegate static normalization to the helper while preserving any
+		// ServiceManager-specific live/runtime fields inside the caller.
+		return servicemanager_snapshot::CollectGatewayStatusSnapshot(m_activeConfig);
+	}
+
+	blazeclaw::core::servicemanager_snapshot::RuntimeHealthSnapshot ServiceManager::CollectRuntimeHealthSnapshot() const noexcept {
+		// Runtime health aggregation currently lives in the helper and may
+		// consult global services; delegate to keep TU small.
+		return servicemanager_snapshot::CollectRuntimeHealthSnapshot();
 	}
 
 	std::uint64_t CurrentEpochMs();
