@@ -224,6 +224,7 @@
     <ClInclude Include="src\core\runtime\SpeechRecognition\SpeechCudaCompatibilityGuard.h" />
     <ClInclude Include="src\core\ServiceManagerLifecycleHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerLocalModelHelpers.h" />
+    <ClInclude Include="src\core\ServiceManagerSpeechRuntimeHelpers.h" />
     <ClInclude Include="src\core\SkillsCommandInvocationParityValidationService.h" />
     <ClInclude Include="src\core\SkillsFutureStabilityValidationService.h" />
     <ClInclude Include="src\core\SpeechTranscriptionCoordinator.h" />
@@ -500,6 +501,7 @@
     <ClCompile Include="src\core\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerLocalModelHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerRoutingIntentHelpers.cpp" />
+    <ClCompile Include="src\core\ServiceManagerSpeechRuntimeHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerSkillRootsHelpers.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
@@ -728,6 +730,7 @@
     <ClCompile Include="tests\ServiceManagerLifecycleTests.cpp" />
     <ClCompile Include="tests\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="tests\ServiceManagerRoutingIntentTests.cpp" />
+    <ClCompile Include="tests\ServiceManagerSpeechRuntimeTests.cpp" />
     <ClCompile Include="tests\SherpaStep8BaselineToolTests.cpp" />
     <ClCompile Include="tests\SkillsBrowserDiscoverabilityContractTests.cpp" />
     <ClCompile Include="tests\SkillsCommandInvocationParityValidationServiceTests.cpp" />

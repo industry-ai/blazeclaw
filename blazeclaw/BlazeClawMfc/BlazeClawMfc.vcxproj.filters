@@ -677,6 +677,8 @@
     <ClCompile Include="tests\ServiceManagerLifecycleTests.cpp" />
     <ClCompile Include="src\core\ServiceManagerLocalModelHelpers.cpp" />
     <ClCompile Include="tests\ServiceManagerLocalModelTests.cpp" />
+    <ClCompile Include="src\core\ServiceManagerSpeechRuntimeHelpers.cpp" />
+    <ClCompile Include="tests\ServiceManagerSpeechRuntimeTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1276,6 +1278,7 @@
     <ClInclude Include="src\chat\shared\ChatStateTelemetryConsolidation.h" />
     <ClInclude Include="src\core\ServiceManagerLifecycleHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerLocalModelHelpers.h" />
+    <ClInclude Include="src\core\ServiceManagerSpeechRuntimeHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />
