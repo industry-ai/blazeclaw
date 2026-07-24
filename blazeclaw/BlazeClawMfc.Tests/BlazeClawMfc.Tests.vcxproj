@@ -72,6 +72,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerRoutingIntentTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerRoutingIntentHelpers.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerLifecycleTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerTextHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsContractTests.cpp" />
