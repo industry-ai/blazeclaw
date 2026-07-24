@@ -675,6 +675,8 @@
     <ClCompile Include="tests\ServiceManagerRoutingIntentTests.cpp" />
     <ClCompile Include="src\core\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="tests\ServiceManagerLifecycleTests.cpp" />
+    <ClCompile Include="src\core\ServiceManagerLocalModelHelpers.cpp" />
+    <ClCompile Include="tests\ServiceManagerLocalModelTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1273,6 +1275,7 @@
     <ClInclude Include="src\app\core-chat\CoreChatEvent.h" />
     <ClInclude Include="src\chat\shared\ChatStateTelemetryConsolidation.h" />
     <ClInclude Include="src\core\ServiceManagerLifecycleHelpers.h" />
+    <ClInclude Include="src\core\ServiceManagerLocalModelHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\app\res\fileview_hc.bmp" />

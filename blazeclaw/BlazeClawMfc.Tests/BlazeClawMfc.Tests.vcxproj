@@ -75,6 +75,8 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerLifecycleTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerTextHelpers.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\ServiceManagerLocalModelHelpers.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerLocalModelTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayChatMultiActiveModelsThreadPoolTests.cpp" />

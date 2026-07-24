@@ -27,6 +27,7 @@
 #include "ServiceManagerSkillRootsHelpers.h"
 #include "ServiceManagerRoutingIntentHelpers.h"
 #include "ServiceManagerLifecycleHelpers.h"
+#include "ServiceManagerLocalModelHelpers.h"
 
 #include <cctype>
 #include <chrono>
