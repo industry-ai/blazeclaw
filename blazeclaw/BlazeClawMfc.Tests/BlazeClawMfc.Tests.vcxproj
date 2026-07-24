@@ -31,7 +31,7 @@
       <ProgramDataBaseFileName>$(IntDir)%(Filename).pdb</ProgramDataBaseFileName>
       <AdditionalOptions>/bigobj /utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->
-      <PreprocessorDefinitions>NOMINMAX;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_AFXDLL;BLAZECLAW_TESTS_NO_RUNTIME_DEPENDENCIES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

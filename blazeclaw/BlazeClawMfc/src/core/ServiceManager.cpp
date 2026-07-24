@@ -21,7 +21,6 @@
 #include "SkillsFrontmatterCompat.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
-#include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
 #include "runtime/SpeechRecognition/SpeechRecognitionRuntime.h"
 #include "ServiceManagerTextHelpers.h"
 #include "ServiceManagerSkillRootsHelpers.h"
@@ -4225,18 +4224,6 @@ namespace blazeclaw::core {
 			m_localModelActivationReason;
 		auto previousLocalModelRuntime = std::move(m_localModelRuntime);
 
-		auto buildLocalModelRuntime = [](
-			const std::wstring& provider)
-			-> std::unique_ptr<localmodel::ITextGenerationRuntime> {
-			const std::wstring normalizedProvider = ToLower(provider);
-			if (normalizedProvider == L"llama" ||
-				normalizedProvider == L"llama.cpp") {
-				return std::make_unique<localmodel::LlamaTextGenerationRuntime>();
-			}
-
-			return std::make_unique<localmodel::OnnxTextGenerationRuntime>();
-			};
-
 		const auto runtimeOrchestrationPolicy =
 			m_serviceBootstrapCoordinator.ResolveRuntimeOrchestrationPolicySettings();
 		const bool localModelStartupLoadEnabled =
@@ -4258,7 +4245,6 @@ namespace blazeclaw::core {
 					return true;
 				},
 				[this,
-				&buildLocalModelRuntime,
 				localModelStartupLoadEnabled](blazeclaw::config::AppConfig& candidateConfig) {
 					if (m_activeChatProvider == "local" &&
 						IsLlamaLocalModelId(m_activeChatModel)) {
@@ -4266,7 +4252,8 @@ namespace blazeclaw::core {
 					}
 
 					m_localModelRuntime =
-						buildLocalModelRuntime(candidateConfig.localModel.provider);
+						servicemanager_localmodel::BuildRuntimeForProvider(
+							candidateConfig.localModel.provider);
 					m_localModelRuntime->Configure(candidateConfig);
 
 					bool localModelLoaded = false;

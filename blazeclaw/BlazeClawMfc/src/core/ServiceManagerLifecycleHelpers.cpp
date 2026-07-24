@@ -1,14 +1,21 @@
 #include "pch.h"
 #include "ServiceManagerLifecycleHelpers.h"
 
-#include "bootstrap/CServiceBootstrapCoordinator.h"
 #include "ServiceManagerTextHelpers.h"
+
+#ifndef BLAZECLAW_TESTS_NO_RUNTIME_DEPENDENCIES
+#include "bootstrap/CServiceBootstrapCoordinator.h"
+#endif
 
 namespace blazeclaw::core::servicemanager_lifecycle {
 
 	void AppendStartupTrace(const char* stage) {
+	#ifdef BLAZECLAW_TESTS_NO_RUNTIME_DEPENDENCIES
+		(void)stage;
+	#else
 		CServiceBootstrapCoordinator coordinator;
 		coordinator.AppendStartupTrace(stage);
+	#endif
 	}
 
 	bool SuppressStartupMigrationsFromEnv() {

@@ -13,25 +13,25 @@ TEST_CASE("ResolveLocalModelActivationFromEnv respects environment values", "[se
 	const wchar_t* envName = L"BLAZECLAW_LOCAL_MODEL_ACTIVATION";
 
 	// Ensure unset -> false
-	SetEnvironmentVariableW(envName, nullptr);
+	_wputenv_s(envName, L"");
 	REQUIRE(ResolveLocalModelActivationFromEnv() == false);
 
 	// True variants
-	SetEnvironmentVariableW(envName, L"true");
+	_wputenv_s(envName, L"true");
 	REQUIRE(ResolveLocalModelActivationFromEnv() == true);
 
-	SetEnvironmentVariableW(envName, L"1");
+	_wputenv_s(envName, L"1");
 	REQUIRE(ResolveLocalModelActivationFromEnv() == true);
 
 	// False variants
-	SetEnvironmentVariableW(envName, L"0");
+	_wputenv_s(envName, L"0");
 	REQUIRE(ResolveLocalModelActivationFromEnv() == false);
 
-	SetEnvironmentVariableW(envName, L"false");
+	_wputenv_s(envName, L"false");
 	REQUIRE(ResolveLocalModelActivationFromEnv() == false);
 
 	// Clean up
-	SetEnvironmentVariableW(envName, nullptr);
+	_wputenv_s(envName, L"");
 }
 
 TEST_CASE("BuildLocalModelActivationReason prefers config reason then env", "[servicemanager][localmodel]")

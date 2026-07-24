@@ -1,9 +1,17 @@
 #pragma once
 
+#include "runtime/LocalModel/ITextGenerationRuntime.h"
+
 #include <string>
 #include <optional>
+#include <memory>
 
 namespace blazeclaw::core::servicemanager_localmodel {
+
+	// Build runtime implementation from provider token while preserving existing
+	// provider selection behavior.
+	std::unique_ptr<localmodel::ITextGenerationRuntime> BuildRuntimeForProvider(
+		const std::wstring& provider);
 
 	// Read environment flag to decide if local model activation is forced on.
 	bool ResolveLocalModelActivationFromEnv();
