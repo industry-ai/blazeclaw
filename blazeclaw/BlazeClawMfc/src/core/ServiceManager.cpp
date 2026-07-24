@@ -4820,46 +4820,22 @@ namespace blazeclaw::core {
 		const std::wstring& speechActiveModelId,
 		const std::wstring& speechModelPath,
 		std::string* outStatusMessage) {
-		if (!m_running) {
-			if (outStatusMessage != nullptr) {
-				*outStatusMessage = "service_manager_not_running";
-			}
-			return false;
-		}
 
+		// Forward orchestration into the speech runtime helper to shrink
+		// ServiceManager.cpp while preserving original behavior.
 		m_activeConfig.speechRecognition.enabled = speechEnabled;
 		m_activeConfig.speechRecognition.provider = speechProvider;
 		m_activeConfig.speechRecognition.storageRoot = speechStorageRoot;
 		m_activeConfig.speechRecognition.activeModelId = speechActiveModelId;
 		m_activeConfig.speechRecognition.modelPath = speechModelPath;
 
-		m_speechTranscriptionCoordinator.Shutdown(m_speechRecognitionRuntime);
-		m_speechRecognitionRuntime.Configure(m_activeConfig);
-
-		const std::wstring runtimeHotMode =
-			ToLower(Trim(m_activeConfig.speechRecognition.runtimeHotMode));
-		const bool startupLoadEnabled =
-			runtimeHotMode != L"on_demand" &&
-			runtimeHotMode != L"idle_timeout";
-		const bool loaded = startupLoadEnabled
-			? m_speechRecognitionRuntime.LoadModel()
-			: true;
-
-		m_speechRecognition = m_speechRecognitionRuntime.Snapshot();
-		if (!startupLoadEnabled) {
-			m_speechRecognition.status = "startup_load_deferred";
-		}
-		else if (!loaded && m_speechRecognition.status.empty()) {
-			m_speechRecognition.status = "load_failed";
-		}
-
-		if (outStatusMessage != nullptr) {
-			*outStatusMessage = m_speechRecognition.status.empty()
-				? (startupLoadEnabled ? std::string("loaded") : std::string("startup_load_deferred"))
-				: m_speechRecognition.status;
-		}
-
-		return loaded;
+		return servicemanager_speech::ApplySpeechRecognitionConfigReload(
+			m_running,
+			m_activeConfig,
+			m_speechTranscriptionCoordinator,
+			m_speechRecognitionRuntime,
+			m_speechRecognition,
+			outStatusMessage);
 	}
 
 	const std::string& ServiceManager::ActiveChatProvider() const noexcept {
