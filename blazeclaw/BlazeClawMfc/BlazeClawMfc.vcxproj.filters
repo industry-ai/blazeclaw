@@ -686,6 +686,12 @@
     <ClCompile Include="src\core\skills\Skill.cpp">
       <Filter>skills</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\skills\SkillsGatewayStateBuilder.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\skills\HookBootstrapPromptProjector.cpp">
+      <Filter>skills</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />
@@ -1289,6 +1295,15 @@
     <ClInclude Include="src\core\ServiceManagerTextToSpeechHelpers.h" />
     <ClInclude Include="src\core\ServiceManagerSnapshotHelpers.h" />
     <ClInclude Include="src\core\skills\Skill.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\skills\SkillsRuntimeState.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\skills\SkillsGatewayStateBuilder.h">
+      <Filter>skills</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\skills\HookBootstrapPromptProjector.h">
       <Filter>skills</Filter>
     </ClInclude>
   </ItemGroup>

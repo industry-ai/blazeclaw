@@ -3015,44 +3015,92 @@ namespace blazeclaw::core {
 	blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkillsState() const {
 		return m_skillsHooksCoordinator.BuildGatewaySkillsState(
 			CSkillsHooksCoordinator::GatewayStateContext{
-				.catalog = m_skillsCatalog,
-				.eligibility = m_skillsEligibility,
-				.prompt = m_skillsPrompt,
-				.commands = m_skillsCommands,
-				.watch = m_skillsWatch,
-				.sync = m_skillsSync,
-				.envOverrides = m_skillsEnvOverrides,
-				.install = m_skillsInstall,
-				.securityScan = m_skillSecurityScan,
-				.hookExecution = m_hookExecution,
-				.skillsConfig = m_activeConfig.skills,
-				.effectiveSkillRoots = &m_effectiveSkillRoots,
-				.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
-				.hooksLastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
-				.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
-				.hooksAutoRemediationEnabled = m_state.hooks.autoRemediationEnabled,
-				.hooksAutoRemediationRequiresApproval = m_state.hooks.autoRemediationRequiresApproval,
-				.hooksAutoRemediationExecuted = m_state.hooks.autoRemediationExecuted,
-				.hooksLastAutoRemediationStatus = m_state.hooks.lastAutoRemediationStatus,
-				.hooksAutoRemediationTenantId = m_state.hooks.autoRemediationTenantId,
-				.hooksLastAutoRemediationPlaybookPath = m_state.hooks.lastAutoRemediationPlaybookPath,
-				.hooksAutoRemediationTokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes,
-				.hooksAutoRemediationTokenRotations = m_state.hooks.autoRemediationTokenRotations,
-				.hooksLastRemediationTelemetryPath = m_state.hooks.lastRemediationTelemetryPath,
-				.hooksLastRemediationAuditPath = m_state.hooks.lastRemediationAuditPath,
-				.hooksRemediationSloStatus = m_state.hooks.remediationSloStatus,
-				.hooksRemediationSloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected,
-				.hooksRemediationSloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked,
-				.hooksLastComplianceAttestationPath = m_state.hooks.lastComplianceAttestationPath,
-				.hooksEnterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
-				.hooksCrossTenantAttestationAggregationEnabled =
-					m_state.hooks.crossTenantAttestationAggregationEnabled,
-				.hooksCrossTenantAttestationAggregationStatus =
-					m_state.hooks.crossTenantAttestationAggregationStatus,
-				.hooksCrossTenantAttestationAggregationCount =
-					m_state.hooks.crossTenantAttestationAggregationCount,
-				.hooksLastCrossTenantAttestationAggregationPath =
-					m_state.hooks.lastCrossTenantAttestationAggregationPath,
+				//.catalog = m_skillsCatalog,
+				//.eligibility = m_skillsEligibility,
+				//.prompt = m_skillsPrompt,
+				//.commands = m_skillsCommands,
+				//.watch = m_skillsWatch,
+				//.sync = m_skillsSync,
+				//.envOverrides = m_skillsEnvOverrides,
+				//.install = m_skillsInstall,
+				//.securityScan = m_skillSecurityScan,
+				//.hookExecution = m_hookExecution,
+				//.skillsConfig = m_activeConfig.skills,
+				//.effectiveSkillRoots = &m_effectiveSkillRoots,
+				//.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
+				//.hooksLastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
+				//.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
+				//.hooksAutoRemediationEnabled = m_state.hooks.autoRemediationEnabled,
+				//.hooksAutoRemediationRequiresApproval = m_state.hooks.autoRemediationRequiresApproval,
+				//.hooksAutoRemediationExecuted = m_state.hooks.autoRemediationExecuted,
+				//.hooksLastAutoRemediationStatus = m_state.hooks.lastAutoRemediationStatus,
+				//.hooksAutoRemediationTenantId = m_state.hooks.autoRemediationTenantId,
+				//.hooksLastAutoRemediationPlaybookPath = m_state.hooks.lastAutoRemediationPlaybookPath,
+				//.hooksAutoRemediationTokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+				//.hooksAutoRemediationTokenRotations = m_state.hooks.autoRemediationTokenRotations,
+				//.hooksLastRemediationTelemetryPath = m_state.hooks.lastRemediationTelemetryPath,
+				//.hooksLastRemediationAuditPath = m_state.hooks.lastRemediationAuditPath,
+				//.hooksRemediationSloStatus = m_state.hooks.remediationSloStatus,
+				//.hooksRemediationSloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected,
+				//.hooksRemediationSloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked,
+				//.hooksLastComplianceAttestationPath = m_state.hooks.lastComplianceAttestationPath,
+				//.hooksEnterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
+				//.hooksCrossTenantAttestationAggregationEnabled =
+				//	m_state.hooks.crossTenantAttestationAggregationEnabled,
+				//.hooksCrossTenantAttestationAggregationStatus =
+				//	m_state.hooks.crossTenantAttestationAggregationStatus,
+				//.hooksCrossTenantAttestationAggregationCount =
+				//	m_state.hooks.crossTenantAttestationAggregationCount,
+				//.hooksLastCrossTenantAttestationAggregationPath =
+				//	m_state.hooks.lastCrossTenantAttestationAggregationPath,
+				.skills = CSkillsHooksCoordinator::SkillsGatewaySnapshotContext{
+					.catalog = m_skillsCatalog,
+					.eligibility = m_skillsEligibility,
+					.prompt = m_skillsPrompt,
+					.commands = m_skillsCommands,
+					.watch = m_skillsWatch,
+					.sync = m_skillsSync,
+					.envOverrides = m_skillsEnvOverrides,
+					.install = m_skillsInstall,
+					.securityScan = m_skillSecurityScan,
+					.skillsConfig = m_activeConfig.skills,
+					.effectiveSkillRoots = &m_effectiveSkillRoots
+				},
+				.hooks = CSkillsHooksCoordinator::HooksGatewaySnapshotContext{
+					.hookExecution = m_hookExecution
+				},
+				.governance = CSkillsHooksCoordinator::GovernanceGatewayContext{
+					.reportingEnabled = m_state.hooks.governanceReportingEnabled,
+					.lastReportPath = m_state.hooks.lastGovernanceReportPath,
+					.reportsGenerated = m_state.hooks.governanceReportsGenerated
+				},
+				.remediation = CSkillsHooksCoordinator::RemediationGatewayContext{
+					.enabled = m_state.hooks.autoRemediationEnabled,
+					.requiresApproval = m_state.hooks.autoRemediationRequiresApproval,
+					.executed = m_state.hooks.autoRemediationExecuted,
+					.lastStatus = m_state.hooks.lastAutoRemediationStatus,
+					.tenantId = m_state.hooks.autoRemediationTenantId,
+					.lastPlaybookPath = m_state.hooks.lastAutoRemediationPlaybookPath,
+					.tokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+					.tokenRotations = m_state.hooks.autoRemediationTokenRotations,
+					.lastTelemetryPath = m_state.hooks.lastRemediationTelemetryPath,
+					.lastAuditPath = m_state.hooks.lastRemediationAuditPath,
+					.sloStatus = m_state.hooks.remediationSloStatus,
+					.sloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected,
+					.sloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked
+				},
+				.compliance = CSkillsHooksCoordinator::ComplianceGatewayContext{
+					.lastComplianceAttestationPath = m_state.hooks.lastComplianceAttestationPath,
+					.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
+					.crossTenantAttestationAggregationEnabled =
+						m_state.hooks.crossTenantAttestationAggregationEnabled,
+					.crossTenantAttestationAggregationStatus =
+						m_state.hooks.crossTenantAttestationAggregationStatus,
+					.crossTenantAttestationAggregationCount =
+						m_state.hooks.crossTenantAttestationAggregationCount,
+					.lastCrossTenantAttestationAggregationPath =
+						m_state.hooks.lastCrossTenantAttestationAggregationPath
+				}
 			},
 			[this](
 				const SkillsCatalogEntry& entry,

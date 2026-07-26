@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "SkillsHooksCoordinator.h"
 
+#include "SkillsGatewayStateBuilder.h"
+#include "HookBootstrapPromptProjector.h"
+
 #include <algorithm>
 #include <cwctype>
 #include <unordered_map>
@@ -14,38 +17,68 @@ namespace blazeclaw::core {
 		const std::wstring& reason,
 		const RefreshContext& context) const
 	{
-		// resolve workspace root
-		auto workspaceRoot = context.workspaceRoot;
-		if (workspaceRoot.empty())
-		{	// fallback to current working directory if not provided
-			workspaceRoot = std::filesystem::current_path();
-		}
+		//// resolve workspace root
+		//auto workspaceRoot = context.workspaceRoot;
+		//if (workspaceRoot.empty())
+		//{	// fallback to current working directory if not provided
+		//	workspaceRoot = std::filesystem::current_path();
+		//}
 
-		// receive a composite refresh result from the skills facade
-		auto refresh = context.skillsFacade.RefreshSkillsState(
-			workspaceRoot,
+		//// receive a composite refresh result from the skills facade
+		//auto refresh = context.skillsFacade.RefreshSkillsState(
+		//	workspaceRoot,
+		//	config,
+		//	forceRefresh,
+		//	reason,
+		//	context.hooksFallbackPromptInjection,
+		//	context.refreshDependencies);
+
+		//// update multiple snapshots in `RefreshContext`
+		//context.catalog = std::move(refresh.catalog);
+		//context.eligibility = std::move(refresh.eligibility);
+		//context.prompt = std::move(refresh.prompt);
+		//context.commands = std::move(refresh.commands);
+		//context.sync = std::move(refresh.sync);
+		//context.envOverrides = std::move(refresh.envOverrides);	// environment overrides
+		//context.install = std::move(refresh.install);			// install state
+		//context.securityScan = std::move(refresh.securityScan);	// security scan
+		//context.watch = std::move(refresh.watch);				// watch state
+		//context.runSnapshot = std::move(refresh.runSnapshot);	// run state
+
+		//// build or retrieve hook-related snapshots
+		//context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);	// hook catalog
+		//context.hookExecution = context.hookExecutionService.Snapshot();	// hook execution
+		//context.events = context.hookEventService.Snapshot();	// hook events
+		RefreshDependencies dependencies{
+				context.refreshDependencies,
+				context.hookCatalogService,
+				context.hookExecutionService,
+				context.hookEventService,
+				context.skillsFacade,
+				context.workspaceRoot,
+				context.hooksFallbackPromptInjection
+		};
+
+		auto state = RefreshSkillsState(
 			config,
 			forceRefresh,
 			reason,
-			context.hooksFallbackPromptInjection,
-			context.refreshDependencies);
+			dependencies);
 
-		// update multiple snapshots in `RefreshContext`
-		context.catalog = std::move(refresh.catalog);
-		context.eligibility = std::move(refresh.eligibility);
-		context.prompt = std::move(refresh.prompt);
-		context.commands = std::move(refresh.commands);
-		context.sync = std::move(refresh.sync);
-		context.envOverrides = std::move(refresh.envOverrides);	// environment overrides
-		context.install = std::move(refresh.install);			// install state
-		context.securityScan = std::move(refresh.securityScan);	// security scan
-		context.watch = std::move(refresh.watch);				// watch state
-		context.runSnapshot = std::move(refresh.runSnapshot);	// run state
+		context.catalog = std::move(state.skills.catalog);
+		context.eligibility = std::move(state.skills.eligibility);
+		context.prompt = std::move(state.skills.prompt);
+		context.commands = std::move(state.skills.commands);
+		context.sync = std::move(state.skills.sync);
+		context.envOverrides = std::move(state.skills.envOverrides);
+		context.install = std::move(state.skills.install);
+		context.securityScan = std::move(state.skills.securityScan);
+		context.watch = std::move(state.skills.watch);
+		context.runSnapshot = std::move(state.skills.runSnapshot);
 
-		// build or retrieve hook-related snapshots
-		context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);	// hook catalog
-		context.hookExecution = context.hookExecutionService.Snapshot();	// hook execution
-		context.events = context.hookEventService.Snapshot();	// hook events
+		context.hookCatalog = std::move(state.hooks.catalog);
+		context.hookExecution = std::move(state.hooks.execution);
+		context.events = std::move(state.hooks.events);
 	}
 
 	// constructs the state consumed by the gateway/host layer
@@ -56,277 +89,378 @@ namespace blazeclaw::core {
 			const EntryBuilder& entryBuilder,
 			const std::function<std::string(const std::wstring&)>& toNarrow) const
 	{
-		blazeclaw::gateway::SkillsCatalogGatewayState	gatewaySkillsState;
+		//blazeclaw::gateway::SkillsCatalogGatewayState	gatewaySkillsState;
 
-		// set the size of the DTO vector to match the number of catalog entries, to avoid multiple reallocations
-		gatewaySkillsState.entries.reserve(context.catalog.entries.size());
+		//// set the size of the DTO vector to match the number of catalog entries, to avoid multiple reallocations
+		//gatewaySkillsState.entries.reserve(context.catalog.entries.size());
 
-		std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
-		for (const auto& eligibility : context.eligibility.entries)
-		{
-			eligibilityByName.emplace(eligibility.skillName, eligibility);
-		}
+		//std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
+		//for (const auto& eligibility : context.eligibility.entries)
+		//{
+		//	eligibilityByName.emplace(eligibility.skillName, eligibility);
+		//}
 
-		std::unordered_map<std::wstring, SkillsCommandSpec> commandsBySkill;
-		for (const auto& command : context.commands.commands)
-		{
-			commandsBySkill.emplace(command.skillName, command);
-		}
+		//std::unordered_map<std::wstring, SkillsCommandSpec> commandsBySkill;
+		//for (const auto& command : context.commands.commands)
+		//{
+		//	commandsBySkill.emplace(command.skillName, command);
+		//}
 
-		std::unordered_map<std::wstring, SkillsInstallPlanEntry> installBySkill;
-		for (const auto& plan : context.install.entries)
-		{
-			installBySkill.emplace(plan.skillName, plan);
-		}
+		//std::unordered_map<std::wstring, SkillsInstallPlanEntry> installBySkill;
+		//for (const auto& plan : context.install.entries)
+		//{
+		//	installBySkill.emplace(plan.skillName, plan);
+		//}
 
-		// merge the returned DTO with SkillsEligibilitySnapshot, SkillsCommandSnapshot, and SkillsInstallSnapshot
-		for (const auto& entry : context.catalog.entries)
-		{
-			const auto eligibilityIt = eligibilityByName.find(entry.skillName);
-			const auto commandIt = commandsBySkill.find(entry.skillName);
-			const auto installIt = installBySkill.find(entry.skillName);
+		//// merge the returned DTO with SkillsEligibilitySnapshot, SkillsCommandSnapshot, and SkillsInstallSnapshot
+		//for (const auto& entry : context.catalog.entries)
+		//{
+		//	const auto eligibilityIt = eligibilityByName.find(entry.skillName);
+		//	const auto commandIt = commandsBySkill.find(entry.skillName);
+		//	const auto installIt = installBySkill.find(entry.skillName);
 
-			gatewaySkillsState.entries.push_back(entryBuilder(
-				entry,
-				eligibilityIt != eligibilityByName.end() ? &eligibilityIt->second : nullptr,
-				commandIt != commandsBySkill.end() ? &commandIt->second : nullptr,
-				installIt != installBySkill.end() ? &installIt->second : nullptr));
-		}
+		//	gatewaySkillsState.entries.push_back(entryBuilder(
+		//		entry,
+		//		eligibilityIt != eligibilityByName.end() ? &eligibilityIt->second : nullptr,
+		//		commandIt != commandsBySkill.end() ? &commandIt->second : nullptr,
+		//		installIt != installBySkill.end() ? &installIt->second : nullptr));
+		//}
 
-		// counts from eligibility snapshot
-		gatewaySkillsState.eligibleCount = context.eligibility.eligibleCount;
-		gatewaySkillsState.disabledCount = context.eligibility.disabledCount;
-		gatewaySkillsState.alwaysBypassCount =
-			context.eligibility.alwaysBypassCount;
-		gatewaySkillsState.blockedByAllowlistCount =
-			context.eligibility.blockedByAllowlistCount;
-		gatewaySkillsState.missingRequirementsCount =
-			context.eligibility.missingRequirementsCount;
-		gatewaySkillsState.strictEntryResolutionModeCount =
-			context.eligibility.strictEntryResolutionModeCount;
-		gatewaySkillsState.compatEntryResolutionModeCount =
-			context.eligibility.compatEntryResolutionModeCount;
-		gatewaySkillsState.configResolvedByKeyCount =
-			context.eligibility.configResolvedByKeyCount;
-		gatewaySkillsState.configResolvedByNameFallbackCount =
-			context.eligibility.configResolvedByNameFallbackCount;
-		gatewaySkillsState.allowlistRawCount =
-			context.eligibility.allowlistRawCount;
-		gatewaySkillsState.allowlistNormalizedCount =
-			context.eligibility.allowlistNormalizedCount;
-		gatewaySkillsState.remoteEligibilityEnabledCount =
-			context.eligibility.remoteEligibilityEnabledCount;
-		gatewaySkillsState.remotePlatformSatisfiedCount =
-			context.eligibility.remotePlatformSatisfiedCount;
-		gatewaySkillsState.remoteBinSatisfiedCount =
-			context.eligibility.remoteBinSatisfiedCount;
-		gatewaySkillsState.remoteAnyBinSatisfiedCount =
-			context.eligibility.remoteAnyBinSatisfiedCount;
+		//// counts from eligibility snapshot
+		//gatewaySkillsState.eligibleCount = context.eligibility.eligibleCount;
+		//gatewaySkillsState.disabledCount = context.eligibility.disabledCount;
+		//gatewaySkillsState.alwaysBypassCount =
+		//	context.eligibility.alwaysBypassCount;
+		//gatewaySkillsState.blockedByAllowlistCount =
+		//	context.eligibility.blockedByAllowlistCount;
+		//gatewaySkillsState.missingRequirementsCount =
+		//	context.eligibility.missingRequirementsCount;
+		//gatewaySkillsState.strictEntryResolutionModeCount =
+		//	context.eligibility.strictEntryResolutionModeCount;
+		//gatewaySkillsState.compatEntryResolutionModeCount =
+		//	context.eligibility.compatEntryResolutionModeCount;
+		//gatewaySkillsState.configResolvedByKeyCount =
+		//	context.eligibility.configResolvedByKeyCount;
+		//gatewaySkillsState.configResolvedByNameFallbackCount =
+		//	context.eligibility.configResolvedByNameFallbackCount;
+		//gatewaySkillsState.allowlistRawCount =
+		//	context.eligibility.allowlistRawCount;
+		//gatewaySkillsState.allowlistNormalizedCount =
+		//	context.eligibility.allowlistNormalizedCount;
+		//gatewaySkillsState.remoteEligibilityEnabledCount =
+		//	context.eligibility.remoteEligibilityEnabledCount;
+		//gatewaySkillsState.remotePlatformSatisfiedCount =
+		//	context.eligibility.remotePlatformSatisfiedCount;
+		//gatewaySkillsState.remoteBinSatisfiedCount =
+		//	context.eligibility.remoteBinSatisfiedCount;
+		//gatewaySkillsState.remoteAnyBinSatisfiedCount =
+		//	context.eligibility.remoteAnyBinSatisfiedCount;
 
-		// counts from catalog snapshot diagnostics
-		gatewaySkillsState.rootsScanned = context.catalog.diagnostics.rootsScanned;
-		gatewaySkillsState.rootsSkipped = context.catalog.diagnostics.rootsSkipped;
-		gatewaySkillsState.pluginRootsConfigured =
-			context.catalog.diagnostics.pluginRootsConfigured;
-		gatewaySkillsState.pluginRootsScanned =
-			context.catalog.diagnostics.pluginRootsScanned;
-		gatewaySkillsState.loaderPolicyRejectPathSymlinkCount =
-			context.catalog.diagnostics.loaderPolicyRejectPathSymlinkCount;
-		gatewaySkillsState.loaderPolicyStrictFrontmatterCount =
-			context.catalog.diagnostics.loaderPolicyStrictFrontmatterCount;
-		gatewaySkillsState.symlinkRejectedFiles =
-			context.catalog.diagnostics.symlinkRejectedFiles;
-		gatewaySkillsState.strictFrontmatterOmittedFiles =
-			context.catalog.diagnostics.strictFrontmatterOmittedFiles;
-		gatewaySkillsState.oversizedSkillFiles =
-			context.catalog.diagnostics.oversizedSkillFiles;
-		gatewaySkillsState.invalidFrontmatterFiles =
-			context.catalog.diagnostics.invalidFrontmatterFiles;
-		gatewaySkillsState.verifiedOpenPathFailures =
-			context.catalog.diagnostics.verifiedOpenPathFailures;
-		gatewaySkillsState.verifiedOpenValidationFailures =
-			context.catalog.diagnostics.verifiedOpenValidationFailures;
-		gatewaySkillsState.verifiedOpenIoFailures =
-			context.catalog.diagnostics.verifiedOpenIoFailures;
-		gatewaySkillsState.warningCount = context.catalog.diagnostics.warnings.size();
+		//// counts from catalog snapshot diagnostics
+		//gatewaySkillsState.rootsScanned = context.catalog.diagnostics.rootsScanned;
+		//gatewaySkillsState.rootsSkipped = context.catalog.diagnostics.rootsSkipped;
+		//gatewaySkillsState.pluginRootsConfigured =
+		//	context.catalog.diagnostics.pluginRootsConfigured;
+		//gatewaySkillsState.pluginRootsScanned =
+		//	context.catalog.diagnostics.pluginRootsScanned;
+		//gatewaySkillsState.loaderPolicyRejectPathSymlinkCount =
+		//	context.catalog.diagnostics.loaderPolicyRejectPathSymlinkCount;
+		//gatewaySkillsState.loaderPolicyStrictFrontmatterCount =
+		//	context.catalog.diagnostics.loaderPolicyStrictFrontmatterCount;
+		//gatewaySkillsState.symlinkRejectedFiles =
+		//	context.catalog.diagnostics.symlinkRejectedFiles;
+		//gatewaySkillsState.strictFrontmatterOmittedFiles =
+		//	context.catalog.diagnostics.strictFrontmatterOmittedFiles;
+		//gatewaySkillsState.oversizedSkillFiles =
+		//	context.catalog.diagnostics.oversizedSkillFiles;
+		//gatewaySkillsState.invalidFrontmatterFiles =
+		//	context.catalog.diagnostics.invalidFrontmatterFiles;
+		//gatewaySkillsState.verifiedOpenPathFailures =
+		//	context.catalog.diagnostics.verifiedOpenPathFailures;
+		//gatewaySkillsState.verifiedOpenValidationFailures =
+		//	context.catalog.diagnostics.verifiedOpenValidationFailures;
+		//gatewaySkillsState.verifiedOpenIoFailures =
+		//	context.catalog.diagnostics.verifiedOpenIoFailures;
+		//gatewaySkillsState.warningCount = context.catalog.diagnostics.warnings.size();
 
-		// counts from command snapshot
-		gatewaySkillsState.commandSanitizeCount =
-			context.commands.sanitizeCount;
-		gatewaySkillsState.commandDedupeCount =
-			context.commands.dedupeCount;
-		gatewaySkillsState.commandSkillNameDedupeCount =
-			context.commands.skillNameDedupeCount;
-		gatewaySkillsState.commandMissingToolDispatchCount =
-			context.commands.missingToolDispatchCount;
-		gatewaySkillsState.commandInvalidArgModeFallbackCount =
-			context.commands.invalidArgModeFallbackCount;
-		gatewaySkillsState.commandSourceContributionCount =
-			context.commands.commandSourceContributionCount;
+		//// counts from command snapshot
+		//gatewaySkillsState.commandSanitizeCount =
+		//	context.commands.sanitizeCount;
+		//gatewaySkillsState.commandDedupeCount =
+		//	context.commands.dedupeCount;
+		//gatewaySkillsState.commandSkillNameDedupeCount =
+		//	context.commands.skillNameDedupeCount;
+		//gatewaySkillsState.commandMissingToolDispatchCount =
+		//	context.commands.missingToolDispatchCount;
+		//gatewaySkillsState.commandInvalidArgModeFallbackCount =
+		//	context.commands.invalidArgModeFallbackCount;
+		//gatewaySkillsState.commandSourceContributionCount =
+		//	context.commands.commandSourceContributionCount;
 
-		gatewaySkillsState.entryConfigRawCount =
-			context.skillsConfig.entryConfigRawCount;
-		gatewaySkillsState.entryConfigNormalizedCount =
-			context.skillsConfig.entryConfigNormalizedCount;
-		gatewaySkillsState.entryConfigMalformedCount =
-			context.skillsConfig.entryConfigMalformedCount;
+		//gatewaySkillsState.entryConfigRawCount =
+		//	context.skillsConfig.entryConfigRawCount;
+		//gatewaySkillsState.entryConfigNormalizedCount =
+		//	context.skillsConfig.entryConfigNormalizedCount;
+		//gatewaySkillsState.entryConfigMalformedCount =
+		//	context.skillsConfig.entryConfigMalformedCount;
 
-		{
-			const std::set<std::wstring> dispatchRequiredSkills{
-				L"baidu-search",
-				L"web-browsing",
-				L"summarize",
-				L"humanizer",
-				L"imap-smtp-email",
-			};
-			gatewaySkillsState.dispatchRequiredSkillCount = dispatchRequiredSkills.size();
-			std::size_t missingDispatchCount = 0;
-			for (const auto& requiredSkill : dispatchRequiredSkills) {
-				std::wstring requiredLower = requiredSkill;
-				std::transform(
-					requiredLower.begin(),
-					requiredLower.end(),
-					requiredLower.begin(),
-					[](const wchar_t ch) {
-						return static_cast<wchar_t>(std::towlower(ch));
-					});
-				const auto entryIt = std::find_if(
-					gatewaySkillsState.entries.begin(),
-					gatewaySkillsState.entries.end(),
-					[&requiredLower](const blazeclaw::gateway::SkillsCatalogGatewayEntry& entry) {
-						std::wstring entryLower(entry.name.begin(), entry.name.end());
-						std::transform(
-							entryLower.begin(),
-							entryLower.end(),
-							entryLower.begin(),
-							[](const wchar_t ch) {
-								return static_cast<wchar_t>(std::towlower(ch));
-							});
-						return entryLower == requiredLower;
-					});
-				if (entryIt == gatewaySkillsState.entries.end() ||
-					entryIt->commandToolName.empty()) {
-					++missingDispatchCount;
-				}
-			}
-			gatewaySkillsState.dispatchRequiredMissingCount = missingDispatchCount;
-		}
+		//{
+		//	const std::set<std::wstring> dispatchRequiredSkills{
+		//		L"baidu-search",
+		//		L"web-browsing",
+		//		L"summarize",
+		//		L"humanizer",
+		//		L"imap-smtp-email",
+		//	};
+		//	gatewaySkillsState.dispatchRequiredSkillCount = dispatchRequiredSkills.size();
+		//	std::size_t missingDispatchCount = 0;
+		//	for (const auto& requiredSkill : dispatchRequiredSkills) {
+		//		std::wstring requiredLower = requiredSkill;
+		//		std::transform(
+		//			requiredLower.begin(),
+		//			requiredLower.end(),
+		//			requiredLower.begin(),
+		//			[](const wchar_t ch) {
+		//				return static_cast<wchar_t>(std::towlower(ch));
+		//			});
+		//		const auto entryIt = std::find_if(
+		//			gatewaySkillsState.entries.begin(),
+		//			gatewaySkillsState.entries.end(),
+		//			[&requiredLower](const blazeclaw::gateway::SkillsCatalogGatewayEntry& entry) {
+		//				std::wstring entryLower(entry.name.begin(), entry.name.end());
+		//				std::transform(
+		//					entryLower.begin(),
+		//					entryLower.end(),
+		//					entryLower.begin(),
+		//					[](const wchar_t ch) {
+		//						return static_cast<wchar_t>(std::towlower(ch));
+		//					});
+		//				return entryLower == requiredLower;
+		//			});
+		//		if (entryIt == gatewaySkillsState.entries.end() ||
+		//			entryIt->commandToolName.empty()) {
+		//			++missingDispatchCount;
+		//		}
+		//	}
+		//	gatewaySkillsState.dispatchRequiredMissingCount = missingDispatchCount;
+		//}
 
-		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
-		gatewaySkillsState.promptChars = context.prompt.promptChars;
-		gatewaySkillsState.promptTruncated = context.prompt.truncated;
-		gatewaySkillsState.snapshotVersion = context.watch.version;
-		gatewaySkillsState.watchEnabled = context.watch.watchEnabled;
-		gatewaySkillsState.watchDebounceMs = context.watch.debounceMs;
-		gatewaySkillsState.watchReason = toNarrow(context.watch.reason);
-		gatewaySkillsState.prompt = toNarrow(context.prompt.prompt);
+		//gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
+		//gatewaySkillsState.promptChars = context.prompt.promptChars;
+		//gatewaySkillsState.promptTruncated = context.prompt.truncated;
+		//gatewaySkillsState.snapshotVersion = context.watch.version;
+		//gatewaySkillsState.watchEnabled = context.watch.watchEnabled;
+		//gatewaySkillsState.watchDebounceMs = context.watch.debounceMs;
+		//gatewaySkillsState.watchReason = toNarrow(context.watch.reason);
+		//gatewaySkillsState.prompt = toNarrow(context.prompt.prompt);
 
-		if (context.effectiveSkillRoots != nullptr) {
-			gatewaySkillsState.effectiveSkillRoots = *context.effectiveSkillRoots;
-			gatewaySkillsState.effectiveSkillRootCount =
-				context.effectiveSkillRoots->size();
-		}
-		gatewaySkillsState.sandboxSyncOk = context.sync.success;
-		gatewaySkillsState.sandboxDestinationNamingMode =
-			toNarrow(context.sync.destinationNamingMode);
-		gatewaySkillsState.sandboxDestinationCollisions =
-			context.sync.destinationNameCollisions;
-		gatewaySkillsState.sandboxSourceDirFallbacks =
-			context.sync.sourceDirFallbackCount;
-		gatewaySkillsState.sandboxSynced = context.sync.copiedSkills;
-		gatewaySkillsState.sandboxSkipped = context.sync.skippedSkills;
-		gatewaySkillsState.envAllowed = context.envOverrides.allowedCount;
-		gatewaySkillsState.envBlocked = context.envOverrides.blockedCount;
-		gatewaySkillsState.installExecutableCount = context.install.executableCount;
-		gatewaySkillsState.installBlockedCount = context.install.blockedCount;
-		gatewaySkillsState.installContractProjectedCount =
-			static_cast<std::size_t>(std::count_if(
-				context.catalog.entries.begin(),
-				context.catalog.entries.end(),
-				[](const SkillsCatalogEntry& entry) {
-					return entry.metadata.has_value() && !entry.metadata->install.empty();
-				}));
-		gatewaySkillsState.installContractFallbackCount =
-			static_cast<std::size_t>(std::count_if(
-				context.install.entries.begin(),
-				context.install.entries.end(),
-				[&context](const SkillsInstallPlanEntry& plan) {
-					const auto it = std::find_if(
-						context.catalog.entries.begin(),
-						context.catalog.entries.end(),
-						[&plan](const SkillsCatalogEntry& entry) {
-							return entry.skillName == plan.skillName;
-						});
-					return it == context.catalog.entries.end() ||
-						!(it->metadata.has_value() && !it->metadata->install.empty());
-				}));
+		//if (context.effectiveSkillRoots != nullptr) {
+		//	gatewaySkillsState.effectiveSkillRoots = *context.effectiveSkillRoots;
+		//	gatewaySkillsState.effectiveSkillRootCount =
+		//		context.effectiveSkillRoots->size();
+		//}
+		//gatewaySkillsState.sandboxSyncOk = context.sync.success;
+		//gatewaySkillsState.sandboxDestinationNamingMode =
+		//	toNarrow(context.sync.destinationNamingMode);
+		//gatewaySkillsState.sandboxDestinationCollisions =
+		//	context.sync.destinationNameCollisions;
+		//gatewaySkillsState.sandboxSourceDirFallbacks =
+		//	context.sync.sourceDirFallbackCount;
+		//gatewaySkillsState.sandboxSynced = context.sync.copiedSkills;
+		//gatewaySkillsState.sandboxSkipped = context.sync.skippedSkills;
+		//gatewaySkillsState.envAllowed = context.envOverrides.allowedCount;
+		//gatewaySkillsState.envBlocked = context.envOverrides.blockedCount;
+		//gatewaySkillsState.installExecutableCount = context.install.executableCount;
+		//gatewaySkillsState.installBlockedCount = context.install.blockedCount;
+		//gatewaySkillsState.installContractProjectedCount =
+		//	static_cast<std::size_t>(std::count_if(
+		//		context.catalog.entries.begin(),
+		//		context.catalog.entries.end(),
+		//		[](const SkillsCatalogEntry& entry) {
+		//			return entry.metadata.has_value() && !entry.metadata->install.empty();
+		//		}));
+		//gatewaySkillsState.installContractFallbackCount =
+		//	static_cast<std::size_t>(std::count_if(
+		//		context.install.entries.begin(),
+		//		context.install.entries.end(),
+		//		[&context](const SkillsInstallPlanEntry& plan) {
+		//			const auto it = std::find_if(
+		//				context.catalog.entries.begin(),
+		//				context.catalog.entries.end(),
+		//				[&plan](const SkillsCatalogEntry& entry) {
+		//					return entry.skillName == plan.skillName;
+		//				});
+		//			return it == context.catalog.entries.end() ||
+		//				!(it->metadata.has_value() && !it->metadata->install.empty());
+		//		}));
 
-		// security scan snapshot
-		gatewaySkillsState.scanInfoCount = context.securityScan.infoCount;
-		gatewaySkillsState.scanWarnCount = context.securityScan.warnCount;
-		gatewaySkillsState.scanCriticalCount = context.securityScan.criticalCount;
-		gatewaySkillsState.scanScannedFiles = context.securityScan.scannedFileCount;
+		//// security scan snapshot
+		//gatewaySkillsState.scanInfoCount = context.securityScan.infoCount;
+		//gatewaySkillsState.scanWarnCount = context.securityScan.warnCount;
+		//gatewaySkillsState.scanCriticalCount = context.securityScan.criticalCount;
+		//gatewaySkillsState.scanScannedFiles = context.securityScan.scannedFileCount;
 
-		gatewaySkillsState.governanceReportingEnabled =
-			context.hooksGovernanceReportingEnabled;
-		gatewaySkillsState.governanceReportsGenerated =
-			static_cast<std::size_t>(context.hooksGovernanceReportsGenerated);
-		gatewaySkillsState.lastGovernanceReportPath =
-			toNarrow(context.hooksLastGovernanceReportPath);
+		//gatewaySkillsState.governanceReportingEnabled =
+		//	context.hooksGovernanceReportingEnabled;
+		//gatewaySkillsState.governanceReportsGenerated =
+		//	static_cast<std::size_t>(context.hooksGovernanceReportsGenerated);
+		//gatewaySkillsState.lastGovernanceReportPath =
+		//	toNarrow(context.hooksLastGovernanceReportPath);
 
-		// hook execution diagnostics snapshot
-		gatewaySkillsState.policyBlockedCount =
-			static_cast<std::size_t>(context.hookExecution.diagnostics.policyBlockedCount);
-		gatewaySkillsState.driftDetectedCount =
-			static_cast<std::size_t>(context.hookExecution.diagnostics.driftDetectedCount);
-		gatewaySkillsState.lastDriftReason =
-			toNarrow(context.hookExecution.diagnostics.lastDriftReason);
+		//// hook execution diagnostics snapshot
+		//gatewaySkillsState.policyBlockedCount =
+		//	static_cast<std::size_t>(context.hookExecution.diagnostics.policyBlockedCount);
+		//gatewaySkillsState.driftDetectedCount =
+		//	static_cast<std::size_t>(context.hookExecution.diagnostics.driftDetectedCount);
+		//gatewaySkillsState.lastDriftReason =
+		//	toNarrow(context.hookExecution.diagnostics.lastDriftReason);
 
-		// remediation context fields
-		gatewaySkillsState.autoRemediationEnabled = context.hooksAutoRemediationEnabled;
-		gatewaySkillsState.autoRemediationRequiresApproval =
-			context.hooksAutoRemediationRequiresApproval;
-		gatewaySkillsState.autoRemediationExecuted =
-			static_cast<std::size_t>(context.hooksAutoRemediationExecuted);
-		gatewaySkillsState.lastAutoRemediationStatus =
-			toNarrow(context.hooksLastAutoRemediationStatus);
-		gatewaySkillsState.autoRemediationTenantId =
-			toNarrow(context.hooksAutoRemediationTenantId);
-		gatewaySkillsState.lastAutoRemediationPlaybookPath =
-			toNarrow(context.hooksLastAutoRemediationPlaybookPath);
-		gatewaySkillsState.autoRemediationTokenMaxAgeMinutes =
-			static_cast<std::size_t>(context.hooksAutoRemediationTokenMaxAgeMinutes);
-		gatewaySkillsState.autoRemediationTokenRotations =
-			static_cast<std::size_t>(context.hooksAutoRemediationTokenRotations);
-		gatewaySkillsState.lastRemediationTelemetryPath =
-			toNarrow(context.hooksLastRemediationTelemetryPath);
-		gatewaySkillsState.lastRemediationAuditPath =
-			toNarrow(context.hooksLastRemediationAuditPath);
-		gatewaySkillsState.remediationSloStatus =
-			toNarrow(context.hooksRemediationSloStatus);
-		gatewaySkillsState.remediationSloMaxDriftDetected =
-			static_cast<std::size_t>(context.hooksRemediationSloMaxDriftDetected);
-		gatewaySkillsState.remediationSloMaxPolicyBlocked =
-			static_cast<std::size_t>(context.hooksRemediationSloMaxPolicyBlocked);
+		//// remediation context fields
+		//gatewaySkillsState.autoRemediationEnabled = context.hooksAutoRemediationEnabled;
+		//gatewaySkillsState.autoRemediationRequiresApproval =
+		//	context.hooksAutoRemediationRequiresApproval;
+		//gatewaySkillsState.autoRemediationExecuted =
+		//	static_cast<std::size_t>(context.hooksAutoRemediationExecuted);
+		//gatewaySkillsState.lastAutoRemediationStatus =
+		//	toNarrow(context.hooksLastAutoRemediationStatus);
+		//gatewaySkillsState.autoRemediationTenantId =
+		//	toNarrow(context.hooksAutoRemediationTenantId);
+		//gatewaySkillsState.lastAutoRemediationPlaybookPath =
+		//	toNarrow(context.hooksLastAutoRemediationPlaybookPath);
+		//gatewaySkillsState.autoRemediationTokenMaxAgeMinutes =
+		//	static_cast<std::size_t>(context.hooksAutoRemediationTokenMaxAgeMinutes);
+		//gatewaySkillsState.autoRemediationTokenRotations =
+		//	static_cast<std::size_t>(context.hooksAutoRemediationTokenRotations);
+		//gatewaySkillsState.lastRemediationTelemetryPath =
+		//	toNarrow(context.hooksLastRemediationTelemetryPath);
+		//gatewaySkillsState.lastRemediationAuditPath =
+		//	toNarrow(context.hooksLastRemediationAuditPath);
+		//gatewaySkillsState.remediationSloStatus =
+		//	toNarrow(context.hooksRemediationSloStatus);
+		//gatewaySkillsState.remediationSloMaxDriftDetected =
+		//	static_cast<std::size_t>(context.hooksRemediationSloMaxDriftDetected);
+		//gatewaySkillsState.remediationSloMaxPolicyBlocked =
+		//	static_cast<std::size_t>(context.hooksRemediationSloMaxPolicyBlocked);
 
-		gatewaySkillsState.lastComplianceAttestationPath =
-			toNarrow(context.hooksLastComplianceAttestationPath);
+		//gatewaySkillsState.lastComplianceAttestationPath =
+		//	toNarrow(context.hooksLastComplianceAttestationPath);
 
-		gatewaySkillsState.enterpriseSlaPolicyId =
-			toNarrow(context.hooksEnterpriseSlaPolicyId);
+		//gatewaySkillsState.enterpriseSlaPolicyId =
+		//	toNarrow(context.hooksEnterpriseSlaPolicyId);
 
-		// calculate summary metrics for cross-tenant attestation aggregation status
-		gatewaySkillsState.crossTenantAttestationAggregationEnabled =
-			context.hooksCrossTenantAttestationAggregationEnabled;
-		gatewaySkillsState.crossTenantAttestationAggregationStatus =
-			toNarrow(context.hooksCrossTenantAttestationAggregationStatus);
-		gatewaySkillsState.crossTenantAttestationAggregationCount =
-			static_cast<std::size_t>(context.hooksCrossTenantAttestationAggregationCount);
-		gatewaySkillsState.lastCrossTenantAttestationAggregationPath =
-			toNarrow(context.hooksLastCrossTenantAttestationAggregationPath);
+		//// calculate summary metrics for cross-tenant attestation aggregation status
+		//gatewaySkillsState.crossTenantAttestationAggregationEnabled =
+		//	context.hooksCrossTenantAttestationAggregationEnabled;
+		//gatewaySkillsState.crossTenantAttestationAggregationStatus =
+		//	toNarrow(context.hooksCrossTenantAttestationAggregationStatus);
+		//gatewaySkillsState.crossTenantAttestationAggregationCount =
+		//	static_cast<std::size_t>(context.hooksCrossTenantAttestationAggregationCount);
+		//gatewaySkillsState.lastCrossTenantAttestationAggregationPath =
+		//	toNarrow(context.hooksLastCrossTenantAttestationAggregationPath);
 
-		return gatewaySkillsState;
+		//return gatewaySkillsState;
+		SkillsGatewayStateBuilder builder;
+
+		return builder.Build(context, entryBuilder, toNarrow);
 	}
+
+	// Governance and remediation delegation
+	// triggering policy/reporting side effects
+	//void CSkillsHooksCoordinator::EmitGovernanceAndRemediation(
+	//	const HooksGovernanceEmitter::GovernanceContext& governanceContext,
+	//	const HooksGovernanceEmitter::RemediationContext& remediationContext,
+	//	std::vector<std::wstring>& inOutWarnings) const
+	//{
+	//	HooksGovernanceEmitter	emitter;
+
+	//	emitter.EmitGovernanceReportIfNeeded(governanceContext, inOutWarnings);
+	//	emitter.EmitRemediationLifecycleIfNeeded(remediationContext, inOutWarnings);
+	//}
+
+	// modify the skill prompt based on hook bootstrap files, e.g., SELF_EVOLVING_REMINDER.md
+	void CSkillsHooksCoordinator::ApplyHookBootstrapProjection(
+		HookBootstrapProjectionContext& context) const
+	{
+		HookBootstrapPromptProjector projector;
+
+		HookBootstrapPromptProjector::ProjectionContext projectionContext{
+			context.bootstrapFiles,
+			context.prompt,
+			context.promptChars,
+			context.promptTruncated,
+			context.maxSkillsPromptChars,
+			context.lastReminderState,
+			context.lastReminderReason,
+			context.selfEvolvingHookTriggered
+		};
+
+		projector.Apply(projectionContext);
+	}
+
+	bool CSkillsHooksCoordinator::ContainsBootstrapFile(
+		const std::vector<HookBootstrapFile>& files,
+		const std::wstring& expectedPath)
+	{
+		return HookBootstrapPromptProjector::ContainsBootstrapFile(files, expectedPath);
+	}
+
+	SkillsHooksRuntimeState CSkillsHooksCoordinator::RefreshSkillsState(
+		const blazeclaw::config::AppConfig& config,
+		const bool forceRefresh,
+		const std::wstring& reason,
+		const RefreshDependencies& dependencies) const
+	{
+		auto workspaceRoot = dependencies.workspaceRoot;
+		if (workspaceRoot.empty())
+		{
+			workspaceRoot = std::filesystem::current_path();
+		}
+
+		auto refresh = dependencies.skillsFacade.RefreshSkillsState(
+			workspaceRoot,
+			config,
+			forceRefresh,
+			reason,
+			dependencies.hooksFallbackPromptInjection,
+			dependencies.refreshDependencies);
+
+		SkillsHooksRuntimeState state;
+
+		state.skills.catalog = std::move(refresh.catalog);
+		state.skills.eligibility = std::move(refresh.eligibility);
+		state.skills.prompt = std::move(refresh.prompt);
+		state.skills.commands = std::move(refresh.commands);
+		state.skills.sync = std::move(refresh.sync);
+		state.skills.envOverrides = std::move(refresh.envOverrides);
+		state.skills.install = std::move(refresh.install);
+		state.skills.securityScan = std::move(refresh.securityScan);
+		state.skills.watch = std::move(refresh.watch);
+		state.skills.runSnapshot = std::move(refresh.runSnapshot);
+
+		state.hooks.catalog =
+			dependencies.hookCatalogService.BuildSnapshot(state.skills.catalog);
+		state.hooks.execution =
+			dependencies.hookExecutionService.Snapshot();
+		state.hooks.events =
+			dependencies.hookEventService.Snapshot();
+
+		return state;
+	}
+
+	HooksGovernanceEmitterAdapter& CSkillsHooksCoordinator::DefaultGovernanceEmitter()
+	{
+		static HooksGovernanceEmitterAdapter emitter;
+		return emitter;
+	}
+
+	CSkillsHooksCoordinator::CSkillsHooksCoordinator()
+		: governanceEmitter_(&DefaultGovernanceEmitter())
+	{}
+
+	CSkillsHooksCoordinator::CSkillsHooksCoordinator(
+		IHooksGovernanceEmitter& governanceEmitter)
+		: governanceEmitter_(&governanceEmitter)
+	{}
 
 	// Governance and remediation delegation
 	// triggering policy/reporting side effects
@@ -335,125 +469,12 @@ namespace blazeclaw::core {
 		const HooksGovernanceEmitter::RemediationContext& remediationContext,
 		std::vector<std::wstring>& inOutWarnings) const
 	{
-		HooksGovernanceEmitter	emitter;
+		governanceEmitter_->EmitGovernanceReportIfNeeded(
+			governanceContext,
+			inOutWarnings);
 
-		emitter.EmitGovernanceReportIfNeeded(governanceContext, inOutWarnings);
-		emitter.EmitRemediationLifecycleIfNeeded(remediationContext, inOutWarnings);
+		governanceEmitter_->EmitRemediationLifecycleIfNeeded(
+			remediationContext,
+			inOutWarnings);
 	}
-
-	// modify the skill prompt based on hook bootstrap files, e.g., SELF_EVOLVING_REMINDER.md
-	void CSkillsHooksCoordinator::ApplyHookBootstrapProjection(
-		HookBootstrapProjectionContext& context) const
-	{
-		// detect if `SELF_EVOLVING_REMINDER.md` is present in the bootstrap files
-		context.selfEvolvingHookTriggered =
-			ContainsBootstrapFile(context.bootstrapFiles, L"SELF_EVOLVING_REMINDER.md");
-
-		if (context.selfEvolvingHookTriggered &&
-			context.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos)
-		{
-			context.prompt +=
-				L"\n## Self-Evolving Reminder\n"
-				L"When tasks finish, capture reusable learnings:\n"
-				L"- corrections -> .learnings/LEARNINGS.md\n"
-				L"- failures -> .learnings/ERRORS.md\n"
-				L"- missing capabilities -> .learnings/FEATURE_REQUESTS.md\n"
-				L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
-			context.promptChars = static_cast<std::uint32_t>(context.prompt.size());
-			if (context.prompt.size() > context.maxSkillsPromptChars)
-			{
-				context.prompt = context.prompt.substr(0, context.maxSkillsPromptChars);
-				context.promptChars =
-					static_cast<std::uint32_t>(context.prompt.size());
-				context.promptTruncated = true;
-			}
-
-			context.lastReminderState = L"reminder_fallback_used";
-			context.lastReminderReason = L"prompt_fallback";
-		}
-
-		std::wstringstream builder;
-		bool headerWritten = false;
-		for (const auto& file : context.bootstrapFiles)
-		{
-			auto normalized = file.path;
-			std::transform(
-				normalized.begin(),
-				normalized.end(),
-				normalized.begin(),
-				[](const wchar_t ch)
-				{
-					return static_cast<wchar_t>(std::towlower(ch));
-				});
-
-			if (normalized == L"self_evolving_reminder.md")
-			{
-				continue;
-			}
-
-			if (!headerWritten)
-			{
-				builder << L"\n## Hook Bootstrap Context\n";
-				headerWritten = true;
-			}
-
-			builder << L"- " << file.path;
-			if (file.virtualFile)
-			{
-				builder << L" (virtual)";
-			}
-			builder << L"\n";
-		}
-
-		const std::wstring genericHookContext = builder.str();
-		if (!genericHookContext.empty() &&
-			context.prompt.find(L"## Hook Bootstrap Context") == std::wstring::npos)
-		{
-			context.prompt += genericHookContext;
-			context.promptChars = static_cast<std::uint32_t>(context.prompt.size());
-			if (context.prompt.size() > context.maxSkillsPromptChars)
-			{
-				context.prompt = context.prompt.substr(0, context.maxSkillsPromptChars);
-				context.promptChars =
-					static_cast<std::uint32_t>(context.prompt.size());
-				context.promptTruncated = true;
-			}
-		}
-	}
-
-	bool CSkillsHooksCoordinator::ContainsBootstrapFile(
-		const std::vector<HookBootstrapFile>& files,
-		const std::wstring& expectedPath)
-	{
-		for (const auto& file : files)
-		{
-			auto lowered = file.path;
-			std::transform(
-				lowered.begin(),
-				lowered.end(),
-				lowered.begin(),
-				[](const wchar_t ch)
-				{
-					return static_cast<wchar_t>(std::towlower(ch));
-				});
-
-			auto expected = expectedPath;
-			std::transform(
-				expected.begin(),
-				expected.end(),
-				expected.begin(),
-				[](const wchar_t ch)
-				{
-					return static_cast<wchar_t>(std::towlower(ch));
-				});
-
-			if (lowered == expected)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 } // namespace blazeclaw::core
