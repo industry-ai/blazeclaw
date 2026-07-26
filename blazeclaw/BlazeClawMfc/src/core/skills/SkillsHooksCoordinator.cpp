@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "CSkillsHooksCoordinator.h"
+#include "SkillsHooksCoordinator.h"
 
 #include <algorithm>
 #include <cwctype>

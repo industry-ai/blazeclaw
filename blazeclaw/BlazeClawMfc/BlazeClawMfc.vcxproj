@@ -257,7 +257,7 @@
     <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
     <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
     <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
-    <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h" />
+    <ClInclude Include="src\core\skills\SkillsHooksCoordinator.h" />
     <ClInclude Include="src\\core\\skills\\HooksGovernanceEmitter.h" />
     <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
     <ClInclude Include="src\\core\\bootstrap\\StartupPolicyResolver.h" />
@@ -567,7 +567,7 @@
     <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="src\\core\\tools\\ToolProcessRunner.cpp" />
     <ClCompile Include="src\\core\\tools\\ToolArgumentValidators.cpp" />
-    <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp" />
+    <ClCompile Include="src\core\skills\SkillsHooksCoordinator.cpp" />
     <ClCompile Include="src\\core\\skills\\HooksGovernanceEmitter.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\StartupPolicyResolver.cpp" />

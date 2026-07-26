@@ -55,7 +55,7 @@
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 #include "providers/CDeepSeekClient.h"
-#include "skills/CSkillsHooksCoordinator.h"
+#include "skills/SkillsHooksCoordinator.h"
 #include "bootstrap/CServiceBootstrapCoordinator.h"
 #include "bootstrap/GatewayRuntimeBootstrapCoordinator.h"
 #include "bootstrap/GatewayManagedConfigReloader.h"
