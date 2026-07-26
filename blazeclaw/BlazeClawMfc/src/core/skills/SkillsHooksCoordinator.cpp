@@ -7,18 +7,21 @@
 
 namespace blazeclaw::core {
 
+	// state synchronization entry point
 	void CSkillsHooksCoordinator::RefreshSkillsState(
 		const blazeclaw::config::AppConfig& config,
 		const bool forceRefresh,
 		const std::wstring& reason,
 		const RefreshContext& context) const
 	{
+		// resolve workspace root
 		auto workspaceRoot = context.workspaceRoot;
 		if (workspaceRoot.empty())
-		{
+		{	// fallback to current working directory if not provided
 			workspaceRoot = std::filesystem::current_path();
 		}
 
+		// receive a composite refresh result from the skills facade
 		auto refresh = context.skillsFacade.RefreshSkillsState(
 			workspaceRoot,
 			config,
@@ -27,28 +30,35 @@ namespace blazeclaw::core {
 			context.hooksFallbackPromptInjection,
 			context.refreshDependencies);
 
+		// update multiple snapshots in `RefreshContext`
 		context.catalog = std::move(refresh.catalog);
 		context.eligibility = std::move(refresh.eligibility);
-		context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);
-		context.hookExecution = context.hookExecutionService.Snapshot();
 		context.prompt = std::move(refresh.prompt);
-		context.events = context.hookEventService.Snapshot();
 		context.commands = std::move(refresh.commands);
 		context.sync = std::move(refresh.sync);
-		context.envOverrides = std::move(refresh.envOverrides);
-		context.install = std::move(refresh.install);
-		context.securityScan = std::move(refresh.securityScan);
-		context.watch = std::move(refresh.watch);
-		context.runSnapshot = std::move(refresh.runSnapshot);
+		context.envOverrides = std::move(refresh.envOverrides);	// environment overrides
+		context.install = std::move(refresh.install);			// install state
+		context.securityScan = std::move(refresh.securityScan);	// security scan
+		context.watch = std::move(refresh.watch);				// watch state
+		context.runSnapshot = std::move(refresh.runSnapshot);	// run state
+
+		// build or retrieve hook-related snapshots
+		context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);	// hook catalog
+		context.hookExecution = context.hookExecutionService.Snapshot();	// hook execution
+		context.events = context.hookEventService.Snapshot();	// hook events
 	}
 
+	// constructs the state consumed by the gateway/host layer
+	// it takes internal domain snapshots and produces a gateway DTO
 	blazeclaw::gateway::SkillsCatalogGatewayState
 		CSkillsHooksCoordinator::BuildGatewaySkillsState(
 			const GatewayStateContext& context,
 			const EntryBuilder& entryBuilder,
 			const std::function<std::string(const std::wstring&)>& toNarrow) const
 	{
-		blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
+		blazeclaw::gateway::SkillsCatalogGatewayState	gatewaySkillsState;
+
+		// set the size of the DTO vector to match the number of catalog entries, to avoid multiple reallocations
 		gatewaySkillsState.entries.reserve(context.catalog.entries.size());
 
 		std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
@@ -69,6 +79,7 @@ namespace blazeclaw::core {
 			installBySkill.emplace(plan.skillName, plan);
 		}
 
+		// merge the returned DTO with SkillsEligibilitySnapshot, SkillsCommandSnapshot, and SkillsInstallSnapshot
 		for (const auto& entry : context.catalog.entries)
 		{
 			const auto eligibilityIt = eligibilityByName.find(entry.skillName);
@@ -82,6 +93,37 @@ namespace blazeclaw::core {
 				installIt != installBySkill.end() ? &installIt->second : nullptr));
 		}
 
+		// counts from eligibility snapshot
+		gatewaySkillsState.eligibleCount = context.eligibility.eligibleCount;
+		gatewaySkillsState.disabledCount = context.eligibility.disabledCount;
+		gatewaySkillsState.alwaysBypassCount =
+			context.eligibility.alwaysBypassCount;
+		gatewaySkillsState.blockedByAllowlistCount =
+			context.eligibility.blockedByAllowlistCount;
+		gatewaySkillsState.missingRequirementsCount =
+			context.eligibility.missingRequirementsCount;
+		gatewaySkillsState.strictEntryResolutionModeCount =
+			context.eligibility.strictEntryResolutionModeCount;
+		gatewaySkillsState.compatEntryResolutionModeCount =
+			context.eligibility.compatEntryResolutionModeCount;
+		gatewaySkillsState.configResolvedByKeyCount =
+			context.eligibility.configResolvedByKeyCount;
+		gatewaySkillsState.configResolvedByNameFallbackCount =
+			context.eligibility.configResolvedByNameFallbackCount;
+		gatewaySkillsState.allowlistRawCount =
+			context.eligibility.allowlistRawCount;
+		gatewaySkillsState.allowlistNormalizedCount =
+			context.eligibility.allowlistNormalizedCount;
+		gatewaySkillsState.remoteEligibilityEnabledCount =
+			context.eligibility.remoteEligibilityEnabledCount;
+		gatewaySkillsState.remotePlatformSatisfiedCount =
+			context.eligibility.remotePlatformSatisfiedCount;
+		gatewaySkillsState.remoteBinSatisfiedCount =
+			context.eligibility.remoteBinSatisfiedCount;
+		gatewaySkillsState.remoteAnyBinSatisfiedCount =
+			context.eligibility.remoteAnyBinSatisfiedCount;
+
+		// counts from catalog snapshot diagnostics
 		gatewaySkillsState.rootsScanned = context.catalog.diagnostics.rootsScanned;
 		gatewaySkillsState.rootsSkipped = context.catalog.diagnostics.rootsSkipped;
 		gatewaySkillsState.pluginRootsConfigured =
@@ -107,40 +149,8 @@ namespace blazeclaw::core {
 		gatewaySkillsState.verifiedOpenIoFailures =
 			context.catalog.diagnostics.verifiedOpenIoFailures;
 		gatewaySkillsState.warningCount = context.catalog.diagnostics.warnings.size();
-		gatewaySkillsState.eligibleCount = context.eligibility.eligibleCount;
-		gatewaySkillsState.disabledCount = context.eligibility.disabledCount;
-		gatewaySkillsState.blockedByAllowlistCount =
-			context.eligibility.blockedByAllowlistCount;
-		gatewaySkillsState.missingRequirementsCount =
-			context.eligibility.missingRequirementsCount;
-		gatewaySkillsState.strictEntryResolutionModeCount =
-			context.eligibility.strictEntryResolutionModeCount;
-		gatewaySkillsState.compatEntryResolutionModeCount =
-			context.eligibility.compatEntryResolutionModeCount;
-		gatewaySkillsState.configResolvedByKeyCount =
-			context.eligibility.configResolvedByKeyCount;
-		gatewaySkillsState.configResolvedByNameFallbackCount =
-			context.eligibility.configResolvedByNameFallbackCount;
-		gatewaySkillsState.allowlistRawCount =
-			context.eligibility.allowlistRawCount;
-		gatewaySkillsState.allowlistNormalizedCount =
-			context.eligibility.allowlistNormalizedCount;
-		gatewaySkillsState.entryConfigRawCount =
-			context.skillsConfig.entryConfigRawCount;
-		gatewaySkillsState.entryConfigNormalizedCount =
-			context.skillsConfig.entryConfigNormalizedCount;
-		gatewaySkillsState.entryConfigMalformedCount =
-			context.skillsConfig.entryConfigMalformedCount;
-		gatewaySkillsState.remoteEligibilityEnabledCount =
-			context.eligibility.remoteEligibilityEnabledCount;
-		gatewaySkillsState.remotePlatformSatisfiedCount =
-			context.eligibility.remotePlatformSatisfiedCount;
-		gatewaySkillsState.remoteBinSatisfiedCount =
-			context.eligibility.remoteBinSatisfiedCount;
-		gatewaySkillsState.remoteAnyBinSatisfiedCount =
-			context.eligibility.remoteAnyBinSatisfiedCount;
-		gatewaySkillsState.alwaysBypassCount =
-			context.eligibility.alwaysBypassCount;
+
+		// counts from command snapshot
 		gatewaySkillsState.commandSanitizeCount =
 			context.commands.sanitizeCount;
 		gatewaySkillsState.commandDedupeCount =
@@ -153,6 +163,14 @@ namespace blazeclaw::core {
 			context.commands.invalidArgModeFallbackCount;
 		gatewaySkillsState.commandSourceContributionCount =
 			context.commands.commandSourceContributionCount;
+
+		gatewaySkillsState.entryConfigRawCount =
+			context.skillsConfig.entryConfigRawCount;
+		gatewaySkillsState.entryConfigNormalizedCount =
+			context.skillsConfig.entryConfigNormalizedCount;
+		gatewaySkillsState.entryConfigMalformedCount =
+			context.skillsConfig.entryConfigMalformedCount;
+
 		{
 			const std::set<std::wstring> dispatchRequiredSkills{
 				L"baidu-search",
@@ -193,6 +211,7 @@ namespace blazeclaw::core {
 			}
 			gatewaySkillsState.dispatchRequiredMissingCount = missingDispatchCount;
 		}
+
 		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
 		gatewaySkillsState.promptChars = context.prompt.promptChars;
 		gatewaySkillsState.promptTruncated = context.prompt.truncated;
@@ -201,6 +220,7 @@ namespace blazeclaw::core {
 		gatewaySkillsState.watchDebounceMs = context.watch.debounceMs;
 		gatewaySkillsState.watchReason = toNarrow(context.watch.reason);
 		gatewaySkillsState.prompt = toNarrow(context.prompt.prompt);
+
 		if (context.effectiveSkillRoots != nullptr) {
 			gatewaySkillsState.effectiveSkillRoots = *context.effectiveSkillRoots;
 			gatewaySkillsState.effectiveSkillRootCount =
@@ -240,22 +260,29 @@ namespace blazeclaw::core {
 					return it == context.catalog.entries.end() ||
 						!(it->metadata.has_value() && !it->metadata->install.empty());
 				}));
+
+		// security scan snapshot
 		gatewaySkillsState.scanInfoCount = context.securityScan.infoCount;
 		gatewaySkillsState.scanWarnCount = context.securityScan.warnCount;
 		gatewaySkillsState.scanCriticalCount = context.securityScan.criticalCount;
 		gatewaySkillsState.scanScannedFiles = context.securityScan.scannedFileCount;
+
 		gatewaySkillsState.governanceReportingEnabled =
 			context.hooksGovernanceReportingEnabled;
 		gatewaySkillsState.governanceReportsGenerated =
 			static_cast<std::size_t>(context.hooksGovernanceReportsGenerated);
 		gatewaySkillsState.lastGovernanceReportPath =
 			toNarrow(context.hooksLastGovernanceReportPath);
+
+		// hook execution diagnostics snapshot
 		gatewaySkillsState.policyBlockedCount =
 			static_cast<std::size_t>(context.hookExecution.diagnostics.policyBlockedCount);
 		gatewaySkillsState.driftDetectedCount =
 			static_cast<std::size_t>(context.hookExecution.diagnostics.driftDetectedCount);
 		gatewaySkillsState.lastDriftReason =
 			toNarrow(context.hookExecution.diagnostics.lastDriftReason);
+
+		// remediation context fields
 		gatewaySkillsState.autoRemediationEnabled = context.hooksAutoRemediationEnabled;
 		gatewaySkillsState.autoRemediationRequiresApproval =
 			context.hooksAutoRemediationRequiresApproval;
@@ -281,10 +308,14 @@ namespace blazeclaw::core {
 			static_cast<std::size_t>(context.hooksRemediationSloMaxDriftDetected);
 		gatewaySkillsState.remediationSloMaxPolicyBlocked =
 			static_cast<std::size_t>(context.hooksRemediationSloMaxPolicyBlocked);
+
 		gatewaySkillsState.lastComplianceAttestationPath =
 			toNarrow(context.hooksLastComplianceAttestationPath);
+
 		gatewaySkillsState.enterpriseSlaPolicyId =
 			toNarrow(context.hooksEnterpriseSlaPolicyId);
+
+		// calculate summary metrics for cross-tenant attestation aggregation status
 		gatewaySkillsState.crossTenantAttestationAggregationEnabled =
 			context.hooksCrossTenantAttestationAggregationEnabled;
 		gatewaySkillsState.crossTenantAttestationAggregationStatus =
@@ -297,19 +328,24 @@ namespace blazeclaw::core {
 		return gatewaySkillsState;
 	}
 
+	// Governance and remediation delegation
+	// triggering policy/reporting side effects
 	void CSkillsHooksCoordinator::EmitGovernanceAndRemediation(
 		const HooksGovernanceEmitter::GovernanceContext& governanceContext,
 		const HooksGovernanceEmitter::RemediationContext& remediationContext,
 		std::vector<std::wstring>& inOutWarnings) const
 	{
-		HooksGovernanceEmitter emitter;
+		HooksGovernanceEmitter	emitter;
+
 		emitter.EmitGovernanceReportIfNeeded(governanceContext, inOutWarnings);
 		emitter.EmitRemediationLifecycleIfNeeded(remediationContext, inOutWarnings);
 	}
 
+	// modify the skill prompt based on hook bootstrap files, e.g., SELF_EVOLVING_REMINDER.md
 	void CSkillsHooksCoordinator::ApplyHookBootstrapProjection(
 		HookBootstrapProjectionContext& context) const
 	{
+		// detect if `SELF_EVOLVING_REMINDER.md` is present in the bootstrap files
 		context.selfEvolvingHookTriggered =
 			ContainsBootstrapFile(context.bootstrapFiles, L"SELF_EVOLVING_REMINDER.md");
 
