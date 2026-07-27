@@ -20,9 +20,9 @@ inline constexpr int kSocketRecvTimeoutMs = 5000;
 inline constexpr int kSocketSendTimeoutMs = 5000;
 
 // ─── TCP keepalive idle ───
-// 默认 2 小时太长，30s 没活动就开始探测。
+// 默认 2 小时太长，3 分钟没活动就开始探测。
 // 注意：使用 uint32_t 而非 DWORD，避免依赖 <winsock2.h> 的 typedef 顺序。
-inline constexpr uint32_t kTcpKeepaliveIdleMs = 30 * 1000;
+inline constexpr uint32_t kTcpKeepaliveIdleMs = 3 * 60 * 1000;
 
 // ─── IRC 重连退避 ───
 // Defaults for TransportConfig / NetworkTimeouts fallback.
@@ -41,7 +41,7 @@ inline constexpr std::chrono::milliseconds kMaxReconnectBackoff{ 30000 };
 inline constexpr uint32_t kHeartbeatIntervalMs = 180000;
 
 // ─── 心跳线程分段 sleep (ControlLoop 用) ───
-inline constexpr int kHeartbeatStepMs = 30000;
+inline constexpr int kHeartbeatStepMs = 180000;
 
 // ─── ChatRoomBridge 请求超时 ───
 // 异步请求超过此时间未收到响应，触发重试/超时回调。

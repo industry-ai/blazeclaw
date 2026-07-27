@@ -615,8 +615,8 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
 
     ++requests_received_;
 
-    // TCP 杩炴帴鏂紑鏃讹紝灏嗛渶瑕佺綉缁滃線杩旂殑鍛戒护鍔犲叆闃熷垪
-    // 杩炴帴鎭㈠鍚庝細鑷姩閲嶈瘯锛堣 RetryPendingRequests锛?
+    // TCP 连接断开时，将请求放入队列
+    // 连接恢复后，自动重试，通过 RetryPendingRequests 实现
     auto needs_network_roundtrip = [](const std::string& kind) -> bool {
         return kind == "list_conversations" ||
                kind == "create_conversation" ||
@@ -636,7 +636,7 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
     };
 
     if (!is_connected_.load() && needs_network_roundtrip(req.kind)) {
-        // 杩炴帴鏂紑锛屽皢璇锋眰鍔犲叆闃熷垪
+		// TCP 连接断开，排队请求
         {
             std::lock_guard<std::mutex> lock(pending_requests_queue_mutex_);
             pending_requests_queue_.push_back(req);
@@ -644,8 +644,6 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         TRACE(_T("[CChatRoomBridge] Connection lost, queued request: kind=%s requestId=%s queue_size=%d\n"),
               CA2T(req.kind.c_str()), CA2T(req.request_id.c_str()),
               static_cast<int>(pending_requests_queue_.size()));
-
-        // 涓嶅彂閫佸搷搴?鈥斺€?閲嶈瘯鎴愬姛鍚庢墠浼氶€氳繃 callback 鍙戦€佸搷搴?
         return;
     }
 
@@ -719,7 +717,8 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
         else if (req.kind == "invite_member") command = "INVITE_MEMBER";
         else if (req.kind == "remove_member") command = "REMOVE_MEMBER";
         else if (req.kind == "list_conversations") command = "LIST_MY_CHAT_ROOMS";
-        // 涓汉浠诲姟鍛戒护锛堝榻?chat-bridge.mjs 涓殑 PERSONAL_TASK_* 鍛戒护锛?
+        // 个人任务指令（对应 chat-bridge.mjs 中的 PERSONAL_TASK_* 指令）
+		//
         else if (req.kind == "list_personal_tasks") command = "PERSONAL_TASK_LIST";
         else if (req.kind == "create_personal_task") command = "PERSONAL_TASK_CREATE";
         else if (req.kind == "set_task_status") command = "PERSONAL_TASK_SET_STATUS";
@@ -1260,27 +1259,6 @@ void CChatRoomBridge::HandleWebMessageAsync(const BridgeRequest& req) {
     ++requests_failed_;
 }
 
-bool CChatRoomBridge::HandleWebMessage(const BridgeRequest& req, BridgeResponse& resp) {
-    if (!initialized_) {
-        resp.ok = false;
-        resp.error_message = "bridge_not_initialized";
-        return false;
-    }
-
-    ++requests_received_;
-    resp.request_id = req.request_id;
-    resp.timestamp_ms = GetTimestampMs();
-
-    bool success = DispatchRequest(req, resp);
-
-    if (success) {
-        ++requests_handled_;
-    } else {
-        ++requests_failed_;
-    }
-
-    return success;
-}
 
 bool CChatRoomBridge::DispatchRequest(const BridgeRequest& req,
                                        BridgeResponse& resp) {
@@ -1292,9 +1270,7 @@ bool CChatRoomBridge::DispatchRequest(const BridgeRequest& req,
     }
 
     // Route to appropriate handler
-    if (kind == "send_message") {
-        return HandleSendMessage(req, resp);
-    } else if (kind == "send_prompt") {
+    if (kind == "send_prompt") {
         return HandleSendPrompt(req, resp);
     } else if (kind == "part_channel") {
         return HandlePartChannel(req, resp);
@@ -1326,97 +1302,6 @@ bool CChatRoomBridge::DispatchRequest(const BridgeRequest& req,
 
     resp.error_message = std::string("Unknown request kind: ") + kind;
     return false;
-}
-
-bool CChatRoomBridge::HandleSendMessage(const BridgeRequest& req,
-                                       BridgeResponse& resp) {
-    // Parse payload JSON: {"channel": "#xxx", "message": "text"}
-    std::string channel;
-    std::string message;
-
-    try {
-        auto payload = nlohmann::json::parse(req.payload_json);
-        channel = payload.value("channel", "");
-        message = payload.value("message", "");
-    } catch (...) {
-        resp.ok = false;
-        resp.error_message = "invalid_payload";
-        resp.payload_json = "{\"sent\":false,\"error\":\"invalid JSON payload\"}";
-        return true;
-    }
-
-    if (channel.empty() || message.empty()) {
-        resp.ok = false;
-        resp.error_message = "missing_channel_or_message";
-        resp.payload_json = "{\"sent\":false,\"error\":\"channel and message are required\"}";
-        return true;
-    }
-
-    // Normalize channel name
-    if (!channel.empty() && channel[0] != '#') {
-        channel = "#" + channel;
-    }
-
-    // Use fire-and-forget to send PRIVMSG.
-    // The server echoes it back via push (privmsg event), which arrives asynchronously
-    // through the push receiver thread.  This avoids the race where a concurrent push
-    // message on the socket is misread as the response to this request.
-    auto& transport = ResolveTransport();
-    bool ok = transport.SendPrivmsgNoWait(channel, message);
-
-    resp.ok = ok;
-    if (!ok) {
-        resp.error_message = "network_send_failed";
-        resp.payload_json = "{\"sent\":false,\"error\":\"failed to send via network\"}";
-        } else {
-        resp.payload_json = "{\"sent\":true}";
-        }
-
-    // 鈹€鈹€ OpenClaw AI Agent 璋冪敤锛堝榻?AIAssistant/JsBridge 鐨?chatSendPrivmsg 涓?agent mention 妫€娴嬮€昏緫锛夆攢鈹€
-    // 鏉′欢锛氭秷鎭腑鍖呭惈 @鐐庡浘AI鍔╂墜 鎴栭閬撲负 workspace
-    if (ok) {
-        // 璇婃柇锛氭墦鍗?message 鐨勫墠 120 瀛楄妭锛堝崄鍏繘鍒?+ 鍙瀛楃锛?
-        {
-            std::ostringstream diag;
-            diag << "HandleSendMessage message(len=" << message.size() << "): ";
-            size_t showLen = (std::min)(message.size(), size_t(120));
-            for (size_t i = 0; i < showLen; ++i) {
-                diag << std::hex << std::setfill('0') << std::setw(2)
-                     << (static_cast<unsigned int>(static_cast<unsigned char>(message[i]))) << " ";
-            }
-            TRACE(_T("[CChatRoomBridge] %hs\n"), diag.str().c_str());
-        }
-
-        bool isAgentMention = false;
-        // TEMP: 绂佺敤 Agent 璇锋眰锛岄伩鍏?OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
-        // TODO: 閲嶆柊鍚敤鍓嶇‘淇?OpenClaw 鏈嶅姟 (192.168.20.12:3000) 宸茶繍琛?
-        
-        if (message.find('@') != std::string::npos) {
-            // UTF-8 缂栫爜鐨?"鐐庡浘AI鍔╂墜": E7 82 8E E5 9B BE 41 49 E5 8A A9 E6 89 8B
-            static const char kAgentNameUtf8[] = "\xE7\x82\x8E\xE5\x9B\xBE" "AI" "\xE5\x8A\xA9\xE6\x89\x8B";
-            isAgentMention = (message.find("@" + std::string(kAgentNameUtf8)) != std::string::npos);
-            // 鍏滃簳锛氱洿鎺ユ悳绱㈡簮鐮佷腑鐨?UTF-8 literal锛堝彇鍐充簬婧愭枃浠剁紪鐮侊級
-            if (!isAgentMention) {
-                isAgentMention = (message.find("@鐐庡浘AI鍔╂墜") != std::string::npos);
-            }
-        }
-        if (!isAgentMention && channel.find("#workspace_") != std::string::npos) {
-            isAgentMention = true;
-        }
-        
-        // 鏆傛椂绂佺敤 Agent 妫€娴嬶紝閬垮厤 OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
-        //isAgentMention = false;
-        TRACE(_T("[CChatRoomBridge] HandleSendMessage: isAgentMention=%d\n"), isAgentMention ? 1 : 0);
-        // TEMP: 绂佺敤 Agent 璇锋眰瑙﹀彂锛岄伩鍏?OpenClaw 鏈嶅姟涓嶅彲鐢ㄦ椂鍗℃
-         if (isAgentMention) {
-             TRACE(_T("[CChatRoomBridge] HandleSendMessage: agent mention detected, triggering OpenClaw request\n"));
-             SendOpenClawAgentRequest(channel, message);
-         }
-    }
-
-    // 寮傛澶勭悊锛宒one_cb 鎴?timeout thread 浼氬彂 EmitResponse銆傛澶勪笉濉厖 resp
-    // 锛堝凡鐢?HandleWebMessageAsync 蹇界暐锛夛紝涔熶笉鍦ㄦ EmitResponse鈥斺€旈伩鍏嶄笌 async callback 绔炰簤銆?
-    return true;
 }
 
 bool CChatRoomBridge::HandleSendPrompt(const BridgeRequest& req,

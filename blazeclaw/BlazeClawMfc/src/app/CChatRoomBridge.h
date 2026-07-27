@@ -112,8 +112,6 @@ public:
     // Shutdown
     void Shutdown();
 
-    // Handle incoming web message (sync — returns response directly; blocks caller thread)
-    bool HandleWebMessage(const BridgeRequest& req, BridgeResponse& resp);
 
     // Async version: non-blocking. Starts the operation and returns immediately.
     // When the response arrives (or on error/timeout), posts result to web via emit_to_web.
@@ -153,9 +151,8 @@ public:
 private:
     // Request handlers (all non-blocking / fire-and-forget; the actual server
     // response is routed back to the web via emit_to_web).
-    bool HandleSendMessage(const BridgeRequest& req, BridgeResponse& resp);
     bool HandleSendPrompt(const BridgeRequest& req, BridgeResponse& resp);
-    void HandleJoinChannelViaIrc(const BridgeRequest& req);
+    void HandleJoinChannelViaIrc(const BridgeRequest& req);   
     void HandleSendMessageViaIrc(const BridgeRequest& req);
     bool HandlePartChannel(const BridgeRequest& req, BridgeResponse& resp);
     bool HandleKickMember(const BridgeRequest& req, BridgeResponse& resp);

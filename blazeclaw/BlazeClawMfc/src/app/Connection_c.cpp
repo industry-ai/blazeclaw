@@ -490,7 +490,7 @@ bool CConnection_c::EnableTcpKeepAlive(SOCKET s) {
     }
 
     // Windows Vista+: TCP_KEEPALIVE = idle time (毫秒)
-    // 默认 2 小时太长，改为 30 秒没活动就开始探测。
+    // 3 分钟没活动就开始探测。
     DWORD idle_ms = static_cast<DWORD>(blazeclaw::net::kTcpKeepaliveIdleMs);
     if (setsockopt(s, IPPROTO_TCP, TCP_KEEPALIVE,
                    reinterpret_cast<const char*>(&idle_ms), sizeof(idle_ms)) == SOCKET_ERROR) {
@@ -510,14 +510,14 @@ bool CConnection_c::EnableTcpKeepAlive(SOCKET s) {
         LOG_WARN("conn={} SO_KEEPALIVE failed err={}", conn_id_, get_last_error());
         return false;
     }
-    int idle_s = 30;
+    int idle_s = 180;
     int interval_s = 5;
     int cnt = 3;
     setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE,  &idle_s,    sizeof(idle_s));
     setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval_s, sizeof(interval_s));
     setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT,   &cnt,        sizeof(cnt));
 #endif
-    LOG_INFO("conn={} TCP keep-alive enabled: idle=30s interval=5s cnt=3", conn_id_);
+    LOG_INFO("conn={} TCP keep-alive enabled: idle=180s interval=5s cnt=3", conn_id_);
     return true;
 }
 
