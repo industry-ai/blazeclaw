@@ -37,8 +37,8 @@ inline constexpr std::chrono::milliseconds kMaxReconnectBackoff{ 30000 };
 // Prefer blazeclaw.conf:
 //   agentchat.transport.heartbeatIntervalMs
 //   agentchat.transport.heartbeatStepMs
-// 服务端经常因长连接 idle (默认 60~120s) 主动 RST，每 20s 发送一次 Ping (type=21)。
-inline constexpr uint32_t kHeartbeatIntervalMs = 20000;
+// 服务端长连接每 3 分钟发送一次心跳 (LIST 命令)。
+inline constexpr uint32_t kHeartbeatIntervalMs = 180000;
 
 // ─── 心跳线程分段 sleep (ControlLoop 用) ───
 inline constexpr int kHeartbeatStepMs = 30000;

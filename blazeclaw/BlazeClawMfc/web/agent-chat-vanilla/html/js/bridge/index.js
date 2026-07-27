@@ -11,6 +11,7 @@ import core from './core.js';
 import state from './state.js';
 import AppConfig from '../config.js';
 import { chatroomBridgeRequest, onChatroomPush } from '../transport/chatroomTransport.js';
+import chatHistoryStore from '../stores/chatHistoryStore.js';
 import {
   resolveInteractiveResourceContext,
   buildHostBridgeContextMessage,
@@ -27,6 +28,20 @@ import {
   isCollaborationChatMessage,
   parseCollaborationChatMessage,
 } from '../protocol/collaborationChatEnvelope.js';
+import {
+  createAgentTaskNo,
+  buildOpenClawMessage,
+} from '../protocol/aiTaskRequest.js';
+import {
+  appendInlineAttachments,
+  stripInlineLinks,
+  sanitizeAgentReply,
+  dedupeAttachments,
+  isImageUrl,
+  isGeneratedH5CardUrl,
+  titleFromUrl,
+} from '../protocol/agentReplyParser.js';
+import { tryParseReminderDraft, hasReminderKeyword } from '../protocol/reminderParser.js';
 
 let _initialized = false;
 let _connected = false;
@@ -58,6 +73,26 @@ let _interactiveBridgeState = {
   suppressedTexts: new Map(),
   _messageHandler: null,
 };
+
+// ── 聊天记录本地持久化（对齐 chatHistoryStore 防抖写入）──
+let _persistTimer = null;
+function _syncHistoryStoreUserId() {
+  const uid = state.getUserId() || state.getPhone() || '';
+  chatHistoryStore.setUserId(uid);
+}
+function _persistMessages() {
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    const convs = state.getConversations();
+    for (const conv of convs) {
+      const msgs = state.getMessages(conv.id);
+      if (msgs && msgs.length) {
+        chatHistoryStore.saveMessages(conv.id, msgs);
+      }
+    }
+  }, 1000);
+}
 
 // ── Agent deliveryId 去重（对齐原项目 _GROUP_AGENT_REPLY_RELAY_PREFIX 机制）──
 // C++ 广播 agent 回复时，消息可能含两种标记：
@@ -181,6 +216,7 @@ function _initAuth() {
       sessionId: _storageGet(AUTH_STORAGE_KEYS.sessionId),
       jwt,
     });
+    _syncHistoryStoreUserId();
     state._setters.notify();
   }
 }
@@ -200,6 +236,7 @@ function _applyInjectedAuthInternal(injected) {
   _storageSet(AUTH_STORAGE_KEYS.phone, phone);
   _storageSet(AUTH_STORAGE_KEYS.userId, userId);
   if (sessionId) _storageSet(AUTH_STORAGE_KEYS.sessionId, sessionId);
+  _syncHistoryStoreUserId();
   state._setters.notify();
 }
 
@@ -230,6 +267,11 @@ function init() {
   // 订阅 state 变化，把新消息转发给已打开的 H5 iframe Bridge
   // （_forwardPendingMessages 是幂等的，仅转发 _forwardedMessageIds 中没有的新消息）
   state.subscribe(_notifyInteractiveBridge);
+  // 订阅 state 变化，防抖持久化聊天记录到 localStorage
+  state.subscribe(_persistMessages);
+
+  // 启动通知轮询定时器（每5秒检查到期提醒）
+  _startNotificationPolling();
 }
 
 // ── 推送事件处理（实时消息、Agent 流式、群邀请等）──
@@ -248,6 +290,16 @@ function _appendOrDedupMessage(convId, msg) {
   // agentDeliveryId 去重（对齐原项目：发送者本地已展示带相同 deliveryId 的 agent 消息时，丢弃服务端广播的重复消息）
   if (msg.agentDeliveryId && list.some((m) => m.agentDeliveryId === msg.agentDeliveryId)) {
     console.log('[bridge] duplicate agent delivery ignored', { convId, agentDeliveryId: msg.agentDeliveryId });
+    return;
+  }
+
+  // AI 回复文本去重：agent.turn.final 已更新占位气泡后，chat.push 可能再推送一遍相同回复。
+  // 此时占位已是 complete 状态，无法通过 agentDeliveryId 去重（可能无 deliveryId），
+  // 通过文本匹配丢弃重复的 agent 消息。
+  if (msg.author === 'agent' && msg.text && list.some((m) =>
+    m.author === 'agent' && m.status === 'complete' && m.text === msg.text
+  )) {
+    console.log('[bridge] duplicate agent reply ignored', { convId, text: msg.text.slice(0, 80) });
     return;
   }
 
@@ -312,10 +364,15 @@ function _handlePush(msg) {
       // 兼容 data 在 payload.data 或 payload 本身的情况
       const d = payload.data || payload;
       const evt = String(payload.event || d.event || '').toUpperCase();
+      // isAgent 检测：匹配事件类型或 sender 中的 agent 关键词。
+      // 注意：sender 可能是 UTF-8 被当作 GBK 解读的乱码（如 "炎图AI助手" -> "鐐"鐐庡浘AI鍔╂墜"），
+      // 此时 "炎图"/"小炎" 不匹配，但 ASCII 的 "AI" 仍然保留，用 includes('AI') 兜底。
+      const _senderStr = String(d.sender || d.from || d.authorId || '');
       const isAgent = evt === 'AGENT_BROADCAST' ||
-        String(d.sender || d.from || d.authorId || '').toLowerCase().includes('agent') ||
-        String(d.sender || d.from || '').toLowerCase().includes('炎图') ||
-        String(d.sender || d.from || '').toLowerCase().includes('小炎');
+        _senderStr.toLowerCase().includes('agent') ||
+        _senderStr.includes('炎图') ||
+        _senderStr.includes('小炎') ||
+        _senderStr.includes('AI');
       if (evt === 'PRIVMSG' || evt === 'MESSAGE' || evt === 'AGENT_BROADCAST' ||
           evt === 'IRC_MESSAGE' || !evt) {
         // 兼容多种字段名
@@ -344,7 +401,14 @@ function _handlePush(msg) {
           break;
         }
         // 统一解码 agent 消息：relay 信封 -> delivery marker -> 解析卡片附件/清理 JSON
-        const decoded = _decodeAgentMessage(text, isAgent);
+        // 如果存在 streaming agent 占位符，且消息来自本地用户（C++ 可能通过 sender session
+        // 转发 AI 回复）或 sender 已匹配 agent 关键词，才强制 isAgent=true 走完整解析管线。
+        // 其他群成员的消息不应覆盖 AI 占位气泡，而应追加到列表末尾。
+        const _hasStreamingPlaceholder = (state.getMessages(convId) || []).some(
+          (m) => m.author === 'agent' && m.status === 'streaming'
+        );
+        const _forceAgent = _hasStreamingPlaceholder && (isSelf || isAgent);
+        const decoded = _decodeAgentMessage(text, isAgent || _forceAgent);
 
         // 占位消息更新：如果有 streaming 占位且当前消息是 AI 回复（非用户回显、非其他用户），
         // 更新占位而非新增消息。C++ 可能通过 chat.push 推送 AI 回复（sender 可能不是 agent）。
@@ -357,9 +421,11 @@ function _handlePush(msg) {
               (m.delivery === 'sending' || m.delivery === 'sent') &&
               m.text === decoded.text && m.convId === convId
             );
+            // 用户回显 -> 直接丢弃，不更新占位也不追加新消息
+            if (isEcho) break;
             // 排除其他用户的普通消息（既非自身也非 agent）
             const isOtherUser = !isSelf && !decoded.isAgent;
-            if (!isEcho && !isOtherUser) {
+            if (!isOtherUser) {
               // 是 prompt/系统指令而非 AI 回复 -> 丢弃，保持 streaming 占位等待真正回复
               if (_isPromptText(decoded.text)) {
                 break;
@@ -490,14 +556,21 @@ function _handleChatroomPush(push) {
     const selfId = state.getSessionId();
     const isSelf = sender && (sender === selfId || sender === state.getPhone() || sender === state.getUserId());
 
-    // 判断是否为 Agent 消息
+    // 判断是否为 Agent 消息（同 chat.push handler：含 includes('AI') 乱码兜底）
     const isAgent = String(sender).toLowerCase().includes('agent') ||
-      String(sender).toLowerCase().includes('炎图') ||
-      String(sender).toLowerCase().includes('小炎') ||
+      String(sender).includes('炎图') ||
+      String(sender).includes('小炎') ||
+      String(sender).includes('AI') ||
       payload.isAgent === true;
 
     // 统一解码 agent 消息：relay 信封 -> delivery marker -> 解析卡片附件/清理 JSON
-    const decoded = _decodeAgentMessage(message, isAgent);
+    // 同 chat.push handler 逻辑：仅当消息来自本地用户或 sender 已匹配 agent 关键词时，
+    // 才强制 isAgent=true。其他群成员的消息不覆盖 AI 占位气泡。
+    const _hasStreamingPlaceholder = (state.getMessages(channel) || []).some(
+      (m) => m.author === 'agent' && m.status === 'streaming'
+    );
+    const _forceAgent = _hasStreamingPlaceholder && (isSelf || isAgent);
+    const decoded = _decodeAgentMessage(message, isAgent || _forceAgent);
 
     // 占位消息更新：同 chat.push handler 的逻辑
     {
@@ -508,8 +581,10 @@ function _handleChatroomPush(push) {
           (m.delivery === 'sending' || m.delivery === 'sent') &&
           m.text === decoded.text && m.convId === channel
         );
+        // 用户回显 -> 直接丢弃，不更新占位也不追加新消息
+        if (isEcho) return;
         const isOtherUser = !isSelf && !decoded.isAgent;
-        if (!isEcho && !isOtherUser) {
+        if (!isOtherUser) {
           // 是 prompt/系统指令而非 AI 回复 -> 丢弃，保持 streaming 占位等待真正回复
           if (_isPromptText(decoded.text)) {
             return;
@@ -662,6 +737,7 @@ async function login(phone, code) {
     _storageSet(AUTH_STORAGE_KEYS.phone, phone);
     _storageSet(AUTH_STORAGE_KEYS.userId, userId);
     if (sessionId) _storageSet(AUTH_STORAGE_KEYS.sessionId, sessionId);
+    _syncHistoryStoreUserId();
     state._setters.notify();
   }
   return r;
@@ -670,6 +746,9 @@ async function logout() {
   try { await core.request('auth.logout', {}); } catch (e) {}
   // 清除 localStorage 鉴权数据（对齐原项目 AuthStore.logout）
   Object.values(AUTH_STORAGE_KEYS).forEach(k => _storageRemove(k));
+  // 清除聊天记录和草稿缓存
+  chatHistoryStore.clearAllMessages();
+  chatHistoryStore.clearDrafts();
   state._setters.resetAuth();
   state._setters.resetAll();
   state._setters.notify();
@@ -734,11 +813,21 @@ async function loadConversations() {
   });
   if (list.length) {
     state._setters.conversations(list);
-    state._setters.notify();
-    // 加入所有频道（与原项目一致：获取列表后批量 join，以便接收推送消息）
+    // 从 localStorage 恢复聊天记录（页面刷新后立即显示缓存消息，不等 C++ 推送）
     list.forEach((conv) => {
-      chatroomBridgeRequest('join_channel', { channel: conv.id }).catch(() => {});
+      const localMsgs = chatHistoryStore.loadMessages(conv.id);
+      if (localMsgs.length) {
+        state._setters.messages(conv.id, localMsgs);
+        // 恢复会话最后消息预览
+        const last = localMsgs[localMsgs.length - 1];
+        if (last) { conv.lastMessage = last.text; conv.lastTs = last.ts; }
+      }
     });
+    state._setters.notify();
+    // 暂时取消自动加入所有频道（新功能验证阶段避免干扰）
+    // list.forEach((conv) => {
+    //   chatroomBridgeRequest('join_channel', { channel: conv.id }).catch(() => {});
+    // });
   }
   return list;
 }
@@ -774,6 +863,7 @@ async function sendUserMessage(text, convId, options = {}) {
     authorId: state.getUserId() || 'self',
     authorName: '我',
     text,
+    attachments: options.attachments || [],
     ts: now,
     createdAt: now,
     delivery: 'sending',
@@ -790,6 +880,12 @@ async function sendUserMessage(text, convId, options = {}) {
   const shouldCallAgent = options.callAgent || (conv && (conv.type === 'agent' || conv.scope === 'personal_workspace')) || /@.+AI助手/.test(text);
   if (shouldCallAgent) {
     _requestAgentReply(text, convId);
+  }
+
+  // 个人提醒：检测 @炎图AI助手 + 提醒关键词，解析时间并创建任务
+  // 对齐 agent 项目 sendMessageService.ts _createPersonalReminderTaskFromMessage
+  if (shouldCallAgent && hasReminderKeyword(text)) {
+    _tryCreateReminderTask(text, convId, optimisticMsg.id);
   }
 
   try {
@@ -844,7 +940,12 @@ async function loadConversationHistory(convId) {
   // 规范化历史消息：确保包含 author / createdAt 等 _renderBubble 所需字段
   const messages = rawMessages.map((m) => _normalizeHistoryMessage(m, convId)).filter(Boolean);
   if (messages.length) {
-    state._setters.messages(convId, messages);
+    // 合并而非覆盖：以服务端历史为基准，追加本地缓存中服务端未返回的消息
+    const localMsgs = state.getMessages(convId) || [];
+    const serverIds = new Set(messages.map((m) => m.id));
+    const localOnly = localMsgs.filter((m) => !serverIds.has(m.id));
+    const merged = localOnly.length ? [...messages, ...localOnly] : messages;
+    state._setters.messages(convId, merged);
     state._setters.notify();
   }
   return r;
@@ -869,7 +970,8 @@ function _normalizeHistoryMessage(m, convId) {
   const isSelf = senderId && (senderId === selfId || senderId === state.getPhone() || senderId === state.getUserId());
   const isAgent = m.isAgent || String(m.sender || '').toLowerCase().includes('agent')
     || String(m.from || '').includes('炎图')
-    || String(m.sender || m.from || '').toLowerCase().includes('小炎');
+    || String(m.sender || m.from || '').toLowerCase().includes('小炎')
+    || String(m.sender || m.from || '').includes('AI');
 
   const ts = m.ts || m.timestamp || m.timestamp_ms || m.createdAt || Date.now();
 
@@ -1286,6 +1388,75 @@ async function reschedulePersonalTask(taskId, newDueAt) {
   return core.request('tasks.personal.reschedule', { taskId, newDueAt });
 }
 
+// ── 个人提醒触发：解析消息文本，创建本地任务 + 发送给 C++ ──
+// 对齐 agent 项目 sessionStore.ts _createPersonalReminderTaskFromMessage
+function _tryCreateReminderTask(text, convId, messageId) {
+  var draft = tryParseReminderDraft(text);
+  if (!draft) return null;
+
+  var taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  var reminderId = 'rem-' + taskId;
+  var task = {
+    id: taskId,
+    ownerUserId: state.getUserId() || 'self',
+    creatorUserId: state.getUserId() || 'self',
+    title: draft.title,
+    summary: '提醒时间：' + draft.delayLabel,
+    sourceConversationId: convId,
+    createdFromMessageId: messageId,
+    dueAt: draft.dueAt,
+    status: 'pending',
+    deliveryTarget: { type: 'conversation', conversationId: convId },
+    reminderId: reminderId,
+    createdAt: Date.now(),
+    syncStatus: 'syncing',
+  };
+
+  // 本地立即创建（UI 即时显示任务卡片）
+  state._setters.appendPersonalTask(task);
+  state._setters.notify();
+
+  // 异步发送给 C++ 持久化 + 注册 cron 定时
+  createPersonalTask({
+    id: taskId,
+    ownerUserId: task.ownerUserId,
+    creatorUserId: task.creatorUserId,
+    title: task.title,
+    summary: task.summary,
+    dueAt: String(task.dueAt),
+    status: 'pending',
+    sourceConversationId: convId,
+    createdFromMessageId: messageId,
+    reminderId: reminderId,
+  }).then(function (resp) {
+    var serverTaskId = (resp && (resp.taskId || resp.id)) || taskId;
+    state._setters.updatePersonalTask(taskId, { syncStatus: 'synced', serverTaskId: serverTaskId });
+    state._setters.notify();
+  }).catch(function (e) {
+    console.warn('[bridge] createPersonalTask failed:', e && e.message);
+    state._setters.updatePersonalTask(taskId, { syncStatus: 'failed', syncError: String(e && e.message || e) });
+    state._setters.notify();
+  });
+
+  return task;
+}
+
+// ── 通知轮询定时器 ──
+// 每 5 秒检查是否有任务到期，触发 UI 刷新让通知面板和红点更新
+// 对齐 agent 项目 useNowTick(5_000) 的轮询机制
+var _notificationTimer = null;
+function _startNotificationPolling() {
+  if (_notificationTimer) return;
+  _notificationTimer = setInterval(function () {
+    var now = Date.now();
+    var hasDue = (state.getPersonalTasksForCurrentUser() || []).some(function (t) {
+      return t.status === 'pending' && t.dueAt && t.dueAt <= now;
+    });
+    if (hasDue) state._setters.notify();
+  }, 5000);
+}
+
+
 // ================================================================
 // 设备通道
 // ================================================================
@@ -1353,7 +1524,9 @@ function _titleFromUrl(url) {
   try {
     const u = new URL(url);
     const last = u.pathname.split('/').filter(Boolean).pop() || u.hostname;
-    return decodeURIComponent(last).replace(/\.\w+$/, '') || u.hostname;
+    // return decodeURIComponent(last).replace(/\.\w+$/, '') || u.hostname;
+    return decodeURIComponent(last).replace(/\.html?$/i, '');
+
   } catch (e) {
     return String(url || '').slice(0, 40);
   }
@@ -1363,6 +1536,60 @@ function _isH5CardUrl(url) {
   const lower = String(url || '').toLowerCase();
   return /\/[^/?#]*card[^/?#]*\.html?(?:[?#].*)?$/i.test(lower)
     || /\/index\.html?(?:[?#].*)?$/i.test(lower);
+}
+
+/**
+ * 检测 AI 协议 JSON 特征字段（对齐 origin-vanilla openclaw-shared.ts hasAiProtocolJsonSignature）
+ * 要求同时含 (outputs|providerId|skillId) 与 (summary|status)，避免误判普通 JSON。
+ */
+function _hasAiProtocolJsonSignature(text) {
+  return /"(?:outputs|providerId|skillId)"\s*:/.test(text) && /"(?:summary|status)"\s*:/.test(text);
+}
+
+/**
+ * 定位 AI_SKILL_RESULT JSON 的起止边界（对齐 origin-vanilla tryExtractAiSkillResultText 的边界查找）
+ * 通过显式标记或特征字段定位起点，再用括号匹配（含字符串/转义感知）找到完整 JSON。
+ * @param {string} raw
+ * @returns {{start:number, end:number}|null} end 为闭合 '}' 的索引（含）
+ */
+function _locateAiSkillJsonBounds(raw) {
+  const explicitIdx = raw.indexOf('AI_SKILL_RESULT');
+  const hasSignature = _hasAiProtocolJsonSignature(raw);
+  if (explicitIdx === -1 && !hasSignature) return null;
+
+  // 无显式标记时，用特征字段定位起点
+  const searchFrom = explicitIdx !== -1 ? explicitIdx : Math.min(
+    raw.indexOf('"outputs"') !== -1 ? raw.indexOf('"outputs"') : Infinity,
+    raw.indexOf('"providerId"') !== -1 ? raw.indexOf('"providerId"') : Infinity,
+    raw.indexOf('"skillId"') !== -1 ? raw.indexOf('"skillId"') : Infinity,
+  );
+  if (searchFrom === Infinity) return null;
+
+  // 从标记位向后找起始 '{'（JSON 可能跟在 "AI_SKILL_RESULT:\n```json\n" 之后）
+  let start = searchFrom;
+  while (start < raw.length) {
+    if (raw[start] === '{') break;
+    start += 1;
+  }
+  if (start >= raw.length || raw[start] !== '{') return null;
+
+  // 括号匹配找闭合 '}'（感知字符串与转义，避免字符串内 '}' 误判）
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth += 1;
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return { start, end: i };
+    }
+  }
+  return null; // 未闭合，无法定位
 }
 
 /**
@@ -1382,72 +1609,103 @@ function _parseAgentReply(text, existingAttachments = []) {
   let cleanText = raw;
   const attachments = [];
 
-  // 1. 尝试查找并解析 JSON（结构化 AI 回复）
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
+  // 1. 定位并解析 AI_SKILL_RESULT 结构化 JSON（对齐 origin-vanilla tryExtractAiSkillResultText）
+  const bounds = _locateAiSkillJsonBounds(raw);
+  if (bounds) {
+    const jsonStr = raw.slice(bounds.start, bounds.end + 1);
+    const beforeJson = raw.slice(0, bounds.start).trim();
+    const afterJson = raw.slice(bounds.end + 1).trim();
+    let extractedText = '';
+    let parsedOk = false;
     try {
-      const obj = JSON.parse(jsonMatch[0]);
-      // AI_SKILL_RESULT 格式：{ outputs: [...], skillId, taskNo, ... }
-      if (obj && (Array.isArray(obj.outputs) || obj.skillId || obj.providerId)) {
-        const textParts = [];
+      const obj = JSON.parse(jsonStr);
+      if (obj && typeof obj === 'object') {
+        const summary = String(obj.summary || '').trim();
+        // outputs 兼容数组与单对象（对齐原项目）
+        let outputs = [];
         if (Array.isArray(obj.outputs)) {
-          for (const output of obj.outputs) {
-            const type = String(output.type || '').trim();
-            if (type === 'text') {
-              textParts.push(String(output.content || output.text || ''));
-            } else if (type === 'webview' || type === 'artifact') {
-              const url = String(output.url || '').trim();
-              if (url && /^https?:\/\//.test(url)) {
-                attachments.push({
-                  type: 'webview',
-                  url,
-                  title: String(output.title || _titleFromUrl(url)),
-                  objectKind: output.objectKind || (output.url && _isH5CardUrl(output.url) ? 'h5_card' : ''),
-                  artifactType: output.artifactType || '',
-                  sourceSkillId: output.sourceSkillId || obj.skillId || '',
-                  taskNo: obj.taskNo || '',
-                  providerId: obj.providerId || '',
-                  skillId: obj.skillId || '',
-                });
-              }
+          outputs = obj.outputs;
+        } else if (obj.outputs && typeof obj.outputs === 'object') {
+          outputs = [obj.outputs];
+        }
+        const textParts = [];
+        for (const output of outputs) {
+          if (!output || typeof output !== 'object') continue;
+          const type = String(output.type || '').trim();
+          if (type === 'text') {
+            // 标准格式：{ type: "text", content: "..." }，兜底 text 字段
+            const c = String(output.content || output.text || '').trim();
+            if (c) textParts.push(c);
+          } else if (type === 'webview' || type === 'webview_content' || type === 'artifact') {
+            const url = String(output.url || '').trim();
+            if (url && /^https?:\/\//.test(url)) {
+              attachments.push({
+                type: 'webview',
+                url,
+                title: String(output.title || _titleFromUrl(url)),
+                objectKind: output.objectKind || (output.url && _isH5CardUrl(output.url) ? 'h5_card' : ''),
+                artifactType: output.artifactType || '',
+                sourceSkillId: output.sourceSkillId || obj.skillId || '',
+                taskNo: obj.taskNo || '',
+                providerId: obj.providerId || '',
+                skillId: obj.skillId || '',
+              });
+            }
+          } else {
+            // 任意带 url 字段的输出 - 保留为附件（对齐原项目兜底）
+            const url = String(output.url || '').trim();
+            if (url && /^https?:\/\//.test(url) && !attachments.some(a => a.url === url)) {
+              attachments.push({
+                type: 'webview',
+                url,
+                title: String(output.title || _titleFromUrl(url)),
+                objectKind: output.url && _isH5CardUrl(output.url) ? 'h5_card' : '',
+                artifactType: '',
+              });
+            }
+            // 直接格式 { text: "..." }
+            if (typeof output.text === 'string' && output.text.trim()) {
+              textParts.push(output.text);
             }
           }
         }
-        // 从原始文本中移除 JSON，保留前后可能有的纯文本
-        const beforeJson = raw.slice(0, jsonMatch.index).trim();
-        const afterJson = raw.slice(jsonMatch.index + jsonMatch[0].length).trim();
-        cleanText = [beforeJson, textParts.join('\n'), afterJson].filter(Boolean).join('\n').trim();
+        extractedText = textParts.join('\n') || summary;
+        if (extractedText) parsedOk = true;
       }
     } catch (e) {
-      // JSON 解析失败，当作纯文本处理
+      // JSON 畸形 - 走正则兜底提取
+    }
+    if (!parsedOk) {
+      // 正则兜底：从畸形 JSON 中提取 summary/content/text（对齐 origin-vanilla regex fallback）
+      const summaryMatch = jsonStr.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const summary = summaryMatch ? summaryMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      const contentMatch = jsonStr.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const content = contentMatch ? contentMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      const textMatch = jsonStr.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const textVal = textMatch ? textMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : '';
+      extractedText = content || textVal || summary;
+    }
+    if (extractedText) {
+      cleanText = [beforeJson, extractedText, afterJson].filter(Boolean).join('\n').trim();
     }
   }
 
-  // 2. 从纯文本中提取 URL 作为 webview 附件
-  const urlRegex = /https?:\/\/[^\s"'<>\]\\]+/gi;
-  const found = cleanText.match(urlRegex) || [];
-  for (const url of found) {
-    if (attachments.some(a => a.url === url)) continue;
-    const isH5 = _isH5CardUrl(url);
-    attachments.push({
-      type: 'webview',
-      url,
-      title: _titleFromUrl(url),
-      objectKind: isH5 ? 'h5_card' : '',
-      artifactType: isH5 ? 'html' : '',
-    });
-  }
+  // 2. 从文本中提取 URL 作为附件（对齐 agent 项目 appendInlineWebviewAttachments）
+  // 同时匹配 markdown 链接 [label](url) 和裸 URL，比旧版仅匹配裸 URL 更完整
+  appendInlineAttachments(cleanText, attachments);
 
-  // 3. 合并 C++ 推送的附件（去重）
-  const seenUrls = new Set(attachments.map(a => a.url).filter(Boolean));
+  // 3. 合并 C++ 推送的附件 + 去重（对齐 agent 项目 dedupeAttachments）
   for (const att of existingAttachments) {
-    if (att.url && seenUrls.has(att.url)) continue;
-    if (att.url) seenUrls.add(att.url);
     attachments.push(att);
   }
+  const dedupedAttachments = dedupeAttachments(attachments);
 
-  // 4. H5 卡片存在时简化低信息文本
-  const hasH5Card = attachments.some(a =>
+  // 4. 从文本中移除已提取为附件的 URL（对齐 agent 项目 stripAttachedInlineLinks）
+  // 这样文本中不再重复显示 URL，用户看到的是干净文本 + 下方卡片
+  cleanText = stripInlineLinks(cleanText, dedupedAttachments);
+
+  // 5. H5 卡片存在时简化低信息文本
+  const hasH5Card = dedupedAttachments.some(a =>
     a.objectKind === 'h5_card' || a.sourceSkillId === 'h5-cards' ||
     a.artifactType === 'html' || (a.url && _isH5CardUrl(a.url))
   );
@@ -1458,10 +1716,14 @@ function _parseAgentReply(text, existingAttachments = []) {
     }
   }
 
-  // 5. 移除残留的 JSON 碎片行（如单独的 "outputs": [...] 片段）
+  // 6. 移除残留的 JSON 碎片行（如单独的 "outputs": [...] 片段）
   cleanText = cleanText.replace(/^[\s]*[\{\}".\[\]:,\d]+[\s]*$/gm, '').trim();
 
-  return { text: cleanText || raw, attachments };
+  // 7. 清洗 AI 回复文本（对齐 agent 项目 sanitizeAgentVisibleReply）
+  // 去除思考过程、工具细节、乱码、协议泄露等不应展示给用户的内容
+  cleanText = sanitizeAgentReply(cleanText, dedupedAttachments);
+
+  return { text: cleanText || raw, attachments: dedupedAttachments };
 }
 
 // 检测文本是否是 prompt/系统指令而非 AI 回复
@@ -1567,7 +1829,39 @@ async function _requestAgentReply(text, convId) {
   });
 
   try {
-    const result = await core.request('agent.turn', { text, conversationId: convId, ai: AppConfig.getCurrentAi() });
+    // 按照协议文档 §2.3 构建 AI_TASK_REQUEST，嵌入 prompt 文本发送给 AI 引擎。
+    // 对齐 agent 项目 openclawAgentProvider.ts buildOpenClawMessage。
+
+    // 对齐 agent 项目 sendMessageService.ts stripAgentMention：
+    // 群聊 @提及场景下，发送给 AI 的 input.text 应为去除 @XX AI助手 前缀的纯用户意图文本。
+    // 如 "@炎图AI助手 打开樱花大冒险" -> "打开樱花大冒险"
+    // 否则 AI 会把 @提及 当作查询内容，导致回复格式异常。
+    const userQuery = String(text || '')
+      .replace(/\u200B/g, '')                          // 1. 去除零宽空格
+      .replace(/@\S+AI助手\s*/g, '')                   // 2. 去除 @XX AI助手 前缀
+      .trim() || text.trim();
+
+    const taskNo = createAgentTaskNo();
+    const metadata = {
+      taskNo,
+      providerId: AppConfig.getCurrentAi(),
+      conversationId: convId,
+      userId: state.getUserId() || undefined,
+      userPhone: state.getPhone() || undefined,
+    };
+    // 构建会话上下文（对齐 agent 项目 agentRuntimeService.ts normalizeConversationContext）
+    // 取最近 4 条消息（排除当前用户消息），用于后续追问场景
+    const recentMsgs = (state.getMessages(convId) || [])
+      .filter((m) => m && m.text && !m._isLocalStream && m.id !== agentMsgId)
+      .slice(-4)
+      .map((m) => {
+        const role = m.author === 'agent' || m.isAgent ? '助手' : '用户';
+        return `${role}: ${String(m.text).slice(0, 160)}`;
+      });
+    const prompt = buildOpenClawMessage(userQuery, metadata, undefined, recentMsgs);
+    console.log('[bridge] agent.turn prompt:\n', prompt);
+    console.log('[bridge] agent.turn userQuery:', userQuery, '| taskNo:', taskNo);
+    const result = await core.request('agent.turn', { text: prompt, conversationId: convId, ai: AppConfig.getCurrentAi(), taskNo });
     if (!done) {
       const rawText = (result && (result.text || result.message || result.content))
         || (typeof result === 'string' ? result : '');
@@ -2170,11 +2464,53 @@ function parseSharedPostMessageContent(raw, convId) {
   return state.parseSharedPostMessageContent(raw, convId);
 }
 
+/**
+ * 对齐 agent 项目 postShareEnvelope.ts encodeForwardAttachmentContent：
+ * 将转发附件编码为 HTML 注释信封格式，附加到显示文本后。
+ * 格式：displayText\n<!-- agent-chat:forward-attachment <base64> -->
+ * 接收方通过 parseSharedPostMessageContent 解析信封，还原 displayText 和 attachments。
+ * 使用 HTML 注释 + base64 编码，避免服务端文本透传时 JSON 被截断或转义。
+ */
+const FORWARD_ATTACHMENT_START = '<!-- agent-chat:forward-attachment ';
+const FORWARD_ATTACHMENT_END = ' -->';
+
+function _toBase64Utf8(value) {
+  var bytes = new TextEncoder().encode(value);
+  var binary = '';
+  for (var i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }
+  return btoa(binary);
+}
+
+function _fromBase64Utf8(value) {
+  var binary = atob(value);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+  return new TextDecoder().decode(bytes);
+}
+
+function encodeForwardAttachment(displayText, title, attachments) {
+  var envelope = { version: 1, title: title, attachments: attachments };
+  var token = _toBase64Utf8(JSON.stringify(envelope));
+  return displayText + '\n' + FORWARD_ATTACHMENT_START + token + FORWARD_ATTACHMENT_END;
+}
+
+// ================================================================
+// 草稿持久化（输入框内容本地存储）
+// ================================================================
+function saveComposerDrafts(drafts) {
+  chatHistoryStore.saveDrafts(drafts);
+}
+function loadComposerDrafts() {
+  return chatHistoryStore.loadDrafts();
+}
+
 // ================================================================
 // 重置（登出/切换账号时清理）
 // ================================================================
 async function resetForAuthChange() {
   try { await disconnect(); } catch (e) {}
+  chatHistoryStore.clearAllMessages();
+  chatHistoryStore.clearDrafts();
   state._setters.resetAll();
   state._setters.notify();
 }
@@ -2218,7 +2554,9 @@ export default {
   // notifications
   getGroupInvitationNotifications, getPushNotifications, getLastSeenNotificationsAt, setLastSeenNotificationsAt,
   // utils
-  parseSharedPostMessageContent, resetForAuthChange,
+  parseSharedPostMessageContent, encodeForwardAttachment, resetForAuthChange,
+  // drafts
+  saveComposerDrafts, loadComposerDrafts,
   // pub/sub
   subscribe, onPush, isMockMode,
 };

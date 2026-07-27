@@ -127,17 +127,100 @@ function getPhone() { return _auth.phone; }
 function getSessionId() { return _auth.sessionId; }
 function isLoggedIn() { return _auth.isLoggedIn; }
 
-// ── 工具：解析消息中的帖子分享信封（纯字符串解析，无业务逻辑）──
+// ── 工具：解析消息中的帖子分享信封（对齐 agent 项目 postShareEnvelope.ts）──
+// 支持两种信封格式（均为 HTML 注释 + base64 编码）：
+// - <!-- agent-chat:forward-attachment <base64> -->：转发 ai_card/webview/image 附件
+// - <!-- agent-chat:post-share <base64> -->：转发 native_post 帖子
+var _POST_SHARE_START = '<!-- agent-chat:post-share ';
+var _POST_SHARE_END = ' -->';
+var _FWD_ATTACH_START = '<!-- agent-chat:forward-attachment ';
+var _FWD_ATTACH_END = ' -->';
+
+function _fromBase64Utf8(value) {
+  try {
+    var binary = atob(value);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+    return new TextDecoder().decode(bytes);
+  } catch (e) { return ''; }
+}
+
+/**
+ * 从可见文本中剥离 agent-chat HTML 注释信封，避免接收端把 base64 当作普通文本渲染。
+ * 对齐 agent 项目 stripAgentChatEnvelope()。
+ */
+function _stripAgentChatEnvelope(content) {
+  var source = String(content ?? '');
+  var cursor = 0;
+  var result = '';
+  while (cursor < source.length) {
+    var fwdStart = source.indexOf(_FWD_ATTACH_START, cursor);
+    var postStart = source.indexOf(_POST_SHARE_START, cursor);
+    var candidates = [];
+    if (fwdStart !== -1) candidates.push({ start: fwdStart, endTag: _FWD_ATTACH_END });
+    if (postStart !== -1) candidates.push({ start: postStart, endTag: _POST_SHARE_END });
+    if (!candidates.length) break;
+    candidates.sort(function (a, b) { return a.start - b.start; });
+    var pick = candidates[0];
+    result += source.slice(cursor, pick.start);
+    var end = source.indexOf(pick.endTag, pick.start);
+    if (end === -1) { cursor = source.length; break; }
+    cursor = end + pick.endTag.length;
+  }
+  result += source.slice(cursor);
+  return result.replace(/\s+/g, ' ').trim();
+}
+
 function parseSharedPostMessageContent(rawContent, convId) {
   if (!rawContent || typeof rawContent !== 'string') return null;
-  const marker = 'c:agentchat.collaboration';
-  const idx = rawContent.indexOf(marker);
-  if (idx < 0) return null;
+  var source = String(rawContent);
+
+  // 查找信封标记（取两者中更靠前的）
+  var fwdIdx = source.indexOf(_FWD_ATTACH_START);
+  var postIdx = source.indexOf(_POST_SHARE_START);
+  var useFwd = fwdIdx !== -1 && (postIdx === -1 || fwdIdx < postIdx);
+  var usePost = postIdx !== -1 && (fwdIdx === -1 || postIdx < fwdIdx);
+
+  if (!useFwd && !usePost) {
+    // 兼容旧格式：c:agentchat.collaboration {json}
+    var marker = 'c:agentchat.collaboration';
+    var idx = source.indexOf(marker);
+    if (idx < 0) return null;
+    try {
+      var json = source.slice(idx + marker.length).trim();
+      var obj = JSON.parse(json);
+      return { content: source.slice(0, idx).trim(), attachments: obj.attachments, _convId: convId };
+    } catch (e) { return null; }
+  }
+
+  var startIdx = useFwd ? fwdIdx : postIdx;
+  var startTag = useFwd ? _FWD_ATTACH_START : _POST_SHARE_START;
+  var endTag = useFwd ? _FWD_ATTACH_END : _POST_SHARE_END;
+
+  var endIdx = source.indexOf(endTag, startIdx);
+  if (endIdx === -1) {
+    return { content: _stripAgentChatEnvelope(source) };
+  }
+
+  var token = source.slice(startIdx + startTag.length, endIdx).trim();
+  var before = source.slice(0, startIdx).trimEnd();
+  var after = source.slice(endIdx + endTag.length).trimStart();
+  var displayContent = [before, after].filter(Boolean).join('\n').trim();
+
   try {
-    const json = rawContent.slice(idx + marker.length).trim();
-    const obj = JSON.parse(json);
-    return { ...obj, _convId: convId };
-  } catch (e) { return null; }
+    var payload = JSON.parse(_fromBase64Utf8(token));
+
+    if (useFwd && payload.version === 1 && Array.isArray(payload.attachments)) {
+      return { content: displayContent, attachments: payload.attachments, _convId: convId };
+    }
+
+    if (usePost && payload.version === 1 && payload.post) {
+      var post = Object.assign({}, payload.post, { conversationId: convId || payload.post.conversationId });
+      return { content: displayContent, post: post, attachments: post.attachments || [], _convId: convId };
+    }
+  } catch (e) { /* fallthrough */ }
+
+  return { content: _stripAgentChatEnvelope(source) };
 }
 
 // ── 设备绑定 payload 解析（纯本地字符串解析）──
@@ -203,6 +286,21 @@ const _setters = {
   },
   status(s) { _status = s; },
   personalTasks(v) { _personalTasks = v || []; },
+  appendPersonalTask(task) {
+    // 去重：同一 createdFromMessageId + ownerUserId 不重复创建
+    var exists = _personalTasks.some(function (t) {
+      return t.id === task.id ||
+        (task.createdFromMessageId && t.createdFromMessageId === task.createdFromMessageId);
+    });
+    if (exists) return;
+    _personalTasks = [_personalTasks, task].flat ? _personalTasks.concat([task]) : _personalTasks.concat([task]);
+  },
+  updatePersonalTask(taskId, patch) {
+    var idx = _personalTasks.findIndex(function (t) { return t.id === taskId; });
+    if (idx >= 0) {
+      _personalTasks[idx] = Object.assign({}, _personalTasks[idx], patch);
+    }
+  },
   boundDevices(v) { _boundDevices = v || []; },
   pendingDeviceSessions(v) { _pendingDeviceSessions = v || []; },
   agentSkills(v) { _agentSkills = v || []; },

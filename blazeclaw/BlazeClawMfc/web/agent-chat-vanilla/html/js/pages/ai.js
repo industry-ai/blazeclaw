@@ -14,7 +14,6 @@
 import Bridge from '../bridge/index.js';
 import UiStore from '../stores/uiStore.js';
 import Toast from '../utils/toast.js';
-import TimeUtils from '../utils/time.js';
 
 const AiPage = {
   activeSegment: 'overview',
@@ -264,8 +263,8 @@ const AiPage = {
                 <div class="hub-skill-row ${enabled ? '' : 'hub-skill-disabled'}">
                   <div class="hub-skill-row-info">
                     <span class="hub-skill-row-title">${this._esc(s.title)}</span>
-                    <P class="hub-skill-row-desc">${this._esc(s.description)}</P>
-                    <P class="hub-skill-row-perm">${this._esc(s.permission)}</P>
+                    <p class="hub-skill-row-desc">${this._esc(s.description)}</p>
+                    <p class="hub-skill-row-perm">${this._esc(s.permission)}</p>
                   </div>
                   <button class="hub-skill-toggle ${enabled ? 'on' : 'off'}" data-action="toggleSkill" data-skill-id="${s.id}">
                     ${enabled

@@ -96,18 +96,33 @@ inline std::optional<StartupSelection> FindChatUiIndex(
 			L"chat" /
 			L"dist" /
 			L"index.html";
+		const auto directSource =
+			cursor /
+			L"web" /
+			L"chat" /
+			L"index.html";
+		const auto directDist =
+			cursor /
+			L"web" /
+			L"chat" /
+			L"dist" /
+			L"index.html";
 
 		std::vector<std::pair<std::filesystem::path, bool>> orderedCandidates;
 		if (preference == StartupPreference::PreferSource) {
 			orderedCandidates.push_back({ projectSource, false });
 			orderedCandidates.push_back({ repoSource, false });
+			orderedCandidates.push_back({ directSource, false });
 			orderedCandidates.push_back({ projectDist, true });
 			orderedCandidates.push_back({ repoDist, true });
+			orderedCandidates.push_back({ directDist, true });
 		} else {
 			orderedCandidates.push_back({ projectDist, true });
 			orderedCandidates.push_back({ repoDist, true });
+			orderedCandidates.push_back({ directDist, true });
 			orderedCandidates.push_back({ projectSource, false });
 			orderedCandidates.push_back({ repoSource, false });
+			orderedCandidates.push_back({ directSource, false });
 		}
 
 		for (const auto& candidate : orderedCandidates) {

@@ -300,8 +300,15 @@ void CTcpReceiverWnd::AddStatusLog(const CString& line)
 {
 	if (!m_logEdit.m_hWnd) return;
 
-	// 添加状态日志行
-	AppendLogLine(line + _T("\r\n"), false, true);
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	CString timeStr;
+	timeStr.Format(_T("%02d:%02d:%02d.%03d"), st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+
+	CString displayLine;
+	displayLine.Format(_T("[%s] %s\r\n"), timeStr.GetString(), line.GetString());
+
+	AppendLogLine(displayLine, false, true);
 }
 
 void CTcpReceiverWnd::EnqueueIncomingLogLine(const CString& line)

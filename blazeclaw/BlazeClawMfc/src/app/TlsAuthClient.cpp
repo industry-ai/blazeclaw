@@ -88,7 +88,10 @@ void TlsAuthClient::Disconnect() {
         return;
     }
 
-    network_.Disconnect();
+    // 登录只断开 TLS 认证连接，不牵连 TCP chat 连接。
+    // network_.Disconnect() 会同时断开 TCP 和 TLS，导致 LoginWithSms 刚建立的
+    // chat TCP 连接被析构函数误杀，WebView 请求聊天列表时出现 "tcp_not_connected"。
+    network_.DisconnectTls();
     is_logged_in_ = false;
     email_.clear();
     access_token_.clear();

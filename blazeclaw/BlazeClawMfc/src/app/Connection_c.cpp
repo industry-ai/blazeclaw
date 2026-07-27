@@ -465,8 +465,11 @@ bool CConnection_c::Connect(const std::string& host, int port, bool use_tls) {
     is_connected_ = true;
     LOG_INFO("conn={} Connected total_ms={}", conn_id_, (now_ms() - t0));
 
-    // 启动应用层心跳 (PING/PONG)，保活长连接。
-    //StartHeartbeat();
+    // 启动TCP应用层心跳（用 LIST 命令保活长连接，同时获取最新群聊列表）。
+    if (!use_tls_)
+    {
+        StartHeartbeat();
+    }
 
     return true;
 }
@@ -556,21 +559,26 @@ void CConnection_c::HeartbeatLoop() {
         }
         slept_ms = 0;
 
-        // PING：使用 SendNoWait 走 send_mutex_，不会和业务写串扰。
-        // 心跳失败 = 连接死了，立即退出循环，让 PushReceiver / disconnect_callback 接管。
-        const bool ok = SendNoWait(static_cast<uint16_t>(MsgType::Ping), std::string{});
+        // 心跳用 LIST 命令（走 221 IrcMessageReq 通道），可以同时获取最新群聊列表。
+        // SendNoWait 走 send_mutex_，不会和业务写串扰；失败 = 连接死了，立即退出循环。
+        // 心跳 payload: cmd=LIST，server 若支持则返回频道列表，不支持时 send 本身仍会成功。
+        const std::string heartbeat_payload = "{\"cmd\":\"LIST_MY_CHAT_ROOMS\"}";
+        const bool ok = SendNoWait(static_cast<uint16_t>(MsgType::IrcMessageReq), heartbeat_payload);
         if (!ok) {
-            LOG_WARN("conn={} Heartbeat: SendNoWait(Ping) failed, stopping heartbeat", conn_id_);
+            LOG_WARN("conn={} Heartbeat: SendNoWait(IrcMessageReq/LIST) failed, stopping heartbeat", conn_id_);
             break;
         }
-        LOG_DEBUG("conn={} Heartbeat: Ping sent", conn_id_);
+        LOG_DEBUG("conn={} Heartbeat: LIST sent", conn_id_);
     }
     LOG_INFO("conn={} Heartbeat thread stopped", conn_id_);
 }
 
 void CConnection_c::Close() {
     // 先停心跳线程，避免它在 socket 已关闭后还尝试 send。
-    //StopHeartbeat();
+    if (!use_tls_)
+    {
+        StopHeartbeat();
+    }
 
     const bool was_connected = is_connected_.load();
     if (was_connected) {
@@ -996,17 +1004,15 @@ void LogToTcpReceiverWnd(const std::string& line) {
 }
 }
 
-// recv_timeout_ms:
-//   -1 (默认) = 永久阻塞(给 PushReceiver 用,不应被 idle 杀掉,bug #7 修复)
-//   >= 0      = 单次 recv 最多等 N 毫秒(给 SendRequest 同步路径用,避免阻塞 UI)
-//
-// 返回 RecvStatus:
-///   - Success：成功读出一帧，header + payload 已填充。
-///   - Timeout：socket SO_RCVTIMEO 到期（非 fatal，PushReceiver 应继续循环）。
-///   - Eof：peer FIN（PushReceiver 应触发重连）。
-///   - FatalError：ECONNRESET 等（PushReceiver 应触发重连）。
-bool CConnection_c::ReadMessage(AppProtoHeader& outHeader, std::string& outPayload,
-                                      int recv_timeout_ms) {
+    // recv_timeout_ms:
+    //   -1 (默认) = 永久阻塞(给 PushReceiver 用,不应被 idle 杀掉,bug #7 修复)
+    //   >= 0      = 单次 recv 最多等 N 毫秒(给 SendRequest 同步路径用,避免阻塞 UI)
+    //
+    // 失败原因通过 get_last_recv_status() 查询:
+    //   - Timeout：socket SO_RCVTIMEO 到期（非 fatal，PushReceiver 应继续循环）。
+    //   - Eof：peer FIN（PushReceiver 应触发重连）。
+    //   - FatalError：ECONNRESET 等（PushReceiver 应触发重连）。
+    bool CConnection_c::ReadMessage(AppProtoHeader& outHeader, std::string& outPayload) {
     outPayload.clear();
 
     if (!is_connected_) {
@@ -1018,11 +1024,8 @@ bool CConnection_c::ReadMessage(AppProtoHeader& outHeader, std::string& outPaylo
     // SendRequest 调用线程同时从同一 socket 读取，把 TCP 字节流瓜分。
     std::lock_guard<std::mutex> recv_lock(recv_mutex_);
 
-    RecvStatus status = recv_all(reinterpret_cast<char*>(&outHeader),
-                                 static_cast<int>(sizeof(outHeader)),
-                                 recv_timeout_ms);
-    if (status != RecvStatus::Success) {
-        last_recv_status_.store(status);
+    if (!recv_all(reinterpret_cast<char*>(&outHeader),
+                  static_cast<int>(sizeof(outHeader)))) {
         return false;
     }
 
@@ -1081,11 +1084,9 @@ bool CConnection_c::ReadMessage(AppProtoHeader& outHeader, std::string& outPaylo
     std::vector<char> buffer(len);
     // payload 的 recv 沿用同一个超时预算。ReadMessage 整体超时上限约 5s(SendRequest 路径),
     // 因为服务端在响应 header 之后通常立即 flush payload,中间空隙很短。
-    status = recv_all(buffer.data(), static_cast<int>(len), recv_timeout_ms);
-    if (status != RecvStatus::Success) {
+    if (!recv_all(buffer.data(), static_cast<int>(len))) {
         // header 已收到但 payload 没收完：把读到的部分 buffer 丢掉（已被释放）。
         // 这里返回 false 让 PushReceiver 区分 timeout（继续）和 Eof/fatal（断开）。
-        last_recv_status_.store(status);
         return false;
     }
 
@@ -1179,14 +1180,24 @@ bool CConnection_c::StartPushReceiver() {
             AppProtoHeader header{};
             std::string payload{};
 
+            // 诊断：记录每次 ReadMessage 调用,用于统计调用频率和超时模式
+            const uint64_t t_recv_enter_ms = now_ms();
+            TRACE(_T("conn=%d Push receiver: ReadMessage enter (loop iter)\n"), conn_id_);
+
             if (!ReadMessage(header, payload)) {
+                const uint64_t t_recv_exit_ms = now_ms();
                 RecvStatus last_status = get_last_recv_status();
+                TRACE(_T("conn=%d Push receiver: ReadMessage returned false, status=%d, elapsed=%llums\n"),
+                      conn_id_, static_cast<int>(last_status),
+                      static_cast<unsigned long long>(t_recv_exit_ms - t_recv_enter_ms));
                 if (last_status == RecvStatus::Timeout) {
                     // 5s SO_RCVTIMEO 到期：服务端暂时没推数据。关键修复（原 bug #7）：
                     // 必须继续循环 —— 不许自杀、不要调用 disconnect_callback、不要清 is_connected_。
                     // 整个连接（TCP socket）依然 alive，可能只是服务端 5s+ 没有推消息。
                     LOG_INFO("conn={} Push receiver: 5s idle timeout (keepalive, NOT fatal)",
                              conn_id_);
+                    TRACE(_T("conn=%d Push receiver: Timeout branch hit, sleep 100ms then continue\n"),
+                          conn_id_);
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 }
@@ -1411,15 +1422,15 @@ bool CConnection_c::send_all(const char* data, int len) {
 }
 
 // --- 内部函数：确保全部接收 ---
-// 关键修复(原 bug #7+)：recv_all 必须明确返回 RecvStatus，让 PushReceiver 能区分：
-//   - Timeout：SO_RCVTIMEO=5s 到期（服务端暂时没推数据），非 fatal → sleep+continue
+// recv_all 返回 bool：true=成功读出全部字节，false=失败。
+// 失败的具体原因通过 get_last_recv_status() 查询：
+//   - Timeout：SO_RCVTIMEO=5s 到期（服务端暂时没推数据），非 fatal → PushReceiver sleep+continue
 //   - Eof：peer FIN / TLS zero-return（对端写半边关闭），fatal → 触发 reconnect
 //   - FatalError：ECONNRESET / ENOTCONN 等致命错误，fatal → 触发 reconnect
 //
-// 之前只返回 bool 的设计导致 PushReceiver 必须靠 get_last_error() 推测错误类型，
-// 而 Windows 上 recv 返回 0（peer FIN）时 get_last_error() 也是 0，会被误判为
-// WSAETIMEDOUT 之外的"未知 0"——结合 fatal 列表 (error==0) 直接走 fatal 分支。
-RecvStatus CConnection_c::recv_all(char* buf, int len, int /*recv_timeout_ms*/) {
+// 之前只返回 bool 导致 PushReceiver 只能靠 get_last_error() 推测错误类型，
+// 而 Windows 上 recv 返回 0（peer FIN）时 get_last_error() 也是 0，会被误判为 FatalError。
+bool CConnection_c::recv_all(char* buf, int len) {
     int total = 0;
     while (total < len) {
         int ret;
@@ -1441,38 +1452,59 @@ RecvStatus CConnection_c::recv_all(char* buf, int len, int /*recv_timeout_ms*/) 
                 }
 
                 if (ssl_err == SSL_ERROR_ZERO_RETURN || ssl_err == SSL_ERROR_SYSCALL) {
-                    // TLS 通道被对端关闭（FIN 或 RST）
-                    LOG_WARN("conn={} TLS connection closed by peer (ssl_err={})", conn_id_, ssl_err);
-                    return ssl_err == SSL_ERROR_ZERO_RETURN ? RecvStatus::Eof : RecvStatus::FatalError;
+                    // TLS 通道被对端关闭（FIN）。语义与 plaintext recv()==0 相同，都是 peer 正常关闭写半边。
+                    // SSL_ERROR_SYSCALL + ret==0 含义是"收到 EOF 但没有 TLS 错误"（peer 干净关闭）。
+                    // SSL_ERROR_SYSCALL + ret==-1 是"底层连接出错"，才是 FatalError。
+                    bool is_peer_fin = (ret == 0);
+                    LOG_WARN("conn={} TLS connection closed by peer (ssl_err={}, ret={})",
+                             conn_id_, ssl_err, ret);
+                    last_recv_status_.store(is_peer_fin ? RecvStatus::Eof : RecvStatus::FatalError);
+                    return false;
                 }
 
                 LOG_ERROR("conn={} SSL_read failed (ssl_err={}, received {}/{})",
                           conn_id_, ssl_err, total, len);
                 drain_openssl_error_stack(std::cerr);
-                return RecvStatus::FatalError;
+                last_recv_status_.store(RecvStatus::FatalError);
+                return false;
             }
 
             // plaintext TCP
             if (ret == 0) {
                 // peer FIN（对方写半边关闭）：TCP 还可写，但已无法再读出任何数据。
-                // 一定要返回 Eof，不要返回 Timeout，否则 PushReceiver 会以为是 5s
-                // 超时而被误判为 keepalive 继续空转。
-                LOG_INFO("conn={} recv()=0 (peer FIN, will trigger reconnect)", conn_id_);
-                return RecvStatus::Eof;
+                last_recv_status_.store(RecvStatus::Eof);
+                return false;
             }
 
             int err = get_last_error();
             if (err == WSAETIMEDOUT) {
                 // socket 层 SO_RCVTIMEO=5s 到期。这是非 fatal 状态。
-                return RecvStatus::Timeout;
+                TRACE(_T("conn=%d recv_all: WSAETIMEDOUT (SO_RCVTIMEO fired), total=%d/%d\n"),
+                      conn_id_, total, len);
+                last_recv_status_.store(RecvStatus::Timeout);
+                return false;
             }
+
+            // ECONNRESET / WSAECONNRESET / WSAECONNABORTED：
+            // 服务端 idle 超时关闭连接后,Windows 上 recv() 常返回 -1 + 这些错误码。
+            // 这与收到 FIN(字节流结束)语义相同,应视为 Eof 而非 FatalError。
+            if (err == WSAECONNRESET || err == WSAECONNABORTED ||
+                err == WSAESHUTDOWN || err == WSAENOTCONN) {
+                LOG_INFO("conn={} recv()=-1 err={} (connection closed by peer), treating as EOF",
+                         conn_id_, err);
+                last_recv_status_.store(RecvStatus::Eof);
+                return false;
+            }
+
             // ECONNRESET / ENOTCONN / ESHUTDOWN / EHOSTUNREACH 等
             LOG_WARN("conn={} recv() failed err={} (received {}/{})",
                      conn_id_, err, total, len);
-            return RecvStatus::FatalError;
+            last_recv_status_.store(RecvStatus::FatalError);
+            return false;
         }
         total += ret;
     }
-    return RecvStatus::Success;
+    last_recv_status_.store(RecvStatus::Success);
+    return true;
 }
 

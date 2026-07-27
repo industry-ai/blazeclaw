@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <!--
+    BlazeClaw MSI Installer Definition
+    Product: BlazeClaw
+    Manufacturer: 炎图科技
+    Version: 1.0.0.0
+  -->
+
+  <!-- UpgradeCode 保持固定，更换 Product Id 即可触发升级检测 -->
+  <Product Id="*" Name="BlazeClaw" Language="1033" Version="1.0.0.0"
+           Manufacturer="炎图科技"
+           UpgradeCode="{B1C2D3E4-F5A6-4780-B9C1-D2E3F4A5B6C7}"
+           Codepage="65001">
+
+    <!--
+      InstallerVersion="500" 表示支持 Windows Installer 5.0+
+      perMachine 要求管理员权限，适合 MFC 应用
+    -->
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" InstallPrivileges="elevated"/>
+
+    <!-- 嵌入 CAB 压缩包 -->
+    <MediaTemplate/>
+
+    <!-- 使用内置安装目录选择 UI -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
+    <UIRef Id="WixUI_InstallDir"/>
+
+    <!-- 桌面快捷方式开关（可通过命令行参数覆盖）-->
+    <Property Id="CREATE_DESKTOP_SHORTCUT" Value="1"/>
+
+    <!-- 安装特性：包含主程序和所有文件组件 -->
+    <Feature Id="ProductFeature" Title="BlazeClaw" Level="1">
+      <ComponentGroupRef Id="ProductComponents"/>
+      <ComponentGroupRef Id="PackageComponents"/>
+    </Feature>
+
+    <!-- 「程序和功能」中的联系信息 -->
+    <Property Id="ARPCONTACT" Value="炎图科技"/>
+
+    <!-- 自动升级：检测并卸载旧版本 -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BlazeClaw is already installed."/>
+
+  </Product>
+
+  <!-- 目录结构 Fragment -->
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <!-- 安装目标目录：[ProgramFilesFolder]\BlazeClaw -->
+        <Directory Id="INSTALLFOLDER" Name="BlazeClaw"/>
+      </Directory>
+      <Directory Id="DesktopFolder"/>
+    </Directory>
+  </Fragment>
+
+  <!-- 主程序组件和快捷方式 Fragment -->
+  <Fragment>
+
+    <!-- 从主程序 exe 中提取图标 -->
+    <Icon Id="BlazeClawIcon" SourceFile="$(var.SourceExe)"/>
+
+    <ComponentGroup Id="ProductComponents">
+
+      <!-- 主程序 exe 组件 -->
+      <Component Id="cmpMainExe" Guid="*" Directory="INSTALLFOLDER">
+        <File Id="filMainExe" Source="$(var.SourceExe)" KeyPath="yes" Name="BlazeClaw.exe"/>
+        <!-- 创建安装文件夹并授权 Users 组完全控制（程序运行需要写入配置）-->
+        <CreateFolder>
+          <util:PermissionEx User="Users" GenericAll="yes"/>
+        </CreateFolder>
+        <!-- 卸载注册表：写入 HKLM 以支持「程序和功能」显示 -->
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Value="" KeyPath="no"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Name="DisplayName" Value="BlazeClaw"/>
+        <!-- UninstallString 使用 {ProductCode} 会在编译时被替换 -->
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Name="UninstallString" Value="msiexec /x {B1C2D3E4-F5A6-4780-B9C1-D2E3F4A5B6C7}"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER]BlazeClaw.exe"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="integer" Name="NoModify" Value="1"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="integer" Name="NoRepair" Value="1"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Name="Publisher" Value="炎图科技"/>
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="string" Name="DisplayVersion" Value="1.0.0.0"/>
+        <!-- EstimatedSize 单位为 KB，预估 200MB -->
+        <RegistryValue Root="HKLM" Key="Software\BlazeClaw\Uninstall" Type="integer" Name="EstimatedSize" Value="204800"/>
+      </Component>
+
+      <!-- 桌面快捷方式组件（条件创建）-->
+      <Component Id="cmpDesktopShortcut" Guid="{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" Directory="DesktopFolder">
+        <Condition>CREATE_DESKTOP_SHORTCUT=1</Condition>
+        <RegistryValue Root="HKCU" Key="Software\BlazeClaw\DesktopShortcut" Type="string" Value="BlazeClaw" KeyPath="yes"/>
+        <Shortcut Id="DesktopShortcut"
+                  Name="BlazeClaw"
+                  Description="BlazeClaw AI Assistant"
+                  Target="[INSTALLFOLDER]BlazeClaw.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="BlazeClawIcon"
+                  IconIndex="0"/>
+      </Component>
+
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>
