@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ================================================================
+﻿/* ================================================================
    AgentChat 重构版 - 聊天主页面（UI 渲染层）
    业务逻辑（消息收发/群管理/任务/Agent/设备投递）通过 Bridge -> postMessage 交由 C++ 处理
    语音转文字前端直接调用阿里云 DashScope ASR，不走 C++ 也不依赖 chat-bridge 服务
@@ -271,7 +271,7 @@ const ChatPage = {
       <main class="ds-main" style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--app-page-bg);">
         ${activeConv ? this._renderDesktopHeader(activeConv, isAgent, isGroup) : this._emptyMain()}
         ${activeConv ? this._renderMessageStream(messages, activeConv) : ''}
-        ${activeConv ? this._renderDesktopComposer(activeConv) : ''}
+        ${activeConv ? (activeConv.isKicked ? this._renderKickedBanner() : this._renderDesktopComposer(activeConv)) : ''}
       </main>
     </div>`;
   },
@@ -313,6 +313,17 @@ const ChatPage = {
 
   _emptyMain() {
     return `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-size:0.9rem;color:var(--app-muted);">选择一个会话开始聊天</div>`;
+  },
+
+  // 被踢出群聊时，替换输入框区域，提示用户已被移除且不可发送消息
+  _renderKickedBanner() {
+    return `
+    <div class="kicked-banner-wrap" style="flex-shrink:0;padding:0.75rem 1rem 1rem;display:flex;align-items:center;justify-content:center;">
+      <div class="kicked-banner" style="display:flex;align-items:center;gap:0.5rem;padding:0.6rem 1rem;border-radius:0.75rem;background:#fef2f2;color:#b91c1c;font-size:0.85rem;border:1px solid rgba(220,38,38,0.18);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <span>您已被移除群聊，无法发送消息</span>
+      </div>
+    </div>`;
   },
 
   _dsActionBtn(icon, id = '') {
@@ -447,7 +458,7 @@ const ChatPage = {
       </div>
       <!-- Composer -->
       <div style="flex-shrink:0;padding:0.75rem 1rem 0.75rem;padding-bottom:max(0.75rem,env(safe-area-inset-bottom));">
-        ${this._renderComposer(conv, false)}
+        ${conv.isKicked ? this._renderKickedBanner() : this._renderComposer(conv, false)}
       </div>
     </div>`;
   },
@@ -573,6 +584,7 @@ const ChatPage = {
       const isAgent = c.type === 'agent';
       const isGroup = c.type === 'group';
       const isPinned = c.scope === 'personal_workspace';
+      const isKicked = !!c.isKicked;
       const unread = Bridge.getConversationUnreadCount ? Bridge.getConversationUnreadCount(c.id) : (c.unread || 0);
       const timeLabel = this._convTimeLabel(c.id);
 
@@ -611,10 +623,15 @@ const ChatPage = {
       } else if (isGroup) {
         badgesHtml = `<span class="conv-badge-label conv-badge-group">群</span>`;
       }
+      if (isKicked) {
+        badgesHtml += `<span class="conv-badge-label conv-badge-kicked">已移除</span>`;
+      }
 
       // Preview text
       let previewText = '';
-      if (isPinned) {
+      if (isKicked) {
+        previewText = '您已被移除群聊';
+      } else if (isPinned) {
         previewText = this._getWorkspaceStatus();
       } else if (preview) {
         previewText = preview;
@@ -627,7 +644,7 @@ const ChatPage = {
       }
 
       return `
-      <div class="conv-item ${isActive ? 'active' : ''}" data-conv-id="${c.id}">
+      <div class="conv-item ${isActive ? 'active' : ''} ${isKicked ? 'conv-item-kicked' : ''}" data-conv-id="${c.id}">
         ${avatarHtml}
         <div class="conv-body">
           <div class="conv-name-row">
@@ -640,7 +657,7 @@ const ChatPage = {
           ${timeLabel ? `<span class="conv-time">${timeLabel}</span>` : ''}
           ${unread > 0 ? `<span class="conv-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
         </div>
-        ${isGroup && !isPinned ? `<button class="conv-more-btn" data-conv-id="${c.id}" title="更多操作" aria-label="更多操作">
+        ${isGroup && !isPinned && !isKicked ? `<button class="conv-more-btn" data-conv-id="${c.id}" title="更多操作" aria-label="更多操作">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </button>` : ''}
       </div>`;
@@ -839,7 +856,7 @@ const ChatPage = {
     const isSystem = msg.author === 'system';
 
     if (isSystem) {
-      const isPlain = !/[#*_`>\[\]()]/.test(msg.text || msg.content || '');
+      const isPlain = !/[#*_`>[\]()]/.test(msg.text || msg.content || '');
       const html = isPlain ? this._esc(msg.text || msg.content || '') : MarkdownRenderer.render(msg.text || msg.content || '');
       return `<div class="msg-system-row"><div class="msg-system-bubble"><div class="whitespace-pre-wrap" style="word-break:break-word;">${html.replace(/\n/g,'<br>')}</div></div></div>`;
     }
@@ -849,7 +866,7 @@ const ChatPage = {
       const { displayContent, attachments } = this._resolveMessageDisplay(msg, conv?.id);
       const isStreaming = msg.status === 'streaming';
       const isTypingOnly = isStreaming && !displayContent.trim();
-      const isPlain = !/[#*_`>\[\]()]/.test(displayContent);
+      const isPlain = !/[#*_`>[\]()]/.test(displayContent);
       const html = isPlain ? this._esc(displayContent) : MarkdownRenderer.render(displayContent);
       const attachmentCards = this._renderPostAttachmentCards(attachments, conv);
       const bubbleContent = isTypingOnly
@@ -876,7 +893,7 @@ const ChatPage = {
       const swatch = AvatarSwatch.getSwatch(Bridge.getUserId() || 'me');
       const initials = (Bridge.getPhone()||'').slice(-2) || '我';
       const { displayContent, attachments } = this._resolveMessageDisplay(msg, conv?.id);
-      const isPlain = !/[#*_`>\[\]()]/.test(displayContent);
+      const isPlain = !/[#*_`>[\]()]/.test(displayContent);
       const html = isPlain ? this._esc(displayContent) : MarkdownRenderer.render(displayContent);
       const attachmentCards = this._renderPostAttachmentCards(attachments, conv);
       return `
@@ -901,7 +918,7 @@ const ChatPage = {
       const name = msg.authorName || '成员';
       const initials = (name||'').slice(-2) || '#';
       const { displayContent, attachments } = this._resolveMessageDisplay(msg, conv?.id);
-      const isPlain = !/[#*_`>\[\]()]/.test(displayContent);
+      const isPlain = !/[#*_`>[\]()]/.test(displayContent);
       const html = isPlain ? this._esc(displayContent) : MarkdownRenderer.render(displayContent);
       const attachmentCards = this._renderPostAttachmentCards(attachments, conv);
       return `
@@ -1418,6 +1435,13 @@ const ChatPage = {
 
     const convId = Bridge.getActiveConversationId();
     if (!convId) { Toast.warn('请先选择一个会话'); return; }
+
+    // 被踢出的群聊禁止发送消息
+    const activeConv = Bridge.getActiveConversation();
+    if (activeConv && activeConv.isKicked) {
+      Toast.warn('您已被移除群聊，无法发送消息');
+      return;
+    }
 
     this._setComposerDraft(convId, '');
     this.pendingScrollToBottom = true;

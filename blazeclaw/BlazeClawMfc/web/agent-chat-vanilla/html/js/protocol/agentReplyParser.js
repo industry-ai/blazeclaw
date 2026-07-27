@@ -417,7 +417,7 @@ function extractFinalAnswer(content) {
   const cleaned = content.replace(/^\u2705\s*/u, '').trim();
 
   // 策略 A: 查找结构化分隔（空行 + 编号/标题）
-  const structuralBreak = cleaned.search(/\n\n(?:[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]\u3001|[0-9]+[\.\u3001]|#{1,3}\s|[\u4e00-\u9fff]{4,})/u);
+  const structuralBreak = cleaned.search(/\n\n(?:[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]\u3001|[0-9]+[.\u3001]|#{1,3}\s|[\u4e00-\u9fff]{4,})/u);
   if (structuralBreak >= 0) {
     const answer = cleaned.slice(structuralBreak).trim();
     if (answer && !isLowInformationAgentReply(answer) && answer.length >= 10) return answer;

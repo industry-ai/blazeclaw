@@ -10,6 +10,7 @@
 
 const STORAGE_PREFIX = 'agentchat:history';
 const DRAFTS_PREFIX = 'agentchat:drafts';
+const KICKED_PREFIX = 'agentchat:kicked';
 const MAX_MESSAGES_PER_CONV = 200;
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -22,6 +23,10 @@ function _msgKey(userId, convId) {
 
 function _draftsKey(userId) {
   return `${DRAFTS_PREFIX}:${userId}`;
+}
+
+function _kickedKey(userId) {
+  return `${KICKED_PREFIX}:${userId}`;
 }
 
 function setUserId(userId) {
@@ -117,6 +122,91 @@ function clearAllMessages() {
   }
 }
 
+// ── 被踢出群聊持久化 ──
+// 本地保存被踢出的群聊信息，使会话列表仍能展示这些群聊并查看本地缓存的历史记录。
+// 存储结构：{ convId: { convId, name, title, scope, kickedAt, reason, operator } }
+
+function _loadKickedMap() {
+  if (!_currentUserId) return {};
+  try {
+    const raw = localStorage.getItem(_kickedKey(_currentUserId));
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    return (obj && typeof obj === 'object') ? obj : {};
+  } catch (e) {
+    console.warn('[chatHistoryStore] load kicked rooms failed', e);
+    return {};
+  }
+}
+
+function _saveKickedMap(map) {
+  if (!_currentUserId) return;
+  try {
+    localStorage.setItem(_kickedKey(_currentUserId), JSON.stringify(map || {}));
+  } catch (e) {
+    console.warn('[chatHistoryStore] save kicked rooms failed', e);
+  }
+}
+
+/**
+ * 保存/更新一条被踢出群聊记录
+ * @param {Object} room - { convId, name, title, scope, kickedAt, reason, operator }
+ */
+function saveKickedRoom(room) {
+  if (!_currentUserId || !room || !room.convId) return;
+  const map = _loadKickedMap();
+  map[room.convId] = {
+    convId: room.convId,
+    name: room.name || '',
+    title: room.title || '',
+    scope: room.scope || 'group',
+    kickedAt: room.kickedAt || Date.now(),
+    reason: room.reason || '',
+    operator: room.operator || '',
+  };
+  _saveKickedMap(map);
+}
+
+/**
+ * 获取所有被踢出群聊记录
+ * @returns {Array} 被踢出群聊数组
+ */
+function getKickedRooms() {
+  const map = _loadKickedMap();
+  return Object.values(map);
+}
+
+/**
+ * 判断某个会话是否已被踢出
+ */
+function isKicked(convId) {
+  if (!_currentUserId || !convId) return false;
+  const map = _loadKickedMap();
+  return !!map[convId];
+}
+
+/**
+ * 移除单条被踢出群聊记录（如用户被重新邀请回群）
+ */
+function removeKickedRoom(convId) {
+  if (!_currentUserId || !convId) return;
+  const map = _loadKickedMap();
+  if (map[convId]) {
+    delete map[convId];
+    _saveKickedMap(map);
+  }
+}
+
+/**
+ * 清除当前用户所有被踢出群聊记录
+ */
+function clearKickedRooms() {
+  if (!_currentUserId) return;
+  try {
+    localStorage.removeItem(_kickedKey(_currentUserId));
+  } catch (e) {}
+}
+
 // ── 草稿持久化 ──
 
 /**
@@ -170,4 +260,9 @@ export default {
   saveDrafts,
   loadDrafts,
   clearDrafts,
+  saveKickedRoom,
+  getKickedRooms,
+  isKicked,
+  removeKickedRoom,
+  clearKickedRooms,
 };

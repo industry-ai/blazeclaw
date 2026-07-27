@@ -990,6 +990,7 @@ const PostsPanelMixin = {
 
           if (action === 'publish-draft-quick' || action === 'publish-draft') {
             const targetId = this.workspacePublishTargetId || Bridge.getConversations().find(item => item.type === 'group' && item.scope !== 'personal_workspace')?.id;
+            const draftActions = Bridge.getWorkspaceDraftActions(conv.id);
             const publishSkillId = skillId || draftActions[0]?.skillId;
             if (!publishSkillId || !targetId) {
               Toast.warn(targetId ? '暂无可发布的草稿' : '请先选择目标群聊');

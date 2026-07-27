@@ -688,24 +688,63 @@ function _handleChatroomPush(push) {
     return;
   }
 
-  // 被踢出/被禁言：创建系统通知
-  if (et === 'kick' || et === 'ban') {
-    console.log('[通知] 收到 C++ 推送', et, ':', { eventType: et, channel, payload });
+  // 被禁言：创建系统通知
+  if (et === 'ban') {
+    console.log('[通知] 收到 C++ 推送 ban:', { eventType: et, channel, payload });
     const sender = String(payload.sender || payload.from || payload.nick || '');
     const target = String(payload.target || payload.target_nick || payload.affected || '');
     const message = String(payload.message || payload.reason || payload.text || '');
     const ts = Date.now();
-    const actionLabel = et === 'kick' ? '被移出群聊' : '被禁言';
     state._setters.addPushNotification({
-      id: `push-${et}:${channel}:${ts}`,
+      id: `push-ban:${channel}:${ts}`,
       kind: 'system',
-      title: `${target || '成员'} ${actionLabel}`,
+      title: `${target || '成员'} 被禁言`,
       summary: message || (sender ? `操作者：${sender}` : ''),
       sourceName: channel.replace(/^#/, ''),
       conversationId: channel,
       createdAt: ts,
     });
     state._setters.notify();
+    return;
+  }
+
+  // 被踢出群聊：创建系统通知 + 本地保存被踢出群聊信息（用于会话列表展示与历史记录查看）
+  if (et === 'kicked') {
+    console.log('[通知] 收到 C++ 推送 kicked:', { eventType: et, channel, payload });
+    const sender = payload.kicker_phone;
+    // 使用前端接收时间作为 createdAt，保证 createdAt > lastSeen（角标计数依赖此比较）
+    // C++ 推送的时间戳可能早于 lastSeen（app 启动时间），会导致角标永远为 0
+    const ts = Date.now();
+    // 本地保存被踢出的群聊信息，使会话列表仍能展示该群聊并查看本地缓存的历史记录
+    const conv = (state.getConversations() || []).find((c) => c.id === channel);
+    chatHistoryStore.saveKickedRoom({
+      convId: channel,
+      name: (conv && conv.name) || channel.replace(/^#/, ''),
+      title: (conv && conv.title) || '',
+      scope: (conv && conv.scope) || 'group',
+      kickedAt: ts,
+      reason: "",
+      operator: sender,
+    });
+    // 标记当前会话为已踢出，UI 据此禁用发送并展示提示
+    if (conv) conv.isKicked = true;
+    // 创建系统通知（对齐 group_invited：去重 + createdAt 用前端接收时间）
+    const pushNotif = {
+      id: `push-kicked:${channel}:${ts}`,
+      kind: 'system',
+      title: `已被移出群聊 ${payload.room_name}`,
+      summary: sender ? `您被 ${sender} 移除群聊` : '',
+      sourceName: payload.room_name || channel.replace(/^#/, ''),
+      conversationId: channel,
+      createdAt: ts,
+    };
+    // 去重：同一会话只保留最新一条被踢出通知（对齐 group_invited 去重逻辑）
+    const existing = state.getPushNotifications().filter((i) => !(i.id && i.id.startsWith('push-kicked:') && i.conversationId === channel));
+    state._setters.pushNotifications([pushNotif, ...existing].slice(0, 100));
+    // notify 触发 _updateBadges 重新计算"通知"tab 角标数（pushNotifications 中 createdAt > lastSeen 的条目会计入角标）
+    state._setters.notify();
+    // 刷新会话列表：把本地保存的被踢出群聊并入列表（对齐 group_invited 刷新会话列表）
+    loadConversations().catch((e) => console.warn('[通知] kicked: 刷新会话列表失败', e));
     return;
   }
 
@@ -746,9 +785,10 @@ async function logout() {
   try { await core.request('auth.logout', {}); } catch (e) {}
   // 清除 localStorage 鉴权数据（对齐原项目 AuthStore.logout）
   Object.values(AUTH_STORAGE_KEYS).forEach(k => _storageRemove(k));
-  // 清除聊天记录和草稿缓存
+  // 清除聊天记录、草稿与被踢出群聊缓存
   chatHistoryStore.clearAllMessages();
   chatHistoryStore.clearDrafts();
+  chatHistoryStore.clearKickedRooms();
   state._setters.resetAuth();
   state._setters.resetAll();
   state._setters.notify();
@@ -809,12 +849,45 @@ async function loadConversations() {
       lastMessage: '',
       lastTs: 0,
       unreadCount: 0,
+      isKicked: false,
     };
   });
-  if (list.length) {
-    state._setters.conversations(list);
+
+  // 合并本地存储的被踢出群聊：
+  // - 若被踢出的群聊已重新出现在 C++ 列表中（被重新邀请），清除本地踢出标记；
+  // - 否则把被踢出的群聊加入会话列表，以便查看本地缓存的历史记录。
+  const kickedRooms = chatHistoryStore.getKickedRooms();
+  const kickedNotInList = [];
+  for (const kr of kickedRooms) {
+    const existing = list.find((c) => c.id === kr.convId);
+    if (existing) {
+      chatHistoryStore.removeKickedRoom(kr.convId);
+      existing.isKicked = false;
+      // 用户被重新邀请回群聊：若当前正在查看该群聊（之前因被踢出未 join），
+      // 需重新 join 频道，否则发消息会报 "send JOIN before PRIVMSG"
+      if (state.getActiveConversationId() === existing.id) {
+        chatroomBridgeRequest('join_channel', { channel: existing.id }).catch(() => {});
+      }
+    } else {
+      kickedNotInList.push({
+        id: kr.convId,
+        type: 'group',
+        name: kr.name || kr.convId.replace(/^#/, ''),
+        title: kr.title || '',
+        scope: kr.scope || 'group',
+        lastMessage: '',
+        lastTs: 0,
+        unreadCount: 0,
+        isKicked: true,
+      });
+    }
+  }
+  const mergedList = list.concat(kickedNotInList);
+
+  if (mergedList.length) {
+    state._setters.conversations(mergedList);
     // 从 localStorage 恢复聊天记录（页面刷新后立即显示缓存消息，不等 C++ 推送）
-    list.forEach((conv) => {
+    mergedList.forEach((conv) => {
       const localMsgs = chatHistoryStore.loadMessages(conv.id);
       if (localMsgs.length) {
         state._setters.messages(conv.id, localMsgs);
@@ -829,7 +902,7 @@ async function loadConversations() {
     //   chatroomBridgeRequest('join_channel', { channel: conv.id }).catch(() => {});
     // });
   }
-  return list;
+  return mergedList;
 }
 function getConversations() { return state.getConversations(); }
 function getActiveConversationId() { return state.getActiveConversationId(); }
@@ -838,8 +911,12 @@ function setActiveConversation(id) {
   state.setActiveConversationId(id);
   if (id) {
     state.clearMarkRead(id);
-    // 加入频道并拉取历史消息（与原项目一致：切换会话时先 join 再加载历史）
-    chatroomBridgeRequest('join_channel', { channel: id }).catch(() => {});
+    const conv = state.getActiveConversation();
+    // 被踢出的群聊不再 join 频道，仅展示本地缓存的历史记录
+    if (!(conv && conv.isKicked)) {
+      // 加入频道并拉取历史消息（与原项目一致：切换会话时先 join 再加载历史）
+      chatroomBridgeRequest('join_channel', { channel: id }).catch(() => {});
+    }
     // if ((state.getMessages(id) || []).length === 0) {
     //   loadConversationHistory(id).catch(() => {});
     // }
@@ -1001,6 +1078,9 @@ async function createGroupConversation(name) {
 }
 async function deleteConversationFromList(id) {
   state.markLocallyDeleted(id);
+  // 同步清除被踢出群聊的本地记录，避免下次 loadConversations 再次把它并入列表
+  chatHistoryStore.removeKickedRoom(id);
+  chatHistoryStore.clearMessages(id);
   state._setters.notify();
   return core.request('chat.command', { cmd: 'DELETE_CONVERSATION', channel: id, conversationId: id });
 }
@@ -1391,12 +1471,12 @@ async function reschedulePersonalTask(taskId, newDueAt) {
 // ── 个人提醒触发：解析消息文本，创建本地任务 + 发送给 C++ ──
 // 对齐 agent 项目 sessionStore.ts _createPersonalReminderTaskFromMessage
 function _tryCreateReminderTask(text, convId, messageId) {
-  var draft = tryParseReminderDraft(text);
+  const draft = tryParseReminderDraft(text);
   if (!draft) return null;
 
-  var taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  var reminderId = 'rem-' + taskId;
-  var task = {
+  const taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const reminderId = 'rem-' + taskId;
+  const task = {
     id: taskId,
     ownerUserId: state.getUserId() || 'self',
     creatorUserId: state.getUserId() || 'self',
@@ -1407,7 +1487,7 @@ function _tryCreateReminderTask(text, convId, messageId) {
     dueAt: draft.dueAt,
     status: 'pending',
     deliveryTarget: { type: 'conversation', conversationId: convId },
-    reminderId: reminderId,
+    reminderId,
     createdAt: Date.now(),
     syncStatus: 'syncing',
   };
@@ -1427,12 +1507,12 @@ function _tryCreateReminderTask(text, convId, messageId) {
     status: 'pending',
     sourceConversationId: convId,
     createdFromMessageId: messageId,
-    reminderId: reminderId,
-  }).then(function (resp) {
-    var serverTaskId = (resp && (resp.taskId || resp.id)) || taskId;
-    state._setters.updatePersonalTask(taskId, { syncStatus: 'synced', serverTaskId: serverTaskId });
+    reminderId,
+  }).then((resp) => {
+    const serverTaskId = (resp && (resp.taskId || resp.id)) || taskId;
+    state._setters.updatePersonalTask(taskId, { syncStatus: 'synced', serverTaskId });
     state._setters.notify();
-  }).catch(function (e) {
+  }).catch((e) => {
     console.warn('[bridge] createPersonalTask failed:', e && e.message);
     state._setters.updatePersonalTask(taskId, { syncStatus: 'failed', syncError: String(e && e.message || e) });
     state._setters.notify();
@@ -1444,12 +1524,12 @@ function _tryCreateReminderTask(text, convId, messageId) {
 // ── 通知轮询定时器 ──
 // 每 5 秒检查是否有任务到期，触发 UI 刷新让通知面板和红点更新
 // 对齐 agent 项目 useNowTick(5_000) 的轮询机制
-var _notificationTimer = null;
+let _notificationTimer = null;
 function _startNotificationPolling() {
   if (_notificationTimer) return;
-  _notificationTimer = setInterval(function () {
-    var now = Date.now();
-    var hasDue = (state.getPersonalTasksForCurrentUser() || []).some(function (t) {
+  _notificationTimer = setInterval(() => {
+    const now = Date.now();
+    const hasDue = (state.getPersonalTasksForCurrentUser() || []).some((t) => {
       return t.status === 'pending' && t.dueAt && t.dueAt <= now;
     });
     if (hasDue) state._setters.notify();
@@ -1711,13 +1791,13 @@ function _parseAgentReply(text, existingAttachments = []) {
   );
   if (hasH5Card) {
     const t = cleanText.trim();
-    if (!t || t.length < 20 || /^[\s\{\}"\[\]:,\d]+$/.test(t)) {
+    if (!t || t.length < 20 || /^[\s{}"[\]:,\d]+$/.test(t)) {
       cleanText = '卡片已生成，请查看下方卡片。';
     }
   }
 
   // 6. 移除残留的 JSON 碎片行（如单独的 "outputs": [...] 片段）
-  cleanText = cleanText.replace(/^[\s]*[\{\}".\[\]:,\d]+[\s]*$/gm, '').trim();
+  cleanText = cleanText.replace(/^[\s]*[{}".[\]:,\d]+[\s]*$/gm, '').trim();
 
   // 7. 清洗 AI 回复文本（对齐 agent 项目 sanitizeAgentVisibleReply）
   // 去除思考过程、工具细节、乱码、协议泄露等不应展示给用户的内容
@@ -2475,22 +2555,22 @@ const FORWARD_ATTACHMENT_START = '<!-- agent-chat:forward-attachment ';
 const FORWARD_ATTACHMENT_END = ' -->';
 
 function _toBase64Utf8(value) {
-  var bytes = new TextEncoder().encode(value);
-  var binary = '';
-  for (var i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }
   return btoa(binary);
 }
 
 function _fromBase64Utf8(value) {
-  var binary = atob(value);
-  var bytes = new Uint8Array(binary.length);
-  for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
   return new TextDecoder().decode(bytes);
 }
 
 function encodeForwardAttachment(displayText, title, attachments) {
-  var envelope = { version: 1, title: title, attachments: attachments };
-  var token = _toBase64Utf8(JSON.stringify(envelope));
+  const envelope = { version: 1, title, attachments };
+  const token = _toBase64Utf8(JSON.stringify(envelope));
   return displayText + '\n' + FORWARD_ATTACHMENT_START + token + FORWARD_ATTACHMENT_END;
 }
 
@@ -2511,6 +2591,7 @@ async function resetForAuthChange() {
   try { await disconnect(); } catch (e) {}
   chatHistoryStore.clearAllMessages();
   chatHistoryStore.clearDrafts();
+  chatHistoryStore.clearKickedRooms();
   state._setters.resetAll();
   state._setters.notify();
 }

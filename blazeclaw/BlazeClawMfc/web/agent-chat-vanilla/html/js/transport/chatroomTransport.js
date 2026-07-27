@@ -572,10 +572,6 @@ class ChatroomNativeTransport {
     }
   }
 
-  joinConversation(conversationId) {
-    return chatroomJoinChannel(conversationId, this.sessionId);
-  }
-
   sendMessage(payload) {
     const channel = String(payload?.conversationId || '').trim();
     const text = String(payload?.text || '');
@@ -775,7 +771,7 @@ class ChatroomNativeTransport {
           }
         });
         window.dispatchEvent(bridgeEvent);
-        return;
+        
       }
 
       // 其它（ping/error/nick/quit）：暂不透传给 chatStore，避免误显示

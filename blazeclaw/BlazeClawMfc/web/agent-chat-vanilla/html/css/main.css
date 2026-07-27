@@ -1017,6 +1017,23 @@ html.dark .conv-badge-group {
   background: rgba(139, 92, 246, 0.2);
   color: #c4b5fd;
 }
+.conv-badge-kicked {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+html.dark .conv-badge-kicked {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+}
+
+/* 被踢出的会话：整体置灰，提示不可参与 */
+.conv-item-kicked {
+  opacity: 0.62;
+}
+.conv-item-kicked .conv-name {
+  text-decoration: line-through;
+  text-decoration-color: rgba(148, 163, 184, 0.6);
+}
 
 /* Preview */
 .conv-item .conv-preview {
