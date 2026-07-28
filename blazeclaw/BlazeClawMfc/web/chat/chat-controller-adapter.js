@@ -87,12 +87,28 @@
     ];
 
     const NATIVE_FIRST_BUSINESS_METHODS = {
+        send: {
+            nativeMethod: "chat.controller.send",
+            mode: "run-loop-transcript",
+        },
         loadSessionOptions: {
             nativeMethod: "chat.controller.loadSessionOptions",
             mode: "bridge-backed-low-risk",
         },
+        switchSession: {
+            nativeMethod: "chat.controller.switchSession",
+            mode: "bridge-backed-low-risk",
+        },
         loadModelOptions: {
             nativeMethod: "chat.controller.loadModelOptions",
+            mode: "bridge-backed-low-risk",
+        },
+        applyModelSelection: {
+            nativeMethod: "chat.controller.applyModelSelection",
+            mode: "bridge-backed-low-risk",
+        },
+        applyThinkingLevel: {
+            nativeMethod: "chat.controller.applyThinkingLevel",
             mode: "bridge-backed-low-risk",
         },
         loadSpeechCapabilities: {
@@ -105,6 +121,10 @@
         },
         executeExecApprovalAction: {
             nativeMethod: "chat.controller.executeApprovalAction",
+            mode: "speech-approval",
+        },
+        parseApprovalTokenFromText: {
+            nativeMethod: "chat.controller.parseApprovalToken",
             mode: "speech-approval",
         },
         getControlUiBootstrapConfig: {
@@ -206,6 +226,10 @@
         const payload = extractNativePayloadEnvelope(response);
         const statePatch = extractNativeStatePatch(payload);
 
+        if (methodName === "send") {
+            return payload;
+        }
+
         if (methodName === "loadSessionOptions") {
             const session = statePatch.session && typeof statePatch.session === "object"
                 ? statePatch.session
@@ -223,6 +247,18 @@
                         label: id,
                     };
                 }
+
+        if (methodName === "switchSession") {
+            return true;
+        }
+
+        if (methodName === "applyModelSelection") {
+            return true;
+        }
+
+        if (methodName === "applyThinkingLevel") {
+            return true;
+        }
                 const id = String(item.id || "").trim();
                 const label = String(item.label || item.id || "").trim();
                 return {
@@ -287,6 +323,25 @@
             return normalizeApprovalActionResult(approval);
         }
 
+        if (methodName === "parseApprovalTokenFromText") {
+            const approval = statePatch.approval && typeof statePatch.approval === "object"
+                ? statePatch.approval
+                : payload && payload.approval && typeof payload.approval === "object"
+                    ? payload.approval
+                    : payload;
+            const approvalToken = String(approval.approvalToken || "").trim();
+            if (!isValidApprovalToken(approvalToken)) {
+                return null;
+            }
+            const parsed = {
+                approvalToken,
+            };
+            if (Number.isFinite(Number(approval.expiresAtEpochMs))) {
+                parsed.expiresAtEpochMs = Number(approval.expiresAtEpochMs);
+            }
+            return parsed;
+        }
+
         if (methodName === "getControlUiBootstrapConfig") {
             const controlUi = payload && typeof payload.controlUi === "object"
                 ? payload.controlUi
@@ -310,7 +365,26 @@
         return normalizeSpeechApprovalResult(methodName, payload, args);
     }
 
-    function buildNativeBusinessRequestParams(methodName, args) {
+    function buildNativeBusinessRequestParams(methodName, args, controllerImpl) {
+        if (methodName === "send") {
+            const forceError = args[0] === true;
+            const message = controllerImpl && controllerImpl.inputEl
+                ? String(controllerImpl.inputEl.value || "").trim()
+                : "";
+            const attachments = Array.isArray(controllerImpl && controllerImpl.attachments)
+                ? controllerImpl.attachments.slice()
+                : [];
+            return {
+                sessionKey: String((controllerImpl && controllerImpl.sessionKey) || "main"),
+                message,
+                forceError,
+                detached: false,
+                attachmentCount: attachments.length,
+                attachments,
+                responseMode: "single",
+            };
+        }
+
         if (methodName === "loadSessionOptions") {
             const source = args[0] && typeof args[0] === "object"
                 ? args[0]
@@ -325,6 +399,28 @@
             return args[0] && typeof args[0] === "object"
                 ? { ...args[0] }
                 : {};
+        }
+
+        if (methodName === "switchSession") {
+            return {
+                sessionKey: String(args[0] || "").trim() || String((controllerImpl && controllerImpl.sessionKey) || "main"),
+            };
+        }
+
+        if (methodName === "applyModelSelection") {
+            const modelId = String(args[0] || "").trim();
+            return {
+                modelId,
+                model: modelId,
+            };
+        }
+
+        if (methodName === "applyThinkingLevel") {
+            const level = String(args[0] || "").trim();
+            return {
+                level,
+                thinkingLevel: level,
+            };
         }
 
         if (methodName === "loadSpeechCapabilities") {
@@ -357,6 +453,12 @@
                 approvalToken,
                 approve,
                 executePayload,
+            };
+        }
+
+        if (methodName === "parseApprovalTokenFromText") {
+            return {
+                text: String(args[0] || ""),
             };
         }
 
@@ -407,10 +509,22 @@
             return invokeAdapterMethod(controllerImpl, methodName, args, strategy.mode || "default");
         }
 
-        const nativeParams = buildNativeBusinessRequestParams(methodName, args);
+        const nativeParams = buildNativeBusinessRequestParams(methodName, args, controllerImpl);
         try {
             const nativeResponse = await controllerImpl.request(strategy.nativeMethod, nativeParams);
-            return mapNativeBusinessResult(methodName, nativeResponse, args);
+            const mappedResult = mapNativeBusinessResult(methodName, nativeResponse, args);
+            if (methodName === "send") {
+                if (controllerImpl.inputEl && typeof controllerImpl.inputEl === "object") {
+                    controllerImpl.inputEl.value = "";
+                }
+                if (Array.isArray(controllerImpl.attachments)) {
+                    controllerImpl.attachments.length = 0;
+                }
+                if (typeof controllerImpl.persistDraftForSession === "function") {
+                    controllerImpl.persistDraftForSession();
+                }
+            }
+            return mappedResult;
         } catch (error) {
             if (window.console && typeof window.console.warn === "function") {
                 window.console.warn(
