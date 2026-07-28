@@ -1736,9 +1736,11 @@
     <None Include="web\chat\index.html">
       <Filter>web\chat</Filter>
     </None>
-    <None Include="web\chat\chat-controller-adapter.js" />
     <None Include="tools\Evaluate-FixedMonitoringEscalation.ps1" />
     <None Include="web\chat\chat-controller-legacy.js">
+      <Filter>web\chat</Filter>
+    </None>
+    <None Include="web\chat\chat-controller-adapter.js">
       <Filter>web\chat</Filter>
     </None>
   </ItemGroup>

@@ -519,12 +519,14 @@
                     ? nativeParams.attachments.slice()
                     : [];
 
+                // append local chat bubble through existing controller surface
                 if (messageText && typeof controllerImpl.appendChatBubble === "function") {
-                    controllerImpl.appendChatBubble(messageText, "self", {
+                    controllerImpl.appendChatBubble(messageText, "self", {  // controller surface expects "self" for user messages
                         source: "user",
                     });
                 }
 
+                // dispatch the send request to the native controller for processing
                 if (typeof controllerImpl.request === "function") {
                     const gatewaySendParams = {
                         sessionKey: String(nativeParams.sessionKey || "main"),
@@ -536,7 +538,7 @@
                     };
 
                     void controllerImpl.request("chat.send", gatewaySendParams)
-                        .catch((error) => {
+                        .catch((error) => { // if gateway send fails, log the error and append a local error bubble to the transcript
                             if (window.console && typeof window.console.warn === "function") {
                                 window.console.warn(
                                     "[chat-controller-adapter] gateway send dispatch failed:",
@@ -551,9 +553,11 @@
                         });
                 }
 
+                // clear the existing input field
                 if (controllerImpl.inputEl && typeof controllerImpl.inputEl === "object") {
                     controllerImpl.inputEl.value = "";
                 }
+                // clear the existing attachments array
                 if (Array.isArray(controllerImpl.attachments)) {
                     controllerImpl.attachments.length = 0;
                 }
