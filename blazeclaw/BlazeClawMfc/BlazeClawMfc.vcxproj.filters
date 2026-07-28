@@ -693,6 +693,7 @@
       <Filter>skills</Filter>
     </ClCompile>
     <ClCompile Include="tests\ChatControllerNativePhase1HandlersTests.cpp" />
+    <ClCompile Include="src\core\ServiceManager.TTS.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />

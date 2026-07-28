@@ -119,39 +119,6 @@ namespace blazeclaw::core {
 
 	} // namespace
 
-	// ServiceManager TTS facade forwarding implementations (placed after
-	// anonymous helpers to avoid symbol/namespace collisions)
-
-	bool ServiceManager::TextToSpeechEnabled() const noexcept {
-		return servicemanager_tts::TextToSpeechEnabled();
-	}
-
-	std::string ServiceManager::StartTextToSpeech(
-		const std::string& text,
-		const std::string& provider,
-		const std::string& model,
-		const std::string& voice,
-		const std::string& runId) {
-		auto snapshot = servicemanager_tts::StartTextToSpeechState(
-			m_running,
-			provider,
-			model,
-			voice,
-			runId);
-		(void)snapshot;
-		return servicemanager_tts::StartTextToSpeech(text, voice, model);
-	}
-
-	void ServiceManager::StopTextToSpeech(const std::string& utteranceId) {
-		auto snapshot = servicemanager_tts::StopTextToSpeechState(utteranceId);
-		(void)snapshot;
-		servicemanager_tts::StopTextToSpeech(utteranceId);
-	}
-
-	texttospeech::TextToSpeechRuntimeSnapshot ServiceManager::CollectTextToSpeechSnapshot() const noexcept {
-		return servicemanager_tts::CollectTextToSpeechSnapshot();
-	}
-
 	// Snapshot forwarding facades (delegates to servicemanager_snapshot helper)
 	blazeclaw::core::servicemanager_snapshot::GatewayStatusSnapshot ServiceManager::CollectGatewayStatusSnapshot() const noexcept {
 		// Delegate static normalization to the helper while preserving any
@@ -4908,31 +4875,6 @@ namespace blazeclaw::core {
 		m_activeChatProvider = provider.empty() ? "local" : provider;
 		m_activeChatModel = model.empty() ? "default" : model;
 		RecordGatewayLifecycleTransition("runtime_mutation.chat_provider_applied");
-	}
-
-	bool ServiceManager::ApplySpeechRecognitionConfigReload(
-		const bool speechEnabled,
-		const std::wstring& speechProvider,
-		const std::wstring& speechStorageRoot,
-		const std::wstring& speechActiveModelId,
-		const std::wstring& speechModelPath,
-		std::string* outStatusMessage) {
-
-		// Forward orchestration into the speech runtime helper to shrink
-		// ServiceManager.cpp while preserving original behavior.
-		m_activeConfig.speechRecognition.enabled = speechEnabled;
-		m_activeConfig.speechRecognition.provider = speechProvider;
-		m_activeConfig.speechRecognition.storageRoot = speechStorageRoot;
-		m_activeConfig.speechRecognition.activeModelId = speechActiveModelId;
-		m_activeConfig.speechRecognition.modelPath = speechModelPath;
-
-		return servicemanager_speech::ApplySpeechRecognitionConfigReload(
-			m_running,
-			m_activeConfig,
-			m_speechTranscriptionCoordinator,
-			m_speechRecognitionRuntime,
-			m_speechRecognition,
-			outStatusMessage);
 	}
 
 	const std::string& ServiceManager::ActiveChatProvider() const noexcept {
