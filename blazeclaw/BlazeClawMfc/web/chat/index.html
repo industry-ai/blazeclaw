@@ -98,9 +98,15 @@
                 missing.push("BlazeClawChatComposer");
             }
 
+            const legacyApi = window.BlazeClawChatControllerLegacy || null;
+            const legacyRetiredWrapper = Boolean(
+                legacyApi &&
+                legacyApi.__legacyRetiredWrapper === true);
+
             window.__BLAZECLAW_CHAT_SCRIPT_ORDER_COMPAT__ = {
                 ok: missing.length === 0,
                 missing,
+                legacyRetiredWrapper,
             };
 
             if (missing.length > 0 &&

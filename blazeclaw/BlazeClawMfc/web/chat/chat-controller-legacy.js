@@ -3958,8 +3958,604 @@
         return facade;
     }
 
+    function createRetiredLegacyControllerShim(options) {
+        const opts = options || {};
+        const state = opts.state && typeof opts.state === "object"
+            ? opts.state
+            : {};
+        const setStatus = typeof opts.setStatus === "function"
+            ? opts.setStatus
+            : function () { };
+        const updateComposerState = typeof opts.updateComposerState === "function"
+            ? opts.updateComposerState
+            : function () { };
+
+        state.pending = state.pending instanceof Map ? state.pending : new Map();
+        state.bridgeQueue = Array.isArray(state.bridgeQueue) ? state.bridgeQueue : [];
+        state.terminalRunStates = state.terminalRunStates instanceof Map ? state.terminalRunStates : new Map();
+        state.attachments = Array.isArray(state.attachments) ? state.attachments : [];
+        state.structuredTranscript = Array.isArray(state.structuredTranscript) ? state.structuredTranscript : [];
+        state.draftsBySession = state.draftsBySession instanceof Map ? state.draftsBySession : new Map();
+        state.inputHistory = Array.isArray(state.inputHistory) ? state.inputHistory : [];
+        state.inputHistoryIndex = Number.isInteger(state.inputHistoryIndex) ? state.inputHistoryIndex : -1;
+        state.thinkingOptions = Array.isArray(state.thinkingOptions)
+            ? state.thinkingOptions
+            : ["low", "normal", "high"];
+        state.sessionKey = String(state.sessionKey || "main").trim() || "main";
+        state.selectedModel = String(state.selectedModel || "default").trim() || "default";
+        state.thinkingLevel = String(state.thinkingLevel || "normal").trim().toLowerCase() || "normal";
+
+        function nextId() {
+            state.__legacyShimSeq = Number(state.__legacyShimSeq || 0) + 1;
+            return `shim-${state.__legacyShimSeq}`;
+        }
+
+        function post(message) {
+            if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === "function") {
+                window.chrome.webview.postMessage(message);
+                return;
+            }
+            state.bridgeQueue.push(message);
+        }
+
+        function flushQueue() {
+            while (state.bridgeQueue.length > 0) {
+                post(state.bridgeQueue.shift());
+            }
+        }
+
+        function request(method, params) {
+            return new Promise(function (resolve, reject) {
+                const id = nextId();
+                state.pending.set(id, {
+                    method: String(method || ""),
+                    resolve,
+                    reject,
+                });
+                post({
+                    channel: "blazeclaw.gateway.rpc",
+                    id,
+                    method,
+                    params,
+                });
+            });
+        }
+
+        function handleRpcResult(message) {
+            const id = message && typeof message === "object"
+                ? String(message.id || "")
+                : "";
+            if (!id) {
+                return;
+            }
+
+            const slot = state.pending.get(id);
+            if (!slot) {
+                return;
+            }
+            state.pending.delete(id);
+
+            if (message.ok) {
+                slot.resolve(message);
+                return;
+            }
+
+            const errorMessage = message && message.error && typeof message.error.message === "string"
+                ? message.error.message
+                : "request failed";
+            slot.reject(errorMessage);
+        }
+
+        async function requestNativeFirst(nativeMethod, nativeParams, fallbackMethod, fallbackParams) {
+            try {
+                return await request(nativeMethod, nativeParams);
+            } catch (_) {
+                if (!fallbackMethod) {
+                    throw _;
+                }
+                return request(fallbackMethod, fallbackParams);
+            }
+        }
+
+        async function loadHistory() {
+            const response = await requestNativeFirst(
+                "chat.controller.loadHistory",
+                { sessionKey: state.sessionKey, limit: 200 },
+                "chat.history",
+                { sessionKey: state.sessionKey, limit: 200 });
+            const payload = response && response.payload && typeof response.payload === "object"
+                ? response.payload
+                : response && typeof response.payloadJson === "string"
+                    ? (() => { try { return JSON.parse(response.payloadJson); } catch (_) { return {}; } })()
+                    : {};
+            return payload;
+        }
+
+        async function loadSessionOptions() {
+            const response = await request("chat.controller.loadSessionOptions", {
+                sessionKey: state.sessionKey,
+            });
+            const payload = response && response.payload && typeof response.payload === "object"
+                ? response.payload
+                : response && typeof response.payloadJson === "string"
+                    ? (() => { try { return JSON.parse(response.payloadJson); } catch (_) { return {}; } })()
+                    : {};
+            const statePatch = payload.statePatch && typeof payload.statePatch === "object"
+                ? payload.statePatch
+                : {};
+            const session = statePatch.session && typeof statePatch.session === "object"
+                ? statePatch.session
+                : {};
+            state.sessionOptions = Array.isArray(session.sessionOptions)
+                ? session.sessionOptions.slice()
+                : Array.isArray(session.options)
+                    ? session.options.slice()
+                    : [{ id: "main", scope: "chat", active: true }];
+            return state.sessionOptions;
+        }
+
+        async function switchSession(sessionKey) {
+            const nextSession = String(sessionKey || "").trim() || "main";
+            state.sessionKey = nextSession;
+            await request("chat.controller.switchSession", {
+                sessionKey: nextSession,
+            });
+            return true;
+        }
+
+        async function loadModelOptions() {
+            const response = await request("chat.controller.loadModelOptions", {});
+            const payload = response && response.payload && typeof response.payload === "object"
+                ? response.payload
+                : response && typeof response.payloadJson === "string"
+                    ? (() => { try { return JSON.parse(response.payloadJson); } catch (_) { return {}; } })()
+                    : {};
+            const statePatch = payload.statePatch && typeof payload.statePatch === "object"
+                ? payload.statePatch
+                : {};
+            const models = statePatch.models && typeof statePatch.models === "object"
+                ? statePatch.models
+                : {};
+            state.modelOptions = Array.isArray(models.modelOptions)
+                ? models.modelOptions.slice()
+                : Array.isArray(models.options)
+                    ? models.options.slice()
+                    : [{ id: "default", label: "default" }];
+            return state.modelOptions;
+        }
+
+        function loadThinkingOptions() {
+            return state.thinkingOptions.slice();
+        }
+
+        async function applyModelSelection(modelId) {
+            const normalized = String(modelId || "").trim();
+            if (!normalized) {
+                return false;
+            }
+            state.selectedModel = normalized;
+            await request("chat.controller.applyModelSelection", {
+                modelId: normalized,
+                model: normalized,
+            });
+            return true;
+        }
+
+        function applyThinkingLevel(level) {
+            const normalized = String(level || "").trim().toLowerCase();
+            if (!normalized) {
+                return false;
+            }
+            state.thinkingLevel = normalized;
+            void request("chat.controller.applyThinkingLevel", {
+                level: normalized,
+                thinkingLevel: normalized,
+            });
+            return true;
+        }
+
+        async function send(forceError) {
+            const message = state.inputEl ? String(state.inputEl.value || "").trim() : "";
+            if (!message && (!Array.isArray(state.attachments) || state.attachments.length === 0)) {
+                return;
+            }
+
+            await request("chat.controller.send", {
+                sessionKey: state.sessionKey,
+                message,
+                forceError: forceError === true,
+                detached: false,
+                attachments: Array.isArray(state.attachments) ? state.attachments.slice() : [],
+                attachmentCount: Array.isArray(state.attachments) ? state.attachments.length : 0,
+            });
+
+            if (state.inputEl) {
+                state.inputEl.value = "";
+            }
+            state.attachments = [];
+            updateComposerState();
+        }
+
+        async function abort(options) {
+            const source = options && typeof options === "object" ? options : {};
+            await request("chat.controller.abort", {
+                runId: String(source.runId || state.runId || "").trim(),
+                promptRunId: String(source.promptRunId || "").trim(),
+                sessionKey: state.sessionKey,
+            });
+        }
+
+        function consumeTerminalText(message) {
+            const parsed = parseTextFromMessage(message);
+            return parsed && !isSilentReplyText(parsed)
+                ? parsed
+                : String(state.streamText || "").trim();
+        }
+
+        function applyDeltaText(text) {
+            const next = String(text || "");
+            if (!next || isSilentReplyText(next)) {
+                return;
+            }
+            state.streamText = next;
+        }
+
+        function commitStreamTranscriptFinal(payload) {
+            const text = String(payload && payload.text || "").trim();
+            if (!text || isSilentReplyText(text)) {
+                return false;
+            }
+            state.structuredTranscript.push({
+                role: "assistant",
+                text,
+                runId: String(payload && payload.runId || ""),
+                terminalState: String(payload && payload.terminalState || "final"),
+                sessionKey: state.sessionKey,
+            });
+            if (state.structuredTranscript.length > 500) {
+                state.structuredTranscript.splice(0, state.structuredTranscript.length - 500);
+            }
+            return true;
+        }
+
+        function clearRunState() {
+            state.runId = null;
+            state.streamText = "";
+        }
+
+        function addAttachmentFiles(files) {
+            const source = Array.isArray(files) ? files : [];
+            state.attachments = source.slice();
+            return Promise.resolve();
+        }
+
+        function persistDraftForSession() {
+            if (!state.inputEl) {
+                return;
+            }
+            state.draftsBySession.set(state.sessionKey, String(state.inputEl.value || ""));
+        }
+
+        function restoreDraftForSession() {
+            if (!state.inputEl) {
+                return;
+            }
+            state.inputEl.value = String(state.draftsBySession.get(state.sessionKey) || "");
+        }
+
+        function recallInputHistory(direction) {
+            if (!state.inputHistory.length) {
+                return "";
+            }
+            const next = (Number(state.inputHistoryIndex) || -1) + Number(direction || 0);
+            if (next < 0) {
+                state.inputHistoryIndex = -1;
+                return "";
+            }
+            if (next >= state.inputHistory.length) {
+                state.inputHistoryIndex = state.inputHistory.length - 1;
+                return String(state.inputHistory[state.inputHistoryIndex] || "");
+            }
+            state.inputHistoryIndex = next;
+            return String(state.inputHistory[state.inputHistoryIndex] || "");
+        }
+
+        function getSlashCommandHints() {
+            return Promise.resolve([]);
+        }
+
+        async function loadSpeechCapabilities(forceReload) {
+            const response = await request("chat.controller.loadSpeechCapabilities", {
+                payload: {
+                    forceReload: forceReload === true,
+                },
+            });
+            return response;
+        }
+
+        async function loadSpeechErrorPolicy() {
+            const response = await request("chat.controller.loadSpeechErrorPolicy", {
+                payload: {},
+            });
+            return response;
+        }
+
+        function getSpeechCapabilitiesSnapshot() {
+            return state.speechCapabilities && typeof state.speechCapabilities === "object"
+                ? { ...state.speechCapabilities }
+                : {};
+        }
+
+        function getSpeechSessionStateSnapshot() {
+            return state.speechSessionState && typeof state.speechSessionState === "object"
+                ? { ...state.speechSessionState }
+                : {};
+        }
+
+        function applySpeechLifecycleUpdate(payload) {
+            const source = payload && typeof payload === "object" ? payload : {};
+            state.speechSessionState = {
+                ...(state.speechSessionState || {}),
+                ...source,
+            };
+            return { ...state.speechSessionState };
+        }
+
+        function assessTranscriptQuality(text) {
+            const cleanedText = String(text || "").trim();
+            return {
+                accepted: Boolean(cleanedText),
+                reason: cleanedText ? "" : "empty transcript",
+                cleanedText,
+            };
+        }
+
+        function parseApprovalTokenFromTextBridge(text) {
+            const parsed = parseApprovalTokenFromText(text);
+            if (parsed) {
+                return parsed;
+            }
+
+            void request("chat.controller.parseApprovalToken", {
+                text: String(text || ""),
+            });
+            return null;
+        }
+
+        async function executeExecApprovalAction(approvalToken, approve, options) {
+            const source = options && typeof options === "object" ? options : {};
+            const response = await request("chat.controller.executeApprovalAction", {
+                approvalToken: String(approvalToken || "").trim(),
+                approve: approve === true,
+                executePayload: source.executePayload && typeof source.executePayload === "object"
+                    ? source.executePayload
+                    : null,
+            });
+            return response;
+        }
+
+        function markTerminalRun(runId, terminalState) {
+            const key = String(runId || "").trim();
+            if (!key) {
+                return;
+            }
+            state.terminalRunStates.set(key, String(terminalState || "").trim().toLowerCase() || "terminal");
+        }
+
+        function hasTerminalRun(runId) {
+            const key = String(runId || "").trim();
+            return Boolean(key) && state.terminalRunStates.has(key);
+        }
+
+        function hasBufferedAssistantStream() {
+            return Boolean(String(state.streamText || "").trim());
+        }
+
+        function noteInboundChatEvent() {
+        }
+
+        function appendChatBubble(text, kind, meta) {
+            const addMessage = typeof opts.addMessage === "function"
+                ? opts.addMessage
+                : null;
+            if (addMessage) {
+                addMessage(text, kind, meta || {});
+            }
+        }
+
+        function scheduleHistoryReconcile() {
+            setStatus("history reconcile scheduled");
+        }
+
+        function getStructuredTranscript() {
+            return Array.isArray(state.structuredTranscript)
+                ? state.structuredTranscript.slice()
+                : [];
+        }
+
+        function getOperatorDiagnosticsSnapshot() {
+            return {
+                counters: {},
+                lastEmitMs: {},
+            };
+        }
+
+        async function subscribeSessionUpdates() {
+            await request("sessions.subscribe", {
+                sessionKey: state.sessionKey,
+            });
+            return true;
+        }
+
+        async function unsubscribeSessionUpdates() {
+            await request("sessions.unsubscribe", {
+                sessionKey: state.sessionKey,
+            });
+            return true;
+        }
+
+        async function loadSessionCompactions() {
+            const response = await request("sessions.compaction.list", {
+                sessionKey: state.sessionKey,
+            });
+            return response;
+        }
+
+        async function refreshSessionControlState() {
+            return loadSessionCompactions();
+        }
+
+        async function selectSessionCompaction(id) {
+            return request("sessions.compaction.select", {
+                sessionKey: state.sessionKey,
+                compactionId: String(id || "").trim(),
+            });
+        }
+
+        async function branchSessionCompaction(id) {
+            return request("sessions.compaction.branch", {
+                sessionKey: state.sessionKey,
+                compactionId: String(id || "").trim(),
+            });
+        }
+
+        async function restoreSessionCompaction(id) {
+            return request("sessions.compaction.restore", {
+                sessionKey: state.sessionKey,
+                compactionId: String(id || "").trim(),
+            });
+        }
+
+        function loadAssistantIdentity() {
+            return Promise.resolve();
+        }
+
+        function getControlUiBootstrapConfig(options) {
+            const source = options && typeof options === "object"
+                ? options
+                : {};
+            return request("chat.controller.getControlUiBootstrapConfig", {
+                basePath: String(source.basePath || ""),
+                assistantName: String(state.assistantName || "Assistant"),
+                assistantAvatar: String(state.assistantAvatar || "A"),
+                assistantAgentId: String(state.assistantAgentId || ""),
+            });
+        }
+
+        function processSendQueue() {
+            return Promise.resolve();
+        }
+
+        function sendDetachedMessage(message) {
+            return request("chat.controller.send", {
+                sessionKey: state.sessionKey,
+                message: String(message || "").trim(),
+                detached: true,
+                forceError: false,
+            }).then(function () {
+                return true;
+            });
+        }
+
+        function transcribeSpeech(payload) {
+            return request("chat.controller.transcribeSpeech", payload && typeof payload === "object"
+                ? payload
+                : {});
+        }
+
+        function setPolledEventsHandler() {
+        }
+
+        return {
+            nextId,
+            post,
+            flushQueue,
+            request,
+            loadHistory,
+            send,
+            abort,
+            handleRpcResult,
+            consumeTerminalText,
+            applyDeltaText,
+            commitStreamTranscriptFinal,
+            clearRunState,
+            parseTextFromMessage,
+            isSilentReplyText,
+            addAttachmentFiles,
+            loadSessionOptions,
+            subscribeSessionUpdates,
+            unsubscribeSessionUpdates,
+            loadSessionCompactions,
+            refreshSessionControlState,
+            selectSessionCompaction,
+            branchSessionCompaction,
+            restoreSessionCompaction,
+            loadModelOptions,
+            loadThinkingOptions,
+            switchSession,
+            applyModelSelection,
+            applyThinkingLevel,
+            loadAssistantIdentity,
+            getControlUiBootstrapConfig,
+            persistDraftForSession,
+            restoreDraftForSession,
+            recallInputHistory,
+            getSlashCommandHints,
+            processSendQueue,
+            sendDetachedMessage,
+            transcribeSpeech,
+            applySpeechLifecycleUpdate,
+            loadSpeechCapabilities,
+            loadSpeechErrorPolicy,
+            getSpeechCapabilitiesSnapshot,
+            getSpeechSessionStateSnapshot,
+            assessTranscriptQuality,
+            parseApprovalTokenFromText: parseApprovalTokenFromTextBridge,
+            executeExecApprovalAction,
+            noteInboundChatEvent,
+            appendChatBubble,
+            markTerminalRun,
+            hasTerminalRun,
+            hasBufferedAssistantStream,
+            setPolledEventsHandler,
+            scheduleHistoryReconcile,
+            getStructuredTranscript,
+            getOperatorDiagnosticsSnapshot,
+            sessionKey: state.sessionKey,
+            inputEl: state.inputEl,
+            attachments: state.attachments,
+            persistDraftForSession,
+            runId: state.runId,
+        };
+    }
+
+    function isLegacyRetirementModeEnabled() {
+        if (typeof window.__BLAZECLAW_CHAT_LEGACY_RETIREMENT_MODE__ === "boolean") {
+            return window.__BLAZECLAW_CHAT_LEGACY_RETIREMENT_MODE__;
+        }
+
+        try {
+            if (window.localStorage && typeof window.localStorage.getItem === "function") {
+                const raw = String(window.localStorage.getItem("blazeclaw.chat.legacyRetirementMode") || "")
+                    .trim()
+                    .toLowerCase();
+                if (raw === "0" || raw === "false" || raw === "off" || raw === "disabled") {
+                    return false;
+                }
+                if (raw === "1" || raw === "true" || raw === "on" || raw === "enabled") {
+                    return true;
+                }
+            }
+        } catch (_) {
+        }
+
+        return true;
+    }
+
     function createController(options) {
-        const legacyImplementation = createControllerLegacyImplementation(options);
+        const legacyImplementation = isLegacyRetirementModeEnabled()
+            ? createRetiredLegacyControllerShim(options)
+            : createControllerLegacyImplementation(options);
         return createControllerCompatibilityFacade(legacyImplementation);
     }
 
@@ -5619,6 +6215,8 @@
     window.BlazeClawChatControllerLegacy = {
         createController,
         getBaselineInventorySnapshot,
+        __legacyRetiredWrapper: true,
+        __legacyRetirementModeEnabled: isLegacyRetirementModeEnabled,
         runRegressionChecks,
     };
 })();
