@@ -1,4 +1,7 @@
 (function () {
+    const ADAPTER_VERSION = "step10.0";
+    const ADAPTER_MODE = "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards";
+
     const BRIDGE_BACKED_LOW_RISK_METHODS = [
         "post",
         "request",
@@ -70,6 +73,17 @@
                 if (raw === "1" || raw === "true" || raw === "on" || raw === "enabled") {
                     return true;
                 }
+
+    function buildAdapterParitySnapshot() {
+        return {
+            adapterVersion: ADAPTER_VERSION,
+            adapterMode: ADAPTER_MODE,
+            legacyControllerEnabled: resolveLegacyControllerEnabled(),
+            bridgeBackedLowRiskMethods: BRIDGE_BACKED_LOW_RISK_METHODS.slice(),
+            runLoopTranscriptMethods: RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice(),
+            speechApprovalMethods: SPEECH_APPROVAL_PARITY_METHODS.slice(),
+        };
+    }
             }
         } catch (_) {
         }
@@ -631,19 +645,12 @@
 
         if (typeof facade.getAdapterParitySnapshot !== "function") {
             facade.getAdapterParitySnapshot = function () {
-                return {
-                    adapterVersion: "step7.0",
-                    adapterMode: "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards",
-                    legacyControllerEnabled: resolveLegacyControllerEnabled(),
-                    bridgeBackedLowRiskMethods: BRIDGE_BACKED_LOW_RISK_METHODS.slice(),
-                    runLoopTranscriptMethods: RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice(),
-                    speechApprovalMethods: SPEECH_APPROVAL_PARITY_METHODS.slice(),
-                };
+                return buildAdapterParitySnapshot();
             };
         }
 
-        facade.__adapterVersion = "step10.0";
-        facade.__adapterMode = "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards";
+        facade.__adapterVersion = ADAPTER_VERSION;
+        facade.__adapterMode = ADAPTER_MODE;
         facade.__adapterLegacyControllerEnabled = resolveLegacyControllerEnabled();
         facade.__adapterBridgeBackedLowRiskMethods = BRIDGE_BACKED_LOW_RISK_METHODS.slice();
         facade.__adapterRunLoopTranscriptMethods = RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice();
@@ -669,8 +676,13 @@
         return legacyApi.runRegressionChecks();
     }
 
+    function getAdapterParitySnapshot() {
+        return buildAdapterParitySnapshot();
+    }
+
     window.BlazeClawChatControllerAdapter = {
         createController,
+        getAdapterParitySnapshot,
         runRegressionChecks,
     };
 })();
