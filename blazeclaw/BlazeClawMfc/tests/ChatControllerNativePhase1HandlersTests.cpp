@@ -105,9 +105,14 @@ TEST_CASE("native dispatch speech session snapshot mirrors speech session", "[ch
 {
 	ResetNativeControllerState();
 
+	const auto prime = Dispatch(
+		"chat.controller.applySpeechLifecycleUpdate",
+		R"({"payload":{"stage":"recording","runId":"speech-run-9","sessionId":"main"}})");
+	REQUIRE(prime.ok);
+
 	const auto update = Dispatch(
 		"chat.controller.applySpeechLifecycleUpdate",
-		R"({"payload":{"stage":"streaming","runId":"speech-run-9","text":"hello"}})");
+		R"({"payload":{"stage":"streaming","runId":"speech-run-9","sessionId":"main","text":"hello"}})");
 	REQUIRE(update.ok);
 
 	const auto response = Dispatch("chat.controller.getSpeechSessionStateSnapshot", R"({})");
