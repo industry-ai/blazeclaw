@@ -185,6 +185,21 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Phase 6 web parity: native-first send keeps transport dispatch and local self bubble",
+	"[parity][phase6][web][send]")
+{
+	const auto adapterPath = std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller-adapter.js";
+	const std::string adapterJs = ReadTextFile(ResolveProjectPath(adapterPath));
+
+	REQUIRE(adapterJs.find("if (methodName === \"send\")") != std::string::npos);
+	REQUIRE(adapterJs.find("controllerImpl.appendChatBubble(messageText, \"self\"") != std::string::npos);
+	REQUIRE(adapterJs.find("controllerImpl.request(\"chat.send\", gatewaySendParams)") != std::string::npos);
+}
+
+TEST_CASE(
 	"Phase 9 parity: multi-active responder labeling keeps cached run labels and event order",
 	"[parity][phase9][web][multi-active]")
 {

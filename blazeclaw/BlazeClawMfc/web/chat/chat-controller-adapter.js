@@ -514,6 +514,43 @@
             const nativeResponse = await controllerImpl.request(strategy.nativeMethod, nativeParams);
             const mappedResult = mapNativeBusinessResult(methodName, nativeResponse, args);
             if (methodName === "send") {
+                const messageText = String(nativeParams.message || "").trim();
+                const attachments = Array.isArray(nativeParams.attachments)
+                    ? nativeParams.attachments.slice()
+                    : [];
+
+                if (messageText && typeof controllerImpl.appendChatBubble === "function") {
+                    controllerImpl.appendChatBubble(messageText, "self", {
+                        source: "user",
+                    });
+                }
+
+                if (typeof controllerImpl.request === "function") {
+                    const gatewaySendParams = {
+                        sessionKey: String(nativeParams.sessionKey || "main"),
+                        message: messageText,
+                        forceError: nativeParams.forceError === true,
+                        detached: nativeParams.detached === true,
+                        attachments,
+                        attachmentCount: attachments.length,
+                    };
+
+                    void controllerImpl.request("chat.send", gatewaySendParams)
+                        .catch((error) => {
+                            if (window.console && typeof window.console.warn === "function") {
+                                window.console.warn(
+                                    "[chat-controller-adapter] gateway send dispatch failed:",
+                                    error);
+                            }
+                            if (typeof controllerImpl.appendChatBubble === "function") {
+                                controllerImpl.appendChatBubble(
+                                    `send error: ${String(error)}`,
+                                    "error",
+                                    { source: "user" });
+                            }
+                        });
+                }
+
                 if (controllerImpl.inputEl && typeof controllerImpl.inputEl === "object") {
                     controllerImpl.inputEl.value = "";
                 }
