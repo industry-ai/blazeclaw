@@ -310,7 +310,7 @@
             return `Responder: ${resolvedRuntime} ${provider}/${modelPart}`;
         }
 
-        function handleChatEvents(events) {
+        function handleChatEventsLegacy(events) {
             if (!Array.isArray(events)) {
                 return;
             }
@@ -567,6 +567,104 @@
             }
 
             updateComposerState();
+        }
+
+        function normalizeAndDedupeChatEvents(events) {
+            if (!Array.isArray(events)) {
+                return [];
+            }
+
+            const activeSession = normalizeSessionKeyLocal(state.sessionKey);
+            const normalized = [];
+            for (const event of events) {
+                if (!event || normalizeSessionKeyLocal(event.sessionKey) !== activeSession) {
+                    continue;
+                }
+
+                const runId = String(event.runId || "").trim();
+                const eventState = String(event.state || "").trim().toLowerCase();
+                const eventKey = `${runId}:${eventState}`;
+                if (runId && isTerminalEventState(eventState)) {
+                    if (state.seenChatTerminalRuns.has(eventKey)) {
+                        continue;
+                    }
+
+                    state.seenChatTerminalRuns.add(eventKey);
+                    if (state.seenChatTerminalRuns.size > 512) {
+                        const first = state.seenChatTerminalRuns.values().next();
+                        if (!first.done) {
+                            state.seenChatTerminalRuns.delete(first.value);
+                        }
+                    }
+                }
+
+                normalized.push(event);
+            }
+
+            return normalized;
+        }
+
+        function tryHandleChatEventsNativeFirst(events) {
+            if (typeof controller.processEvents !== "function") {
+                return false;
+            }
+
+            const request = {
+                sessionKey: normalizeSessionKeyLocal(state.sessionKey),
+                events,
+            };
+
+            try {
+                const result = controller.processEvents(request);
+                if (result && typeof result.then === "function") {
+                    Promise.resolve(result)
+                        .then((resolved) => {
+                            if (!resolved || typeof resolved !== "object") {
+                                handleChatEventsLegacy(events);
+                                return;
+                            }
+                            applyNormalizedControllerEnvelope(resolved);
+                            updateComposerState();
+                        })
+                        .catch((error) => {
+                            if (window.console && typeof window.console.warn === "function") {
+                                window.console.warn(
+                                    "[chat-events] native processEvents fallback:",
+                                    error);
+                            }
+                            handleChatEventsLegacy(events);
+                        });
+                    return true;
+                }
+
+                if (!result || typeof result !== "object") {
+                    return false;
+                }
+
+                applyNormalizedControllerEnvelope(result);
+                updateComposerState();
+                return true;
+            } catch (error) {
+                if (window.console && typeof window.console.warn === "function") {
+                    window.console.warn(
+                        "[chat-events] native processEvents fallback:",
+                        error);
+                }
+                return false;
+            }
+        }
+
+        function handleChatEvents(events) {
+            const normalizedEvents = normalizeAndDedupeChatEvents(events);
+            if (!normalizedEvents.length) {
+                return;
+            }
+
+            if (tryHandleChatEventsNativeFirst(normalizedEvents)) {
+                return;
+            }
+
+            handleChatEventsLegacy(normalizedEvents);
         }
 
         function handleLifecycle(message) {

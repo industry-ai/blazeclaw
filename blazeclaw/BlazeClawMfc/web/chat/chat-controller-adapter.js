@@ -86,6 +86,41 @@
         "executeExecApprovalAction",
     ];
 
+    const NATIVE_FIRST_BUSINESS_METHODS = {
+        loadSessionOptions: {
+            nativeMethod: "chat.controller.loadSessionOptions",
+            mode: "bridge-backed-low-risk",
+        },
+        loadModelOptions: {
+            nativeMethod: "chat.controller.loadModelOptions",
+            mode: "bridge-backed-low-risk",
+        },
+        loadSpeechCapabilities: {
+            nativeMethod: "chat.controller.loadSpeechCapabilities",
+            mode: "speech-approval",
+        },
+        loadSpeechErrorPolicy: {
+            nativeMethod: "chat.controller.loadSpeechErrorPolicy",
+            mode: "speech-approval",
+        },
+        executeExecApprovalAction: {
+            nativeMethod: "chat.controller.executeApprovalAction",
+            mode: "speech-approval",
+        },
+        getControlUiBootstrapConfig: {
+            nativeMethod: "chat.controller.getControlUiBootstrapConfig",
+            mode: "bridge-backed-low-risk",
+        },
+        processEvents: {
+            nativeMethod: "chat.controller.processEvents",
+            mode: "run-loop-transcript",
+        },
+        abort: {
+            nativeMethod: "chat.controller.abort",
+            mode: "run-loop-transcript",
+        },
+    };
+
     function resolveLegacyControllerEnabled() {
         if (typeof window.__BLAZECLAW_CHAT_LEGACY_CONTROLLER_ENABLED__ === "boolean") {
             return window.__BLAZECLAW_CHAT_LEGACY_CONTROLLER_ENABLED__;
@@ -102,6 +137,12 @@
                 if (raw === "1" || raw === "true" || raw === "on" || raw === "enabled") {
                     return true;
                 }
+            }
+        } catch (_) {
+        }
+
+        return true;
+    }
 
     function buildAdapterParitySnapshot() {
         return {
@@ -112,13 +153,274 @@
             runLoopTranscriptMethods: RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice(),
             speechApprovalMethods: SPEECH_APPROVAL_PARITY_METHODS.slice(),
             nativeControllerMethods: PHASE1_NATIVE_CONTROLLER_METHODS.slice(),
+            nativeFirstBusinessMethods: Object.keys(NATIVE_FIRST_BUSINESS_METHODS),
         };
     }
+
+    function parseJsonSafe(raw) {
+        if (typeof raw !== "string") {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                return parsed;
             }
         } catch (_) {
         }
+        return null;
+    }
 
-        return true;
+    function extractNativePayloadEnvelope(response) {
+        if (!response || typeof response !== "object") {
+            return {};
+        }
+
+        if (response.payload && typeof response.payload === "object") {
+            return response.payload;
+        }
+
+        if (typeof response.payloadJson === "string") {
+            const parsedPayload = parseJsonSafe(response.payloadJson);
+            if (parsedPayload) {
+                return parsedPayload;
+            }
+        }
+
+        return response;
+    }
+
+    function extractNativeStatePatch(payload) {
+        if (!payload || typeof payload !== "object") {
+            return {};
+        }
+
+        if (payload.statePatch && typeof payload.statePatch === "object") {
+            return payload.statePatch;
+        }
+
+        return {};
+    }
+
+    function mapNativeBusinessResult(methodName, response, args) {
+        const payload = extractNativePayloadEnvelope(response);
+        const statePatch = extractNativeStatePatch(payload);
+
+        if (methodName === "loadSessionOptions") {
+            const session = statePatch.session && typeof statePatch.session === "object"
+                ? statePatch.session
+                : {};
+            const options = Array.isArray(session.sessionOptions)
+                ? session.sessionOptions
+                : Array.isArray(session.options)
+                    ? session.options
+                    : [];
+            return options.map(function (item) {
+                if (!item || typeof item !== "object") {
+                    const id = String(item || "").trim();
+                    return {
+                        id,
+                        label: id,
+                    };
+                }
+                const id = String(item.id || "").trim();
+                const label = String(item.label || item.id || "").trim();
+                return {
+                    ...item,
+                    id,
+                    label: label || id,
+                };
+            });
+        }
+
+        if (methodName === "loadModelOptions") {
+            const models = statePatch.models && typeof statePatch.models === "object"
+                ? statePatch.models
+                : {};
+            const options = Array.isArray(models.modelOptions)
+                ? models.modelOptions
+                : Array.isArray(models.options)
+                    ? models.options
+                    : [];
+            return options.map(function (item) {
+                if (!item || typeof item !== "object") {
+                    const id = String(item || "").trim();
+                    return {
+                        id,
+                        label: id,
+                    };
+                }
+                const id = String(item.id || "").trim();
+                const label = String(item.label || item.id || "").trim();
+                return {
+                    ...item,
+                    id,
+                    label: label || id,
+                };
+            });
+        }
+
+        if (methodName === "loadSpeechCapabilities") {
+            const speech = statePatch.speech && typeof statePatch.speech === "object"
+                ? statePatch.speech
+                : payload && typeof payload === "object" && payload.speech
+                    ? payload.speech
+                    : {};
+            return normalizeSpeechCapabilitiesSnapshot(speech.capabilities);
+        }
+
+        if (methodName === "loadSpeechErrorPolicy") {
+            const speech = statePatch.speech && typeof statePatch.speech === "object"
+                ? statePatch.speech
+                : payload && typeof payload === "object" && payload.speech
+                    ? payload.speech
+                    : {};
+            return normalizeSpeechErrorPolicySnapshot(speech.errorPolicy);
+        }
+
+        if (methodName === "executeExecApprovalAction") {
+            const approval = statePatch.approval && typeof statePatch.approval === "object"
+                ? statePatch.approval
+                : payload && payload.approval && typeof payload.approval === "object"
+                    ? payload.approval
+                    : payload;
+            return normalizeApprovalActionResult(approval);
+        }
+
+        if (methodName === "getControlUiBootstrapConfig") {
+            const controlUi = payload && typeof payload.controlUi === "object"
+                ? payload.controlUi
+                : {};
+            return {
+                basePath: String(controlUi.basePath || ""),
+                assistantName: String(controlUi.assistantName || "Assistant"),
+                assistantAvatar: String(controlUi.assistantAvatar || "A"),
+                assistantAgentId: String(controlUi.assistantAgentId || ""),
+            };
+        }
+
+        if (methodName === "processEvents") {
+            return payload;
+        }
+
+        if (methodName === "abort") {
+            return payload;
+        }
+
+        return normalizeSpeechApprovalResult(methodName, payload, args);
+    }
+
+    function buildNativeBusinessRequestParams(methodName, args) {
+        if (methodName === "loadSessionOptions") {
+            const source = args[0] && typeof args[0] === "object"
+                ? args[0]
+                : {};
+            return {
+                sessionKey: String(source.sessionKey || "main"),
+                sessions: Array.isArray(source.sessions) ? source.sessions : undefined,
+            };
+        }
+
+        if (methodName === "loadModelOptions") {
+            return args[0] && typeof args[0] === "object"
+                ? { ...args[0] }
+                : {};
+        }
+
+        if (methodName === "loadSpeechCapabilities") {
+            const forceReload = args[0] === true;
+            return {
+                payload: {
+                    forceReload,
+                },
+            };
+        }
+
+        if (methodName === "loadSpeechErrorPolicy") {
+            const source = args[0] && typeof args[0] === "object"
+                ? args[0]
+                : {};
+            return {
+                payload: {
+                    ...source,
+                },
+            };
+        }
+
+        if (methodName === "executeExecApprovalAction") {
+            const approvalToken = String(args[0] || "").trim();
+            const approve = args[1] === true;
+            const executePayload = args[2] && typeof args[2] === "object"
+                ? args[2]
+                : null;
+            return {
+                approvalToken,
+                approve,
+                executePayload,
+            };
+        }
+
+        if (methodName === "getControlUiBootstrapConfig") {
+            const source = args[0] && typeof args[0] === "object"
+                ? args[0]
+                : {};
+            return {
+                basePath: String(source.basePath || ""),
+                assistantName: String(source.assistantName || ""),
+                assistantAvatar: String(source.assistantAvatar || ""),
+                assistantAgentId: String(source.assistantAgentId || ""),
+            };
+        }
+
+        if (methodName === "processEvents") {
+            const source = args[0] && typeof args[0] === "object"
+                ? args[0]
+                : {};
+            return {
+                sessionKey: String(source.sessionKey || "main"),
+                events: Array.isArray(source.events) ? source.events : [],
+            };
+        }
+
+        if (methodName === "abort") {
+            const source = args[0] && typeof args[0] === "object"
+                ? args[0]
+                : {};
+            const payload = {
+                runId: String(source.runId || "").trim(),
+                promptRunId: String(source.promptRunId || "").trim(),
+                sessionKey: String(source.sessionKey || "main"),
+            };
+            return payload;
+        }
+
+        return {};
+    }
+
+    async function invokeNativeFirstBusinessMethod(controllerImpl, methodName, args) {
+        const strategy = NATIVE_FIRST_BUSINESS_METHODS[methodName];
+        if (!strategy || typeof strategy !== "object") {
+            return invokeAdapterMethod(controllerImpl, methodName, args, "default");
+        }
+
+        if (typeof controllerImpl.request !== "function") {
+            return invokeAdapterMethod(controllerImpl, methodName, args, strategy.mode || "default");
+        }
+
+        const nativeParams = buildNativeBusinessRequestParams(methodName, args);
+        try {
+            const nativeResponse = await controllerImpl.request(strategy.nativeMethod, nativeParams);
+            return mapNativeBusinessResult(methodName, nativeResponse, args);
+        } catch (error) {
+            if (window.console && typeof window.console.warn === "function") {
+                window.console.warn(
+                    "[chat-controller-adapter] native-first business fallback:",
+                    methodName,
+                    strategy.nativeMethod,
+                    error);
+            }
+            return invokeAdapterMethod(controllerImpl, methodName, args, strategy.mode || "default");
+        }
     }
 
     function getLegacyControllerApi() {
@@ -673,6 +975,12 @@
             };
         }
 
+        for (const methodName of Object.keys(NATIVE_FIRST_BUSINESS_METHODS)) {
+            facade[methodName] = function (...args) {
+                return invokeNativeFirstBusinessMethod(controllerImpl, methodName, args);
+            };
+        }
+
         if (typeof facade.getAdapterParitySnapshot !== "function") {
             facade.getAdapterParitySnapshot = function () {
                 return buildAdapterParitySnapshot();
@@ -685,6 +993,7 @@
         facade.__adapterBridgeBackedLowRiskMethods = BRIDGE_BACKED_LOW_RISK_METHODS.slice();
         facade.__adapterRunLoopTranscriptMethods = RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice();
         facade.__adapterSpeechApprovalMethods = SPEECH_APPROVAL_PARITY_METHODS.slice();
+        facade.__adapterNativeFirstBusinessMethods = Object.keys(NATIVE_FIRST_BUSINESS_METHODS);
 
         return facade;
     }

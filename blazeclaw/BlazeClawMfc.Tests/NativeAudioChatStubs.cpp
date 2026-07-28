@@ -3,6 +3,7 @@
 #include "../BlazeClawMfc/src/app/VoiceRecorder.h"
 #include "../BlazeClawMfc/src/app/ChatView.h"
 #include "../BlazeClawMfc/src/app/BlazeClawMfcApp.h"
+#include "../BlazeClawMfc/src/core/SpeechTranscriptionCoordinator.h"
 
 CVoiceRecorder::CVoiceRecorder() = default;
 CVoiceRecorder::~CVoiceRecorder() = default;
@@ -184,4 +185,8 @@ CStringW CChatView::StopRecordingAndGetPath() {
 std::optional<blazeclaw::core::speechrecognition::SpeechAudioArtifact>
 CChatView::GetLastRecordingAudioArtifact() const {
 	return std::nullopt;
+}
+
+void blazeclaw::core::SpeechTranscriptionCoordinator::Shutdown(
+	RuntimeInterface&) {
 }
