@@ -831,6 +831,7 @@
     <None Include="web\chat\chat-composer.js" />
     <None Include="web\chat\chat-controller-adapter.js" />
     <None Include="web\chat\chat-controller-gui.js" />
+    <None Include="web\chat\chat-controller-legacy.js" />
     <None Include="web\chat\chat-controller.js" />
     <None Include="web\chat\chat-events.js" />
     <None Include="web\chat\config-form-coerce.js" />
