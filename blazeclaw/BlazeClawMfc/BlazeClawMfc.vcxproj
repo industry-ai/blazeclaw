@@ -732,6 +732,7 @@
     <ClCompile Include="tests\AgentChatNativeBridgeHostPollingCompatibilityTests.cpp" />
     <ClCompile Include="tests\AgentChatNativeDegradedStartupContractTests.cpp" />
     <ClCompile Include="tests\AudioRingBufferPhaseETests.cpp" />
+    <ClCompile Include="tests\ChatControllerNativePhase1HandlersTests.cpp" />
     <ClCompile Include="tests\ChatStreamParityAndRollbackTests.cpp" />
     <ClCompile Include="tests\CMgrMessageTests.cpp" />
     <ClCompile Include="tests\CronParityContractTests.cpp" />

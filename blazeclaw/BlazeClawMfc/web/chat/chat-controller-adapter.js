@@ -1,6 +1,35 @@
 (function () {
     const ADAPTER_VERSION = "step10.0";
     const ADAPTER_MODE = "legacy-deprecated-killswitch+bridge-backed-low-risk+run-loop-transcript-guards+speech-approval-guards";
+    const PHASE1_NATIVE_CONTROLLER_METHODS = [
+        "chat.controller.initialize",
+        "chat.controller.send",
+        "chat.controller.abort",
+        "chat.controller.processEvents",
+        "chat.controller.loadHistory",
+        "chat.controller.getControlUiBootstrapConfig",
+        "chat.controller.loadSpeechCapabilities",
+        "chat.controller.loadSpeechErrorPolicy",
+        "chat.controller.transcribeSpeech",
+        "chat.controller.applySpeechLifecycleUpdate",
+        "chat.controller.getSpeechSessionStateSnapshot",
+        "chat.controller.assessTranscriptQuality",
+        "chat.controller.loadSessionOptions",
+        "chat.controller.switchSession",
+        "chat.controller.loadModelOptions",
+        "chat.controller.applyModelSelection",
+        "chat.controller.applyThinkingLevel",
+        "chat.controller.parseApprovalToken",
+        "chat.controller.validateApprovalToken",
+        "chat.controller.executeApprovalAction",
+        "chat.controller.startReconcileWatchdog",
+        "chat.controller.stopReconcileWatchdog",
+        "chat.controller.noteInboundChatEvent",
+        "chat.controller.reconcileWatchdogTick",
+        "chat.controller.handleRpcResult",
+        "chat.controller.getStateSnapshot",
+        "chat.controller.reset",
+    ];
 
     const BRIDGE_BACKED_LOW_RISK_METHODS = [
         "post",
@@ -82,6 +111,7 @@
             bridgeBackedLowRiskMethods: BRIDGE_BACKED_LOW_RISK_METHODS.slice(),
             runLoopTranscriptMethods: RUN_LOOP_TRANSCRIPT_PARITY_METHODS.slice(),
             speechApprovalMethods: SPEECH_APPROVAL_PARITY_METHODS.slice(),
+            nativeControllerMethods: PHASE1_NATIVE_CONTROLLER_METHODS.slice(),
         };
     }
             }

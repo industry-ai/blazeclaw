@@ -692,6 +692,7 @@
     <ClCompile Include="src\core\skills\HookBootstrapPromptProjector.cpp">
       <Filter>skills</Filter>
     </ClCompile>
+    <ClCompile Include="tests\ChatControllerNativePhase1HandlersTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />

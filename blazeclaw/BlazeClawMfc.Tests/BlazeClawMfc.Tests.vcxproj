@@ -54,6 +54,8 @@
     <ClCompile Include="..\BlazeClawMfc\tests\ParityCoverageTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHostRouterTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayProtocolResponseHelpersTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ChatControllerNativePhase1HandlersTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\app\chat-controller.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHttpAuthServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayNetPolicyParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayRequestPolicyGuardTests.cpp" />
@@ -330,6 +332,7 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+
 
 
 

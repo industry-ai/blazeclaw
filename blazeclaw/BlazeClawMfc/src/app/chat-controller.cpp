@@ -3295,6 +3295,90 @@ namespace blazeclaw::app::chatcontroller {
 			return parsed;
 		}
 
+		std::string ReadJsonString(const nlohmann::json& source, const char* key)
+		{
+			if (key == nullptr || !source.is_object())
+			{
+				return "";
+			}
+
+			const auto it = source.find(key);
+			if (it == source.end() || !it->is_string())
+			{
+				return "";
+			}
+
+			return it->get<std::string>();
+		}
+
+		std::string SanitizeTranscriptTextForQuality(const std::string& text)
+		{
+			std::string value = TrimCopy(text);
+			if (value.empty())
+			{
+				return "";
+			}
+
+			value = std::regex_replace(value, std::regex("<\\|[^|]*\\|>"), " ");
+			value = std::regex_replace(value, std::regex("\\[assistant_response\\]", std::regex::icase), " ");
+			value = std::regex_replace(value, std::regex("assistant_response", std::regex::icase), " ");
+			value = std::regex_replace(value, std::regex("\\[user_message\\]", std::regex::icase), " ");
+			value = std::regex_replace(value, std::regex("^language\\s+[^\\s<]+\\s*<asr_text>\\s*", std::regex::icase), "");
+			value = std::regex_replace(value, std::regex("<asr_text>", std::regex::icase), " ");
+			value = std::regex_replace(value, std::regex("\\s+"), " ");
+			return TrimCopy(value);
+		}
+
+		nlohmann::json BuildTranscriptQualityResult(const std::string& input)
+		{
+			const std::string cleaned = SanitizeTranscriptTextForQuality(input);
+			if (cleaned.empty())
+			{
+				return {
+					{"accepted", false},
+					{"reason", "empty transcript"},
+					{"cleanedText", ""},
+				};
+			}
+
+			int longestRun = 1;
+			int currentRun = 1;
+			for (std::size_t i = 1; i < cleaned.size(); ++i)
+			{
+				if (cleaned[i] == cleaned[i - 1])
+				{
+					currentRun += 1;
+					if (currentRun > longestRun)
+					{
+						longestRun = currentRun;
+					}
+				}
+				else
+				{
+					currentRun = 1;
+				}
+			}
+
+			if (longestRun >= 16)
+			{
+				const std::string compressed = std::regex_replace(
+					cleaned,
+					std::regex("(.)\\1{5,}"),
+					"$1$1$1");
+				return {
+					{"accepted", false},
+					{"reason", "repetitive transcript pattern detected"},
+					{"cleanedText", compressed},
+				};
+			}
+
+			return {
+				{"accepted", true},
+				{"reason", ""},
+				{"cleanedText", cleaned},
+			};
+		}
+
 	} // namespace
 
 	NativeControllerBuildMarker CreateNativeControllerBuildMarker()
@@ -3453,11 +3537,16 @@ namespace blazeclaw::app::chatcontroller {
 	{
 		return method == "chat.controller.initialize" ||
 			method == "chat.controller.send" ||
+			method == "chat.controller.abort" ||
 			method == "chat.controller.processEvents" ||
+			method == "chat.controller.loadHistory" ||
+			method == "chat.controller.getControlUiBootstrapConfig" ||
 			method == "chat.controller.loadSpeechCapabilities" ||
 			method == "chat.controller.loadSpeechErrorPolicy" ||
 			method == "chat.controller.transcribeSpeech" ||
 			method == "chat.controller.applySpeechLifecycleUpdate" ||
+			method == "chat.controller.getSpeechSessionStateSnapshot" ||
+			method == "chat.controller.assessTranscriptQuality" ||
 			method == "chat.controller.loadSessionOptions" ||
 			method == "chat.controller.switchSession" ||
 			method == "chat.controller.loadModelOptions" ||
@@ -3536,6 +3625,108 @@ namespace blazeclaw::app::chatcontroller {
 					approvalSnapshot,
 					nlohmann::json::array(),
 					"send").dump());
+		}
+
+		if (request.method == "chat.controller.abort")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			std::string promptRunId = ReadJsonString(params, "promptRunId");
+			if (promptRunId.empty())
+			{
+				promptRunId = ReadJsonString(params, "runId");
+			}
+			if (promptRunId.empty())
+			{
+				promptRunId = sendState.Snapshot().activePromptRunId;
+			}
+
+			const auto sendSnapshot = sendState.NotePromptAbort(promptRunId, "aborted");
+			reconcileWatchdog.Stop();
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			nlohmann::json uiOps = nlohmann::json::array();
+			if (!promptRunId.empty())
+			{
+				uiOps.push_back({
+					{"op", "chat.set_status"},
+					{"target", "chat"},
+					{"data", {
+						{"message", std::string("abort requested for run ") + promptRunId},
+					}},
+				});
+			}
+
+			return blazeclaw::gateway::protocol::OkResponse(
+				request,
+				BuildLifecyclePayload(
+					snapshot,
+					lifecycle,
+					sendSnapshot,
+					streamSnapshot,
+					reconcileSnapshot,
+					sessionSnapshot,
+					modelSnapshot,
+					approvalSnapshot,
+					uiOps,
+					"abort").dump());
+		}
+
+		if (request.method == "chat.controller.loadHistory")
+		{
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			nlohmann::json payload = BuildLifecyclePayload(
+				snapshot,
+				lifecycle,
+				sendSnapshot,
+				streamSnapshot,
+				reconcileSnapshot,
+				sessionSnapshot,
+				modelSnapshot,
+				approvalSnapshot,
+				nlohmann::json::array(),
+				"loadHistory");
+			payload["messages"] = nlohmann::json::array();
+			return blazeclaw::gateway::protocol::OkResponse(request, payload.dump());
+		}
+
+		if (request.method == "chat.controller.getControlUiBootstrapConfig")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			nlohmann::json payload = BuildLifecyclePayload(
+				snapshot,
+				lifecycle,
+				sendSnapshot,
+				streamSnapshot,
+				reconcileSnapshot,
+				sessionSnapshot,
+				modelSnapshot,
+				approvalSnapshot,
+				nlohmann::json::array(),
+				"getControlUiBootstrapConfig");
+			payload["controlUi"] = {
+				{"basePath", ReadJsonString(params, "basePath")},
+				{"assistantName", ReadJsonString(params, "assistantName")},
+				{"assistantAvatar", ReadJsonString(params, "assistantAvatar")},
+				{"assistantAgentId", ReadJsonString(params, "assistantAgentId")},
+			};
+			return blazeclaw::gateway::protocol::OkResponse(request, payload.dump());
 		}
 
 		if (request.method == "chat.controller.processEvents")
@@ -3764,6 +3955,74 @@ namespace blazeclaw::app::chatcontroller {
 					approvalSnapshot,
 					uiOps,
 					"transcribeSpeech").dump());
+		}
+
+		if (request.method == "chat.controller.getSpeechSessionStateSnapshot")
+		{
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			nlohmann::json payload = BuildLifecyclePayload(
+				snapshot,
+				lifecycle,
+				sendSnapshot,
+				streamSnapshot,
+				reconcileSnapshot,
+				sessionSnapshot,
+				modelSnapshot,
+				approvalSnapshot,
+				nlohmann::json::array(),
+				"getSpeechSessionStateSnapshot");
+			if (payload.contains("statePatch") &&
+				payload["statePatch"].is_object() &&
+				payload["statePatch"].contains("speech") &&
+				payload["statePatch"]["speech"].is_object() &&
+				payload["statePatch"]["speech"].contains("speechSession"))
+			{
+				payload["speechSession"] = payload["statePatch"]["speech"]["speechSession"];
+			}
+			return blazeclaw::gateway::protocol::OkResponse(request, payload.dump());
+		}
+
+		if (request.method == "chat.controller.assessTranscriptQuality")
+		{
+			const auto params = ParseJsonObjectParams(request);
+			std::string text = ReadJsonString(params, "text");
+			if (text.empty() &&
+				params.contains("payload") &&
+				params["payload"].is_object())
+			{
+				text = ReadJsonString(params["payload"], "text");
+			}
+
+			const auto quality = BuildTranscriptQualityResult(text);
+			const auto snapshot = lifecycle.GetSnapshot();
+			const auto sendSnapshot = sendState.Snapshot();
+			const auto streamSnapshot = streamState.Snapshot();
+			const auto reconcileSnapshot = reconcileWatchdog.Snapshot();
+			const auto sessionSnapshot = sessionSettings.Snapshot();
+			const auto modelSnapshot = modelSettings.Snapshot();
+			const auto approvalSnapshot = approvalValidation.Snapshot();
+			nlohmann::json payload = BuildLifecyclePayload(
+				snapshot,
+				lifecycle,
+				sendSnapshot,
+				streamSnapshot,
+				reconcileSnapshot,
+				sessionSnapshot,
+				modelSnapshot,
+				approvalSnapshot,
+				nlohmann::json::array(),
+				"assessTranscriptQuality");
+			payload["transcriptQuality"] = quality;
+			payload["accepted"] = quality.value("accepted", false);
+			payload["reason"] = quality.value("reason", "");
+			payload["cleanedText"] = quality.value("cleanedText", "");
+			return blazeclaw::gateway::protocol::OkResponse(request, payload.dump());
 		}
 
 		if (request.method == "chat.controller.loadSessionOptions")
