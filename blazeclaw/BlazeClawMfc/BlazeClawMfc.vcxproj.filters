@@ -694,6 +694,7 @@
     </ClCompile>
     <ClCompile Include="tests\ChatControllerNativePhase1HandlersTests.cpp" />
     <ClCompile Include="src\core\ServiceManager.TTS.cpp" />
+    <ClCompile Include="src\core\ServiceManager.Cancellation.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app\CBridge.h" />

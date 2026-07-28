@@ -504,6 +504,7 @@
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\ServiceManager.Cancellation.cpp" />
     <ClCompile Include="src\core\ServiceManager.TTS.cpp" />
     <ClCompile Include="src\core\ServiceManagerLifecycleHelpers.cpp" />
     <ClCompile Include="src\core\ServiceManagerLocalModelHelpers.cpp" />

@@ -341,19 +341,6 @@ namespace blazeclaw::core {
 		return escaped;
 	}
 
-	void EmitDeepSeekDiagnostic(
-		const char* stage,
-		const std::string& detail) {
-		const std::string safeStage =
-			(stage == nullptr || std::string(stage).empty())
-			? "unknown"
-			: std::string(stage);
-		TRACE(
-			"[DeepSeek][%s] %s\n",
-			safeStage.c_str(),
-			detail.c_str());
-	}
-
 	std::string MaskSecretForTrace(const std::wstring& value) {
 		if (value.empty()) {
 			return "<empty>";
@@ -4557,10 +4544,6 @@ namespace blazeclaw::core {
 		return m_embeddings;
 	}
 
-	const speechrecognition::SpeechRecognitionRuntimeSnapshot& ServiceManager::SpeechRecognition() const noexcept {
-		return m_speechRecognition;
-	}
-
 	const localmodel::LocalModelRuntimeSnapshot& ServiceManager::LocalModelRuntime() const noexcept {
 		return m_localModelRuntimeSnapshot;
 	}
@@ -4913,59 +4896,6 @@ namespace blazeclaw::core {
 		const auto cred = ResolveDeepSeekCredentialUtf8();
 		return cred.has_value() && !cred->empty();
 	}
-
-	bool ServiceManager::IsDeepSeekRunCancelled(const std::string& runId) const {
-		std::scoped_lock lock(m_deepSeekCancelMutex);
-		const auto it = m_deepSeekCancelledRuns.find(runId);
-		return it != m_deepSeekCancelledRuns.end() && it->second;
-	}
-
-	void ServiceManager::MarkDeepSeekRunCancelled(const std::string& runId) {
-		if (runId.empty()) {
-			return;
-		}
-
-		EmitDeepSeekDiagnostic(
-			"cancel",
-			std::string("mark cancelled runId=") + runId);
-
-		std::scoped_lock lock(m_deepSeekCancelMutex);
-		m_deepSeekCancelledRuns.insert_or_assign(runId, true);
-	}
-
-	void ServiceManager::ClearDeepSeekRunCancelled(const std::string& runId) {
-		if (runId.empty()) {
-			return;
-		}
-
-		std::scoped_lock lock(m_deepSeekCancelMutex);
-		m_deepSeekCancelledRuns.erase(runId);
-	}
-
-	bool ServiceManager::IsEmbeddedRunCancelled(const std::string& runId) const {
-		std::scoped_lock lock(m_embeddedCancelMutex);
-		const auto it = m_embeddedCancelledRuns.find(runId);
-		return it != m_embeddedCancelledRuns.end() && it->second;
-	}
-
-	void ServiceManager::MarkEmbeddedRunCancelled(const std::string& runId) {
-		if (runId.empty()) {
-			return;
-		}
-
-		std::scoped_lock lock(m_embeddedCancelMutex);
-		m_embeddedCancelledRuns.insert_or_assign(runId, true);
-	}
-
-	void ServiceManager::ClearEmbeddedRunCancelled(const std::string& runId) {
-		if (runId.empty()) {
-			return;
-		}
-
-		std::scoped_lock lock(m_embeddedCancelMutex);
-		m_embeddedCancelledRuns.erase(runId);
-	}
-
 
 	const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
 		return m_skillsCatalog;

@@ -152,6 +152,10 @@ namespace blazeclaw::core {
 		return servicemanager_tts::CollectTextToSpeechSnapshot();
 	}
 
+	const speechrecognition::SpeechRecognitionRuntimeSnapshot& ServiceManager::SpeechRecognition() const noexcept {
+		return m_speechRecognition;
+	}
+
 	bool ServiceManager::ApplySpeechRecognitionConfigReload(
 		const bool speechEnabled,
 		const std::wstring& speechProvider,
